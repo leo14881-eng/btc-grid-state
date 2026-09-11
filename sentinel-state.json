@@ -1,31 +1,51 @@
 {
   "version": "2.3",
-  "updated_at": "2026-09-11T23:14:04+07:00",
-  "last_scan_at": "2026-09-11T23:14:04+07:00",
+  "updated_at": "2026-09-12T00:40:19+07:00",
+  "last_scan_at": "2026-09-12T00:40:19+07:00",
   "persistence": {"provider": "github", "writable": true},
-  "last_price": 76666,
-  "last_regime": "macro_liquidity_headwind",
+  "last_price": 78014,
+  "last_regime": "macro_liquidity_headwind_easing_but_not_resolved",
   "pre_triggers": {
     "upside_squeeze": {"status": "inactive", "first_seen_at": null, "first_seen_price": null, "confidence": null, "evidence_domains": [], "invalidation": null},
     "downside_liquidation": {"status": "inactive", "first_seen_at": null, "first_seen_price": null, "confidence": null, "evidence_domains": [], "invalidation": null},
-    "liquidity_inflection": {"status": "active", "direction": "bearish", "first_seen_at": "2026-09-11T13:54:55+07:00", "first_seen_price": 77200, "confidence": "MEDIUM", "evidence_domains": ["MacroLiquidity", "MarketStructure"], "invalidation": "Macro pressure eases and BTC reclaims the recent range without new downside confirmation", "last_checked_at": "2026-09-11T23:14:04+07:00", "latest_note": "Bearish liquidity inflection remains MEDIUM but macro evidence strengthened after the Aug CPI release: headline CPI +0.4% m/m and +3.4% y/y; Reuters reports market-implied odds of a next-meeting Fed hike rose to about 91%. UST10Y remains near 5% and oil remains elevated despite intraday easing. BTC is around 76.7k, below the prior 77.2k first-seen level but without sufficient same-definition 4H/ATR history to claim a valid structural break. Sep10 spot ETF net outflow -282.6M remains the third consecutive outflow day and is confirmation, not a standalone pre-trigger upgrade. No sufficient same-definition leverage or valuation history was obtained. No downside-liquidation setup activated and no accumulation gate passed."}
+    "liquidity_inflection": {
+      "status": "active",
+      "direction": "bearish",
+      "first_seen_at": "2026-09-11T13:54:55+07:00",
+      "first_seen_price": 77200,
+      "confidence": "LOW",
+      "evidence_domains": ["MacroLiquidity", "MarketStructure"],
+      "invalidation": "Macro pressure eases and BTC reclaims the recent range without new downside confirmation",
+      "last_checked_at": "2026-09-12T00:40:19+07:00",
+      "latest_note": "Bearish liquidity inflection downgraded MEDIUM->LOW/CONFLICTING. Macro headwind remains: August CPI 3.4% y/y and markets still price a high probability of a Sep Fed hike; dollar firm. But leading stress eased materially intraday: UST10Y retreated from about 4.98% to about 4.92% and Brent fell roughly 3.7% to about $103.60. BTC rebounded from an intraday low near $76,005 to about $78,014 rather than extending lower. Sep10 ETF outflow -282.6M remains confirmation only; Sep11 ETF final flow not yet available in the sources checked. No sufficient same-definition leverage/valuation history was obtained. This weakens the prior bearish pre-trigger but does not fully invalidate it because BTC has not yet clearly reclaimed the recent 79k-80k area and macro conditions remain restrictive."
+    }
   },
   "distribution": {
     "valuation": "UNKNOWN",
     "trend_deviation": "NORMAL",
     "crowding_leverage": "UNKNOWN",
     "marginal_demand_risk": "ELEVATED",
-    "as_of": "2026-09-11T23:14:04+07:00",
-    "note": "Marginal demand remains ELEVATED after three consecutive ETF outflow days ending Sep10 (-46.6M, -120.2M, -282.6M). No validated historical threshold supports EXTREME. Valuation and leverage are UNKNOWN. Distribution remains 0 EXTREME => HOLD/NO ACTION."
+    "as_of": "2026-09-12T00:40:19+07:00",
+    "note": "0 validated EXTREME dimensions. Sep10 ETF outflow -282.6M was the third consecutive outflow day but is confirming/lagging while price has since rebounded. No Sep11 final ETF flow verified this run. Valuation and leverage remain UNKNOWN. Distribution action map => HOLD/NO ACTION."
   },
   "allocation_gate": {
-    "as_of": "2026-09-11T23:14:04+07:00",
+    "as_of": "2026-09-12T00:40:19+07:00",
     "result": "NO_ACTION",
-    "reason": "Portfolio SSOT confirms 0.2133 BTC total and partial known cash only; exact ordinary-portfolio total/current weights and Permanent Core vs Tactical BTC split remain unknown. CPI strengthened the macro headwind, but accumulation requires four-domain joint improvement and distribution has 0 validated EXTREME dimensions. No sizing dependent on unknown weights is fabricated.",
+    "reason": "Portfolio SSOT still has 0.2133 BTC total and only partial known cash; exact ordinary portfolio total/current weights and Permanent Core vs Tactical BTC split are unknown, so weight-dependent sizing cannot be approved. Accumulation four-domain gate is not met and distribution has 0 EXTREME dimensions. The prior bearish liquidity pre-trigger weakened rather than strengthened.",
     "cooldown_status": "INACTIVE_UNTIL_USER_CONFIRMED_BUY",
     "permanent_core": "UNTOUCHED"
   },
-  "alerts": [],
+  "alerts": [
+    {
+      "timestamp": "2026-09-12T00:40:19+07:00",
+      "type": "PRE_TRIGGER_DOWNGRADE",
+      "setup": "LIQUIDITY_INFLECTION_BEARISH",
+      "from_confidence": "MEDIUM",
+      "to_confidence": "LOW",
+      "price": 78014,
+      "reason": "Treasury yields and oil eased while BTC rebounded instead of extending lower; macro headwind remains but evidence is now conflicting."
+    }
+  ],
   "cancelled_setups": [],
   "missed_moves": [],
   "false_positives": [],
