@@ -1,29 +1,19 @@
 {
   "version": "1.0",
   "status": "ACTIVE",
-  "updated_at": null,
+  "updated_at": "2026-09-11T14:00:00+07:00",
   "description": "Append-only decision journal for the frozen 10-Year Wealth Compounding Architecture FINAL. Historical rationale must never be rewritten with future information.",
+  "persistence_status": {
+    "current_chat_write_verified": true,
+    "verified_at": "2026-09-11T14:00:00+07:00",
+    "automation_runtime_write_verified": false,
+    "note": "Write/read path verified without inserting a fake investment decision. Scheduled automation runtime must still prove its own write capability on the first real journal-required event."
+  },
   "rules": {
     "append_only": true,
     "historical_rationale_immutable": true,
     "user_is_only_execution_authority": true,
-    "required_for": [
-      "TACTICAL_BTC_BUY",
-      "TACTICAL_BTC_SELL",
-      "ASYMMETRIC_BUY",
-      "ASYMMETRIC_ADD",
-      "ASYMMETRIC_TP25",
-      "ASYMMETRIC_TP50",
-      "ASYMMETRIC_EXIT_MOST",
-      "ASYMMETRIC_EXIT_ALL",
-      "STRUCTURAL_BUY",
-      "STRUCTURAL_ADD",
-      "STRUCTURAL_REDUCE",
-      "STRUCTURAL_SELL",
-      "STRATEGIC_TERM_DEPOSIT_DECISION",
-      "CRISIS_RESERVE_STATE_CHANGE",
-      "ACTION_REQUIRED_REJECTED"
-    ]
+    "required_for": ["TACTICAL_BTC_BUY","TACTICAL_BTC_SELL","ASYMMETRIC_BUY","ASYMMETRIC_ADD","ASYMMETRIC_TP25","ASYMMETRIC_TP50","ASYMMETRIC_EXIT_MOST","ASYMMETRIC_EXIT_ALL","STRUCTURAL_BUY","STRUCTURAL_ADD","STRUCTURAL_REDUCE","STRUCTURAL_SELL","STRATEGIC_TERM_DEPOSIT_DECISION","CRISIS_RESERVE_STATE_CHANGE","ACTION_REQUIRED_REJECTED"]
   },
   "entry_schema": {
     "id": "string",
@@ -51,11 +41,7 @@
     "executed": "true | false | pending",
     "execution_timestamp": "ISO-8601 string|null",
     "rejection_reason": "string|null",
-    "outcome": {
-      "status": "OPEN | CLOSED | NOT_APPLICABLE | UNKNOWN",
-      "updated_at": "ISO-8601 string|null",
-      "notes": "string|null"
-    }
+    "outcome": {"status":"OPEN | CLOSED | NOT_APPLICABLE | UNKNOWN","updated_at":"ISO-8601 string|null","notes":"string|null"}
   },
   "entries": []
 }
