@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "status": "ACTIVE",
-  "updated_at": "2026-09-11T14:00:00+07:00",
+  "updated_at": "2026-09-11T15:01:00+07:00",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -46,6 +46,38 @@
       "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
     }
   },
+  "execution_state": {
+    "last_confirmed_execution": null,
+    "btc_tactical": {
+      "last_buy_execution_timestamp": null,
+      "last_sell_execution_timestamp": null,
+      "buy_cooldown_hours": 72,
+      "cooldown_until": null,
+      "cooldown_status": "INACTIVE_UNTIL_USER_CONFIRMED_BUY",
+      "last_buy_journal_id": null,
+      "last_sell_journal_id": null
+    },
+    "asymmetric": {
+      "last_execution_timestamp": null,
+      "open_position_ids": []
+    },
+    "structural": {
+      "last_execution_timestamp": null,
+      "open_position_ids": []
+    },
+    "state_sync_policy": {
+      "required_order": [
+        "APPEND_DECISION_JOURNAL",
+        "UPDATE_PORTFOLIO_STATE",
+        "UPDATE_RELEVANT_COOLDOWN_OR_POSITION_LEDGER",
+        "REREAD_AND_VERIFY"
+      ],
+      "journal_source": "decision-journal.json",
+      "user_confirmed_execution_only": true,
+      "historical_rationale_rewrite_forbidden": true,
+      "on_partial_failure": "MARK_STATE_SYNC_DEGRADED_AND_DO_NOT_PRETEND_SUCCESS"
+    }
+  },
   "isolated_capital": {
     "btc_grid": {
       "usd_approx": 7000,
@@ -82,6 +114,8 @@
     "user_confirmed_execution_overrides_prior_state": true,
     "decision_journal_is_history_source": "decision-journal.json",
     "grid_state_source": "state.json",
+    "hunter_ledger_source": "opportunity-hunter-state.json",
+    "sentinel_state_source": "sentinel-state.json",
     "never_infer_missing_balances": true
   }
 }
