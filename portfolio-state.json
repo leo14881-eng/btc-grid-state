@@ -1,7 +1,7 @@
 {
   "version": "1.1",
   "status": "ACTIVE",
-  "updated_at": "2026-09-11T15:01:00+07:00",
+  "updated_at": "2026-09-11T15:20:00+07:00",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -22,10 +22,10 @@
     "btc_core": {
       "usd": null,
       "weight_pct": null,
-      "btc_quantity": null,
+      "btc_quantity": 0.2133,
       "permanent_core_btc": null,
       "tactical_btc": null,
-      "data_status": "NEEDS_USER_CONFIRMED_CURRENT_BALANCE"
+      "data_status": "USER_CONFIRMED_TOTAL_BTC_BALANCE_2026_09_11"
     },
     "cash_tbill": {
       "usd": null,
@@ -66,12 +66,7 @@
       "open_position_ids": []
     },
     "state_sync_policy": {
-      "required_order": [
-        "APPEND_DECISION_JOURNAL",
-        "UPDATE_PORTFOLIO_STATE",
-        "UPDATE_RELEVANT_COOLDOWN_OR_POSITION_LEDGER",
-        "REREAD_AND_VERIFY"
-      ],
+      "required_order": ["APPEND_DECISION_JOURNAL", "UPDATE_PORTFOLIO_STATE", "UPDATE_RELEVANT_COOLDOWN_OR_POSITION_LEDGER", "REREAD_AND_VERIFY"],
       "journal_source": "decision-journal.json",
       "user_confirmed_execution_only": true,
       "historical_rationale_rewrite_forbidden": true,
@@ -82,7 +77,8 @@
     "btc_grid": {
       "usd_approx": 7000,
       "included_in_ordinary_allocation": false,
-      "source_of_truth": "state.json"
+      "source_of_truth": "state.json",
+      "data_status": "USER_CONFIRMED_GRID_CAPITAL_2026_09_11"
     },
     "strategic_term_deposit": {
       "usd_approx": 200000,
@@ -98,15 +94,7 @@
     }
   },
   "allocation_gate_policy": {
-    "required_checks": [
-      "current_portfolio_weights_and_ranges",
-      "funding_source",
-      "risk_budget",
-      "correlation_exposure",
-      "opportunity_cost_vs_btc_or_cash_tbill",
-      "fund_layer_compliance",
-      "permanent_core_and_crisis_reserve_protection"
-    ],
+    "required_checks": ["current_portfolio_weights_and_ranges", "funding_source", "risk_budget", "correlation_exposure", "opportunity_cost_vs_btc_or_cash_tbill", "fund_layer_compliance", "permanent_core_and_crisis_reserve_protection"],
     "missing_current_weight_rule": "If exact current portfolio weights are unavailable, do not fabricate APPROVED ACTION sizing that depends on those weights. Output RECOMMENDATION or DATA REQUIRED until current user-confirmed balances are available.",
     "execution_authority": "USER_ONLY"
   },
