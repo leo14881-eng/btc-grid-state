@@ -1,0 +1,87 @@
+{
+  "version": "1.0",
+  "status": "ACTIVE",
+  "updated_at": "2026-09-11T14:00:00+07:00",
+  "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
+  "architecture": {
+    "btc_core_base_pct": 45,
+    "btc_core_range_pct": [30, 60],
+    "cash_tbill_base_pct": 35,
+    "cash_tbill_range_pct": [20, 55],
+    "structural_base_pct": 15,
+    "structural_range_pct": [0, 30],
+    "structural_single_asset_hard_cap_pct": 5,
+    "asymmetric_base_pct": 5,
+    "asymmetric_hard_cap_pct": 8,
+    "asymmetric_single_asset_hard_cap_pct": 2,
+    "same_correlation_bucket_guideline_cap_pct": [4, 5]
+  },
+  "ordinary_portfolio": {
+    "valuation_timestamp": null,
+    "total_usd": null,
+    "btc_core": {
+      "usd": null,
+      "weight_pct": null,
+      "btc_quantity": null,
+      "permanent_core_btc": null,
+      "tactical_btc": null,
+      "data_status": "NEEDS_USER_CONFIRMED_CURRENT_BALANCE"
+    },
+    "cash_tbill": {
+      "usd": null,
+      "weight_pct": null,
+      "known_pre_2026_11_06_btc_deployment_cash_usd_approx": 34000,
+      "data_status": "PARTIAL_KNOWN_NOT_FULL_PORTFOLIO_BALANCE"
+    },
+    "structural": {
+      "usd": 0,
+      "weight_pct": null,
+      "positions": [],
+      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
+    },
+    "asymmetric": {
+      "usd": 0,
+      "weight_pct": null,
+      "positions": [],
+      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
+    }
+  },
+  "isolated_capital": {
+    "btc_grid": {
+      "usd_approx": 7000,
+      "included_in_ordinary_allocation": false,
+      "source_of_truth": "state.json"
+    },
+    "strategic_term_deposit": {
+      "usd_approx": 200000,
+      "breakable_early": true,
+      "opportunity_cost": "several_thousand_usd_interest",
+      "included_in_ordinary_allocation": false,
+      "status": "STRATEGIC_POOL_NOT_AUTOMATICALLY_DEPLOYABLE"
+    },
+    "crisis_reserve": {
+      "usd": 50000,
+      "included_in_ordinary_allocation": false,
+      "status": "STRICTLY_ISOLATED"
+    }
+  },
+  "allocation_gate_policy": {
+    "required_checks": [
+      "current_portfolio_weights_and_ranges",
+      "funding_source",
+      "risk_budget",
+      "correlation_exposure",
+      "opportunity_cost_vs_btc_or_cash_tbill",
+      "fund_layer_compliance",
+      "permanent_core_and_crisis_reserve_protection"
+    ],
+    "missing_current_weight_rule": "If exact current portfolio weights are unavailable, do not fabricate APPROVED ACTION sizing that depends on those weights. Output RECOMMENDATION or DATA REQUIRED until current user-confirmed balances are available.",
+    "execution_authority": "USER_ONLY"
+  },
+  "update_rules": {
+    "user_confirmed_execution_overrides_prior_state": true,
+    "decision_journal_is_history_source": "decision-journal.json",
+    "grid_state_source": "state.json",
+    "never_infer_missing_balances": true
+  }
+}
