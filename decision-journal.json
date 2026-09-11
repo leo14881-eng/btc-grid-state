@@ -1,0 +1,61 @@
+{
+  "version": "1.0",
+  "status": "ACTIVE",
+  "updated_at": null,
+  "description": "Append-only decision journal for the frozen 10-Year Wealth Compounding Architecture FINAL. Historical rationale must never be rewritten with future information.",
+  "rules": {
+    "append_only": true,
+    "historical_rationale_immutable": true,
+    "user_is_only_execution_authority": true,
+    "required_for": [
+      "TACTICAL_BTC_BUY",
+      "TACTICAL_BTC_SELL",
+      "ASYMMETRIC_BUY",
+      "ASYMMETRIC_ADD",
+      "ASYMMETRIC_TP25",
+      "ASYMMETRIC_TP50",
+      "ASYMMETRIC_EXIT_MOST",
+      "ASYMMETRIC_EXIT_ALL",
+      "STRUCTURAL_BUY",
+      "STRUCTURAL_ADD",
+      "STRUCTURAL_REDUCE",
+      "STRUCTURAL_SELL",
+      "STRATEGIC_TERM_DEPOSIT_DECISION",
+      "CRISIS_RESERVE_STATE_CHANGE",
+      "ACTION_REQUIRED_REJECTED"
+    ]
+  },
+  "entry_schema": {
+    "id": "string",
+    "timestamp": "ISO-8601 string",
+    "asset": "string",
+    "layer": "BTC_TACTICAL | ASYMMETRIC | STRUCTURAL | CASH | STRATEGIC_DEPOSIT | CRISIS_RESERVE",
+    "signal_source": "BTC_SENTINEL | ASYMMETRIC_HUNTER | STRUCTURAL_RADAR | USER | OTHER",
+    "signal": "string",
+    "allocation_gate": "APPROVED_ACTION | ACTION_REQUIRED | NO_ACTION | RECOMMENDATION",
+    "price": "number|null",
+    "action": "string",
+    "amount_usd": "number|null",
+    "portfolio_weight_before": "number|null",
+    "portfolio_weight_after": "number|null",
+    "funding_source": "string|null",
+    "risk_budget": "string|null",
+    "correlation_bucket": "string|null",
+    "evidence_available_at_time": ["string"],
+    "alternative_action": "string|null",
+    "btc_alternative": "string|null",
+    "cash_tbill_alternative": "string|null",
+    "opportunity_cost_conclusion": "string|null",
+    "invalidation_or_thesis_kill": ["string"],
+    "cooldown_status": "string|null",
+    "executed": "true | false | pending",
+    "execution_timestamp": "ISO-8601 string|null",
+    "rejection_reason": "string|null",
+    "outcome": {
+      "status": "OPEN | CLOSED | NOT_APPLICABLE | UNKNOWN",
+      "updated_at": "ISO-8601 string|null",
+      "notes": "string|null"
+    }
+  },
+  "entries": []
+}
