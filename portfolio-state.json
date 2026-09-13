@@ -1,7 +1,7 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "status": "ACTIVE",
-  "updated_at": "2026-09-13T08:04:00+07:00",
+  "updated_at": "2026-09-13T08:20:00+07:00",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -23,11 +23,12 @@
       "usd": 21480.42,
       "weight_pct": 45.8,
       "btc_quantity": 0.27803703,
-      "permanent_core_btc": null,
-      "tactical_btc": null,
-      "allocation_split_status": "UNALLOCATED_NOT_USER_DEFINED",
+      "permanent_floor_target_btc": 0.5,
+      "permanent_floor_status": "BUILDING_NOT_YET_REACHED",
+      "cycle_position_btc": 0,
+      "cycle_position_definition": "Only BTC above the 0.5 BTC permanent floor target is cycle-sellable under ordinary bull-market distribution rules.",
       "reference_price_usd": 77257.43,
-      "data_status": "USER_CONFIRMED_WALLET_BALANCE_2026_09_13"
+      "data_status": "USER_CONFIRMED_WALLET_BALANCE_AND_PERMANENT_FLOOR_RULE_2026_09_13"
     },
     "cash_tbill": {
       "usd": 25420.54,
@@ -36,22 +37,25 @@
       "wallet_display_usd": 25420.54,
       "data_status": "USER_CONFIRMED_FULL_ORDINARY_INVESTABLE_CASH_2026_09_13"
     },
-    "structural": {
-      "usd": 0,
-      "weight_pct": 0,
-      "positions": [],
-      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
-    },
-    "asymmetric": {
-      "usd": 0,
-      "weight_pct": 0,
-      "positions": [],
-      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
-    }
+    "structural": {"usd": 0, "weight_pct": 0, "positions": [], "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"},
+    "asymmetric": {"usd": 0, "weight_pct": 0, "positions": [], "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"}
+  },
+  "btc_cycle_policy": {
+    "principle": "ACCUMULATE_IN_BEAR_MARKET_DISTRIBUTE_IN_BULL_MARKET",
+    "ordinary_short_term_trading": false,
+    "permanent_floor_target_btc": 0.5,
+    "never_fully_exit_btc": true,
+    "while_total_btc_below_floor": "Ordinary cycle distribution must not reduce BTC holdings; priority is staged bear-market accumulation toward 0.5 BTC.",
+    "after_total_btc_exceeds_floor": "Only BTC above 0.5 BTC is cycle-sellable. Bull-market distribution must never reduce total BTC below 0.5 BTC.",
+    "sell_regime": "Bull-market overvaluation/overheating/cycle-top distribution only, except fundamental long-term BTC thesis impairment.",
+    "buy_regime": "Bear-market staged accumulation with dry-powder preservation and existing accumulation/risk gates.",
+    "future_ordinary_btc_buys": "Increase total BTC and first build the permanent 0.5 BTC floor; BTC above the floor becomes cycle position.",
+    "historical_cost_basis": "UNKNOWN_RECONSTRUCTION_PENDING",
+    "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward."
   },
   "execution_state": {
     "last_confirmed_execution": null,
-    "btc_tactical": {
+    "btc_cycle": {
       "last_buy_execution_timestamp": null,
       "last_sell_execution_timestamp": null,
       "buy_cooldown_hours": 72,
@@ -60,14 +64,8 @@
       "last_buy_journal_id": null,
       "last_sell_journal_id": null
     },
-    "asymmetric": {
-      "last_execution_timestamp": null,
-      "open_position_ids": []
-    },
-    "structural": {
-      "last_execution_timestamp": null,
-      "open_position_ids": []
-    },
+    "asymmetric": {"last_execution_timestamp": null, "open_position_ids": []},
+    "structural": {"last_execution_timestamp": null, "open_position_ids": []},
     "state_sync_policy": {
       "required_order": ["APPEND_DECISION_JOURNAL", "UPDATE_PORTFOLIO_STATE", "UPDATE_RELEVANT_COOLDOWN_OR_POSITION_LEDGER", "REREAD_AND_VERIFY"],
       "journal_source": "decision-journal.json",
@@ -77,28 +75,13 @@
     }
   },
   "isolated_capital": {
-    "btc_grid": {
-      "usd_approx": 7000,
-      "included_in_ordinary_allocation": false,
-      "source_of_truth": "state.json",
-      "data_status": "USER_RECONFIRMED_2026_09_13"
-    },
-    "strategic_term_deposit": {
-      "usd_approx": 200000,
-      "breakable_early": true,
-      "opportunity_cost": "several_thousand_usd_interest",
-      "included_in_ordinary_allocation": false,
-      "status": "STRATEGIC_POOL_NOT_AUTOMATICALLY_DEPLOYABLE_USER_RECONFIRMED_2026_09_13"
-    },
-    "crisis_reserve": {
-      "usd": 50000,
-      "included_in_ordinary_allocation": false,
-      "status": "STRICTLY_ISOLATED_USER_RECONFIRMED_2026_09_13"
-    }
+    "btc_grid": {"usd_approx": 7000, "included_in_ordinary_allocation": false, "source_of_truth": "state.json", "data_status": "USER_RECONFIRMED_2026_09_13"},
+    "strategic_term_deposit": {"usd_approx": 200000, "breakable_early": true, "opportunity_cost": "several_thousand_usd_interest", "included_in_ordinary_allocation": false, "status": "STRATEGIC_POOL_NOT_AUTOMATICALLY_DEPLOYABLE_USER_RECONFIRMED_2026_09_13"},
+    "crisis_reserve": {"usd": 50000, "included_in_ordinary_allocation": false, "status": "STRICTLY_ISOLATED_USER_RECONFIRMED_2026_09_13"}
   },
   "allocation_gate_policy": {
-    "required_checks": ["current_portfolio_weights_and_ranges", "funding_source", "risk_budget", "correlation_exposure", "opportunity_cost_vs_btc_or_cash_tbill", "fund_layer_compliance", "permanent_core_and_crisis_reserve_protection"],
-    "missing_current_weight_rule": "If exact current portfolio weights are unavailable, do not fabricate APPROVED ACTION sizing that depends on those weights. Output RECOMMENDATION or DATA REQUIRED until current user-confirmed balances are available.",
+    "required_checks": ["current_portfolio_weights_and_ranges", "funding_source", "risk_budget", "correlation_exposure", "opportunity_cost_vs_btc_or_cash_tbill", "fund_layer_compliance", "btc_permanent_floor_protection", "crisis_reserve_protection"],
+    "btc_sell_floor_rule": "No ordinary cycle BTC sale may reduce total BTC below 0.5 BTC.",
     "execution_authority": "USER_ONLY"
   },
   "update_rules": {
