@@ -1,7 +1,7 @@
 {
   "version": "2.5",
-  "updated_at": "2026-09-13T09:30:46+07:00",
-  "last_scan_at": "2026-09-13T09:30:46+07:00",
+  "updated_at": "2026-09-13T15:02:50+07:00",
+  "last_scan_at": "2026-09-13T15:02:50+07:00",
   "persistence": {"provider": "github", "writable": true},
   "state_ownership": {
     "purpose": "Sentinel-specific signal and market-state cache only. Portfolio holdings, weights, cash balances and permanent-floor quantities are NOT stored here.",
@@ -15,13 +15,13 @@
     "observed_portfolio_content_sha": "648fd00637fec69bb33646b40ac5a5ddcfbd3a10"
   },
   "market_state_freshness": {"status": "FRESH", "reason": "Market state refreshed on this Sentinel scan using current web evidence; portfolio inputs read from portfolio-state.json v1.3."},
-  "last_price": 77000,
+  "last_price": 77177,
   "last_price_quality": "VERIFIED_CURRENT_RANGE_MULTI_SOURCE",
   "last_regime": "bear_market_accumulation_watch_with_macro_tightening_headwind",
   "data_quality": {
     "price_structure": "VERIFIED_CURRENT_VALUE_OR_RANGE",
-    "spot_btc_etf": "VERIFIED_LATEST_COMPLETE_SESSION_MULTI_SOURCE",
-    "treasury_and_fed": "VERIFIED_LATEST_COMPLETE_US_SESSION_MULTI_SOURCE",
+    "spot_btc_etf": "VERIFIED_LATEST_COMPLETE_SESSION_MULTI_SOURCE_NO_NEW_US_SESSION_WEEKEND",
+    "treasury_and_fed": "VERIFIED_LATEST_COMPLETE_US_SESSION_MULTI_SOURCE_NO_NEW_US_SESSION_WEEKEND",
     "derivatives": "CURRENT_VALUE_PARTIALLY_VERIFIED_HISTORICAL_EXTREMENESS_UNKNOWN",
     "onchain_valuation": "INSUFFICIENT_FOR_CURRENT_PRECISE_GATE"
   },
@@ -36,12 +36,12 @@
       "confidence": "MEDIUM",
       "evidence_domains": ["MacroLiquidity", "TreasuryRates", "FedPolicyExpectations"],
       "invalidation": "Fed tightening expectations materially reverse, Treasury yields retreat sustainably, and BTC/spot demand improve without renewed downside confirmation",
-      "last_checked_at": "2026-09-13T09:30:46+07:00",
-      "latest_note": "August CPI kept inflation pressure elevated; market pricing strongly favors a September hike and 2Y/10Y/30Y Treasury yields remain elevated. BTC nevertheless remains near 77k rather than accelerating lower."
+      "last_checked_at": "2026-09-13T15:02:50+07:00",
+      "latest_note": "No material change since prior scan. BTC remains near 77.0k-77.4k in weekend consolidation. No new complete U.S. ETF or Treasury session is available; latest macro evidence still supports a medium-confidence tightening headwind."
     }
   },
   "accumulation_gate": {
-    "as_of": "2026-09-13T09:30:46+07:00",
+    "as_of": "2026-09-13T15:02:50+07:00",
     "valuation": "UNKNOWN_CURRENT_ONCHAIN_VALUATION_INSUFFICIENT",
     "liquidity": "HEADWIND",
     "forced_selling": "PARTIAL_DELEVERAGING_CURRENT_DATA_VERIFIED_BUT_HISTORICAL_EXTREMENESS_UNKNOWN",
@@ -55,12 +55,12 @@
     "crowding_leverage": "CURRENT_DERIVATIVES_DATA_AVAILABLE_HISTORICAL_EXTREMENESS_UNKNOWN",
     "marginal_demand_risk": "ELEVATED",
     "validated_extreme_dimensions": 0,
-    "as_of": "2026-09-13T09:30:46+07:00",
-    "note": "Latest complete U.S. session Sep 11 showed about $13.29M spot BTC ETF net outflow, fourth consecutive outflow day; Sep 8-11 total about $462.7M outflow. This is demand weakness, not by itself a validated cycle-top extreme."
+    "as_of": "2026-09-13T15:02:50+07:00",
+    "note": "No new complete U.S. ETF session since Sep 11. Latest complete session showed about $13.29M spot BTC ETF net outflow, fourth consecutive outflow day; Sep 8-11 total about $462.7M outflow. Demand weakness remains elevated but is not a validated cycle-top extreme."
   },
   "allocation_gate": {
     "status": "NO_ACTION",
-    "recomputed_at": "2026-09-13T09:30:46+07:00",
+    "recomputed_at": "2026-09-13T15:02:50+07:00",
     "current_portfolio_values_cached_here": false,
     "rule": "Never use this file as a holdings/weights source. Read portfolio-state.json at runtime and recompute the allocation gate.",
     "reason": "BTC remains above the next frozen 72k ladder trigger and the Accumulation Gate is not met. Portfolio SSOT shows BTC below the 0.5 BTC permanent floor, so ordinary cycle sellable BTC is zero."
