@@ -1,7 +1,7 @@
 {
-  "version": "2.4",
-  "updated_at": "2026-09-13T08:38:00+07:00",
-  "last_scan_at": "2026-09-12T10:50:21+07:00",
+  "version": "2.5",
+  "updated_at": "2026-09-13T09:30:46+07:00",
+  "last_scan_at": "2026-09-13T09:30:46+07:00",
   "persistence": {"provider": "github", "writable": true},
   "state_ownership": {
     "purpose": "Sentinel-specific signal and market-state cache only. Portfolio holdings, weights, cash balances and permanent-floor quantities are NOT stored here.",
@@ -14,12 +14,17 @@
     "observed_portfolio_state_updated_at": "2026-09-13T08:20:00+07:00",
     "observed_portfolio_content_sha": "648fd00637fec69bb33646b40ac5a5ddcfbd3a10"
   },
-  "market_state_freshness": {
-    "status": "STALE_UNTIL_NEXT_SENTINEL_SCAN",
-    "reason": "The latest market scan predates the current portfolio SSOT update. Market/regime fields below are historical Sentinel state only and must be refreshed on the next Sentinel run before a new capital action."
+  "market_state_freshness": {"status": "FRESH", "reason": "Market state refreshed on this Sentinel scan using current web evidence; portfolio inputs read from portfolio-state.json v1.3."},
+  "last_price": 77000,
+  "last_price_quality": "VERIFIED_CURRENT_RANGE_MULTI_SOURCE",
+  "last_regime": "bear_market_accumulation_watch_with_macro_tightening_headwind",
+  "data_quality": {
+    "price_structure": "VERIFIED_CURRENT_VALUE_OR_RANGE",
+    "spot_btc_etf": "VERIFIED_LATEST_COMPLETE_SESSION_MULTI_SOURCE",
+    "treasury_and_fed": "VERIFIED_LATEST_COMPLETE_US_SESSION_MULTI_SOURCE",
+    "derivatives": "CURRENT_VALUE_PARTIALLY_VERIFIED_HISTORICAL_EXTREMENESS_UNKNOWN",
+    "onchain_valuation": "INSUFFICIENT_FOR_CURRENT_PRECISE_GATE"
   },
-  "last_price": 76870.66,
-  "last_regime": "macro_liquidity_headwind_easing_but_not_resolved",
   "pre_triggers": {
     "upside_squeeze": {"status": "inactive", "first_seen_at": null, "first_seen_price": null, "confidence": null, "evidence_domains": [], "invalidation": null},
     "downside_liquidation": {"status": "inactive", "first_seen_at": null, "first_seen_price": null, "confidence": null, "evidence_domains": [], "invalidation": null},
@@ -28,46 +33,47 @@
       "direction": "bearish",
       "first_seen_at": "2026-09-11T13:54:55+07:00",
       "first_seen_price": 77200,
-      "confidence": "LOW",
-      "evidence_domains": ["MacroLiquidity", "MarketStructure"],
-      "invalidation": "Macro pressure eases and BTC reclaims the recent range without new downside confirmation",
-      "last_checked_at": "2026-09-12T10:50:21+07:00",
-      "latest_note": "Historical Sentinel-specific signal state from the last market scan. Must be refreshed before any new capital action."
+      "confidence": "MEDIUM",
+      "evidence_domains": ["MacroLiquidity", "TreasuryRates", "FedPolicyExpectations"],
+      "invalidation": "Fed tightening expectations materially reverse, Treasury yields retreat sustainably, and BTC/spot demand improve without renewed downside confirmation",
+      "last_checked_at": "2026-09-13T09:30:46+07:00",
+      "latest_note": "August CPI kept inflation pressure elevated; market pricing strongly favors a September hike and 2Y/10Y/30Y Treasury yields remain elevated. BTC nevertheless remains near 77k rather than accelerating lower."
     }
   },
   "accumulation_gate": {
-    "as_of": "2026-09-12T10:50:21+07:00",
-    "valuation": "UNKNOWN",
-    "liquidity": "HEADWIND_EASING_BUT_NOT_RESOLVED",
-    "forced_selling": "UNKNOWN",
+    "as_of": "2026-09-13T09:30:46+07:00",
+    "valuation": "UNKNOWN_CURRENT_ONCHAIN_VALUATION_INSUFFICIENT",
+    "liquidity": "HEADWIND",
+    "forced_selling": "PARTIAL_DELEVERAGING_CURRENT_DATA_VERIFIED_BUT_HISTORICAL_EXTREMENESS_UNKNOWN",
     "stabilization": "PARTIAL_INSUFFICIENT",
     "result": "NOT_MET",
-    "status": "HISTORICAL_UNTIL_NEXT_SCAN"
+    "blocking_gaps": ["Current reliable on-chain valuation evidence is insufficient", "No verified cycle-level forced-selling extreme", "Spot ETF demand remains net negative over the latest four-session streak"]
   },
   "distribution": {
     "valuation": "UNKNOWN",
-    "trend_deviation": "NORMAL",
-    "crowding_leverage": "UNKNOWN",
+    "trend_deviation": "NORMAL_TO_ELEVATED_NOT_EXTREME",
+    "crowding_leverage": "CURRENT_DERIVATIVES_DATA_AVAILABLE_HISTORICAL_EXTREMENESS_UNKNOWN",
     "marginal_demand_risk": "ELEVATED",
-    "as_of": "2026-09-12T10:50:21+07:00",
-    "note": "Historical Sentinel-specific distribution state. 0 validated EXTREME dimensions at the last scan. Must be refreshed before any new capital action."
+    "validated_extreme_dimensions": 0,
+    "as_of": "2026-09-13T09:30:46+07:00",
+    "note": "Latest complete U.S. session Sep 11 showed about $13.29M spot BTC ETF net outflow, fourth consecutive outflow day; Sep 8-11 total about $462.7M outflow. This is demand weakness, not by itself a validated cycle-top extreme."
   },
   "allocation_gate": {
-    "status": "RECOMPUTE_ON_EACH_RUN_FROM_PORTFOLIO_SSOT",
-    "last_market_scan_result": "NO_ACTION",
-    "last_market_scan_as_of": "2026-09-12T10:50:21+07:00",
+    "status": "NO_ACTION",
+    "recomputed_at": "2026-09-13T09:30:46+07:00",
     "current_portfolio_values_cached_here": false,
-    "rule": "Never use this file as a holdings/weights source. Read portfolio-state.json at runtime and recompute the allocation gate."
+    "rule": "Never use this file as a holdings/weights source. Read portfolio-state.json at runtime and recompute the allocation gate.",
+    "reason": "BTC remains above the next frozen 72k ladder trigger and the Accumulation Gate is not met. Portfolio SSOT shows BTC below the 0.5 BTC permanent floor, so ordinary cycle sellable BTC is zero."
   },
   "alerts": [
     {
-      "timestamp": "2026-09-12T00:40:19+07:00",
-      "type": "PRE_TRIGGER_DOWNGRADE",
+      "timestamp": "2026-09-13T09:30:46+07:00",
+      "type": "MACRO_LIQUIDITY_HEADWIND_UPGRADE",
       "setup": "LIQUIDITY_INFLECTION_BEARISH",
-      "from_confidence": "MEDIUM",
-      "to_confidence": "LOW",
-      "price": 78014,
-      "reason": "Treasury yields and oil eased while BTC rebounded instead of extending lower; macro headwind remains but evidence is now conflicting."
+      "from_confidence": "LOW",
+      "to_confidence": "MEDIUM",
+      "price": 77000,
+      "reason": "August CPI and Treasury/Fed-pricing evidence strengthened the tightening headwind while spot BTC ETF demand remained negative. BTC price stabilization prevents escalation to a downside-liquidation trigger."
     }
   ],
   "cancelled_setups": [],
