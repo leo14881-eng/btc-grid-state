@@ -1,8 +1,23 @@
 {
-  "version": "2.3",
-  "updated_at": "2026-09-12T10:50:21+07:00",
+  "version": "2.4",
+  "updated_at": "2026-09-13T08:38:00+07:00",
   "last_scan_at": "2026-09-12T10:50:21+07:00",
   "persistence": {"provider": "github", "writable": true},
+  "state_ownership": {
+    "purpose": "Sentinel-specific signal and market-state cache only. Portfolio holdings, weights, cash balances and permanent-floor quantities are NOT stored here.",
+    "portfolio_source_of_truth": "portfolio-state.json",
+    "portfolio_source_url": "https://raw.githubusercontent.com/leo14881-eng/btc-grid-state/refs/heads/main/portfolio-state.json",
+    "runtime_rule": "Every Sentinel run must read portfolio-state.json directly for current BTC quantity, weights, cash, permanent-floor status and allocation inputs.",
+    "duplicate_portfolio_balances_forbidden": true,
+    "duplicate_portfolio_weights_forbidden": true,
+    "observed_portfolio_state_version": "1.3",
+    "observed_portfolio_state_updated_at": "2026-09-13T08:20:00+07:00",
+    "observed_portfolio_content_sha": "648fd00637fec69bb33646b40ac5a5ddcfbd3a10"
+  },
+  "market_state_freshness": {
+    "status": "STALE_UNTIL_NEXT_SENTINEL_SCAN",
+    "reason": "The latest market scan predates the current portfolio SSOT update. Market/regime fields below are historical Sentinel state only and must be refreshed on the next Sentinel run before a new capital action."
+  },
   "last_price": 76870.66,
   "last_regime": "macro_liquidity_headwind_easing_but_not_resolved",
   "pre_triggers": {
@@ -17,8 +32,17 @@
       "evidence_domains": ["MacroLiquidity", "MarketStructure"],
       "invalidation": "Macro pressure eases and BTC reclaims the recent range without new downside confirmation",
       "last_checked_at": "2026-09-12T10:50:21+07:00",
-      "latest_note": "No material state change versus 09:52 scan. Fresh BTC reference is about $76.87k. Sep11 UST10Y ended near 4.93%-4.95% after nearing 5%, while Brent settled near $104.61 after approaching $109-$110. Macro headwind eased from extremes but remains elevated. Latest complete US spot BTC ETF flow located remains Sep10 at about -$282.6m; no Sep11 final flow verified in this run. ETF weakness remains confirming rather than a new leading trigger. No sufficient same-definition valuation/leverage history. Bearish liquidity inflection remains LOW/CONFLICTING."
+      "latest_note": "Historical Sentinel-specific signal state from the last market scan. Must be refreshed before any new capital action."
     }
+  },
+  "accumulation_gate": {
+    "as_of": "2026-09-12T10:50:21+07:00",
+    "valuation": "UNKNOWN",
+    "liquidity": "HEADWIND_EASING_BUT_NOT_RESOLVED",
+    "forced_selling": "UNKNOWN",
+    "stabilization": "PARTIAL_INSUFFICIENT",
+    "result": "NOT_MET",
+    "status": "HISTORICAL_UNTIL_NEXT_SCAN"
   },
   "distribution": {
     "valuation": "UNKNOWN",
@@ -26,14 +50,14 @@
     "crowding_leverage": "UNKNOWN",
     "marginal_demand_risk": "ELEVATED",
     "as_of": "2026-09-12T10:50:21+07:00",
-    "note": "0 validated EXTREME dimensions. Latest complete ETF flow located remains Sep10 about -$282.6m, confirming weak marginal demand but not an EXTREME threshold without sufficient same-definition history. Valuation and leverage remain UNKNOWN. Distribution action map => HOLD/NO ACTION."
+    "note": "Historical Sentinel-specific distribution state. 0 validated EXTREME dimensions at the last scan. Must be refreshed before any new capital action."
   },
   "allocation_gate": {
-    "as_of": "2026-09-12T10:50:21+07:00",
-    "result": "NO_ACTION",
-    "reason": "Portfolio SSOT still has user-confirmed 0.2133 BTC total and only partial known cash; exact ordinary portfolio total/current weights and Permanent Core vs Tactical BTC split remain unknown, so weight-dependent sizing cannot be approved. Accumulation four-domain gate is not met and distribution has 0 EXTREME dimensions. No material change from prior scan.",
-    "cooldown_status": "INACTIVE_UNTIL_USER_CONFIRMED_BUY",
-    "permanent_core": "UNTOUCHED"
+    "status": "RECOMPUTE_ON_EACH_RUN_FROM_PORTFOLIO_SSOT",
+    "last_market_scan_result": "NO_ACTION",
+    "last_market_scan_as_of": "2026-09-12T10:50:21+07:00",
+    "current_portfolio_values_cached_here": false,
+    "rule": "Never use this file as a holdings/weights source. Read portfolio-state.json at runtime and recompute the allocation gate."
   },
   "alerts": [
     {
