@@ -1,7 +1,7 @@
 {
   "version": "2.6",
-  "updated_at": "2026-09-14T07:40:49+07:00",
-  "last_scan_at": "2026-09-14T06:40:07+07:00",
+  "updated_at": "2026-09-14T10:00:38+07:00",
+  "last_scan_at": "2026-09-14T10:00:38+07:00",
   "persistence": {"provider": "github", "writable": true},
   "state_ownership": {
     "purpose": "Sentinel-specific signal and market-state cache only. Portfolio holdings, weights, cash balances and permanent-floor quantities are NOT stored here.",
@@ -15,25 +15,36 @@
     "observed_portfolio_content_sha": "648fd00637fec69bb33646b40ac5a5ddcfbd3a10"
   },
   "market_state_freshness": {
-    "status": "FRESH_AT_LAST_SCAN",
-    "reason": "Market evidence belongs to the 2026-09-14T06:40:07+07:00 scan. The 07:40 update is a state-governance repair only, not a new market scan."
+    "status": "FRESH",
+    "reason": "Refreshed at 2026-09-14T10:00:38+07:00 using current BTC market data plus latest complete U.S. macro session. No new complete U.S. ETF/Treasury session has occurred since Sep 11."
   },
-  "last_price": 77214,
-  "last_price_quality": "VERIFIED_CURRENT_RANGE_MULTI_SOURCE_AT_LAST_SCAN",
+  "last_price": 77333.5,
+  "last_price_quality": "VERIFIED_CURRENT_VALUE_COINGLASS_WITH_CROSSCHECKED_77K_RANGE",
   "last_regime": "bear_market_accumulation_watch_with_macro_tightening_headwind",
   "data_quality": {
-    "price_structure": "VERIFIED_CURRENT_VALUE_OR_RANGE_AT_LAST_SCAN",
+    "price_structure": "VERIFIED_CURRENT_VALUE_AND_RECENT_STRUCTURE",
     "spot_btc_etf": "SOURCE_CONFLICT_LATEST_SESSION_DIRECTION_UNRESOLVED",
     "treasury_and_fed": "VERIFIED_LATEST_COMPLETE_US_SESSION_MULTI_SOURCE_NO_NEW_US_SESSION_WEEKEND",
-    "derivatives": "CURRENT_VALUE_PARTIALLY_VERIFIED_HISTORICAL_EXTREMENESS_UNKNOWN",
+    "derivatives": "VERIFIED_CURRENT_VALUE_COINGLASS_HISTORICAL_EXTREMENESS_UNKNOWN",
     "onchain_valuation": "INSUFFICIENT_FOR_CURRENT_PRECISE_GATE"
   },
   "source_conflicts": {
     "spot_btc_etf_latest_complete_session": {
       "status": "SOURCE_CONFLICT",
-      "reason": "Reliable aggregators previously disagreed on the latest session sign/direction. Until reconciled by authoritative/original data or harmonized definitions, the latest-session ETF direction must not be used as a confirmed Gate input.",
+      "reason": "Reliable aggregators previously disagreed on the Sep 11 latest complete session sign/direction. Until reconciled by authoritative/original data or harmonized definitions, the latest-session ETF direction must not be used as a confirmed Gate input.",
       "capital_action_use_allowed": false
     }
+  },
+  "current_market_snapshot": {
+    "as_of": "2026-09-14T10:00:38+07:00",
+    "btc_price_usd": 77333.5,
+    "btc_24h_change_pct": 0.11,
+    "btc_7d_change_pct": -3.3,
+    "futures_open_interest_usd": 51563312942,
+    "futures_volume_24h_usd": 32120691554,
+    "spot_volume_24h_usd": 2159469960,
+    "futures_liquidations_24h_usd": 42078353,
+    "derivatives_note": "Current values verified from CoinGlass; historical extremeness unknown."
   },
   "pre_triggers": {
     "upside_squeeze": {"status": "inactive", "first_seen_at": null, "first_seen_price": null, "confidence": null, "evidence_domains": [], "invalidation": null},
@@ -46,12 +57,12 @@
       "confidence": "MEDIUM",
       "evidence_domains": ["MacroLiquidity", "TreasuryRates", "FedPolicyExpectations"],
       "invalidation": "Fed tightening expectations materially reverse, Treasury yields retreat sustainably, and BTC/spot demand improve without renewed downside confirmation",
-      "last_checked_at": "2026-09-14T06:40:07+07:00",
-      "latest_note": "No material actionable change at the last market scan. ETF latest-session direction is now marked SOURCE_CONFLICT and excluded from confirmed Gate evidence until reconciled."
+      "last_checked_at": "2026-09-14T10:00:38+07:00",
+      "latest_note": "No material actionable change. BTC remains near 77.3k. Fed hike odds remain around the mid-80% range after hot inflation data; latest official Sep 10 Treasury constant maturities remain elevated at 2Y 4.56%, 10Y 4.95%, 30Y 5.37%. ETF latest-session direction remains SOURCE_CONFLICT and excluded from confirmed Gate evidence."
     }
   },
   "accumulation_gate": {
-    "as_of": "2026-09-14T06:40:07+07:00",
+    "as_of": "2026-09-14T10:00:38+07:00",
     "valuation": "UNKNOWN_CURRENT_ONCHAIN_VALUATION_INSUFFICIENT",
     "liquidity": "HEADWIND",
     "forced_selling": "PARTIAL_DELEVERAGING_CURRENT_DATA_VERIFIED_BUT_HISTORICAL_EXTREMENESS_UNKNOWN",
@@ -70,15 +81,15 @@
     "crowding_leverage": "CURRENT_DERIVATIVES_DATA_AVAILABLE_HISTORICAL_EXTREMENESS_UNKNOWN",
     "marginal_demand_risk": "UNKNOWN_SOURCE_CONFLICT_FOR_LATEST_ETF_SESSION",
     "validated_extreme_dimensions": 0,
-    "as_of": "2026-09-14T06:40:07+07:00",
-    "note": "Latest-session spot-BTC ETF direction is unresolved across reliable sources and is therefore SOURCE_CONFLICT. It must not be used as a confirmed marginal-demand deterioration or improvement signal until reconciled."
+    "as_of": "2026-09-14T10:00:38+07:00",
+    "note": "No validated bull-top distribution extreme. Latest-session spot-BTC ETF direction remains SOURCE_CONFLICT and cannot be used as confirmed marginal-demand deterioration or improvement evidence."
   },
   "allocation_gate": {
     "status": "NO_ACTION",
-    "recomputed_at": "2026-09-14T07:40:49+07:00",
+    "recomputed_at": "2026-09-14T10:00:38+07:00",
     "current_portfolio_values_cached_here": false,
     "rule": "Never use this file as a holdings/weights source. Read portfolio-state.json at runtime and recompute the allocation gate. Price levels are observation points only and never substitute for the Accumulation Gate.",
-    "reason": "Accumulation Gate remains NOT_MET because liquidity is a headwind and stabilization is insufficient. No specific BTC price level is a buy authorization; any observation level only triggers a fresh Gate evaluation. Portfolio SSOT remains below the 0.5 BTC permanent floor, so ordinary cycle-sellable BTC is zero."
+    "reason": "Accumulation Gate remains NOT_MET because liquidity remains a headwind and stabilization is insufficient. Current BTC around 77.3k does not create an action by itself. Portfolio SSOT remains below the 0.5 BTC permanent floor, so ordinary cycle-sellable BTC is zero."
   },
   "governance_repairs": [
     {
