@@ -1,7 +1,7 @@
 {
-  "version": "2.6",
-  "updated_at": "2026-09-14T13:06:15+07:00",
-  "last_scan_at": "2026-09-14T13:06:15+07:00",
+  "version": "2.7",
+  "updated_at": "2026-09-14T13:58:34+07:00",
+  "last_scan_at": "2026-09-14T13:58:34+07:00",
   "persistence": {"provider": "github", "writable": true},
   "state_ownership": {
     "purpose": "Sentinel-specific signal and market-state cache only. Portfolio holdings, weights, cash balances and permanent-floor quantities are NOT stored here.",
@@ -16,34 +16,35 @@
   },
   "market_state_freshness": {
     "status": "FRESH",
-    "reason": "Refreshed at 2026-09-14T13:06:15+07:00 using current CoinGlass BTC/OI/volume pages and same-day Reuters macro evidence. No new complete U.S. ETF/Treasury session has occurred since Sep 11."
+    "reason": "Refreshed at 2026-09-14T13:58:34+07:00 using current CoinGlass BTC/OI/liquidation data, same-day Reuters macro evidence, and reconciled Sep 11 U.S. spot-BTC ETF data from Farside plus SoSoValue-reported figures."
   },
-  "last_price": 76620.7,
-  "last_price_quality": "VERIFIED_CURRENT_COINGLASS_VALUE_WITH_INTRADAY_PAGE_VARIANTS_APPROX_76.5K_TO_77.2K",
+  "last_price": 76793.6,
+  "last_price_quality": "VERIFIED_CURRENT_COINGLASS_VALUE_WITH_INTRADAY_PAGE_VARIANTS_APPROX_76.8K_TO_77.1K",
   "last_regime": "bear_market_accumulation_watch_with_macro_tightening_headwind",
   "data_quality": {
     "price_structure": "VERIFIED_CURRENT_INTRADAY_RANGE_AND_RECENT_STRUCTURE",
-    "spot_btc_etf": "SOURCE_CONFLICT_LATEST_SESSION_DIRECTION_UNRESOLVED",
+    "spot_btc_etf": "VERIFIED_LATEST_COMPLETE_SESSION_MULTI_SOURCE_RECONCILED",
     "treasury_and_fed": "VERIFIED_LATEST_COMPLETE_US_SESSION_PLUS_SAME_DAY_REUTERS_FED_PRICING",
-    "derivatives": "VERIFIED_CURRENT_OI_AND_VOLUME_COINGLASS_HISTORICAL_EXTREMENESS_UNKNOWN_LIQUIDATIONS_NOT_INDEPENDENTLY_REFRESHED",
+    "derivatives": "VERIFIED_CURRENT_OI_VOLUME_AND_LIQUIDATIONS_COINGLASS_HISTORICAL_EXTREMENESS_UNKNOWN",
     "onchain_valuation": "INSUFFICIENT_FOR_CURRENT_PRECISE_GATE"
   },
   "source_conflicts": {
     "spot_btc_etf_latest_complete_session": {
-      "status": "SOURCE_CONFLICT",
-      "reason": "Reliable aggregators previously disagreed on the Sep 11 latest complete session sign/direction. Until reconciled by authoritative/original data or harmonized definitions, the latest-session ETF direction must not be used as a confirmed Gate input.",
-      "capital_action_use_allowed": false
+      "status": "RESOLVED",
+      "resolved_at": "2026-09-14T13:58:34+07:00",
+      "resolution": "Farside now reports Sep 11 total net flow of approximately -13.2M, consistent with SoSoValue-reported approximately -13.2893M. Prior positive figures were not the total-session net flow under the reconciled fund set/definition.",
+      "capital_action_use_allowed": true
     }
   },
   "current_market_snapshot": {
-    "as_of": "2026-09-14T13:06:15+07:00",
-    "btc_price_usd": 76620.7,
-    "btc_24h_change_pct": -0.91,
+    "as_of": "2026-09-14T13:58:34+07:00",
+    "btc_price_usd": 76793.6,
+    "btc_24h_change_pct": -0.7,
     "futures_open_interest_usd": 50960000000,
-    "futures_volume_24h_usd": 19230000000,
-    "spot_volume_24h_usd": 1740000000,
-    "futures_liquidations_24h_usd": null,
-    "derivatives_note": "Current BTC/OI/volume verified from CoinGlass. Same-site page variants showed roughly 76.5k-77.2k during the scan window, consistent with intraday movement/crawl timing. OI remains near 51B, not a material deleveraging shift versus the prior scan. Liquidations were not independently refreshed. Historical extremeness unknown."
+    "futures_volume_24h_usd": 18380000000,
+    "spot_volume_24h_usd": 1700000000,
+    "futures_liquidations_24h_usd": 11066257,
+    "derivatives_note": "Current BTC/OI/volume/liquidations verified from CoinGlass. OI remains near 51B and 24h liquidations are modest relative to the size of OI; this is not verified evidence of a cycle-level leverage washout. Historical extremeness remains unknown."
   },
   "pre_triggers": {
     "upside_squeeze": {"status": "inactive", "first_seen_at": null, "first_seen_price": null, "confidence": null, "evidence_domains": [], "invalidation": null},
@@ -56,21 +57,21 @@
       "confidence": "MEDIUM",
       "evidence_domains": ["MacroLiquidity", "TreasuryRates", "FedPolicyExpectations"],
       "invalidation": "Fed tightening expectations materially reverse, Treasury yields retreat sustainably, and BTC/spot demand improve without renewed downside confirmation",
-      "last_checked_at": "2026-09-14T13:06:15+07:00",
-      "latest_note": "No actionable regime change. BTC moved within roughly 76.5k-77.2k during the scan window, below the prior 77.26k snapshot but without an independent liquidation/spot-demand confirmation. Reuters same-day reporting keeps September Fed hike odds around 86%-87%, 10Y Treasury near 4.97%, and Brent around 107-108, preserving the macro tightening/inflation headwind. ETF latest-session direction remains SOURCE_CONFLICT and excluded from confirmed Gate evidence."
+      "last_checked_at": "2026-09-14T13:58:34+07:00",
+      "latest_note": "No actionable regime change. BTC remains around 76.8k-77.1k. Reuters same-day reporting puts September Fed-hike odds around 86%-87%, 10Y Treasury near 4.97%, and Brent around 107-108, preserving the macro tightening/inflation headwind. Sep 11 U.S. spot-BTC ETF flow conflict is now reconciled to about -13.2M/-13.29M net outflow, confirming a fourth consecutive outflow day rather than resolving stabilization positively."
     }
   },
   "accumulation_gate": {
-    "as_of": "2026-09-14T13:06:15+07:00",
+    "as_of": "2026-09-14T13:58:34+07:00",
     "valuation": "UNKNOWN_CURRENT_ONCHAIN_VALUATION_INSUFFICIENT",
     "liquidity": "HEADWIND",
     "forced_selling": "PARTIAL_DELEVERAGING_CURRENT_DATA_VERIFIED_BUT_HISTORICAL_EXTREMENESS_UNKNOWN",
-    "stabilization": "PARTIAL_INSUFFICIENT_WITH_ETF_SOURCE_CONFLICT",
+    "stabilization": "PARTIAL_INSUFFICIENT_WITH_CONFIRMED_RECENT_ETF_OUTFLOW_STREAK",
     "result": "NOT_MET",
     "blocking_gaps": [
       "Current reliable on-chain valuation evidence is insufficient",
-      "No verified cycle-level forced-selling extreme or fresh liquidation cascade",
-      "Stabilization evidence remains insufficient; latest-session ETF direction is SOURCE_CONFLICT and cannot be used as confirmed evidence"
+      "No verified cycle-level forced-selling extreme; current OI remains near 51B and current 24h liquidation value does not establish a major washout",
+      "Stabilization remains insufficient; Sep 8-11 U.S. spot-BTC ETF sessions were net outflows, including approximately -13.2M on Sep 11 after reconciliation"
     ],
     "price_level_policy": "No price level is an automatic buy trigger. 72K, 65K, 58K and other levels are observation/scenario references only. Reaching them triggers re-evaluation, not automatic buying; executable buying remains Gate- and stabilization-driven."
   },
@@ -78,17 +79,17 @@
     "valuation": "UNKNOWN",
     "trend_deviation": "NORMAL_TO_ELEVATED_NOT_EXTREME",
     "crowding_leverage": "CURRENT_DERIVATIVES_DATA_AVAILABLE_HISTORICAL_EXTREMENESS_UNKNOWN",
-    "marginal_demand_risk": "UNKNOWN_SOURCE_CONFLICT_FOR_LATEST_ETF_SESSION",
+    "marginal_demand_risk": "ELEVATED_CONFIRMED_RECENT_ETF_OUTFLOW_STREAK",
     "validated_extreme_dimensions": 0,
-    "as_of": "2026-09-14T13:06:15+07:00",
-    "note": "No validated bull-top distribution extreme. Latest-session spot-BTC ETF direction remains SOURCE_CONFLICT and cannot be used as confirmed marginal-demand deterioration or improvement evidence."
+    "as_of": "2026-09-14T13:58:34+07:00",
+    "note": "No validated bull-top distribution extreme. Sep 11 ETF flow is now reconciled as a small net outflow, confirming four consecutive outflow sessions through Sep 11; this is elevated marginal-demand weakness, not a cycle-top extreme."
   },
   "allocation_gate": {
     "status": "NO_ACTION",
-    "recomputed_at": "2026-09-14T13:06:15+07:00",
+    "recomputed_at": "2026-09-14T13:58:34+07:00",
     "current_portfolio_values_cached_here": false,
     "rule": "Never use this file as a holdings/weights source. Read portfolio-state.json at runtime and recompute the allocation gate. Price levels are observation points only and never substitute for the Accumulation Gate.",
-    "reason": "Accumulation Gate remains NOT_MET because liquidity remains a headwind and stabilization is insufficient. The intraday move into the mid/high-76k area is not an action by itself and lacks independent confirmation of seller exhaustion or improving demand. Portfolio SSOT remains below the 0.5 BTC permanent floor, so ordinary cycle-sellable BTC is zero."
+    "reason": "Accumulation Gate remains NOT_MET because liquidity remains a headwind and stabilization is insufficient. The ETF data reconciliation removes uncertainty but resolves it toward confirmed recent demand weakness, not toward a buy signal. Portfolio SSOT remains below the 0.5 BTC permanent floor, so ordinary cycle-sellable BTC is zero."
   },
   "governance_repairs": [
     {
@@ -99,7 +100,12 @@
     {
       "timestamp": "2026-09-14T07:40:49+07:00",
       "type": "ETF_SOURCE_CONFLICT_CONTROL",
-      "detail": "Latest-session ETF sign disagreement is now SOURCE_CONFLICT and excluded from confirmed Gate evidence until reconciled."
+      "detail": "Latest-session ETF sign disagreement was marked SOURCE_CONFLICT and excluded from confirmed Gate evidence until reconciled."
+    },
+    {
+      "timestamp": "2026-09-14T13:58:34+07:00",
+      "type": "ETF_SOURCE_CONFLICT_RESOLVED",
+      "detail": "Farside and SoSoValue-aligned figures now reconcile Sep 11 U.S. spot-BTC ETF total net flow to approximately -13.2M/-13.29M; ETF evidence is restored as confirmed input."
     }
   ],
   "alerts": [
@@ -111,6 +117,15 @@
       "to_confidence": "MEDIUM",
       "price": 77000,
       "reason": "August CPI and Treasury/Fed-pricing evidence strengthened the tightening headwind while spot BTC demand evidence was weak/uncertain. BTC price stabilization prevented escalation to a downside-liquidation trigger."
+    },
+    {
+      "timestamp": "2026-09-14T13:58:34+07:00",
+      "type": "ETF_DATA_CONFLICT_RESOLVED_NEGATIVE",
+      "setup": "STABILIZATION_EVIDENCE_RECONCILIATION",
+      "from_confidence": "SOURCE_CONFLICT",
+      "to_confidence": "VERIFIED_RECENT_DEMAND_WEAKNESS",
+      "price": 76793.6,
+      "reason": "Sep 11 total U.S. spot-BTC ETF flow is now reconciled near -13.2M/-13.29M across Farside and SoSoValue-aligned reporting, confirming a fourth consecutive outflow session. This strengthens the evidence that stabilization is not yet confirmed but does not change the current NO ACTION verdict."
     }
   ],
   "cancelled_setups": [],
