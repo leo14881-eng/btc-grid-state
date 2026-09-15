@@ -1,6 +1,6 @@
 # Investment Automations — Canonical Logic FINAL
 
-Version: 2026-09-14 v1.1
+Version: 2026-09-15 v1.2
 Timezone: Asia/Ho_Chi_Minh
 Status: FROZEN under “10-Year Wealth Compounding Architecture FINAL”
 
@@ -213,7 +213,7 @@ Notify only for material candidate/tier/valuation/thesis/Allocation-Gate changes
 
 ---
 
-# TASK 5 — Asymmetric Opportunity Hunter — v4.1 FINAL
+# TASK 5 — Asymmetric Opportunity Hunter — v4.2 FINAL
 
 Schedule: daily 09:00 Asia/Ho_Chi_Minh.
 
@@ -221,11 +221,45 @@ Read `portfolio-state.json`, `decision-journal.json`, `opportunity-hunter-state.
 
 A ledger with `status=ACTIVE_INITIALIZED`, a valid timestamp and `assets={}` is healthy when Portfolio SSOT and Journal confirm zero Asymmetric positions. Do not block a first trade merely because assets is empty. If a position/execution exists elsewhere but is absent from Hunter ledger, output `STATE SYNC VIOLATION` and block new actions until repaired.
 
-Capital: total Asymmetric hard cap 10,000 USDT; C-Class single asset <=1,000; all C-Class <=3,000. Never use BTC core/dip-buy cash, Grid, Structural, $200K term deposit or $50K Crisis Reserve without explicit reallocation.
+Capital: total Asymmetric hard cap 10,000 USDT; C-Class single asset <=1,000; all C-Class <=3,000. When portfolio-level percentage caps are stricter than these nominal Hunter caps, the stricter applicable cap governs until the architecture is formally reconciled. Never use BTC core/dip-buy cash, Grid, Structural, $200K term deposit or $50K Crisis Reserve without explicit reallocation.
 
 Goal: identify genuine early asymmetric repricing opportunities (including ZEC/PEPE/TIA-type patterns) before/early in a move, while avoiding high-FDV/unlock/value-capture traps. Typical target window weeks to ~3-18 months for 3x-20x; 3-5y only assesses upside ceiling/durability. Short-term BTC outperformance is not a hard gate, but BTC/Cash opportunity cost must be explicit.
 
-Search broadly without overfiltering. Prefer early structural change, narrative/catalyst formation, improving demand/value capture, favorable supply asymmetry and underpricing before consensus. Keep candidate set compact.
+Search broadly without overfiltering. Prefer early structural change, narrative/catalyst formation, improving demand/value capture, favorable supply asymmetry and underpricing before consensus. Keep the displayed candidate set compact, but `NO QUALIFIED BUY` must never suppress the research watchlist. A run with zero executable BUYs must still surface the strongest early-stage opportunities found.
+
+## Mandatory scored candidate framework
+
+Every daily run must output a ranked Top Watchlist whenever enough market data exists to evaluate candidates. Normally show the best 5-10 assets; fewer is allowed only when evidence is genuinely insufficient. Do not invent filler candidates merely to reach a count.
+
+Each displayed asset receives a transparent 0-100 Fundamental Opportunity Score composed of eight 0-10 subscores:
+
+1. Repricing / Upside Potential — weight 20%: plausible remaining upside over the target window and 3-5y ceiling, not past performance.
+2. Catalyst / Narrative Formation — weight 15%: identifiable upcoming or emerging catalysts, preferably before consensus saturation.
+3. Adoption / Demand — weight 15%: verified usage, users, volume, TVL, revenue or other economically relevant demand appropriate to the asset.
+4. Token Value Capture — weight 15%: credible mechanism connecting ecosystem success to token demand/value; weak or absent capture must score poorly.
+5. Valuation / Underpricing — weight 15%: market cap/FDV/revenue or protocol-appropriate valuation and how much optimism is already priced.
+6. Supply / Unlock Quality — weight 10%: circulating/FDV structure, unlocks, emissions, insider concentration and sell-pressure risk. Better supply quality = higher score.
+7. Liquidity / Market Structure — weight 5%: tradability, depth, venue quality and whether the setup is already excessively crowded/reflexive.
+8. Risk / Thesis Durability — weight 5%: smart-contract, regulatory, competitive, governance, permanent-loss and thesis fragility. More durable/lower permanent-loss risk = higher score.
+
+Convert each 0-10 subscore to the weighted total: `Total Score = Σ(subscore / 10 × weight)`, reported as 0-100. Missing critical evidence must be marked `DATA INSUFFICIENT`; do not silently award a neutral score. If non-critical evidence is missing, score conservatively and identify the missing evidence. Scores are decision aids, not automatic BUY triggers.
+
+Tier guidance based on the Total Score, subject to Risk Governor and critical-data overrides:
+- <60 = MONITOR / normally omit from compact Top Watchlist unless strategically important.
+- 60-69 = WATCH.
+- 70-79 = RESEARCH.
+- 80-87 = CANDIDATE.
+- >=88 = HIGH CONVICTION RESEARCH, but still NOT automatically executable.
+
+An executable B-Class `BUY SMALL` requires more than score: complete downside/EV due diligence, Risk Governor PASS, acceptable supply/unlock/liquidity, explicit BTC/Cash opportunity cost, authorized funding source and Allocation Gate PASS. A HIGH score with a critical red flag may remain WAIT or be vetoed.
+
+## Early-discovery and change tracking
+
+For each Top Watchlist asset output: Rank / Asset / Total Score / Tier / Stage / Action, followed by the eight subscores, strongest evidence, key catalyst, supply/unlock issue, thesis kill, concrete upgrade trigger and concrete downgrade trigger.
+
+Always identify `NEW TO RADAR`, `UPGRADED`, `DOWNGRADED`, and `NEAREST TO BUY` when applicable. Preserve the distinction between research status and execution status: WATCH/RESEARCH/CANDIDATE can be valuable outputs even when today's verdict is `NO QUALIFIED BUY`.
+
+Reflexivity ranking is separate from the Fundamental Opportunity Score. Output it only when price/volume/positioning/social/flow evidence is sufficiently verified; otherwise write `REFLEXIVITY: INCOMPLETE`. Do not boost the Fundamental score merely because price has already pumped.
 
 Before B-Class executable `BUY SMALL`, evaluate -30/-50/-70%, near-zero/permanent-loss, liquidity/exit failure, Token Demand failure, worst supply/unlock/emission and quantitative EV/asymmetry. Estimated probabilities must be labeled estimates. Critical missing data => `DATA INSUFFICIENT / B DUE DILIGENCE PENDING`.
 
@@ -237,4 +271,4 @@ Sell/de-risk for thesis break, permanent-loss/value-capture/supply/liquidity det
 
 Learning-loop framework changes only after at least one CLOSED real trade with confirmed execution history and explicit user approval.
 
-Daily output: TODAY'S VERDICT / NEW CANDIDATES / MATERIAL CHANGES / Fundamental ranking/subscores/class / Reflexivity ranking only if sufficiently verified else INCOMPLETE / Risk Governor / confirmed positions/actions / risks-invalidations-data gaps. If none: `NO QUALIFIED BUY` + closest candidate + concrete trigger.
+Daily output is mandatory even when there is no BUY: TODAY'S VERDICT / TOP WATCHLIST WITH SCORES / NEW TO RADAR / UPGRADES-DOWNGRADES / NEAREST TO BUY / MATERIAL CHANGES / Fundamental ranking + eight subscores + tier / Reflexivity ranking if sufficiently verified else INCOMPLETE / Risk Governor / confirmed positions-actions / risks-invalidations-data gaps. If no executable asset qualifies, output `NO QUALIFIED BUY` but still show the scored watchlist and the closest candidate with concrete trigger. Only a genuine market-data failure may produce no scored candidates, and that must be labeled `DATA INSUFFICIENT` rather than `NO CANDIDATES`.
