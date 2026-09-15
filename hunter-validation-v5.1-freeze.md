@@ -1,46 +1,52 @@
 # TASK 5 — VALIDATION LAYER (v5.1-freeze)
 
 Status: FROZEN
-Role: pre-report automatic quality control for TASK 5 v5.1. Engine logic §0–§17 remains frozen. Run every assertion before generating the finished daily report. Any blocking violation marks the asset BLOCKED with error_code; blocked assets cannot authorize capital action, enter validated rankings, or receive nearest labels. Independently valid upstream research outputs remain visible for audit/research under the score-preservation rules below.
+Role: pre-report automatic quality control for TASK 5 v5.1. Engine logic §0–§17 remains frozen. Run every assertion before generating the finished daily report. Blocking violations cannot authorize capital action, enter validated rankings, or receive nearest labels. Independently valid upstream outputs remain visible under score-preservation and generation rules.
 
-All thresholds are PROVISIONAL because the current six-asset sample has no statistical calibration.
+All thresholds in this layer are PROVISIONAL unless explicitly stated otherwise.
 
-## V1 — SUPPLY_ANCHOR (merged bidirectional dilution validation)
+## V1 — SUPPLY_ANCHOR (bidirectional dilution validation + freshness/conflict guard)
 
-Required inputs; missing input blocks rather than silently passing:
+Required inputs:
 - `valuation_horizon`: required; `today` or target date/range.
 - `material_supply_change_exists`: required boolean.
-- PROVISIONAL materiality definition: expected new circulating supply within target horizon >= 5% of current circulating supply. The determination must cite an unlock schedule/emission curve source.
+- PROVISIONAL materiality definition: expected new circulating supply within target horizon >= 5% of current circulating supply. Determination must cite unlock schedule/emission curve evidence.
+- Every `today_circulating` and `modeled_future_circulating` value must carry `{value, as_of, source}`.
+
+Missing-input guard:
 - If `valuation_horizon` missing OR `material_supply_change_exists` missing OR (`material_supply_change_exists=true` AND `modeled_future_circulating` missing): `BLOCK`, error=`SUPPLY_INPUT_MISSING:<field_name>`.
 
-Main validation:
+Freshness guard:
+- If any supply input used by valuation has `report_AS_OF - supply.as_of > 30d`: `BLOCK`, error=`SUPPLY_INPUT_STALE:<field_name>`.
+
+Source-conflict guard:
+- If a second reasonably reliable source exists for the same supply field, first harmonize economic definition/date/scope.
+- If harmonized values still satisfy `max(source_values)/min(source_values) > 1.2`: `BLOCK`, error=`SUPPLY_SOURCE_CONFLICT:<field_name>`.
+- While such conflict remains, any materiality calculation dependent on that field is `BLOCKED / UNRESOLVED`; do not assert `material_supply_change_exists=true/false` from the conflicted denominator.
+
+Main anchor validation:
 - If `valuation_horizon > today` AND `material_supply_change_exists=true`, required supply basis = `modeled_future_circulating`.
 - If `supply_basis == today_circulating` AND `material_supply_change_exists=true`: `BLOCK`, error=`DILUTION_IGNORED`.
 - If `supply_basis == max_supply` AND `today_circulating < max_supply` AND `modeled_future_circulating != max_supply`: `BLOCK`, error=`WRONG_SUPPLY_ANCHOR`.
 - Exception: if `modeled_future_circulating == max_supply` at target horizon, max supply is valid.
 
-Principle: supply-anchor correctness means `supply_basis` equals expected circulating supply at the valuation target horizon. `today_circulating`, `max_supply`, and `modeled_future_circulating` are not inherently right or wrong; mismatch to target-horizon expected circulation is the error.
+Principle: correct supply anchor = expected circulating supply at the valuation target horizon. No supply anchor is inherently conservative/correct merely because it is today circulating or max supply.
 
 ## V2 — ILLEGAL_DUAL_STATE
 
-Gate must be exactly one of `PASS / MARGINAL / FAIL / BLOCKED / NOT_CONFIRMED` and single-valued.
-If it contains `/` or multiple states: `BLOCK`, error=`ILLEGAL_DUAL_STATE`, then rejudge:
-- 3x assumptions EXTREME -> FAIL.
-- 3x assumptions AGGRESSIVE and permanent loss controllable -> MARGINAL.
-- depends on conflicted data -> BLOCKED.
+Gate must be exactly one of `PASS / MARGINAL / FAIL / BLOCKED / NOT_CONFIRMED` and single-valued. If it contains `/` or multiple states: `BLOCK`, error=`ILLEGAL_DUAL_STATE`, then rejudge: 3x EXTREME -> FAIL; 3x AGGRESSIVE with controllable permanent loss -> MARGINAL; conflicted dependency -> BLOCKED.
 
 ## V3 — REVENUE_BASIS_CONFLICT
 
-Normalize revenue/fees values to the same economic definition AND comparable observation window before comparison. Do not compare a 30d run-rate with a trailing-year annualized figure as if they were duplicate measurements of the same period. Once definitions/windows are harmonized, assertion: `max(annualized) / min(annualized) <= 1.5`. If ratio >1.5: `BLOCK`, error=`REVENUE_BASIS_CONFLICT`; dependent Reverse Valuation becomes BLOCKED; Gate=`BLOCKED`; report sources and definitions.
+Normalize revenue/fees values to the same economic definition AND comparable observation window before comparison. Never compare a 30d run-rate with trailing-year annualized as duplicate measurements of the same period. After harmonization, if `max(annualized)/min(annualized) > 1.5`: `BLOCK`, error=`REVENUE_BASIS_CONFLICT`; dependent Reverse Valuation=`BLOCKED`; Gate=`BLOCKED`; report conflicting sources/definitions.
 
 ## V4 — MISSING_CASE
 
-FRM cases must include `BEAR / BASE / BULL / EXTREME_BULL / PERMANENT_LOSS`.
-Missing any: `BLOCK`, error=`MISSING_CASE:<case_name>`.
+FRM must contain `BEAR / BASE / BULL / EXTREME_BULL / PERMANENT_LOSS`. Missing any: `BLOCK`, error=`MISSING_CASE:<case_name>`.
 
 ## V5 — INCOMPARABLE_MISUSE
 
-`INCOMPARABLE` is allowed only when data are complete but asymmetry genuinely overlaps under the dominance test. If used while a required component is missing, relabel `DATA_INSUFFICIENT` and list missing components. Required components: six FQ components, FRM, future_circulating, reverse_valuation, crowding, invalidation_geometry.
+`INCOMPARABLE` is allowed only when required data are complete but dominance genuinely cannot be established. If a required component is missing, relabel `DATA_INSUFFICIENT` and list missing components. Required: six FQ components, FRM, future_circulating when required by V1, reverse_valuation, crowding, invalidation_geometry.
 
 ## V6 — STALE_IN_GATE
 
@@ -48,55 +54,74 @@ Any EA entering BUY/ADD Gate must have `status=FRESH`. If `STALE` or `INVALIDATE
 
 ## V7 — FRESHNESS_MISSING
 
-Every FQ must contain `{value, as_of}` and every EA `{value, as_of, expires_at, status}`. Missing any field: `BLOCK`, error=`FRESHNESS_FIELD_MISSING`.
+Every current v5.1 FQ must contain `{value, as_of, generation}`. Every current/retained EA must contain `{value, as_of, expires_at, status, generation}` where applicable. Missing required metadata: `BLOCK`, error=`FRESHNESS_FIELD_MISSING`.
 
 ## V8 — CONDITIONAL_UNSTRUCTURED
 
-If Risk Governor uses CONDITIONAL, it must be a WAIT substate with complete structure `{condition, action_if_met, action_if_not_met, review_deadline, evidence, owner}`. Bare CONDITIONAL or any missing field -> downgrade to WAIT, error=`CONDITIONAL_UNSTRUCTURED`. Provisional numeric references without defensible historical baseline may trigger reassessment only; they must not automatically promote Governor to ALLOW or authorize BUY.
+If Risk Governor uses CONDITIONAL, it is a WAIT substate and must contain `{condition, action_if_met, action_if_not_met, review_deadline, evidence, owner}`. Missing structure -> downgrade to WAIT, error=`CONDITIONAL_UNSTRUCTURED`. Provisional numeric references without defensible baseline may trigger reassessment only, never automatic ALLOW/BUY.
 
 ## V9 — RESERVED
 
-Merged into V1 SUPPLY_ANCHOR. Do not run a duplicate dilution validator.
+Dilution validation is merged into V1. Do not run duplicate dilution logic.
 
 ## V10 — NEAREST_UNQUALIFIED
 
-Any `NEAREST-TO-*-BUY` asset must pass every corresponding TASK 5 §17 gate. If any gate fails but nearest is assigned: clear nearest label, error=`NEAREST_UNQUALIFIED`.
+Any `NEAREST-TO-*-BUY` must pass every corresponding TASK 5 §17 requirement. If any fails: clear nearest label, error=`NEAREST_UNQUALIFIED`.
 
-## VALIDATION OUTPUT SEMANTICS — SCORE PRESERVATION
+## BLOCK TAXONOMY — mandatory sub_type
+
+Whenever the reporting layer marks an asset BLOCKED, it must assign exactly one sub_type:
+
+### BLOCKED-INCOMPLETE
+Missing one or more required current components/inputs such that additional data could materially change the Hunter conclusion. Includes missing/incomplete FRM, required future_circulating, Reverse Valuation, crowding, invalidation_geometry, fresh required inputs, unresolved source conflict, or other prerequisite evidence.
+
+Action: include in `DATA REPAIR PRIORITY`; list `error_code` and `missing_items`. Capital action=$0.
+
+### BLOCKED-CONCLUDED
+Required decision inputs are sufficiently complete and a stable non-Hunter-entry conclusion has already been reached. Typical condition: inputs sufficient AND Gate in `{FAIL, MARGINAL}` AND the exclusion conclusion is stable for a new Hunter entry.
+
+Action: include in `EXCLUDED`, NOT in Data Repair Priority; attach explicit `conclusion`, e.g. `DO-NOT-CHASE` or `UPSIDE_INSUFFICIENT`. Capital action=$0.
+
+An unresolved secondary issue that is relevant only to existing-holder management does not automatically convert a stable new-entry `BLOCKED-CONCLUDED` into `BLOCKED-INCOMPLETE`; label that secondary issue separately.
+
+Forbidden: marking `BLOCKED-CONCLUDED` as `DATA_INSUFFICIENT` merely to keep it in a repair queue.
+
+## SCORE PRESERVATION
 
 `BLOCK != DELETE SCORE`.
 
-A validator failure blocks:
-- capital authorization;
-- BUY / ADD Gate;
-- NEAREST designation;
-- participation in VALIDATED ranking;
-- promotion of execution state.
+A validator failure blocks capital authorization, BUY/ADD Gate, nearest, validated-ranking participation and execution-state promotion. It does not erase independently valid upstream outputs.
 
-It does NOT erase independently valid upstream outputs.
+### FQ preservation + generation
+Every displayed numeric FQ must have a generation:
+- `v5.1-FQ`: computed from the frozen v5.1 six-component rubric, with `as_of`; eligible for `FQ RESEARCH VIEW` ranking if otherwise valid/current.
+- `LEGACY-FQ`: inherited from an older engine/rubric or cannot be proven to have been recomputed under v5.1; audit-visible only, never used in any v5.1 ranking, Signal, Gate, nearest, or other v5.1 decision.
 
-### FQ preservation
-If all six FQ-required components are valid and current under TASK 5, output the numeric FQ with `FQ_as_of` even when a downstream validator fails. If FQ prerequisites themselves are incomplete, output `FQ=DATA_INSUFFICIENT`.
+If provenance is uncertain, default to `LEGACY-FQ`, never assume v5.1-FQ.
+If FQ prerequisites are incomplete for a fresh v5.1 computation, output `v5.1-FQ=DATA_INSUFFICIENT`; a legacy value may be shown separately in audit.
 
-### EA preservation
-If FRM + Reverse Valuation + all EA-required inputs were valid when EA was calculated, retain the numeric EA with `{as_of, expires_at, status}` even when later stale or invalidated. Examples: `EA=77 | status=INVALIDATED_BY_EVENT`; `EA=72 | status=STALE`. Such values are `DISPLAY/AUDIT ONLY` and MUST NOT enter current capital Gate or VALIDATED EA ranking. If EA prerequisites themselves were incomplete when calculated, output `EA=DATA_INSUFFICIENT`; do not preserve an invalid legacy score merely because it exists historically.
+Mixing FQ generations in one v5.1 ranking is forbidden: `BLOCK RANKING`, error=`FQ_GENERATION_MIXED`.
 
-### Rankings
-Output two concepts distinctly when useful:
-- `RESEARCH SCORE VIEW`: may display independently valid FQ and DISPLAY/AUDIT-ONLY EA values, clearly tagged by status.
-- `VALIDATED RANKING`: only assets satisfying the required validation/freshness conditions participate. Never mix stale/invalidated/display-only values into validated capital ranking.
+### EA preservation + generation
+If FRM + Reverse Valuation + all EA-required inputs were valid when EA was calculated, retain numeric EA with `{as_of, expires_at, status, generation}` even if later stale/invalidated. Such values are DISPLAY/AUDIT ONLY unless current v5.1 requirements and freshness permit use. If an old EA cannot be proven to have followed v5.1 order/prerequisites, mark `LEGACY-EA / OBSOLETE`; never use it in v5.1 Gate/ranking. If current EA prerequisites are incomplete: `v5.1-EA=DATA_INSUFFICIENT`.
 
-Blocked assets remain visible in `BLOCKED / DATA REPAIR QUEUE` with all independently valid upstream scores preserved.
+## RANKING SEMANTICS
+
+- `FQ RESEARCH VIEW`: only valid/current `v5.1-FQ` values with as_of. If none or insufficient refresh coverage, output `PENDING v5.1-FQ REFRESH`; do not rank LEGACY-FQ.
+- `VALIDATED EA RANKING`: only current v5.1 EA values satisfying required validation/freshness conditions.
+- `LEGACY AUDIT`: may display LEGACY-FQ and LEGACY-EA values, clearly labeled OBSOLETE/AUDIT ONLY, never mixed into current rankings.
 
 ## Execution flow
 
 1. Pull current data and fill frozen TASK 5 v5.1 engine.
-2. Run V1–V10 for every asset before finished-report generation.
-3. Any BLOCK -> asset cannot authorize capital action, enter validated ranking, or receive nearest. Report `{asset,error_code,missing_items}` and preserve independently valid upstream scores in `BLOCKED / DATA REPAIR QUEUE` / research view.
-4. Only validation-eligible assets participate in validated ranking/nearest decisions.
-5. Engine logic is not modified because of a daily fill/data error; assertions intercept it.
-6. No validator may fabricate missing values merely to obtain PASS.
+2. Validate supply freshness/conflicts and all V1–V10 assertions before finished-report generation.
+3. Preserve independently valid upstream scores with generation/status metadata.
+4. For every blocked asset assign exactly one of `BLOCKED-INCOMPLETE` or `BLOCKED-CONCLUDED`.
+5. `BLOCKED-INCOMPLETE` -> DATA REPAIR PRIORITY. `BLOCKED-CONCLUDED` -> EXCLUDED. Never place the same asset in both.
+6. Only validation-eligible current-generation assets participate in current rankings/nearest/capital decisions.
+7. No validator may fabricate missing values merely to obtain PASS or a score.
+8. Engine logic is not modified because of a daily data/fill error.
 
 ## FREEZE declaration
 
-TASK 5 engine logic §0–§17 is FROZEN from v5.1. This Validation Layer is FROZEN after this score-preservation clarification. Unfreeze only for a demonstrated structural defect that systematically misses/misclassifies a real opportunity and cannot be explained by data/fill error. Daily execution = data fill + assertions; it does not include logic modification.
+TASK 5 engine logic §0–§17 remains FROZEN at v5.1. This Validation Layer is FROZEN after the BLOCK taxonomy + V1 supply guard + FQ generation patch. Unfreeze only for a demonstrated structural defect that systematically misses/misclassifies a real opportunity and cannot be explained by data/fill error. Daily execution = data fill + assertions; it does not include logic modification.
