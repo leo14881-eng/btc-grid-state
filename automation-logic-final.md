@@ -1,6 +1,6 @@
 # Investment Automations — Canonical Logic FINAL
 
-Version: 2026-09-15 v1.3
+Version: 2026-09-15 v1.4
 Timezone: Asia/Ho_Chi_Minh
 Status: FROZEN under “10-Year Wealth Compounding Architecture FINAL”
 
@@ -207,187 +207,185 @@ Notify only for material candidate/tier/valuation/thesis/Allocation-Gate changes
 
 ---
 
-# TASK 5 — Asymmetric Opportunity Hunter — v5.0 FINAL
+# TASK 5 — Asymmetric Opportunity Scoring (v5.1)
 
 Schedule: daily 09:00 Asia/Ho_Chi_Minh.
 
-Read `portfolio-state.json`, `decision-journal.json`, `opportunity-hunter-state.json`, then this file.
+Read `portfolio-state.json`, `decision-journal.json`, `opportunity-hunter-state.json`, then this file. A ledger with `status=ACTIVE_INITIALIZED`, a valid timestamp and `assets={}` is healthy when Portfolio SSOT and Journal confirm zero Asymmetric positions. If a position/execution exists elsewhere but is absent from Hunter ledger, output `STATE SYNC VIOLATION` and block new actions until repaired.
 
-A ledger with `status=ACTIVE_INITIALIZED`, a valid timestamp and `assets={}` is healthy when Portfolio SSOT and Journal confirm zero Asymmetric positions. Do not block a first trade merely because assets is empty. If a position/execution exists elsewhere but is absent from Hunter ledger, output `STATE SYNC VIOLATION` and block new actions until repaired.
+Capital: total Asymmetric nominal hard cap 10,000 USDT; legacy C-Class single asset <=1,000 and all C-Class <=3,000 remain conservative references. When portfolio-level percentage caps are stricter, the stricter applicable cap governs. Never use BTC core/dip-buy cash, Grid, Structural, $200K term deposit or $50K Crisis Reserve without explicit reallocation.
 
-Capital: total Asymmetric nominal hard cap 10,000 USDT; legacy C-Class single asset <=1,000 and all C-Class <=3,000 remain conservative references until class migration is fully reconciled. When portfolio-level percentage caps are stricter than Hunter nominal caps, the stricter applicable cap governs. Never use BTC core/dip-buy cash, Grid, Structural, $200K term deposit or $50K Crisis Reserve without explicit reallocation.
+Goal: identify genuine early asymmetric repricing opportunities before/early in a move. Typical target window is weeks to ~3-18 months for 3x-20x; 3-5y assesses upside ceiling/durability only. `NO QUALIFIED BUY` must never suppress the research watchlist.
 
-Goal: identify genuine early asymmetric repricing opportunities, including fundamental-backed and reflexive/narrative opportunities, before/early in a move while avoiding high-FDV, unlock, value-capture and permanent-loss traps. Typical target window is weeks to ~3-18 months for 3x-20x; 3-5y assesses upside ceiling/durability only. `NO QUALIFIED BUY` must never suppress the research watchlist.
+All thresholds in this Task 5 are `PROVISIONAL` because the current six-asset sample has no statistical calibration.
 
-## Core architecture — classification + split axes + gates
+## 0. Execution order — mandatory
 
-Never compress quality, entry and safety into one score.
+`DATA → VALUATION → SCENARIOS → FORWARD_RETURN_MAP → REVERSE_VALUATION → EA → FORWARD_UPSIDE_GATE → RISK_GOVERNOR → EXECUTION_STATE`
 
-`QUALITY ≠ ENTRY`
-`ENTRY ≠ SAFETY`
-`SAFETY ≠ UPSIDE`
+No step may be skipped or reverse-engineered from a desired EA/action.
 
-### Layer 1 — Classification
+## 1. Data freshness
 
-- `A-CLASS`: fundamental-backed asymmetry; current, verified economic quality/value capture is material.
-- `B-CLASS`: reflexive/narrative asymmetry; opportunity may be real despite low FQ, but requires smaller risk budget and stricter exit discipline.
-- `B-DEVELOPMENT`: current thesis is still primarily EA/catalyst driven while A-Class characteristics remain conditional or pending. Future expected improvement is not enough for A-Class labeling.
-- `HYBRID`: both currently verified fundamental and reflexive/entry characteristics are material.
+Each FQ stores `{value, as_of}`. Each EA stores `{value, as_of, expires_at, status}` where status is `FRESH / STALE / INVALIDATED_BY_EVENT`.
 
-Class migration must be evidence-driven. Example: conditional future value capture does not justify `A-DEVELOPMENT`; migration from B-DEVELOPMENT -> HYBRID/A-CLASS requires actual verified economic activation/adoption/value capture.
+EA maximum TTL: A-Class = 7d; B-Class/B-Development = 3d; event-driven = min(class TTL, event date/time). `STALE` or `INVALIDATED_BY_EVENT` may remain on Radar but cannot be used by any BUY/ADD Gate.
 
-### Layer 2 — Two independent scores
+`EVENT_OVERRIDE`: unlock; governance result; tokenomics change; exploit; listing; delisting; regulatory action; protocol launch/failure; material revenue/TVL break; buyback on/off; major supply change; catalyst completion/failure. Occurrence immediately invalidates EA and forces recalculation.
 
-`FQ = Fundamental Quality Score (0-100)` answers: how strong is the token's current economic quality?
+## 2. FQ — Fundamental Quality
 
-FQ must evaluate, with asset-appropriate evidence: adoption/product demand; revenue/economic activity; token value capture; competitive durability; supply quality; fundamental sustainability. Protocol/company success without token-level value capture must not be treated as token quality. Store `FQ_AS_OF`. FQ is not permanent: material exploit, revenue collapse, tokenomics/value-capture change, regulatory shock or major competitive loss forces immediate reassessment. Otherwise refresh on a reasonable weekly-to-monthly cadence appropriate to data availability.
+FQ answers only: `what is the token now?`
 
-`EA = Entry Asymmetry Score (0-100)` answers: at today's price and timing, how attractive is the forward payoff asymmetry?
+Weights:
+- Adoption / Real Demand: 25
+- Current Revenue / Economic Activity: 20
+- Token Value Capture: 20, with this component multiplied by EM
+- Competitive Durability: 15
+- Supply Quality: 10
+- Fundamental Sustainability: 10
 
-EA must evaluate: remaining repricing potential; valuation/mispricing; catalyst timing; positioning/crowding; supply-demand asymmetry; reflexivity potential; entry/invalidation geometry. Past drawdown or distance from ATH is not by itself underpricing.
+Total = 100.
 
-FQ and EA MUST NOT be merged, averaged, multiplied or converted into a Total Opportunity Score. Maintain separate `FUNDAMENTAL QUALITY RANKING` and `ENTRY ASYMMETRY RANKING`.
+FQ forbidden inputs: historical price appreciation; narrative strength; catalyst proximity; drawdown; cheap valuation; future buyback; future TAM. Catalyst never enters FQ.
 
-Do not freeze example scores into the template. All candidate scores must be recalculated under the same current rubric and same stated `as_of` evidence. If evidence is insufficient, output `DATA INSUFFICIENT`; never fill scores by analogy or memory.
+Normal FQ review cadence = 30d. Immediate reassessment on exploit, revenue collapse, tokenomics/value-capture change, regulation, major competitive loss or other material fundamental event.
 
-### Layer 3 — Evidence Maturity (EM)
+## 3. EM — Evidence Maturity
 
-EM is a gate/context field, not a ranking bonus. Use explicit maturity states; numeric mapping is optional and must not be used as a hidden score multiplier.
+Three states; EM is not a ranking dimension. Its multiplier applies only to the FQ Token Value Capture component:
+- `UNPROVEN = 0.40`: not governed/approved or not live on-chain.
+- `CONDITIONAL = 0.65`: approved but activation has prerequisites.
+- `ACTIVE = 1.00`: on-chain execution has occurred and economic effect is measurable.
 
-Default states:
-- `SPECULATIVE`
-- `PROPOSED`
-- `APPROVED / CONDITIONAL`
-- `ACTIVE / EARLY`
-- `VERIFIED / ECONOMICALLY MATERIAL`
+## 4. FF — Fundamental Floor
 
-EM affects capital eligibility, required confirmation and position size. A proposed/conditional mechanism cannot be described as active economic value capture.
+Token-level risk gate; changes position budget only, never ranking:
+- `HIGH`: main catalyst can fail and real token-captured cash flow still supports value.
+- `MEDIUM`: partial token-level economics already realized.
+- `LOW`: valuation depends heavily on a future/single event; failure can collapse thesis.
+- `NONE`: no token-level economic value; pure reflexivity.
 
-### Layer 4 — Fundamental Floor (FF)
+## 5. Forward Return Map — mandatory EA prerequisite
 
-FF = `HIGH / MEDIUM / LOW / NONE`. It answers: if the main catalyst fails, how much real token-level economic support remains?
+First list valuation: `current_price / current_MC / current_FDV / circulating_now / future_circulating`.
 
-FF is a risk-budget gate only; it never adds ranking points. Evaluate the token, not merely the protocol/company. Revenue without token value capture does not automatically create a high floor.
+All forward multiples must use future circulating supply rather than today's circulating supply. This is mandatory for ZRO, ENA, ONDO and any material-unlock/high-dilution asset.
 
-### Layer 5 — Risk Governor
+Then output five cases: `BEAR / BASE / BULL / EXTREME_BULL / PERMANENT_LOSS`.
 
-Risk Governor may `ALLOW`, `REDUCE SIZE`, `WAIT`, or `VETO`. Research status and execution status are separate.
+Every case must include `{name, target_price, target_MC, target_FDV, multiple, bucket, assumptions, failure_mode}`.
 
-A `CONDITIONAL` state is never allowed to be vague. It must include:
-- a falsifiable `condition`;
-- `action_if_met`;
-- `action_if_not_met`;
-- `review_deadline`;
-- `evidence_required`.
+`bucket ∈ {LIKELY, PLAUSIBLE, TAIL}`. Buckets are ordinal; do not invent percentage probabilities. Map from Reverse Valuation assumption realism: realistic assumptions -> LIKELY; aggressive assumptions -> PLAUSIBLE; extreme assumptions -> TAIL. `PERMANENT_LOSS` is mandatory and distinct from volatility downside.
 
-If any of those are missing or thresholds cannot be justified from evidence/history/market structure, `CONDITIONAL` maps to `WAIT`. Never invent X/Y/Z thresholds merely to make a condition executable.
+## 6. Reverse Valuation
 
-Risk Governor checks permanent-loss risk, smart-contract/technical risk, regulation, liquidity/exit risk, concentration, unlock/emissions, token-demand failure, single-catalyst dependency, correlation, portfolio allocation and BTC/Cash opportunity cost.
+For every asset, reverse-value both 3x and 5x. Derive the required `revenue / market_share / buyback / TVL / users` where economically relevant. If a metric is not economically relevant, mark `N/A` rather than fabricate it.
 
-### Layer 6 — Position sizing / execution discipline
+Classify each target `REALISTIC / AGGRESSIVE / EXTREME` and output: `Nx requires <future MC/FDV>, corresponding to <assumptions>, realism=<classification>`.
 
-A-Class may receive a larger Asymmetric risk budget only when FQ and EA are both sufficiently strong, evidence is mature, FF is acceptable, Risk Governor allows it and Allocation Gate passes.
+## 7. EA — Entry Asymmetry
 
-B-Class/B-Development may remain on Radar with low FQ or low FF. Low FQ/FF does not automatically delete an early opportunity. However capital eligibility requires smaller sizing, higher liquidity standards, faster review and explicit exit discipline.
+EA is derived only after FRM + Reverse Valuation; no FRM means EA=`DATA INSUFFICIENT`.
 
-For every B-Class/B-Development asset, distinguish `RADAR ELIGIBILITY` from `CAPITAL ELIGIBILITY`. A candidate may remain WATCH/RESEARCH without complete execution parameters. Before `BUY SMALL` becomes eligible, all three must be predefined and evidence-based:
-1. `INVALIDATION`: explicit thesis/price invalidation; not vague language such as momentum weakened.
-2. `TIME STOP`: asset/event-specific N-day deadline for thesis/catalyst realization or mandatory exit/review.
-3. `PROFIT LADDER`: predefined X% gain -> Y% trim steps plus runner rule, calibrated to volatility/liquidity/market cap/reflexivity/catalyst window rather than a universal template.
+Weights:
+- Remaining Repricing: 35 — inverse of already-price-in degree using move from lows, 30/90/180d performance, MC expansion, social/narrative attention.
+- RV Realism: 25 — more extreme base/bull assumptions score lower.
+- Dilution-Adjusted Upside: 20 — upside calculated with future circulating supply.
+- Crowding inverse: 10 — derivatives/positioning crowding.
+- Invalidation Geometry: 10 — clarity/quality of invalidation.
 
-If any of these three cannot be responsibly quantified: `RADAR = ALLOWED`, `BUY SMALL = PROHIBITED`.
+Hard rule: catalyst already occurred AND price already repriced -> Remaining Repricing collapses -> EA must be materially reduced. Never set EA first and backfill a bull case.
 
-## EA freshness and event override
+## 8. Forward Upside Gate
 
-EA is perishable. Every EA must store:
-- `EA_SCORE`
-- `EA_AS_OF`
-- `EA_EXPIRES_AT`
-- `EA_STATUS = FRESH / STALE / INVALIDATED_BY_EVENT`
+Risk-adjusted, not a naked-multiple gate:
+- `PASS`: at least one `LIKELY` or `PLAUSIBLE` >=3x path; that path's Reverse Valuation is not `EXTREME`; and the target position can absorb the permanent-loss case.
+- `MARGINAL`: reasonable cases are mainly ~1.5x-3x.
+- `FAIL`: 3x exists only under `EXTREME` assumptions, or a 3x path has permanent loss assessed `LIKELY`.
 
-Default maximum TTL:
-- A-Class: <=7 days.
-- B-Class/B-Development/reflexive: <=3 days.
+Add independent `FRAGILE` flag: if downgrading the bull bucket by one ordinal level causes PASS to disappear, mark `FRAGILE=true`.
 
-Use a shorter TTL when catalyst/event timing requires it. `STALE` or `INVALIDATED_BY_EVENT` EA may remain on Radar but cannot authorize `BUY SMALL`, `BUY` or `ADD`.
+For FAIL record reason separately as `UPSIDE_INSUFFICIENT` or `DOWNSIDE_FATAL`.
 
-The following events force immediate EA invalidation/recalculation regardless of TTL: major unlock; governance result; tokenomics change; exploit; material listing/delisting; regulatory action; major protocol launch/failure; material revenue/TVL discontinuity; buyback activation/deactivation; major supply change; catalyst completion/failure.
+## 9. Comparison rule — no scalar EV
 
-FQ also carries `FQ_AS_OF`; material fundamental events force immediate reassessment even if normal review cadence has not elapsed.
+Do not calculate `Σ(p×multiple)` or invent pseudo-precise probabilities. Use a dominance test: rank A above B only if A remains superior across all reasonable bucket assignments. Otherwise output `INCOMPARABLE` and require human judgment. Low-probability high-multiple versus high-probability low-multiple defaults to `INCOMPARABLE`.
 
-## Opportunity signals — labels, not a third score
+Sensitivity test: downgrade bull bucket by one level; if Gate no longer PASS, set `FRAGILE=true`.
 
-Use simple boolean/category signals to expose rare setups. Initial thresholds are `PROVISIONAL` until calibrated on real outcomes; never claim historical validation without evidence.
+## 10. Risk Governor
 
-- `DUAL-STRONG` provisional: FQ >=70 AND EA >=75. High-quality + high-entry-asymmetry A/Hybrid setup; highest research priority, not automatic BUY.
-- `EA-ONLY` provisional: FQ <55 AND EA >=80. Typical B-Class/reflexive setup; small-risk channel only.
-- `QUALITY-TRAP` provisional: FQ >=80 AND EA <50. Excellent quality but poor entry; do not chase.
-- `DEVELOPING` may be used sparingly for FQ 55-69 AND EA >=70 when current fundamentals are partial but important conditions remain unverified.
+Only four outputs: `ALLOW / REDUCE_SIZE / WAIT / VETO`.
 
-Avoid threshold cliffs: scores near cutoffs require judgment/confidence labels. Recalibrate thresholds only from recorded real signals/outcomes and with explicit user approval.
+Check permanent loss, contract/technical, regulatory, liquidity/exit, concentration, unlock/emissions, token-demand failure, single-catalyst dependency, correlation, allocation and BTC/Cash opportunity cost.
 
-## Research tiers vs execution states
+`CONDITIONAL` is a WAIT substate only and must carry `{condition, action_if_met, action_if_not_met, review_deadline, evidence, owner}`. Condition must be falsifiable. If thresholds lack defensible historical/market-structure baselines, do not upgrade to ALLOW; remain WAIT.
 
-Research tiers describe research priority only and must never imply permission to buy. Use compact tiers such as `RADAR / WATCH / RESEARCH / PRIORITY RESEARCH` based on evidence and the two rankings.
+## 11. Opportunity Signal
 
-Execution state must be one of:
-- `RADAR ONLY`
-- `RESEARCH`
-- `WAIT`
-- `CONDITIONAL — WAIT`
-- `CAPITAL ELIGIBLE — SMALL`
-- `CAPITAL ELIGIBLE`
-- `VETO`
+Boolean quadrant labels, not scores. All thresholds are PROVISIONAL:
+- `DUAL-STRONG = FQ>=70 AND EA>=75 AND Gate=PASS AND EA=FRESH AND Governor!=VETO AND FRAGILE=false`.
+- `EA-ONLY = FQ<55 AND EA>=80 AND Gate=PASS`.
+- `QUALITY-TRAP = FQ>=80 AND EA<50`.
+- `DEVELOPING = FQ 55-69 AND EA>=70 AND token Value Capture is not verified`.
+- otherwise `NEUTRAL`.
 
-No `BUY SMALL / BUY / ADD` recommendation is allowed unless current data is fresh, explicit conditions are met, risk budget and funding source are stated, invalidation/exit plan is explicit, Risk Governor allows it and Allocation Gate passes.
+Within ±3 of a threshold, mark `BORDERLINE` and require human review. `DUAL-STRONG` is never itself a BUY signal; Allocation Gate remains independent.
 
-## Candidate discovery and mandatory output
+## 12. Class — evidence-driven migration only
 
-Every daily run must output a compact Top Watchlist whenever enough market data exists. Normally show the strongest 5-10 assets; fewer only when evidence is genuinely insufficient. Never invent filler. `NO QUALIFIED BUY` still requires the strongest research candidates.
+Allowed classes: `A / B / HYBRID / B-DEVELOPMENT`.
 
-For each asset output at minimum:
-- Asset / Class
-- FQ / FQ_AS_OF
-- EA / EA_AS_OF / EA_EXPIRES_AT / EA_STATUS
-- EM / FF
-- Opportunity Signal
-- Research Tier
-- Risk Governor
-- Execution State
-- strongest evidence / catalyst
-- thesis kill
-- upgrade trigger / downgrade trigger
-- supply/unlock issue
-- data gaps/conflicts
+`A` = fundamental-backed. `B` = reflexive/narrative. `HYBRID` = material verified fundamental + reflexive/entry characteristics. `B-DEVELOPMENT` = current thesis still primarily EA/catalyst driven while A-like features remain conditional/pending.
 
-For B-Class/B-Development assets that are Capital Eligible, additionally output `Invalidation / Time Stop / Profit Ladder / Max Position / Review Deadline`.
+Migration `B-DEVELOPMENT → HYBRID → A` may occur only from already-observed on-chain/governance/economic facts; future expectations cannot drive migration.
 
-Always output both `FUNDAMENTAL QUALITY RANKING` and `ENTRY ASYMMETRY RANKING`, plus `DUAL-STRONG`, `EA-ONLY`, `QUALITY-TRAP` candidates when applicable. Output `NEAREST TO A-CLASS BUY` and `NEAREST TO B-CLASS BUY` separately. Do not collapse them into one `NEAREST TO BUY`.
+## 13. Position sizing
 
-Reflexivity analysis remains separate. Use verified price/volume/positioning/social/flow evidence; otherwise output `REFLEXIVITY: INCOMPLETE`. Reflexivity can support EA/B-Class analysis but cannot masquerade as FQ.
+- A with high FQ + high EA + mature EM + FF>=MEDIUM: normal Asymmetric sizing may be considered.
+- Hybrid: interpolate conservatively from FQ/EA/EM/FF.
+- B/B-Development: max size materially below A; position <= legacy C-Class cap; FF LOW/NONE applies an additional 0.5 risk-budget multiplier; EM UNPROVEN reduces further.
 
-## Current-case discipline
+Hard caps always use the strictest applicable rule: Portfolio Asymmetric 8% / single asset 2% / Hunter C-Class limits. No cap creates permission to buy.
 
-Do not freeze HYPE/ENA/PENDLE/ZEC/ZRO/ONDO example scores into canonical logic. Re-score them using the same v5.0 rubric and current evidence on each relevant run.
+## 14. B-Class Capital Eligibility
 
-ENA must not be labeled A-development merely because future value capture is possible. If value capture remains approved/conditional, FF low and thesis mainly depends on future USDe growth, classify `B-DEVELOPMENT` unless current verified evidence justifies migration. Fee-switch approval is not equivalent to economically material active buybacks.
+`RADAR_ELIGIBLE != CAPITAL_ELIGIBLE`.
 
-For event-driven assets such as ZRO, an EA score must not survive across a material unlock event. If a 2026-09-20 unlock remains material to the thesis, set `EA_EXPIRES_AT` no later than that event. After the event, reacquire wallet flows, CEX inflows, actual selling, spot absorption and price reaction before recalculating EA. Repeated monthly unlocks should be judged by actual absorption, not mechanically treated as one-time permanent vetoes.
+Before B/B-Development becomes capital-eligible, precommit asset-specific numeric execution discipline based on volatility, liquidity, market cap and catalyst window:
+- `invalidation`: specific price and/or falsifiable thesis point.
+- `time_stop`: N days.
+- `profit_ladder`: +X% -> trim Y% steps.
 
-PENDLE legacy $1.50-$1.65 research zone remains a research reference only, not an automatic BUY trigger. Full v5.0 gates and fresh EA are required.
+No universal template. Missing any item => `BUY_SMALL PROHIBITED`, but Radar/Research remains allowed.
 
-## Due diligence, monitoring and exits
+## 15. Execution State
 
-Before any executable B-Class `BUY SMALL`, evaluate -30/-50/-70%, near-zero/permanent-loss, liquidity/exit failure, token-demand failure, worst supply/unlock/emission and quantitative EV/asymmetry. Estimated probabilities must be labeled estimates. Critical missing data => `DATA INSUFFICIENT / B DUE DILIGENCE PENDING`.
+Execution state is separate from Research Tier and must be exactly one of:
+`RADAR-ONLY / RESEARCH / WAIT / CONDITIONAL-WAIT / CAPITAL-ELIGIBLE-SMALL / CAPITAL-ELIGIBLE / VETO`.
 
-After confirmed buy: daily price/volume/material catalyst/unlock monitoring; weekly revenue/TVL/adoption/executed buybacks/supply/valuation; event-triggered tokenomics/governance/contract/regulatory/thesis-break monitoring. Record confirmed entry price/quantity/time/capital/thesis/invalidation/catalyst/track. Never invent execution values.
+Delete execution use of `CANDIDATE / HIGH-CONVICTION`. A QUALITY-TRAP must carry: `EXCELLENT ASSET, NOT A HUNTER ENTRY`.
 
-Sell/de-risk for predefined invalidation, time stop, thesis break, permanent-loss/value-capture/supply/liquidity deterioration or deteriorating forward asymmetry. Profit-taking follows the precommitted asset-specific ladder for B-Class positions; do not improvise after entry.
+## 16. Fixed per-asset output order
 
-Learning-loop framework changes only after at least one CLOSED real trade with confirmed execution history and explicit user approval. Threshold/TTL calibration may be proposed from recorded signals but is not silently rewritten.
+`Asset | Class | FQ | FQ_as_of | EA | EA_as_of | EA_expires | EA_status | EM | FF | Signal | RiskGovernor | ExecutionState | ForwardReturnMap{Bear,Base,Bull,ExtremeBull,PermanentLoss} | ReverseValuation{3x,5x} | ForwardUpsideGate | Fragile? | Catalyst | ThesisKill | Upgrade | Downgrade`
 
-## Daily mandatory output
+For B/B-Development `CAPITAL-ELIGIBLE` or `CAPITAL-ELIGIBLE-SMALL`, append:
+`Invalidation | TimeStop | ProfitLadder | MaxPosition | ReviewDeadline`.
 
-`TODAY'S VERDICT / TOP WATCHLIST / FQ RANKING / EA RANKING / OPPORTUNITY SIGNALS / NEW TO RADAR / UPGRADES-DOWNGRADES / NEAREST TO A-CLASS BUY / NEAREST TO B-CLASS BUY / MATERIAL CHANGES / EM-FF / EA FRESHNESS / Risk Governor / EXECUTION STATE / confirmed positions-actions / risks-invalidations-data gaps / Allocation Gate if capital is proposed`.
+## 17. Rankings and NEAREST rules
 
-If no executable asset qualifies, output `NO QUALIFIED BUY` while preserving the watchlist. Only genuine market-data failure may produce no scored candidates, labeled `DATA INSUFFICIENT`, never `NO CANDIDATES`.
+Output `FQ_RANKING` and `EA_RANKING`; only FRESH EA can be used for capital gates. Because Section 9 forbids false scalar comparability, rankings must preserve `INCOMPARABLE` when dominance is not established rather than forcing a total order.
+
+`NEAREST-TO-A-CLASS-BUY` may be named only if all nine gates are met: FQ sufficient; EA sufficient; EA=FRESH; Forward Upside Gate=PASS; EM mature; FF acceptable; Governor=ALLOW; invalidation defined; Allocation Gate can pass.
+
+`NEAREST-TO-B-CLASS-BUY` may be named only if: EA sufficiently high; Gate=PASS; EA=FRESH; liquidity sufficient; invalidation/time_stop/profit_ladder/max_position all defined; Governor=ALLOW.
+
+If no asset satisfies every applicable gate, do not force a nearest candidate. Output `NO QUALIFIED BUY` while preserving the research watchlist.
+
+## Mandatory daily summary
+
+Every run must preserve a compact research watchlist when sufficient market data exists and report: `TODAY'S VERDICT / TOP WATCHLIST / FQ_RANKING / EA_RANKING / OPPORTUNITY SIGNALS / FORWARD RETURN MAP / REVERSE VALUATION / FORWARD UPSIDE GATES / EA FRESHNESS / Risk Governor / EXECUTION STATES / NEAREST-TO-A-CLASS-BUY / NEAREST-TO-B-CLASS-BUY / confirmed positions-actions / risks-invalidations-data gaps / Allocation Gate if capital is proposed`.
+
+Never invent a score, bucket, future supply, valuation input or execution threshold merely to complete the template. Critical missing evidence => `DATA INSUFFICIENT`; capital action remains blocked.
