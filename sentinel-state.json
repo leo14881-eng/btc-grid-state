@@ -1,7 +1,7 @@
 {
   "version": "2.8",
-  "updated_at": "2026-09-18T20:09:20+07:00",
-  "last_scan_at": "2026-09-18T20:09:20+07:00",
+  "updated_at": "2026-09-18T21:04:45+07:00",
+  "last_scan_at": "2026-09-18T21:04:45+07:00",
   "persistence": {"provider":"github","writable":true},
   "state_ownership": {
     "purpose": "Sentinel-specific signal and market-state cache only. Portfolio holdings, weights, cash balances and permanent-floor quantities are NOT stored here.",
@@ -15,31 +15,31 @@
   },
   "market_state_freshness": {
     "status": "FRESH_MARKET_WITH_STALE_PORTFOLIO_INPUT",
-    "reason": "Current 2026-09-18 BTC, ETF and macro evidence refreshed. Portfolio SSOT is readable but last user-confirmed valuation is 2026-09-13, so it is not treated as fresh enough to authorize a new capital action without reconfirmation."
+    "reason": "Current 2026-09-18 BTC and macro evidence refreshed. Portfolio SSOT remains readable but its last user-confirmed valuation is 2026-09-13, so it is stale for authorizing a new capital action. Latest complete ETF evidence remains the prior verified session; no fresher complete session was reliably established in this run."
   },
-  "last_price": 78096.85,
+  "last_price": 77929.78,
   "last_price_quality": "VERIFIED_CURRENT_2026-09-18_COINDESK",
   "last_regime": "bear_market_accumulation_watch_with_partial_price_rebound_but_unconfirmed_recovery",
   "data_quality": {
-    "price_structure": "VERIFIED_CURRENT_PRICE_AROUND_78.1K; BTC recovered from 75,972 and is on a third consecutive gain day, but remains within an established range with upper edge near 82K; higher-timeframe recovery not confirmed",
-    "spot_btc_etf": "VERIFIED_LATEST_COMPLETE_SESSION_2026-09-17_FARSIDE: +159.5M net inflow after -450.4M Sep15 and -295.9M Sep16; one positive session does not establish persistent demand recovery",
-    "treasury_and_fed": "VERIFIED_CURRENT: FED_3.75_4.00_AFTER_25BP_HIKE; Reuters Sep18 10Y around 4.976%; dollar index around 100.48; further-tightening risk remains",
+    "price_structure": "VERIFIED_CURRENT_PRICE_AROUND_77.93K; BTC remains resilient after the recent selloff but is still below the September high area around 82.3K; higher-timeframe recovery not confirmed",
+    "spot_btc_etf": "NO_NEW_RELIABLY_VERIFIED_COMPLETE_SESSION_THIS_RUN; prior verified Sep17 evidence retained qualitatively, not upgraded",
+    "treasury_and_fed": "VERIFIED_CURRENT_MACRO_HEADWIND: Fed target 3.75%-4.00% after Sep16 hike; Reuters Sep18 reports global rates remain tight and U.S. 10Y has recently crossed 5%; dollar index around 100.48",
     "derivatives": "CURRENT_PRECISE_OI_FUNDING_LIQUIDATION_SET_NOT_RELIABLY_VERIFIED_THIS_RUN; UNKNOWN_FOR_CAPITAL_GATE",
     "onchain_valuation": "INSUFFICIENT_FOR_CURRENT_PRECISE_GATE",
     "portfolio_ssot": "READABLE_BUT_USER_CONFIRMED_VALUATION_TIMESTAMP_2026-09-13; STALE_FOR_NEW_CAPITAL_AUTHORIZATION"
   },
   "source_timestamps": {
-    "scan_time": "2026-09-18T20:09:20+07:00",
+    "scan_time": "2026-09-18T21:04:45+07:00",
     "btc_price_source_date": "2026-09-18",
     "macro_source_date": "2026-09-18",
     "latest_complete_etf_session": "2026-09-17",
     "portfolio_state_updated_at": "2026-09-13T08:20:00+07:00"
   },
   "current_market_snapshot": {
-    "as_of": "2026-09-18T20:09:20+07:00",
-    "btc_price_usd": 78096.85,
-    "macro_note": "Fed policy range is 3.75%-4.00% after a 25bp hike this week. Reuters reported the U.S. 10Y around 4.976% on Sep 18 and dollar index around 100.48; further-tightening risk remains a macro headwind.",
-    "demand_note": "Farside shows U.S. spot-BTC ETFs +159.5M on Sep 17 after -450.4M Sep15 and -295.9M Sep16. Demand improved for one session but persistence is not confirmed."
+    "as_of": "2026-09-18T21:04:45+07:00",
+    "btc_price_usd": 77929.78,
+    "macro_note": "Fed policy range is 3.75%-4.00% after the Sep16 hike. Reuters Sep18 describes a global rates reset with the U.S. 10Y recently above 5%, while the dollar index was around 100.48; restrictive liquidity remains a headwind.",
+    "demand_note": "No fresher complete U.S. spot-BTC ETF session was reliably verified in this run. Corporate treasury demand was also reported weak, so persistent marginal-demand recovery remains unconfirmed."
   },
   "pre_triggers": {
     "upside_squeeze": {"status":"inactive","first_seen_at":null,"first_seen_price":null,"confidence":null,"evidence_domains":[],"invalidation":null},
@@ -48,26 +48,26 @@
       "status":"active","direction":"bearish","first_seen_at":"2026-09-11T13:54:55+07:00","first_seen_price":77200,"confidence":"MEDIUM_HIGH",
       "evidence_domains":["MacroLiquidity","TreasuryRates","FedPolicyExpectations","USD","RiskAssets"],
       "invalidation":"Fed tightening expectations materially reverse, Treasury yields retreat sustainably, the dollar weakens materially, and BTC/spot demand improve without renewed downside confirmation",
-      "last_checked_at":"2026-09-18T20:09:20+07:00",
-      "latest_note":"Still active. Fed hiked to 3.75%-4.00%; 10Y remains near 5% and dollar firm. BTC resilience near 78.1K plus Sep17 ETF inflow are constructive but insufficient to invalidate the macro-liquidity headwind."
+      "last_checked_at":"2026-09-18T21:04:45+07:00",
+      "latest_note":"Still active. Fed remains restrictive after the Sep16 hike; U.S. long yields remain historically high and the dollar firm. BTC resilience near 77.9K is constructive but does not independently invalidate the macro-liquidity headwind."
     }
   },
   "accumulation_gate": {
-    "as_of":"2026-09-18T20:09:20+07:00",
+    "as_of":"2026-09-18T21:04:45+07:00",
     "valuation":"UNKNOWN_CURRENT_ONCHAIN_VALUATION_INSUFFICIENT",
     "liquidity":"HEADWIND_REMAINS",
     "forced_selling":"UNKNOWN_CURRENT_PRECISE_DERIVATIVES_EXTREMENESS_THIS_RUN",
-    "stabilization":"PARTIAL_INSUFFICIENT; BTC recovered from 75,972 toward 78.1K with three gain days, but durable higher-timeframe recovery and persistent demand confirmation are not established",
+    "stabilization":"PARTIAL_INSUFFICIENT; BTC remains resilient near 77.9K, but durable higher-timeframe recovery and persistent spot-demand confirmation are not established",
     "result":"NOT_MET",
     "blocking_gaps":["Current reliable on-chain valuation evidence insufficient","Macro liquidity remains restrictive after Fed hike","Current derivatives washout/extremeness not reliably verified this run","Stabilization/demand persistence insufficient","Portfolio SSOT valuation is stale for a new capital authorization"],
     "price_level_policy":"No price level is an automatic buy trigger. Price levels are observation/scenario references only."
   },
   "distribution": {
-    "valuation":"UNKNOWN","trend_deviation":"NORMAL_TO_ELEVATED_NOT_EXTREME","crowding_leverage":"UNKNOWN_CURRENT_PRECISE_SET_THIS_RUN","marginal_demand_risk":"ELEVATED","validated_extreme_dimensions":0,"as_of":"2026-09-18T20:09:20+07:00","note":"No validated bull-top distribution extreme."
+    "valuation":"UNKNOWN","trend_deviation":"NORMAL_TO_ELEVATED_NOT_EXTREME","crowding_leverage":"UNKNOWN_CURRENT_PRECISE_SET_THIS_RUN","marginal_demand_risk":"ELEVATED","validated_extreme_dimensions":0,"as_of":"2026-09-18T21:04:45+07:00","note":"No validated bull-top distribution extreme."
   },
   "allocation_gate": {
     "status":"NO_ACTION_STALE_PORTFOLIO_INPUT",
-    "recomputed_at":"2026-09-18T20:09:20+07:00",
+    "recomputed_at":"2026-09-18T21:04:45+07:00",
     "current_portfolio_values_cached_here":false,
     "rule":"Never use this file as a holdings/weights source. Read portfolio-state.json at runtime.",
     "reason":"Accumulation Gate NOT_MET and the latest user-confirmed portfolio valuation is from Sep 13. Market evidence alone cannot authorize new capital deployment."
