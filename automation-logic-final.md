@@ -242,7 +242,9 @@ Classify:
 - `EARLY_MOVE`: repricing has begun but remaining asymmetry may still be large; requires non-price discovery evidence.
 - `POST_MOVE / LATE_DISCOVERY`: first discovery occurs only after material repricing or the principal catalyst is already substantially priced.
 
-POST_MOVE/LATE_DISCOVERY assets may remain for research/learning but **must not occupy the primary early-opportunity slots, must not be presented as Hunter discovery successes, and price momentum alone may not promote them to capital eligibility**. A strong project discovered late is explicitly a late discovery.
+POST_MOVE/LATE_DISCOVERY assets may remain for research/learning but **must not occupy the primary early-opportunity slots and must not be presented as Hunter discovery successes**. A strong project discovered late is explicitly a late discovery.
+
+**Discovery quality and capital opportunity are separate axes.** Historical appreciation at first discovery (including +50%, +80%, +100% or more) is a mandatory immutable validation statistic and may establish `LATE_DISCOVERY`, but **no fixed historical-return threshold is by itself a capital hard-reject rule**. A LATE_DISCOVERY/POST_MOVE asset may still enter the normal TASK 5 capital research chain when independent non-price evidence supports the thesis. Its current investability must be determined prospectively by `DATA → VALUATION → SCENARIOS → FORWARD_RETURN_MAP → REVERSE_VALUATION → EA → FORWARD_UPSIDE_GATE → RISK_GOVERNOR → EXECUTION_STATE`, including catalyst penetration/priced-in assessment, current valuation, remaining forward upside, downside/permanent-loss risk, supply/unlocks and opportunity cost. Price momentum alone still cannot create or promote a candidate.
 
 ### Discovery-before-confirmation separation
 Slow Discovery creates candidates from the universe using information available at that timestamp. Fast Confirmation monitors only after discovery and may use price/volume/RS/flows to validate or invalidate the already-recorded thesis. Confirmation evidence must never be backfilled as if it existed at discovery.
@@ -253,7 +255,7 @@ The first Hunter output section must be `EARLY DISCOVERY BOARD`: new PRE_MOVE, t
 If no PRE_MOVE/EARLY_MOVE asset qualifies, output `NO EARLY CANDIDATE TODAY`; never fill the board with recent winners.
 
 ### Validation / anti-process rule
-Hunter success is measured by lead time, not by explaining winners after the move. Maintain `late_discovery_rate / pre_move_discovery_rate / missed_leader_rate / discovery_lead_time` through blind replay/forward validation. Architecture polishing must not replace producing these validation numbers. A candidate first found after +50%/+100% repricing is recorded as LATE_DISCOVERY, not a discovery win.
+Hunter success is measured by lead time, not by explaining winners after the move. Maintain `late_discovery_rate / pre_move_discovery_rate / missed_leader_rate / discovery_lead_time` through blind replay/forward validation. Architecture polishing must not replace producing these validation numbers. A candidate first found after +50%/+100% repricing is recorded as LATE_DISCOVERY, not a discovery win **for discovery-quality statistics**; this label does not automatically prohibit prospective TASK 5 capital evaluation or authorization if the remaining forward asymmetry independently passes every required Gate.
 
 ## 0. Execution order — mandatory
 
