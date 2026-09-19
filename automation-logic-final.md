@@ -335,21 +335,49 @@ Weights:
 
 Hard rule: catalyst already occurred AND price already repriced -> Remaining Repricing collapses -> EA must be materially reduced. Never set EA first and backfill a bull case.
 
-## 8. Forward Upside Gate
+## 8. Forward Upside Gate — PATCH v2.13.0 BTC-Relative Gate Hardening (FROZEN)
 
-**BTC-relative, risk-adjusted opportunity gate; not a naked-multiple gate.** For the same forward horizon, construct a BTC benchmark scenario/range from current BTC valuation/regime evidence and compare the candidate against BTC. Do not invent precise probabilities.
+Status: `SHADOW` until global risk-aversion parameter `k` is calibrated by Blind Replay. While SHADOW, Gate outcomes are logged for research but `capital_eligible=0` and no BUY is authorized.
 
-- `PASS`: at least one `LIKELY` or `PLAUSIBLE` candidate path shows **meaningful prospective outperformance versus BTC over the same horizon**, the required Reverse Valuation assumptions are not `EXTREME`, and the excess-upside case remains attractive after future dilution, liquidity/exit constraints, permanent-loss risk and opportunity cost versus simply holding/buying BTC.
-- `MARGINAL`: candidate may outperform BTC, but the expected excess is small, fragile, highly assumption-sensitive, or not clearly sufficient to compensate for the candidate's higher permanent-loss/liquidity/supply risk.
-- `FAIL`: reasonable candidate paths do not outperform BTC sufficiently after risk/opportunity-cost adjustment, outperformance exists only under `EXTREME` assumptions, or permanent-loss/downside risk makes BTC the superior use of risk budget.
+### 8a. BTC-Relative Forward Upside Gate
 
-**There is no fixed 1.5x, 3x, 5x, 10x or 20x minimum for PASS.** A credible +60% candidate can be more relevant than a speculative 5x candidate if BTC's comparable forward case is materially lower and the excess return survives the risk adjustments. Conversely, a projected 2x is not automatically attractive if BTC has a comparable or better risk-adjusted path.
+Per-run versioned inputs: `btc_benchmark_id`, `horizon` (must equal candidate FRM horizon), candidate `bear/base/bull` returns, BTC `bear/base/bull` returns, candidate permanent-loss case, and global calibrated `k`.
 
-Continue to reverse-value 3x and 5x in Section 6 as stress/upside-ceiling diagnostics, not as mandatory capital qualification thresholds.
+Derived: `excess_base = cand.base - btc.base`; `downside_gap = max(0, btc.bear - cand.bear)`; `hurdle = k * downside_gap`.
 
-Add independent `FRAGILE` flag: if downgrading the candidate bull bucket by one ordinal level or upgrading the comparable BTC case by one ordinal level causes PASS to disappear, mark `FRAGILE=true`.
+Evaluate top-down, first match wins:
+- `FAIL / DOWNSIDE_FATAL`: candidate permanent-loss case is catastrophic with non-negligible likelihood. Absolute veto; BTC comparison is not reached.
+- `FAIL / BTC_RELATIVE_UPSIDE_INSUFFICIENT`: candidate does not dominate BTC in BOTH BEAR and BASE (`cand.bear >= btc.bear AND cand.base >= btc.base`), OR `excess_base < hurdle`, OR apparent PASS exists only under EXTREME assumptions.
+- `MARGINAL`: dominance holds and `excess_base >= hurdle`, but residual `excess_base-hurdle` is small, result is FRAGILE, or excess depends on a single catalyst.
+- `PASS`: BEAR and BASE dominance both hold; `excess_base >= hurdle`; assumptions are not EXTREME; and the result remains true after dilution, liquidity and exit constraints.
 
-For FAIL record reason separately as `BTC_RELATIVE_UPSIDE_INSUFFICIENT` or `DOWNSIDE_FATAL`.
+Beating BTC only in BULL while failing BEAR/BASE dominance is FAIL. No fixed absolute-return multiple is a PASS requirement.
+
+### 8a.4 k Calibration Protocol
+
+`k` is the only free Gate parameter and MUST NOT be hand-set. Until calibrated, `k=UNSET` and Gate remains SHADOW. Blind Replay grid: `k ∈ {0.5,1.0,1.5,2.0}`. Objective: maximize realized BTC-relative return/drawdown of the PASS set on OUT-OF-SAMPLE historical discoveries, subject to PASS-set max drawdown not exceeding BTC drawdown over the same windows. Minimum replay sample before freezing: `N_MIN=30` discoveries. Once frozen, persist/version k in SSOT; any k change requires a new commit and re-replay.
+
+### 8b. BTC Benchmark Construction
+
+Exactly ONE `btc_benchmark` per Hunter run, shared by all candidates. Record `btc_benchmark_id / btc_ref_price / timestamp / horizon` at run start. Candidate and BTC horizons MUST match. BTC bands are `BEAR / BASE / BULL`; `EXTREME_BULL` is ceiling diagnostic only and excluded from Gate. Each band is a forward RETURN RANGE, not a point probability; persist the auditable representative value used for band comparison. Comparison is scenario dominance, not base-vs-base alone. Precise fabricated probabilities are prohibited.
+
+### 8c. Fragility Test
+
+`FRAGILE=true` if a PASS disappears when ANY of: candidate bull bucket is downgraded one ordinal level; comparable BTC band is upgraded one ordinal level; or `k` is stressed by +0.5. A FRAGILE PASS is demoted to MARGINAL.
+
+### 8d. Reverse Valuation BTC-relative diagnostic
+
+Keep mandatory RV 3x and RV 5x as stress-test/upside-ceiling diagnostics only; they are not capital qualification thresholds. Add non-gating `RV_BTC_REL`: valuation assumptions required for the candidate to reach `btc.base + hurdle` over the horizon, exposing how heroic the case must be to justify leaving BTC.
+
+### 8e. EA unchanged
+
+EA weights remain: Remaining Repricing 35 / RV Realism 25 / Dilution-Adjusted Upside 20 / Crowding inverse 10 / Invalidation Geometry 10. BTC opportunity cost is handled only in this Gate and MUST NOT be added to EA, avoiding double counting.
+
+### 8f. Freeze Boundary
+
+FROZEN without a proven systematic misclassification defect: Gate logic, BTC band structure, Fragility, EA weights, RV structure. Allowed without architecture change: fill candidate supply/dilution and BTC benchmark data; calibrate k by Blind Replay; correct discovery/stage/evidence tags through append-only observations. Forbidden: new modules, metrics, gates or scenario layers.
+
+Data blockers to exit SHADOW: (1) verifiable current + forward circulating supply/dilution per candidate; (2) one versioned BTC BEAR/BASE/BULL benchmark for the horizon; (3) required universe coverage threshold; and (4) calibrated k. Capital stays zero while k is UNSET.
 
 ## 9. Comparison rule — no scalar EV
 
