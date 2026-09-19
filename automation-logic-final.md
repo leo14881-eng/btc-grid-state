@@ -1,6 +1,6 @@
 # Investment Automations — Canonical Logic FINAL
 
-Version: 2026-09-15 v1.4
+Version: 2026-09-19 v1.5
 Timezone: Asia/Ho_Chi_Minh
 Status: FROZEN under “10-Year Wealth Compounding Architecture FINAL”
 
@@ -218,6 +218,42 @@ Capital: total Asymmetric nominal hard cap 10,000 USDT; legacy C-Class single as
 Goal: identify genuine early asymmetric repricing opportunities before/early in a move. Typical target window is weeks to ~3-18 months for 3x-20x; 3-5y assesses upside ceiling/durability only. `NO QUALIFIED BUY` must never suppress the research watchlist.
 
 All thresholds in this Task 5 are `PROVISIONAL` because the current six-asset sample has no statistical calibration.
+
+## -1. Full-Universe Early Discovery — mandatory primary engine
+
+Hunter is an **early-discovery / pre-positioning system**, not a momentum leaderboard. Every scheduled run MUST begin with a broad market-wide discovery pass before reviewing the existing watchlist. Existing candidates may never substitute for the universe scan.
+
+Discovery objective: find assets whose **non-price evidence is improving before consensus repricing**, so the system can create immutable PRE_MOVE candidates early enough to research and, only after all capital gates pass, consider a small staged entry. Price strength is confirmation, never the primary discovery reason.
+
+### Universe coverage
+- Start from the broad liquid crypto universe available from reliable market datasets, not a hand-picked shortlist and not only existing Hunter assets.
+- Apply only investability/safety exclusions needed to avoid obviously unusable assets (e.g. non-tradable, pathological liquidity, scam/exploit/dead project evidence). Do not narrow the universe merely because an asset lacks recent momentum.
+- Persist `universe_size / scanned_count / excluded_count / exclusion_reasons / coverage_ratio / scan_as_of` each run. If broad-universe coverage cannot be established, label `UNIVERSE_COVERAGE_INSUFFICIENT`; do not pretend the existing watchlist is a full scan.
+
+### PRE_MOVE discovery evidence
+Search first for non-price or weakly-price-correlated inflections: protocol revenue/fees/users/TVL quality; token value-capture activation; buyback/burn; supply/unlock/emission inflection; governance changes; product/mainnet/upgrade milestones; developer/ecosystem adoption; stablecoin/RWA/DeFi/AI/infra demand; exchange/on-chain accumulation where definition is reliable; regulatory/listing/distribution changes; valuation dislocation; neglected narrative with improving fundamentals.
+
+A new candidate requires at least **two causally independent evidence domains**, and at least **one must be non-price**. Pure price/volume/RS/social-trending evidence can never create a PRE_MOVE candidate by itself.
+
+### Anti-chasing stage classification
+At immutable first discovery record `discovered_at / discovery_price / return_24h / return_7d / return_30d / return_90d when available`.
+Classify:
+- `PRE_MOVE`: thesis/evidence inflection exists and price has not materially repriced.
+- `EARLY_MOVE`: repricing has begun but remaining asymmetry may still be large; requires non-price discovery evidence.
+- `POST_MOVE / LATE_DISCOVERY`: first discovery occurs only after material repricing or the principal catalyst is already substantially priced.
+
+POST_MOVE/LATE_DISCOVERY assets may remain for research/learning but **must not occupy the primary early-opportunity slots, must not be presented as Hunter discovery successes, and price momentum alone may not promote them to capital eligibility**. A strong project discovered late is explicitly a late discovery.
+
+### Discovery-before-confirmation separation
+Slow Discovery creates candidates from the universe using information available at that timestamp. Fast Confirmation monitors only after discovery and may use price/volume/RS/flows to validate or invalidate the already-recorded thesis. Confirmation evidence must never be backfilled as if it existed at discovery.
+
+### Daily output priority
+The first Hunter output section must be `EARLY DISCOVERY BOARD`: new PRE_MOVE, then EARLY_MOVE candidates, with immutable discovery evidence and why the market may not yet have priced it. Existing POST_MOVE names go to a separate `POST_MOVE / LEARNING` section and must not crowd out early names.
+
+If no PRE_MOVE/EARLY_MOVE asset qualifies, output `NO EARLY CANDIDATE TODAY`; never fill the board with recent winners.
+
+### Validation / anti-process rule
+Hunter success is measured by lead time, not by explaining winners after the move. Maintain `late_discovery_rate / pre_move_discovery_rate / missed_leader_rate / discovery_lead_time` through blind replay/forward validation. Architecture polishing must not replace producing these validation numbers. A candidate first found after +50%/+100% repricing is recorded as LATE_DISCOVERY, not a discovery win.
 
 ## 0. Execution order — mandatory
 
