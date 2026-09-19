@@ -215,7 +215,7 @@ Read `portfolio-state.json`, `decision-journal.json`, `opportunity-hunter-state.
 
 Capital: total Asymmetric nominal hard cap 10,000 USDT; legacy C-Class single asset <=1,000 and all C-Class <=3,000 remain conservative references. When portfolio-level percentage caps are stricter, the stricter applicable cap governs. Never use BTC core/dip-buy cash, Grid, Structural, $200K term deposit or $50K Crisis Reserve without explicit reallocation.
 
-Goal: identify genuine early asymmetric repricing opportunities before/early in a move. Typical target window is weeks to ~3-18 months for 3x-20x; 3-5y assesses upside ceiling/durability only. `NO QUALIFIED BUY` must never suppress the research watchlist.
+Goal: identify genuine early repricing opportunities before/early in a move whose **prospective risk-adjusted return can outperform BTC over the same evaluation/holding horizon**. Large absolute multiples (3x-20x) remain valuable upside cases but are **not a minimum qualification threshold**. A candidate may qualify with a lower absolute return when evidence supports meaningful BTC-relative excess return after dilution, downside/permanent-loss risk, liquidity and opportunity cost. Typical evaluation window is weeks to ~3-18 months; 3-5y assesses upside ceiling/durability only. `NO QUALIFIED BUY` must never suppress the research watchlist.
 
 All thresholds in this Task 5 are `PROVISIONAL` because the current six-asset sample has no statistical calibration.
 
@@ -337,14 +337,19 @@ Hard rule: catalyst already occurred AND price already repriced -> Remaining Rep
 
 ## 8. Forward Upside Gate
 
-Risk-adjusted, not a naked-multiple gate:
-- `PASS`: at least one `LIKELY` or `PLAUSIBLE` >=3x path; that path's Reverse Valuation is not `EXTREME`; and the target position can absorb the permanent-loss case.
-- `MARGINAL`: reasonable cases are mainly ~1.5x-3x.
-- `FAIL`: 3x exists only under `EXTREME` assumptions, or a 3x path has permanent loss assessed `LIKELY`.
+**BTC-relative, risk-adjusted opportunity gate; not a naked-multiple gate.** For the same forward horizon, construct a BTC benchmark scenario/range from current BTC valuation/regime evidence and compare the candidate against BTC. Do not invent precise probabilities.
 
-Add independent `FRAGILE` flag: if downgrading the bull bucket by one ordinal level causes PASS to disappear, mark `FRAGILE=true`.
+- `PASS`: at least one `LIKELY` or `PLAUSIBLE` candidate path shows **meaningful prospective outperformance versus BTC over the same horizon**, the required Reverse Valuation assumptions are not `EXTREME`, and the excess-upside case remains attractive after future dilution, liquidity/exit constraints, permanent-loss risk and opportunity cost versus simply holding/buying BTC.
+- `MARGINAL`: candidate may outperform BTC, but the expected excess is small, fragile, highly assumption-sensitive, or not clearly sufficient to compensate for the candidate's higher permanent-loss/liquidity/supply risk.
+- `FAIL`: reasonable candidate paths do not outperform BTC sufficiently after risk/opportunity-cost adjustment, outperformance exists only under `EXTREME` assumptions, or permanent-loss/downside risk makes BTC the superior use of risk budget.
 
-For FAIL record reason separately as `UPSIDE_INSUFFICIENT` or `DOWNSIDE_FATAL`.
+**There is no fixed 1.5x, 3x, 5x, 10x or 20x minimum for PASS.** A credible +60% candidate can be more relevant than a speculative 5x candidate if BTC's comparable forward case is materially lower and the excess return survives the risk adjustments. Conversely, a projected 2x is not automatically attractive if BTC has a comparable or better risk-adjusted path.
+
+Continue to reverse-value 3x and 5x in Section 6 as stress/upside-ceiling diagnostics, not as mandatory capital qualification thresholds.
+
+Add independent `FRAGILE` flag: if downgrading the candidate bull bucket by one ordinal level or upgrading the comparable BTC case by one ordinal level causes PASS to disappear, mark `FRAGILE=true`.
+
+For FAIL record reason separately as `BTC_RELATIVE_UPSIDE_INSUFFICIENT` or `DOWNSIDE_FATAL`.
 
 ## 9. Comparison rule — no scalar EV
 
