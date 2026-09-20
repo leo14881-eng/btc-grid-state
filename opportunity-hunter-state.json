@@ -1,7 +1,7 @@
 {
-  "version": "2.13.1",
+  "version": "2.13.2",
   "status": "ACTIVE_INITIALIZED",
-  "updated_at": "2026-09-20T15:15:32+07:00",
+  "updated_at": "2026-09-20T15:25:00+07:00",
   "initialized_at": "2026-09-14T07:35:00+07:00",
   "state_ownership": "hunter_research_and_position_ledger_only",
   "portfolio_ssot": "portfolio-state.json",
@@ -151,41 +151,41 @@
     {
       "asset": "ASTER",
       "archetype": "VALUE_CAPTURE_SUPPLY_INFLECTION",
-      "eligibility": "WATCH_RESEARCH_ONLY",
-      "stage": "PRE_MOVE",
+      "eligibility": "BTC_RELATIVE_TASK5_RESEARCH",
+      "stage": "EARLY_MOVE",
       "thesis": "99% of daily platform fees programmatically buy back ASTER while an equal reserve amount is burned; the 400M team allocation cliff was extended by 12 months to Sep 2027, reducing near-term dilution before a large price repricing.",
       "invalidation": "Fee-funded buybacks materially weaken, delayed team vesting is reversed, emissions overwhelm burns, or platform activity/revenue deteriorates materially.",
       "candidate_id": "ASTER-20260919-001",
       "discovered_at": "2026-09-19T23:05:00+07:00",
       "discovery_price": 0.763,
-      "updated_at": "2026-09-19T23:05:00+07:00",
-      "available_at": "2026-09-19T23:05:00+07:00"
+      "updated_at": "2026-09-20T00:05:00+07:00",
+      "available_at": "2026-09-20T00:05:00+07:00"
     },
     {
       "asset": "JTO",
       "archetype": "VALUE_CAPTURE_PRODUCT_INFLECTION",
-      "eligibility": "WATCH_RESEARCH_ONLY",
+      "eligibility": "BTC_RELATIVE_TASK5_RESEARCH",
       "stage": "PRE_MOVE",
       "thesis": "JTX creates a new fee stream where 80% of platform fees flow to the DAO and the DAO share is committed to JTO open-market buyback and burn through Q4 2027; price has not materially repriced over the last month.",
       "invalidation": "JTX fails to generate material fees/volume, buyback commitment changes, or upcoming insider/investor unlock pressure dominates value capture.",
       "candidate_id": "JTO-20260919-001",
       "discovered_at": "2026-09-19T23:05:00+07:00",
       "discovery_price": 0.4554,
-      "updated_at": "2026-09-19T23:05:00+07:00",
-      "available_at": "2026-09-19T23:05:00+07:00"
+      "updated_at": "2026-09-20T00:05:00+07:00",
+      "available_at": "2026-09-20T00:05:00+07:00"
     },
     {
       "asset": "ENA",
       "archetype": "VALUE_CAPTURE_SUPPLY_RESTRUCTURE",
-      "eligibility": "TASK5_RESEARCH_CHAIN",
+      "eligibility": "BTC_RELATIVE_TASK5_RESEARCH",
       "stage": "POST_MOVE",
       "thesis": "Fee-switch governance passed and early-investor supply overhang was restructured; first Hunter encounter followed ~80% 30D repricing, so discovery quality is late, but historical appreciation is not a capital hard reject under the corrected SSOT.",
       "invalidation": "USDe growth fails to approach activation thresholds, approved value capture is not implemented, supply pressure overwhelms demand, or prospective TASK5 forward-upside/risk gates fail.",
       "candidate_id": "ENA-20260919-001",
       "discovered_at": "2026-09-19T23:05:00+07:00",
       "discovery_price": "UNKNOWN",
-      "updated_at": "2026-09-19T23:15:00+07:00",
-      "available_at": "2026-09-19T23:15:00+07:00"
+      "updated_at": "2026-09-20T00:05:00+07:00",
+      "available_at": "2026-09-20T00:05:00+07:00"
     }
   ],
   "scan_summary": {
@@ -541,6 +541,17 @@
       "coverage_status": "UNIVERSE_COVERAGE_INSUFFICIENT",
       "capital_authority": "FORCED_ZERO_WHILE_SHADOW",
       "note": "No new candidate met the required multi-domain early-discovery evidence in this partial web pass. Existing research statuses preserved; no BUY/ADD authorization."
+    },
+    {
+      "observed_at": "2026-09-20T15:25:00+07:00",
+      "type": "STATE_CONTRACT_REPAIR",
+      "result": "ELIGIBILITY_CONTEXT_SYNCHRONIZED_WITH_CURRENT_ASSET_STATE",
+      "scope": [
+        "ASTER",
+        "JTO",
+        "ENA"
+      ],
+      "note": "One-time repair of mutable current-state contract fields. Immutable discovery snapshots, discovery_price, discovered_at, and stage history were not rewritten. Future Slow writes must update asset current state + eligibility_context in the same persistence closure and reread-verify equality before Fast may consume."
     }
   ],
   "gate_mode": "SHADOW",
