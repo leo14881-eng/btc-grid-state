@@ -225,6 +225,16 @@ Hunter is an **early-discovery / pre-positioning system**, not a momentum leader
 
 Discovery objective: find assets whose **non-price evidence is improving before consensus repricing**, so the system can create immutable PRE_MOVE candidates early enough to research and, only after all capital gates pass, consider a small staged entry. Price strength is confirmation, never the primary discovery reason.
 
+### Persistence implementation contract — PATCH v2.13.1 (operational fix; no investment-logic change)
+- For Hunter-owned GitHub persistence, read repository files only by exact path on `main` using the GitHub file-content API (`fetch_file` semantics), which MUST return complete UTF-8 content plus the current blob SHA. Do not use global search, rendered-page extraction, truncated previews, or generic large-text fetches as the write source.
+- State write sequence is mandatory: `fetch_file(path, main) -> parse complete JSON -> mutate only Hunter-owned current-state fields -> update_file(path, current_blob_sha, main) -> fetch_file(path, main) -> parse -> verify expected fields and new blob SHA`.
+- If exact-path `fetch_file` succeeds with complete parseable content, a prior generic-reader truncation MUST NOT be reported as `STATE PERSISTENCE FAILURE`.
+- `opportunity-hunter-state.json` is a bounded current-state/snapshot file. Do NOT append new historical observation events to its `observation_events` array. Existing entries are legacy history and remain immutable.
+- New historical observations belong only in append-only `hunter-candidate-ledger.jsonl`. State may update the current asset/snapshot/scan/freshness view but must not duplicate the growing event history.
+- A successful Slow scan with no material candidate change updates only current freshness/coverage fields in state; it does not create a duplicate ledger event unless the frozen notification/validation contract requires one.
+- SHA conflict, incomplete exact-path content, JSON parse failure, write failure, or reread mismatch => `STATE PERSISTENCE FAILURE`; Fast Promotion blocked.
+- This patch changes persistence mechanics only. It does NOT change Discovery, TASK5, Gate, EA, validation, universe-coverage, or capital rules.
+
 ### Universe coverage
 - Start from the broad liquid crypto universe available from reliable market datasets, not a hand-picked shortlist and not only existing Hunter assets.
 - Apply only investability/safety exclusions needed to avoid obviously unusable assets (e.g. non-tradable, pathological liquidity, scam/exploit/dead project evidence). Do not narrow the universe merely because an asset lacks recent momentum.
