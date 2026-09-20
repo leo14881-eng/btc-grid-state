@@ -1,20 +1,32 @@
 {
-  "version": "1.3",
+  "version": "1.4",
   "status": "ACTIVE",
-  "updated_at": "2026-09-13T08:20:00+07:00",
+  "updated_at": "2026-09-20T14:57:00+07:00",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
-    "btc_core_range_pct": [30, 60],
+    "btc_core_range_pct": [
+      30,
+      60
+    ],
     "cash_tbill_base_pct": 35,
-    "cash_tbill_range_pct": [20, 55],
+    "cash_tbill_range_pct": [
+      20,
+      55
+    ],
     "structural_base_pct": 15,
-    "structural_range_pct": [0, 30],
+    "structural_range_pct": [
+      0,
+      30
+    ],
     "structural_single_asset_hard_cap_pct": 5,
     "asymmetric_base_pct": 5,
     "asymmetric_hard_cap_pct": 8,
     "asymmetric_single_asset_hard_cap_pct": 2,
-    "same_correlation_bucket_guideline_cap_pct": [4, 5]
+    "same_correlation_bucket_guideline_cap_pct": [
+      4,
+      5
+    ]
   },
   "ordinary_portfolio": {
     "valuation_timestamp": "2026-09-13T08:04:00+07:00",
@@ -37,8 +49,18 @@
       "wallet_display_usd": 25420.54,
       "data_status": "USER_CONFIRMED_FULL_ORDINARY_INVESTABLE_CASH_2026_09_13"
     },
-    "structural": {"usd": 0, "weight_pct": 0, "positions": [], "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"},
-    "asymmetric": {"usd": 0, "weight_pct": 0, "positions": [], "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"}
+    "structural": {
+      "usd": 0,
+      "weight_pct": 0,
+      "positions": [],
+      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
+    },
+    "asymmetric": {
+      "usd": 0,
+      "weight_pct": 0,
+      "positions": [],
+      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
+    }
   },
   "btc_cycle_policy": {
     "principle": "ACCUMULATE_IN_BEAR_MARKET_DISTRIBUTE_IN_BULL_MARKET",
@@ -64,10 +86,21 @@
       "last_buy_journal_id": null,
       "last_sell_journal_id": null
     },
-    "asymmetric": {"last_execution_timestamp": null, "open_position_ids": []},
-    "structural": {"last_execution_timestamp": null, "open_position_ids": []},
+    "asymmetric": {
+      "last_execution_timestamp": null,
+      "open_position_ids": []
+    },
+    "structural": {
+      "last_execution_timestamp": null,
+      "open_position_ids": []
+    },
     "state_sync_policy": {
-      "required_order": ["APPEND_DECISION_JOURNAL", "UPDATE_PORTFOLIO_STATE", "UPDATE_RELEVANT_COOLDOWN_OR_POSITION_LEDGER", "REREAD_AND_VERIFY"],
+      "required_order": [
+        "APPEND_DECISION_JOURNAL",
+        "UPDATE_PORTFOLIO_STATE",
+        "UPDATE_RELEVANT_COOLDOWN_OR_POSITION_LEDGER",
+        "REREAD_AND_VERIFY"
+      ],
       "journal_source": "decision-journal.json",
       "user_confirmed_execution_only": true,
       "historical_rationale_rewrite_forbidden": true,
@@ -75,12 +108,56 @@
     }
   },
   "isolated_capital": {
-    "btc_grid": {"usd_approx": 7000, "included_in_ordinary_allocation": false, "source_of_truth": "state.json", "data_status": "USER_RECONFIRMED_2026_09_13"},
-    "strategic_term_deposit": {"usd_approx": 200000, "breakable_early": true, "opportunity_cost": "several_thousand_usd_interest", "included_in_ordinary_allocation": false, "status": "STRATEGIC_POOL_NOT_AUTOMATICALLY_DEPLOYABLE_USER_RECONFIRMED_2026_09_13"},
-    "crisis_reserve": {"usd": 50000, "included_in_ordinary_allocation": false, "status": "STRICTLY_ISOLATED_USER_RECONFIRMED_2026_09_13"}
+    "btc_grid": {
+      "usd_approx": 14000,
+      "included_in_ordinary_allocation": false,
+      "source_of_truth": "state.json",
+      "data_status": "USER_CONFIRMED_SCREENSHOT_2026_09_20",
+      "current_snapshot": {
+        "investment_usdt": 14000,
+        "pnl_usdt": 110.9133,
+        "pnl_pct": 0.79,
+        "asset_nav_usdt": 14110.6734156,
+        "grid_profit_usdt": 110.1826,
+        "total_annualized_pct": 17.01,
+        "grid_annualized_pct": 16.9,
+        "arbitrage_count": 71,
+        "fee_taker_pct": 0.1,
+        "fee_maker_pct": 0.1,
+        "price_range_usdt": [
+          72000,
+          86000
+        ],
+        "grid_count": 28,
+        "screenshot_price_usdt": 80353.3,
+        "started_at": "2026-09-03T08:05:12+07:00",
+        "source": "USER_SCREENSHOT_2026_09_20"
+      }
+    },
+    "strategic_term_deposit": {
+      "usd_approx": 200000,
+      "breakable_early": true,
+      "opportunity_cost": "several_thousand_usd_interest",
+      "included_in_ordinary_allocation": false,
+      "status": "STRATEGIC_POOL_NOT_AUTOMATICALLY_DEPLOYABLE_USER_RECONFIRMED_2026_09_13"
+    },
+    "crisis_reserve": {
+      "usd": 50000,
+      "included_in_ordinary_allocation": false,
+      "status": "STRICTLY_ISOLATED_USER_RECONFIRMED_2026_09_13"
+    }
   },
   "allocation_gate_policy": {
-    "required_checks": ["current_portfolio_weights_and_ranges", "funding_source", "risk_budget", "correlation_exposure", "opportunity_cost_vs_btc_or_cash_tbill", "fund_layer_compliance", "btc_permanent_floor_protection", "crisis_reserve_protection"],
+    "required_checks": [
+      "current_portfolio_weights_and_ranges",
+      "funding_source",
+      "risk_budget",
+      "correlation_exposure",
+      "opportunity_cost_vs_btc_or_cash_tbill",
+      "fund_layer_compliance",
+      "btc_permanent_floor_protection",
+      "crisis_reserve_protection"
+    ],
     "btc_sell_floor_rule": "No ordinary cycle BTC sale may reduce total BTC below 0.5 BTC.",
     "execution_authority": "USER_ONLY"
   },
