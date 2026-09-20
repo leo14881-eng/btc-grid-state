@@ -1,130 +1,35 @@
 {
-  "version": "2.32",
-  "updated_at": "2026-09-20T15:15:32+07:00",
-  "last_scan_at": "2026-09-20T15:15:32+07:00",
-  "persistence": {
-    "provider": "github",
-    "writable": true
-  },
-  "state_ownership": {
-    "purpose": "Sentinel market and signal state only",
-    "portfolio_source_of_truth": "portfolio-state.json",
-    "observed_portfolio_state_version": "1.5",
-    "observed_portfolio_state_updated_at": "2026-09-20T15:00:00+07:00",
-    "observed_portfolio_content_sha": "3a097f82c97e36bd60fe50f7e22ee9afdb010035"
-  },
-  "market_state_freshness": {
-    "status": "FRESH_WITH_SOURCE_CONFLICT",
-    "as_of": "2026-09-20T15:15:32+07:00",
-    "reason": "Manual all-task run. BTC current-day evidence remains around 80.5K-81K. Sep18 is latest complete US ETF session; reliable reports agree direction positive but magnitude conflicts (+324.6M vs +433M), so ETF magnitude remains SOURCE_CONFLICT. Fed Sep16 raised target 25bp to 3.75-4.00%; BOJ Sep18 raised to 1.25%. Weekend limits fresh US cash-market/ETF data."
-  },
+  "version": "2.33",
+  "updated_at": "2026-09-20T15:37:18+07:00",
+  "last_scan_at": "2026-09-20T15:37:18+07:00",
+  "persistence": {"provider":"github","writable":true},
+  "state_ownership": {"purpose":"Sentinel market and signal state only","portfolio_source_of_truth":"portfolio-state.json","observed_portfolio_state_version":"1.5","observed_portfolio_state_updated_at":"2026-09-20T15:00:00+07:00","observed_portfolio_content_sha":"3a097f82c97e36bd60fe50f7e22ee9afdb010035"},
+  "market_state_freshness": {"status":"FRESH_WITH_SOURCE_CONFLICT","as_of":"2026-09-20T15:37:18+07:00","reason":"BTC current-day reporting remains around 81.1K. Sep18 remains latest complete US ETF session under weekend cadence; direction is positive but magnitude remains unreconciled (+324.6M vs +433M). Treasury yields remain elevated after the Sep16 Fed hike; no confirmed liquidity turn."},
   "last_price": 81100,
-  "last_price_quality": "VERIFIED CURRENT RANGE / APPROXIMATE VALUE: current Sep20 reporting places BTC around 81,100; separate current-day sources place it in the 81K area. Exact tick not independently synchronized, so 81,100 is an approximate current reference and not a capital-action trigger.",
+  "last_price_quality": "VERIFIED CURRENT RANGE / APPROXIMATE VALUE: current Sep20 reporting places BTC around 81,100; exact tick not independently synchronized, so 81,100 is an approximate current reference and not a capital-action trigger.",
   "last_regime": "bear_market_accumulation_watch_rebound_above_80k_recovery_unconfirmed",
   "data_quality": {
-    "price_structure": "VERIFIED CURRENT RANGE: BTC remains around 81K above 80K after rebounding from the Sep15-16 ~75K low; immediate 82K-83K breakout area remains unconfirmed.",
-    "volume": "CURRENT-DAY VALUE AVAILABLE FROM SECONDARY MARKET DATA; HISTORICAL EXTREMENESS UNKNOWN.",
-    "spot_btc_etf": "SOURCE_CONFLICT: Sep18 latest complete session. Farside original table reports +324.6M (FBTC +310.7M); The Block reports +433M overall with FBTC +310.7M. Direction is positive in both, but magnitude/definition is unreconciled, so ETF magnitude is withheld from confirmed Gate use.",
-    "macro": "VERIFIED LATEST OFFICIAL DATA: Fed H.15 release Sep18 shows Sep17 2Y 4.67%, 10Y 4.94%, 30Y 5.29%; Fed raised target range to 3.75%-4.00% on Sep16. Weekend cadence applies; no confirmed liquidity turn.",
-    "derivatives": "DATA INSUFFICIENT / HISTORICAL COMPARISON UNKNOWN: no sufficiently reliable fresh same-definition BTC OI/funding/liquidation set obtained this run; no derivatives confirmation asserted.",
-    "onchain_valuation": "QUALITATIVE EVIDENCE ONLY: current reporting says entity-adjusted SOPR is above 1 and LTH/STH SOPR ratio near 0.88, but same-definition authoritative history/current series was not independently obtained; not used as Gate PASS.",
-    "portfolio_ssot": "READABLE_UNCHANGED_NO_CONFIRMED_NEW_EXECUTION"
+    "price_structure":"VERIFIED CURRENT RANGE: BTC remains around 81K above 80K; immediate 82K-83K breakout area remains unconfirmed.",
+    "volume":"CURRENT-DAY VALUE AVAILABLE FROM SECONDARY MARKET DATA; HISTORICAL EXTREMENESS UNKNOWN.",
+    "spot_btc_etf":"SOURCE_CONFLICT: Sep18 latest complete session; reliable sources agree net inflow direction but report +324.6M vs +433M magnitude/definition. Withheld from confirmed Gate use.",
+    "macro":"VERIFIED LATEST NORMAL SESSION: Sep18 yields remained elevated after Fed raised target to 3.75%-4.00% Sep16; current reporting places 2Y around 4.72-4.74% and 10Y around 4.97-5.01%. No confirmed liquidity turn; exact same-definition 30Y set not independently refreshed this run.",
+    "derivatives":"DATA INSUFFICIENT / HISTORICAL COMPARISON UNKNOWN: no sufficiently reliable fresh same-definition BTC OI/funding/liquidation set obtained this run; no derivatives confirmation asserted.",
+    "onchain_valuation":"QUALITATIVE EVIDENCE ONLY / NOT REFRESHED THIS RUN; not used as Gate PASS.",
+    "portfolio_ssot":"READABLE_UNCHANGED_NO_CONFIRMED_NEW_EXECUTION"
   },
-  "source_timestamps": {
-    "scan_time": "2026-09-20T14:36:00+07:00",
-    "btc_price_latest_verified": "2026-09-20_CURRENT_DAY_APPROX_81.1K",
-    "macro_latest_normal_session": "2026-09-18",
-    "latest_etf_session_checked": "2026-09-18_SOURCE_CONFLICT_FARSIDE_324.6M_VS_REPORTED_433M",
-    "derivatives_latest_verified": "NO_FRESH_FULL_SET_THIS_RUN",
-    "portfolio_state_updated_at": "2026-09-13T08:20:00+07:00"
-  },
-  "current_market_snapshot": {
-    "as_of": "2026-09-20T14:36:00+07:00",
-    "btc_price_usd": 81100,
-    "btc_price_note": "Current-day reporting places BTC around 81.1K and above 80K; exact tick is approximate and price alone does not confirm Recovery.",
-    "macro_note": "Weekend cadence applies; Sep18 remains latest normal US macro-market session. 2Y/10Y yields remain elevated and the Fed backdrop is restrictive after the Sep16 rate hike; no confirmed liquidity turn.",
-    "demand_note": "Sep18 remains latest complete US spot-BTC ETF session. Farside original table shows +324.6M while another current dataset/report shows +433M; direction positive but magnitude/definition remains SOURCE_CONFLICT for Gate purposes."
-  },
+  "source_timestamps": {"scan_time":"2026-09-20T15:37:18+07:00","btc_price_latest_verified":"2026-09-20_CURRENT_DAY_APPROX_81.1K","macro_latest_normal_session":"2026-09-18","latest_etf_session_checked":"2026-09-18_SOURCE_CONFLICT_324.6M_VS_433M","derivatives_latest_verified":"NO_FRESH_FULL_SET_THIS_RUN","portfolio_state_updated_at":"2026-09-20T15:00:00+07:00"},
+  "current_market_snapshot": {"as_of":"2026-09-20T15:37:18+07:00","btc_price_usd":81100,"btc_price_note":"Current-day reporting places BTC around 81.1K and above 80K; price alone does not confirm Recovery.","macro_note":"Weekend cadence applies; Sep18 remains latest normal US macro-market session. Yields remain elevated and Fed backdrop restrictive; no confirmed liquidity turn.","demand_note":"Sep18 remains latest complete US spot-BTC ETF session; direction positive but magnitude remains SOURCE_CONFLICT."},
   "pre_triggers": {
-    "upside_squeeze": {
-      "status": "watch_not_actionable",
-      "first_seen_at": "2026-09-18T23:33:10+07:00",
-      "first_seen_price": 80825,
-      "confidence": "LOW_MEDIUM",
-      "evidence_domains": [
-        "PriceStructure"
-      ],
-      "last_checked_at": "2026-09-20T14:36:00+07:00",
-      "latest_note": "BTC remains above 80K, but the 82K-83K breakout area is not confirmed and ETF magnitude remains SOURCE_CONFLICT, so SpotDemand is not promoted to confirmed Gate evidence. Recovery remains unconfirmed; WATCH_NOT_ACTIONABLE."
-    },
-    "downside_liquidation": {
-      "status": "inactive",
-      "last_checked_at": "2026-09-20T14:36:00+07:00"
-    },
-    "liquidity_inflection": {
-      "status": "active",
-      "direction": "bearish",
-      "confidence": "MEDIUM_HIGH",
-      "last_checked_at": "2026-09-20T14:36:00+07:00",
-      "latest_note": "Restrictive macro/liquidity backdrop remains after the Sep16 Fed hike; Sep18 Treasury yields stayed elevated and weekend cadence applies; no confirmed liquidity turn."
-    }
+    "upside_squeeze":{"status":"watch_not_actionable","first_seen_at":"2026-09-18T23:33:10+07:00","first_seen_price":80825,"confidence":"LOW_MEDIUM","evidence_domains":["PriceStructure"],"last_checked_at":"2026-09-20T15:37:18+07:00","latest_note":"BTC remains above 80K, but 82K-83K breakout is unconfirmed and ETF magnitude remains SOURCE_CONFLICT; WATCH_NOT_ACTIONABLE."},
+    "downside_liquidation":{"status":"inactive","last_checked_at":"2026-09-20T15:37:18+07:00"},
+    "liquidity_inflection":{"status":"active","direction":"bearish","confidence":"MEDIUM_HIGH","last_checked_at":"2026-09-20T15:37:18+07:00","latest_note":"Restrictive macro/liquidity backdrop remains after Sep16 Fed hike; no confirmed liquidity turn."}
   },
-  "accumulation_gate": {
-    "as_of": "2026-09-20T14:36:00+07:00",
-    "valuation": "UNKNOWN",
-    "liquidity": "HEADWIND_REMAINS",
-    "forced_selling": "UNKNOWN",
-    "stabilization": "IMPROVING_BUT_INSUFFICIENT",
-    "result": "NOT_MET",
-    "price_level_policy": "No price level is an automatic buy trigger."
-  },
-  "distribution": {
-    "valuation": "UNKNOWN",
-    "trend_deviation": "NORMAL_TO_ELEVATED_NOT_EXTREME",
-    "crowding_leverage": "UNKNOWN",
-    "marginal_demand_risk": "ETF_SOURCE_CONFLICT_LATEST_COMPLETE_SESSION",
-    "validated_extreme_dimensions": 0,
-    "as_of": "2026-09-20T14:36:00+07:00"
-  },
-  "allocation_gate": {
-    "status": "NO_ACTION",
-    "recomputed_at": "2026-09-20T14:36:00+07:00",
-    "reason": "Accumulation Gate NOT_MET; liquidity headwind remains, valuation/forced-selling evidence is insufficient, derivatives historical context is incomplete, and latest complete-session ETF magnitude remains SOURCE_CONFLICT."
-  },
+  "accumulation_gate": {"as_of":"2026-09-20T15:37:18+07:00","valuation":"UNKNOWN","liquidity":"HEADWIND_REMAINS","forced_selling":"UNKNOWN","stabilization":"IMPROVING_BUT_INSUFFICIENT","result":"NOT_MET","price_level_policy":"No price level is an automatic buy trigger."},
+  "distribution": {"valuation":"UNKNOWN","trend_deviation":"NORMAL_TO_ELEVATED_NOT_EXTREME","crowding_leverage":"UNKNOWN","marginal_demand_risk":"ETF_SOURCE_CONFLICT_LATEST_COMPLETE_SESSION","validated_extreme_dimensions":0,"as_of":"2026-09-20T15:37:18+07:00"},
+  "allocation_gate": {"status":"NO_ACTION","recomputed_at":"2026-09-20T15:37:18+07:00","reason":"Accumulation Gate NOT_MET; liquidity headwind remains, valuation/forced-selling evidence insufficient, derivatives historical context incomplete, and ETF magnitude SOURCE_CONFLICT."},
   "alerts": [],
-  "performance": {
-    "pretrigger_count": 2,
-    "confirmed_move_count": 0,
-    "missed_move_count": 0,
-    "false_positive_count": 0
-  },
-  "bybit_counterparty_risk": {
-    "status": "GREEN",
-    "last_checked_at": "2026-09-20T15:15:32+07:00",
-    "withdrawal_status": "NO_CREDIBLE_BROAD_SUSPENSION_FOUND_IN_CURRENT_SCAN",
-    "por_status": "AVAILABLE_BUT_NOT_SOLVENCY_PROOF; NO_NEW_CURRENT-DAY_RESERVE_RATIO_INDEPENDENTLY_VERIFIED",
-    "security_incident": "NO_NEW_MAJOR_INCIDENT_FOUND_IN_CURRENT_7D_SCAN; 2025 HACK REMAINS HISTORICAL",
-    "regulatory_status": "NO_CURRENT VERIFIED PLATFORM-WIDE FREEZE THREAT FOUND",
-    "source_conflict": false,
-    "evidence_summary": "Current scan found no high-confidence direct anomaly and no two independent credible early-risk domains sufficient for YELLOW.",
-    "recommended_action": "GREEN: maintain normal operations without increasing custody solely because status is GREEN; long-term assets should not remain on CEX unnecessarily."
-  },
-  "regime": {
-    "current": "bear_market_accumulation_watch_rebound_above_80k_recovery_unconfirmed",
-    "status": "UNCHANGED"
-  },
-  "action": {
-    "current": "NO_NEW_CAPITAL_ACTION",
-    "reason": "Accumulation/Portfolio Allocation gates are not fully confirmed; ETF magnitude conflict and restrictive macro backdrop remain. Preserve dry powder."
-  },
-  "manual_run_20260920_151532": {
-    "architecture": "4-Year Wealth Architecture FINAL v1.0 loaded",
-    "btc_price_reference": "~80.5K-81K current-day public evidence",
-    "etf_latest_complete_session": "2026-09-18 positive; magnitude SOURCE_CONFLICT +324.6M vs +433M",
-    "fed": "2026-09-16 +25bp to 3.75-4.00%",
-    "boj": "2026-09-18 +25bp to 1.25%; yen weakened, no confirmed active carry-unwind shock",
-    "accumulation_gate": "NOT_MET",
-    "portfolio_allocation_gate": "NO_ACTION",
-    "bybit_risk": "GREEN"
-  }
+  "performance": {"pretrigger_count":2,"confirmed_move_count":0,"missed_move_count":0,"false_positive_count":0},
+  "bybit_counterparty_risk": {"status":"GREEN","last_checked_at":"2026-09-20T15:37:18+07:00","withdrawal_status":"NO_CREDIBLE_BROAD_SUSPENSION_FOUND_IN_CURRENT_SCAN","por_status":"AVAILABLE_BUT_NOT_SOLVENCY_PROOF; NO_NEW_CURRENT-DAY_RESERVE_RATIO_INDEPENDENTLY_VERIFIED","security_incident":"NO_NEW_MAJOR_INCIDENT_FOUND_IN_CURRENT_7D_SCAN; 2025 HACK REMAINS HISTORICAL","regulatory_status":"NO_CURRENT VERIFIED PLATFORM-WIDE FREEZE THREAT FOUND","source_conflict":false,"evidence_summary":"No high-confidence direct anomaly and no two independent credible early-risk domains sufficient for YELLOW found in current scan.","recommended_action":"GREEN: normal operations allowed; do not increase custody merely because status is GREEN; long-term assets should not remain on CEX unnecessarily."},
+  "regime": {"current":"bear_market_accumulation_watch_rebound_above_80k_recovery_unconfirmed","status":"UNCHANGED"},
+  "action": {"current":"NO_NEW_CAPITAL_ACTION","reason":"Accumulation/Portfolio Allocation gates are not fully confirmed; ETF magnitude conflict and restrictive macro backdrop remain. Preserve dry powder."}
 }
