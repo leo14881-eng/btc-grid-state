@@ -1,30 +1,26 @@
 {
-  "schema_version": "2.3",
+  "schema_version": "2.4",
   "asset": "BTC",
   "pair": "BTC/USDT",
   "exchange": "Bybit",
   "strategy": "spot_grid",
   "leverage": false,
-
   "grid": {
-    "capital_usdt": 7000,
+    "capital_usdt": 14000,
     "lower": 72000,
     "upper": 86000,
     "grid_count": 28,
     "approx_grid_spacing_usdt": 500
   },
-
   "last_adjustment": {
-    "adjusted_at": "2026-09-05T00:00:00+07:00",
-    "reason": "Changed BTC spot grid to 72000-86000 with 28 grids and 7000 USDT capital"
+    "adjusted_at": "2026-09-20T14:57:00+07:00",
+    "reason": "User increased BTC spot grid capital from 7000 to 14000 USDT; range and grid count unchanged"
   },
-
   "cooldown": {
     "days": 4,
     "cooldown_until": "2026-09-09T00:00:00+07:00",
     "emergency_override_allowed": true
   },
-
   "rules": {
     "lower_shift": {
       "requires_atr_verified": true
@@ -36,8 +32,7 @@
     },
     "data_insufficient_is_not_adjustment_reason": true
   },
-
   "user_confirmed_actual_state": true,
-  "updated_at": "2026-09-14T07:35:00+07:00",
-  "updated_by": "state_governance_cleanup"
+  "updated_at": "2026-09-20T15:00:00+07:00",
+  "updated_by": "user_confirmed_grid_increase_sync"
 }
