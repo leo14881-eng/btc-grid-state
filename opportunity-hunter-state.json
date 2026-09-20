@@ -1,7 +1,7 @@
 {
-  "version": "2.13.2",
+  "version": "2.13.3",
   "status": "ACTIVE_INITIALIZED",
-  "updated_at": "2026-09-20T15:25:00+07:00",
+  "updated_at": "2026-09-20T21:05:00+07:00",
   "initialized_at": "2026-09-14T07:35:00+07:00",
   "state_ownership": "hunter_research_and_position_ledger_only",
   "portfolio_ssot": "portfolio-state.json",
@@ -465,95 +465,6 @@
       "validation_status": "LATE_DISCOVERY_BUT_TASK5_CAPITAL_RESEARCH_ALLOWED"
     }
   ],
-  "observation_events": [
-    {
-      "observed_at": "2026-09-19T08:57:54+07:00",
-      "candidate_id": "UNI-20260918-001",
-      "asset": "UNI",
-      "type": "MATERIAL_CATALYST_CONFIRMATION",
-      "stage": "POST_MOVE",
-      "stage_source": "LEGACY_SNAPSHOT_IMMUTABLE",
-      "eligibility": "WATCH",
-      "source": "https://cryptoticker.io/en/uniswap-uni-price-jump-fee-switch/",
-      "note": "Fee/burn value capture coincided with a new US regulatory exemption for tokenized-stock AMM trading. Observation only; no capital promotion."
-    },
-    {
-      "observed_at": "2026-09-19T23:15:00+07:00",
-      "candidate_id": "ENA-20260919-001",
-      "asset": "ENA",
-      "type": "CAPITAL_ELIGIBILITY_RULE_CORRECTION",
-      "stage": "POST_MOVE",
-      "eligibility": "TASK5_RESEARCH_CHAIN",
-      "note": "Corrected SSOT applied: ~80% prior appreciation remains a late-discovery statistic but no longer automatically rejects prospective capital evaluation. No BUY authorization; full TASK5 chain remains required."
-    },
-    {
-      "observed_at": "2026-09-19T23:40:00+07:00",
-      "type": "BTC_RELATIVE_GATE_RERUN",
-      "assets": [
-        "ASTER",
-        "JTO",
-        "ENA"
-      ],
-      "result": "RESEARCH_PRIORITY_NO_CAPITAL_AUTHORIZATION",
-      "reason": "Fixed-multiple hurdle removed; all three warrant BTC-relative forward evaluation, but frozen TASK5 prerequisites remain incomplete. Historical appreciation alone is not a rejection reason.",
-      "btc_reference_current": "~81000",
-      "coverage_status": "UNIVERSE_COVERAGE_INSUFFICIENT"
-    },
-    {
-      "observed_at": "2026-09-20T00:05:00+07:00",
-      "candidate_id": "ASTER-20260919-001",
-      "asset": "ASTER",
-      "type": "STAGE_CORRECTION",
-      "immutable_discovery_stage": "PRE_MOVE",
-      "current_stage": "EARLY_MOVE",
-      "reason": "Sep tokenomics catalyst had already generated price pulses before discovery; correction is prospective/append-only."
-    },
-    {
-      "observed_at": "2026-09-20T00:05:00+07:00",
-      "candidate_id": "JTO-20260919-001",
-      "asset": "JTO",
-      "type": "EVIDENCE_TAG_CORRECTION",
-      "primary_undervalued_vector": "VESTING_CLIFF_END_2026-11-07",
-      "JTX_buyback_evidence": "FAILED_REPRICING"
-    },
-    {
-      "observed_at": "2026-09-20T00:05:00+07:00",
-      "candidate_id": "ENA-20260919-001",
-      "asset": "ENA",
-      "type": "STRUCTURAL_GATE_CLARIFICATION",
-      "gate": "USDe >= 7.5B",
-      "current": "~4.1B",
-      "status": "NOT_MET"
-    },
-    {
-      "observed_at": "2026-09-20T15:15:32+07:00",
-      "type": "MANUAL_ALL_TASK_RUN",
-      "assets": [
-        "ASTER",
-        "JTO",
-        "ENA",
-        "HYPE",
-        "UNI",
-        "ARB",
-        "NEAR"
-      ],
-      "result": "NO_NEW_EARLY_CANDIDATE_NO_FAST_PROMOTION",
-      "coverage_status": "UNIVERSE_COVERAGE_INSUFFICIENT",
-      "capital_authority": "FORCED_ZERO_WHILE_SHADOW",
-      "note": "No new candidate met the required multi-domain early-discovery evidence in this partial web pass. Existing research statuses preserved; no BUY/ADD authorization."
-    },
-    {
-      "observed_at": "2026-09-20T15:25:00+07:00",
-      "type": "STATE_CONTRACT_REPAIR",
-      "result": "ELIGIBILITY_CONTEXT_SYNCHRONIZED_WITH_CURRENT_ASSET_STATE",
-      "scope": [
-        "ASTER",
-        "JTO",
-        "ENA"
-      ],
-      "note": "One-time repair of mutable current-state contract fields. Immutable discovery snapshots, discovery_price, discovered_at, and stage history were not rewritten. Future Slow writes must update asset current state + eligibility_context in the same persistence closure and reread-verify equality before Fast may consume."
-    }
-  ],
   "gate_mode": "SHADOW",
   "k": {
     "value": "UNSET",
@@ -566,5 +477,13 @@
     ],
     "N_MIN": 30
   },
-  "capital_authority": "FORCED_ZERO_WHILE_SHADOW"
+  "capital_authority": "FORCED_ZERO_WHILE_SHADOW",
+  "persistence_schema": {
+    "version": "2.13.3",
+    "state_role": "BOUNDED_CURRENT_STATE",
+    "historical_observations": "hunter-candidate-ledger.jsonl",
+    "read_contract": "EXACT_PATH_FETCH_FILE_FULL_CONTENT",
+    "write_contract": "FULL_REPLACEMENT_WITH_CURRENT_BLOB_SHA_THEN_REREAD_VERIFY",
+    "legacy_observation_events_removed_from_state": true
+  }
 }
