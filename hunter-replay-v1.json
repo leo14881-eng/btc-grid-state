@@ -9,27 +9,49 @@
     "venue": "Binance Spot",
     "quote_asset": "USDT",
     "calibration_window": "2022-01-01/2023-12-31",
-    "oos_windows": ["2024-01-01/2024-12-31", "2025-01-01/2025-12-31"],
+    "oos_windows": [
+      "2024-01-01/2024-12-31",
+      "2025-01-01/2025-12-31"
+    ],
     "data_source": "Binance Public Data (data.binance.vision)",
     "mode": "BLIND_FULL_UNIVERSE",
     "rules_frozen": true,
     "outcome_peeking_forbidden": true,
-    "retrospective_cases_excluded": ["HYPE-2026-09", "ZEC-2026-09"],
-    "phase": "PIT_UNIVERSE_RECONSTRUCTION",
+    "retrospective_cases_excluded": [
+      "HYPE-2026-09",
+      "ZEC-2026-09"
+    ],
+    "phase": "PIT_UNIVERSE_RECONSTRUCTION_RUNNABLE_WITH_COVERAGE_ACCOUNTING",
     "universe_size": null,
     "scanned_count": 0,
     "coverage_ratio": null,
     "raw_n": 0,
     "effective_n": 0,
-    "blocker": "No verified official dated Binance Spot symbol manifest has been located. Current exchangeInfo is current-state only and therefore cannot reconstruct later-delisted USDT symbols without survivorship bias. Binance Public Data documents per-symbol historical archives, but archive documentation does not itself provide a dated historical universe manifest.",
-    "next_step": "Reconstruct a candidate PIT USDT symbol set from Binance Public Data archive existence/first-and-last kline availability, then cross-check listing/delisting announcements. Before outcome computation, freeze exact universe formation thresholds and mark SURVIVORSHIP_INCOMPLETE_MVP if completeness still cannot be demonstrated.",
-    "blocker_last_attacked_at": "2026-09-22T00:07:45+07:00",
+    "blocker": "Perfect official dated Binance Spot universe manifest is unavailable, but this is no longer a global STOP condition. Replay proceeds on reconstructed historical-file universes with explicit coverage/completeness accounting.",
+    "next_step": "Enumerate historical Binance Public Data USDT spot archives, derive symbol first/last availability, freeze universe-formation thresholds before outcome computation, assign VERIFIED/PARTIAL/UNKNOWN coverage, then run the maximum honest replay subset and populate numeric coverage/N metrics. Cross-check listing/delisting announcements without blocking runnable subsets.",
+    "blocker_last_attacked_at": "2026-09-22T01:03:00+07:00",
     "blocker_evidence": [
       "Binance Public Data README confirms historical per-symbol klines are available and says its helper for all symbols enumerates current running symbols.",
       "Official fetch-all-trading-pairs.sh calls the live /api/v3/exchangeInfo endpoint, confirming that helper output is current-state rather than a dated historical manifest.",
       "Binance Public Data archive documentation provides deterministic per-symbol/month paths and checksums, supporting archive-existence/first-last-kline reconstruction as the next honest PIT-universe method.",
-      "No official dated historical Binance Spot universe manifest was verified in this run; therefore survivorship completeness remains unproven and outcome computation/calibration remains blocked."
-    ]
+      "No official dated historical Binance Spot universe manifest was verified in this run; therefore survivorship completeness remains unproven and outcome computation/calibration remains blocked.",
+      "Operational decision: missing perfect PIT manifest is downgraded from global STOP to coverage limitation; this does not relax frozen survivorship or calibration requirements.",
+      "Acceptance criterion: replay progress is judged by real numeric coverage/N outputs, not by architecture edits."
+    ],
+    "execution_policy": {
+      "mode": "RUNNABLE_WITH_COVERAGE_ACCOUNTING",
+      "universe_method": "HISTORICAL_FILE_RECONSTRUCTED_UNIVERSE",
+      "completeness_labels": [
+        "VERIFIED",
+        "PARTIAL",
+        "UNKNOWN"
+      ],
+      "replay_rule": "Run the maximum honest verifiable historical subset immediately. Do not block the entire replay solely because a perfect official dated PIT universe manifest is unavailable.",
+      "calibration_rule": "Only VERIFIED coverage samples may enter final calibration/OOS validation. PARTIAL samples are research-only; UNKNOWN samples are excluded.",
+      "survivorship_rule": "Retain later-delisted/failed assets whenever historical archive evidence is available; if completeness cannot be demonstrated, label SURVIVORSHIP_INCOMPLETE_MVP and do not claim Full-Universe validation.",
+      "announcement_role": "Listing/delisting announcements are cross-check evidence, not the primary universe source.",
+      "anti_stall_acceptance": "Each execution must attempt to produce numeric universe_size, scanned_count, coverage_ratio and Raw N/Effective N where computable. If these remain null/zero, record the concrete data/acquisition blocker and next executable remediation; architecture redesign is not a valid substitute."
+    }
   },
   "runs": [],
   "research_hypotheses": []
