@@ -1,7 +1,7 @@
 {
-  "version": "2.59",
-  "updated_at": "2026-09-21T18:56:01+07:00",
-  "last_scan_at": "2026-09-21T18:56:01+07:00",
+  "version": "2.60",
+  "updated_at": "2026-09-21T19:31:17+07:00",
+  "last_scan_at": "2026-09-21T19:31:17+07:00",
   "persistence": {"provider":"github","writable":true},
   "state_ownership": {
     "purpose":"Sentinel market and signal state only",
@@ -11,56 +11,58 @@
     "observed_portfolio_content_sha":"3a097f82c97e36bd60fe50f7e22ee9afdb010035"
   },
   "market_state_freshness": {
-    "status":"STALE_DATA_FOR_CAPITAL_ACTION_WITH_FUNDING_30Y_AND_ETF_MAGNITUDE_CONFLICT",
-    "as_of":"2026-09-21T18:56:01+07:00",
-    "reason":"BTC remains around 85K and current reporting confirms a material short-squeeze component plus rising aggregate open interest. Venue-consistent current BTC funding and exact current 30Y Treasury yield remain unverified. Sep18 US spot-BTC ETF sources agree on positive direction but conflict materially on magnitude (+324.6M versus +433.03M), so ETF magnitude is SOURCE_CONFLICT and is not used as a confirmed capital-gate input. Data Freshness Hard Gate blocks new capital action."
+    "status":"STALE_DATA_FOR_CAPITAL_ACTION_WITH_CURRENT_BTC_FUNDING_AND_30Y_GAPS",
+    "as_of":"2026-09-21T19:31:17+07:00",
+    "reason":"BTC is around 85K with a material short-squeeze component and rising aggregate open interest. Sep18 US spot-BTC ETF flow conflict is reconciled: +324.6M was a preliminary/incomplete print omitting IBIT; later complete Farside-aligned reporting is +433.0M including IBIT +108.4M. Current venue-consistent BTC funding and an exact Sep21 30Y Treasury yield remain unverified, so Data Freshness Hard Gate still blocks new capital action."
   },
   "last_price": 85117,
   "last_price_quality":"VERIFIED CURRENT-DAY APPROXIMATE REFERENCE: WSJ reports BTC about 85,117 on Sep21; not an executable tick.",
   "last_regime":"bear_market_accumulation_watch_strong_rebound_near_grid_upper_boundary_recovery_unconfirmed",
   "data_quality": {
-    "price_structure":"VERIFIED CURRENT-DAY QUALITATIVE: BTC is around 85K and remains close to the 86K Grid upper boundary; sustained hold above 86K is not confirmed.",
+    "price_structure":"VERIFIED CURRENT-DAY QUALITATIVE: BTC reached about 85.1K, an eight-month high, and remains close to the 86K Grid upper boundary; sustained hold above 86K is not confirmed.",
     "volume":"QUALITATIVE EVIDENCE ONLY: rally includes substantial short liquidations; venue-consistent spot-volume history was not obtained for capital-action PASS.",
-    "spot_btc_etf":"SOURCE_CONFLICT on Sep18 magnitude: current sources report +324.6M and +433.03M; direction is positive in both, magnitude not reconciled to authoritative original table in this run.",
-    "macro":"Current exact same-time 2Y/10Y/30Y set not fully verified; 30Y remains a blocking gap. Restrictive-rate backdrop remains; no verified broad positive liquidity turn.",
-    "derivatives":"PARTIALLY VERIFIED: CoinDesk reports about $648M bearish bets liquidated and aggregate crypto open interest +7.59% to about $156B as BTC reached 85K. Current BTC-specific venue-consistent funding remains unverified.",
+    "spot_btc_etf":"RECONCILED: latest complete US session Sep18 +433.0M net inflow. Earlier +324.6M print was incomplete/preliminary and omitted IBIT +108.4M; complete Farside-aligned reporting includes IBIT.",
+    "macro":"PARTIALLY VERIFIED CURRENT: Sep21 2Y about 4.72-4.74%, 10Y about 4.95-4.97%; yields eased as oil fell. Exact Sep21 30Y remains unverified; latest verified daily 30Y was 5.29% Sep17. Fed raised target 25bp to 3.75%-4.00% Sep16; restrictive backdrop remains.",
+    "derivatives":"PARTIALLY VERIFIED: about $648M bearish bets liquidated and aggregate crypto open interest +7.59% to about $156B as BTC reached 85K. Current BTC-specific venue-consistent funding remains unverified.",
     "onchain_valuation":"QUALITATIVE/NOT REFRESHED; not used as Gate PASS.",
     "portfolio_ssot":"READABLE_V1.5_NO_CONFIRMED_NEW_EXECUTION_IN_SSOT; BTC core 0.27803703 BTC remains below 0.5 BTC permanent floor; Grid SSOT remains 14,000 USDT, 72K-86K, 28 grids."
   },
   "source_timestamps": {
-    "scan_time":"2026-09-21T18:56:01+07:00",
+    "scan_time":"2026-09-21T19:31:17+07:00",
     "btc_price_latest_accessible":"2026-09-21_CURRENT_DAY_ABOUT_85.1K",
-    "latest_etf_session_checked":"2026-09-18_POSITIVE_DIRECTION_MAGNITUDE_SOURCE_CONFLICT",
+    "latest_etf_session_checked":"2026-09-18_COMPLETE_PLUS_433.0M_RECONCILED",
+    "macro_latest_verified":"2026-09-21_2Y_10Y_CURRENT_30Y_GAP",
     "derivatives_latest_verified":"2026-09-21_PARTIAL_OI_AND_LIQUIDATIONS_FUNDING_UNVERIFIED",
     "portfolio_state_updated_at":"2026-09-20T15:00:00+07:00"
   },
   "current_market_snapshot": {
-    "as_of":"2026-09-21T18:56:01+07:00",
+    "as_of":"2026-09-21T19:31:17+07:00",
     "btc_price_usd":85117,
     "btc_price_note":"Approximate current-day reference; still near the 86K Grid upper boundary.",
-    "demand_note":"Sep18 US spot-BTC ETF direction positive, but reported magnitude conflicts (+324.6M vs +433.03M); not used as confirmed Gate magnitude.",
+    "demand_note":"Latest complete US spot-BTC ETF session Sep18 +433.0M net inflow after reconciling preliminary/incomplete +324.6M print.",
+    "macro_note":"Sep21 2Y/10Y yields eased to roughly 4.72-4.74%/4.95-4.97% as oil fell; exact current 30Y remains a blocking gap.",
     "derivatives_note":"Short squeeze material: about $648M bearish bets liquidated; aggregate crypto OI reportedly +7.59% to about $156B; funding gap blocks confirmed crowding classification."
   },
   "pre_triggers": {
-    "upside_squeeze": {"status":"active_watch_not_actionable","first_seen_at":"2026-09-18T23:33:10+07:00","first_seen_price":80825,"confidence":"HIGH_FOR_MOVE_MEDIUM_FOR_SUSTAINABILITY","evidence_domains":["PriceStructure","LeverageLiquidations"],"last_checked_at":"2026-09-21T18:56:01+07:00","latest_note":"BTC remains around 85K with substantial short-liquidation evidence. Sustainability above 86K unconfirmed; funding missing; ETF magnitude conflicted."},
-    "downside_liquidation":{"status":"inactive","last_checked_at":"2026-09-21T18:56:01+07:00","latest_note":"No verified broad downside forced-selling/liquidation confirmation."},
-    "liquidity_inflection":{"status":"active","direction":"bearish_to_neutral_improvement_not_confirmed","confidence":"LOW_TO_MEDIUM","last_checked_at":"2026-09-21T18:56:01+07:00","latest_note":"Exact same-time Treasury 2Y/10Y/30Y set incomplete; no broad positive liquidity turn confirmed."}
+    "upside_squeeze": {"status":"active_watch_not_actionable","first_seen_at":"2026-09-18T23:33:10+07:00","first_seen_price":80825,"confidence":"HIGH_FOR_MOVE_MEDIUM_FOR_SUSTAINABILITY","evidence_domains":["PriceStructure","LeverageLiquidations","SpotETFDemand"],"last_checked_at":"2026-09-21T19:31:17+07:00","latest_note":"BTC remains around 85K with substantial short-liquidation evidence and confirmed positive Sep18 ETF flow. Sustainability above 86K unconfirmed; BTC funding missing."},
+    "downside_liquidation":{"status":"inactive","last_checked_at":"2026-09-21T19:31:17+07:00","latest_note":"No verified broad downside forced-selling/liquidation confirmation."},
+    "liquidity_inflection":{"status":"active","direction":"bearish_to_neutral_improvement_not_confirmed","confidence":"MEDIUM","last_checked_at":"2026-09-21T19:31:17+07:00","latest_note":"Sep21 2Y/10Y yields eased with oil, but exact current 30Y is missing and Fed remains restrictive; no broad positive liquidity turn confirmed."}
   },
-  "accumulation_gate": {"as_of":"2026-09-21T18:56:01+07:00","valuation":"UNKNOWN","liquidity":"UNKNOWN_BLOCKING_CURRENT_30Y_GAP","forced_selling":"UPSIDE_SHORT_SQUEEZE_VERIFIED_NOT_BEAR_CAPITULATION","stabilization":"PRICE_RECOVERY_STRONG_BUT_BREAKOUT_SUSTAINABILITY_UNCONFIRMED","result":"NOT_MET","price_level_policy":"No price level is an automatic buy trigger."},
-  "distribution": {"valuation":"UNKNOWN","trend_deviation":"ELEVATED_SHORT_TERM_NOT_VERIFIED_EXTREME","crowding_leverage":"ELEVATED_RISK_QUALITATIVE_FUNDING_UNKNOWN","marginal_demand_risk":"ETF_DIRECTION_POSITIVE_MAGNITUDE_CONFLICTED","validated_extreme_dimensions":0,"as_of":"2026-09-21T18:56:01+07:00","permanent_core_veto":"ACTIVE: total BTC 0.27803703 < 0.5 BTC; cycle-sellable BTC=0. Ordinary tactical core selling prohibited."},
-  "allocation_gate": {"status":"NO_ACTION","recomputed_at":"2026-09-21T18:56:01+07:00","reason":"Data Freshness Hard Gate blocks new capital action; Accumulation Gate NOT_MET; permanent-core veto applies. No BTC core sell/add, Grid capital increase, or strategic-pool transfer authorized. Grid remains near upper boundary; boundary price alone does not authorize range shift."},
+  "accumulation_gate": {"as_of":"2026-09-21T19:31:17+07:00","valuation":"UNKNOWN","liquidity":"UNKNOWN_BLOCKING_CURRENT_30Y_GAP","forced_selling":"UPSIDE_SHORT_SQUEEZE_VERIFIED_NOT_BEAR_CAPITULATION","stabilization":"PRICE_RECOVERY_STRONG_BUT_BREAKOUT_SUSTAINABILITY_UNCONFIRMED","result":"NOT_MET","price_level_policy":"No price level is an automatic buy trigger."},
+  "distribution": {"valuation":"UNKNOWN","trend_deviation":"ELEVATED_SHORT_TERM_NOT_VERIFIED_EXTREME","crowding_leverage":"ELEVATED_RISK_QUALITATIVE_FUNDING_UNKNOWN","marginal_demand_risk":"ETF_DEMAND_POSITIVE_LATEST_COMPLETE_SESSION","validated_extreme_dimensions":0,"as_of":"2026-09-21T19:31:17+07:00","permanent_core_veto":"ACTIVE: total BTC 0.27803703 < 0.5 BTC; cycle-sellable BTC=0. Ordinary tactical core selling prohibited."},
+  "allocation_gate": {"status":"NO_ACTION","recomputed_at":"2026-09-21T19:31:17+07:00","reason":"Data Freshness Hard Gate still blocks new capital action because current BTC funding and exact current 30Y remain unverified; Accumulation Gate NOT_MET; permanent-core veto applies. No BTC core sell/add, Grid capital increase, or strategic-pool transfer authorized. Grid remains near upper boundary; boundary price alone does not authorize range shift."},
   "drawdown_budget":{"status":"NO_NEW_PROPOSAL_TO_STRESS_TEST","note":"No capital proposal passed upstream gates; no fabricated hard drawdown threshold."},
   "alerts": [
-    {"type":"GRID_UPPER_BOUNDARY_APPROACH","severity":"MEDIUM","observed_at":"2026-09-21T18:56:01+07:00","message":"BTC remains around 85.1K near 86K Grid upper boundary. Valid breakout + trend confirmation + independent confirmation required before upper-range shift or pause decision."},
-    {"type":"ETF_SOURCE_CONFLICT","severity":"MEDIUM","observed_at":"2026-09-21T18:56:01+07:00","message":"Sep18 ETF sources agree on positive direction but conflict on magnitude (+324.6M vs +433.03M). Magnitude excluded from capital Gate until reconciled."},
-    {"type":"PERMANENT_CORE_SELL_VETO","severity":"HIGH","observed_at":"2026-09-21T18:56:01+07:00","message":"BTC core remains 0.27803703 BTC below 0.5 BTC permanent floor; cycle-sellable core BTC remains zero."}
+    {"type":"GRID_UPPER_BOUNDARY_APPROACH","severity":"MEDIUM","observed_at":"2026-09-21T19:31:17+07:00","message":"BTC remains around 85.1K near 86K Grid upper boundary. Valid breakout + trend confirmation + independent confirmation required before upper-range shift or pause decision."},
+    {"type":"ETF_SOURCE_CONFLICT_RESOLVED","severity":"INFO","observed_at":"2026-09-21T19:31:17+07:00","message":"Sep18 ETF flow reconciled to complete +433.0M print; earlier +324.6M was incomplete/preliminary and omitted IBIT +108.4M."},
+    {"type":"PERMANENT_CORE_SELL_VETO","severity":"HIGH","observed_at":"2026-09-21T19:31:17+07:00","message":"BTC core remains 0.27803703 BTC below 0.5 BTC permanent floor; cycle-sellable core BTC remains zero."}
   ],
   "performance":{"pretrigger_count":2,"confirmed_move_count":1,"missed_move_count":0,"false_positive_count":0},
   "bybit_counterparty_risk": {
     "status":"GREEN",
-    "last_checked_at":"2026-09-21T18:56:01+07:00",
+    "last_checked_at":"2026-09-21T19:31:17+07:00",
     "withdrawal_status":"NO_CREDIBLE PLATFORM-WIDE WITHDRAWAL SUSPENSION FOUND IN CURRENT SEARCH.",
-    "por_status":"NO NEW HIGH-CONFIDENCE PoR DETERIORATION FOUND; exact current reserve ratios not independently refreshed. PoR is not complete solvency proof.",
+    "por_status":"Official Bybit Apr2 report (balances Mar18) showed major tracked reserve ratios above 100%, Hacken-verified; no newer high-confidence deterioration found in this scan. PoR is not complete solvency proof.",
     "security_incident":"NO NEW MAJOR BYBIT SECURITY/CUSTODY INCIDENT VERIFIED; Feb2025 hack remains historical.",
     "regulatory_status":"NO VERIFIED PLATFORM-WIDE FREEZE OR INSOLVENCY THREAT FOUND.",
     "source_conflict":false,
@@ -68,5 +70,5 @@
     "recommended_action":"GREEN: normal operations allowed with residual CEX risk. YELLOW+ would veto additions and trigger withdrawal-priority policy."
   },
   "regime":{"current":"bear_market_accumulation_watch_strong_rebound_near_grid_upper_boundary_recovery_unconfirmed","status":"NO_NEW_CONFIRMED_REGIME_CHANGE"},
-  "action":{"current":"NO_NEW_CAPITAL_ACTION_AND_NO_CORE_SELL_GRID_REASSESSMENT_WATCH","reason":"BTC remains near 85K/86K boundary, but funding and 30Y gaps plus ETF magnitude conflict keep capital-action freshness incomplete. Core remains below 0.5 BTC. Keep Grid capital at 14,000 USDT; do not automatically lift 86K upper boundary."}
+  "action":{"current":"NO_NEW_CAPITAL_ACTION_AND_NO_CORE_SELL_GRID_REASSESSMENT_WATCH","reason":"BTC remains near 85K/86K boundary. ETF demand is now reconciled positive and 2Y/10Y yields eased, but current BTC funding and exact Sep21 30Y gaps keep capital-action freshness incomplete. Core remains below 0.5 BTC. Keep Grid capital at 14,000 USDT; do not automatically lift 86K upper boundary."}
 }
