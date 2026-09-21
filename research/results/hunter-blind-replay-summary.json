@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-21T15:13:00.883083+00:00",
+  "generated_at": "2026-09-21T15:18:11.847539+00:00",
   "status": "RESEARCH_UNVALIDATED",
   "source": "Binance Data Vision static USD-M monthly 1h klines",
   "period": "2026-05 through 2026-08",
@@ -43,9 +43,83 @@
       "N": 0
     }
   },
+  "matched_controls": {
+    "method": "same timestamp + nearest trailing-24h quote-volume; deterministic; sector matching unavailable in this layer",
+    "all": {
+      "N_pairs": 640,
+      "signal_gt30_rate": 0.0234375,
+      "control_gt30_rate": 0.028125,
+      "signal_positive_rate": 0.4265625,
+      "control_positive_rate": 0.45,
+      "signal_btc_outperform_rate": 0.4109375,
+      "control_btc_outperform_rate": 0.4296875,
+      "median_signal_ret72": -0.010773790009172335,
+      "median_control_ret72": -0.007966649715405671,
+      "median_signal_excess72": -0.010229747849176185,
+      "median_control_excess72": -0.007579571761542003
+    },
+    "train_70pct": {
+      "N_pairs": 448,
+      "signal_gt30_rate": 0.004464285714285714,
+      "control_gt30_rate": 0.002232142857142857,
+      "signal_positive_rate": 0.3392857142857143,
+      "control_positive_rate": 0.3638392857142857,
+      "signal_btc_outperform_rate": 0.375,
+      "control_btc_outperform_rate": 0.390625,
+      "median_signal_ret72": -0.020271082888343672,
+      "median_control_ret72": -0.019851743665382338,
+      "median_signal_excess72": -0.01213686020713195,
+      "median_control_excess72": -0.010704849594885935
+    },
+    "validation_30pct": {
+      "N_pairs": 192,
+      "signal_gt30_rate": 0.06770833333333333,
+      "control_gt30_rate": 0.08854166666666667,
+      "signal_positive_rate": 0.6302083333333334,
+      "control_positive_rate": 0.6510416666666666,
+      "signal_btc_outperform_rate": 0.4947916666666667,
+      "control_btc_outperform_rate": 0.5208333333333334,
+      "median_signal_ret72": 0.03168460577437915,
+      "median_control_ret72": 0.029038424915400762,
+      "median_signal_excess72": -0.0023944355746569057,
+      "median_control_excess72": 0.002362418687201273
+    },
+    "validation_by_signal": {
+      "PRE_MOVE": {
+        "N_pairs": 99,
+        "signal_gt30_rate": 0.06060606060606061,
+        "control_gt30_rate": 0.0707070707070707,
+        "signal_positive_rate": 0.5353535353535354,
+        "control_positive_rate": 0.6060606060606061,
+        "signal_btc_outperform_rate": 0.42424242424242425,
+        "control_btc_outperform_rate": 0.5050505050505051,
+        "median_signal_ret72": 0.007421276774288277,
+        "median_control_ret72": 0.01685823754789273,
+        "median_signal_excess72": -0.010801904638328974,
+        "median_control_excess72": 0.0018356770516596566
+      },
+      "BREAKOUT": {
+        "N_pairs": 93,
+        "signal_gt30_rate": 0.07526881720430108,
+        "control_gt30_rate": 0.10752688172043011,
+        "signal_positive_rate": 0.7311827956989247,
+        "control_positive_rate": 0.6989247311827957,
+        "signal_btc_outperform_rate": 0.5698924731182796,
+        "control_btc_outperform_rate": 0.5376344086021505,
+        "median_signal_ret72": 0.08770718232044183,
+        "median_control_ret72": 0.06761363636363638,
+        "median_signal_excess72": 0.013056050984743939,
+        "median_control_excess72": 0.002870812769926845
+      },
+      "ACCELERATION": {
+        "N_pairs": 0
+      }
+    }
+  },
   "limitations": [
-    "Layer 1 only: no historical OI/funding/liquidation/catalyst labels",
-    "No matched negative-control layer yet",
-    "Thresholds remain UNVALIDATED until controls and out-of-sample validation are complete"
+    "Layer 2 adds time/liquidity matched controls and chronological OOS validation",
+    "Sector matching is not yet implemented",
+    "No historical OI/funding/liquidation/catalyst labels",
+    "Thresholds remain UNVALIDATED; do not promote to LIVE from this layer alone"
   ]
 }
