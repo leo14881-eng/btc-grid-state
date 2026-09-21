@@ -470,3 +470,21 @@ If no asset satisfies every applicable gate, do not force a nearest candidate. O
 Every run must preserve a compact research watchlist when sufficient market data exists and report: `TODAY'S VERDICT / TOP WATCHLIST / FQ_RANKING / EA_RANKING / OPPORTUNITY SIGNALS / FORWARD RETURN MAP / REVERSE VALUATION / FORWARD UPSIDE GATES / EA FRESHNESS / Risk Governor / EXECUTION STATES / NEAREST-TO-A-CLASS-BUY / NEAREST-TO-B-CLASS-BUY / confirmed positions-actions / risks-invalidations-data gaps / Allocation Gate if capital is proposed`.
 
 Never invent a score, bucket, future supply, valuation input or execution threshold merely to complete the template. Critical missing evidence => `DATA INSUFFICIENT`; capital action remains blocked.
+
+
+---
+
+## v2.13.5 — Persistence Transport Hardening (FROZEN OPERATIONAL PATCH)
+
+This patch is DATA-PIPELINE ONLY. It MUST NOT change any frozen Stage / Universe / Feature / Outcome / Validation / TASK5 rule.
+
+1. Canonical GitHub address is fixed: repository `leo14881-eng/btc-grid-state`, branch `main`. Hunter MUST NOT substitute another repository, branch, raw URL, search result, page reader, generic file reader, or cached copy for Hunter persistence.
+2. All Hunter SSOT reads/writes use exact-path GitHub Contents transport. Fetch the full exact-path file on `main`; for large files, base64/blob transport is canonical. UI/tool-output truncation is NOT evidence that repository content is truncated.
+3. Never build a replacement state from displayed/truncated tool output. A write is allowed only from the complete blob and its current blob SHA.
+4. Single-writer persistence closure: fetch full blob + SHA -> parse -> apply Hunter-owned mutations -> validate immutable snapshots -> atomically mirror mutable asset fields to same candidate_id eligibility_context -> serialize complete state -> update_file with fetched SHA on main -> exact-path reread -> parse -> compare required contract fields.
+5. Freshness proof is in the same closure. Slow may update reviewed_at/evidence_as_of/review_id/available_at only after real evidence review. reread_verified=true and fast_input_ready=true are valid only after post-write reread verification passes. Timestamp-only freshness writes are forbidden.
+6. SHA conflict: discard pending replacement, refetch full current blob + SHA, reapply mutation, revalidate, retry once. Never overwrite concurrent changes from an old base.
+7. Ledger append uses exact-path full-content read-modify-write; preserve old prefix exactly, append new observations only, write with current ledger SHA, reread and verify prefix + append.
+8. Transport/decode/parse/write/reread/contract failure => STATE CONTRACT ERROR + STATE PERSISTENCE FAILURE + fast_input_ready=false; Promotion blocked. Do not diagnose GitHub truncation unless the exact-path/base64-or-blob payload itself is incomplete or unparsable.
+9. Recovery: next genuine Slow evidence review executes this closure; on write+reread+contract PASS, persistence error clears and freshness resumes normally. No manual freshness repair or fabricated review.
+10. This transport contract supersedes older operational instructions permitting generic/page/search/raw readers for Hunter persistence. Research logic is unchanged.
