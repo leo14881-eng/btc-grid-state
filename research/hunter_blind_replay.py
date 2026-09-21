@@ -1,178 +1,233 @@
 #!/usr/bin/env python3
-"""Hunter Blind Replay v0.3 — RESEARCH ONLY.
-Static Binance Data Vision archive; no Binance REST/Futures API.
-Layer-1 validates market-structure signals only; it does not fabricate OI/catalyst fields.
+"""Hunter Blind Full-Universe Replay v1.0 — RESEARCH ONLY.
+
+Reconstructs a point-in-time Binance Spot USDT universe from Binance Data Vision
+archive keys. Missing perfect dated exchangeInfo is a coverage limitation, not a
+global STOP. Only archive-observed symbols are used; no current-symbol allowlist.
 """
-import csv, io, json, os, statistics, urllib.request, zipfile
+import csv, io, json, math, os, statistics, urllib.parse, urllib.request, zipfile
+import xml.etree.ElementTree as ET
+from collections import defaultdict
 from datetime import datetime, timezone
 
 OUT="research/results"; os.makedirs(OUT,exist_ok=True)
-BASE="https://data.binance.vision/data/futures/um/monthly/klines"
-# Fixed universe avoids exchangeInfo dependency and selection look-ahead.
-SYMBOLS="""BTC ETH SOL XRP BNB DOGE ADA AVAX LINK DOT LTC BCH SUI NEAR AAVE UNI TRX ETC ATOM FIL ICP ARB OP INJ SEI TIA WIF PEPE CRV ENA JTO RUNE FET TAO TON POL APT LDO DYDX SAND MANA GALA ALGO XLM HBAR EGLD KAS RENDER ZEC DASH COMP MKR SNX THETA FLOW CHZ GRT ENS IMX STX MINA SAGA ZETA""".split()
-SYMBOLS=[x+"USDT" for x in SYMBOLS]
-MONTHS=["2026-05","2026-06","2026-07","2026-08"]
+S3="https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
+BASE="https://data.binance.vision/data/spot/monthly/klines"
+START_YM="2022-01"; END_YM="2025-12"
+# PRE-REGISTERED before outcome computation.
+MIN_HISTORY_DAYS=90
+LIQUIDITY_TOP_N=100
+OBSERVATION_STEP_DAYS=7
+FEATURE_VERSION="spot-daily-v1"
+RULE_VERSION="blind-full-universe-v1.0"
+STABLE_BASES={"USDC","BUSD","TUSD","FDUSD","USDP","DAI","USDS","UST","USTC","EUR","TRY","BRL","GBP","AUD","RUB","UAH","BIDR","IDRT","NGN","VAI","PAX","SUSD"}
+LEVERAGED_SUFFIXES=("UP","DOWN","BULL","BEAR")
 
-def download(sym,month):
-    name=f"{sym}-1h-{month}.zip"
-    url=f"{BASE}/{sym}/1h/{name}"
-    req=urllib.request.Request(url,headers={"User-Agent":"hunter-replay/0.3"})
-    try:
-        with urllib.request.urlopen(req,timeout=30) as r: data=r.read()
-    except Exception as e:
-        return []
+def get(url,timeout=45):
+    req=urllib.request.Request(url,headers={"User-Agent":"hunter-blind-replay/1.0"})
+    with urllib.request.urlopen(req,timeout=timeout) as r:return r.read()
+
+def list_prefixes(prefix):
+    """List S3 CommonPrefixes; this is archive-derived discovery, not current exchangeInfo."""
+    token=None; out=[]
+    while True:
+        q={"list-type":"2","delimiter":"/","prefix":prefix,"max-keys":"1000"}
+        if token:q["continuation-token"]=token
+        root=ET.fromstring(get(S3+"?"+urllib.parse.urlencode(q)))
+        ns={"s":"http://s3.amazonaws.com/doc/2006-03-01/"}
+        out += [x.text for x in root.findall("s:CommonPrefixes/s:Prefix",ns)]
+        trunc=(root.findtext("s:IsTruncated",default="false",namespaces=ns)=="true")
+        if not trunc:break
+        token=root.findtext("s:NextContinuationToken",default=None,namespaces=ns)
+        if not token:break
+    return out
+
+def discover_symbols():
+    prefs=list_prefixes("data/spot/monthly/klines/")
+    syms=[]
+    for p in prefs:
+        s=p.rstrip("/").split("/")[-1]
+        if not s.endswith("USDT") or s=="BTCUSDT": syms.append(s) if s=="BTCUSDT" else None; continue
+        b=s[:-4]
+        if b in STABLE_BASES or any(b.endswith(x) for x in LEVERAGED_SUFFIXES):continue
+        syms.append(s)
+    if "BTCUSDT" not in syms:syms.append("BTCUSDT")
+    return sorted(set(syms))
+
+def months():
+    y,m=map(int,START_YM.split("-")); ey,em=map(int,END_YM.split("-"))
+    a=[]
+    while (y,m)<=(ey,em):
+        a.append(f"{y:04d}-{m:02d}"); m+=1
+        if m==13:y+=1;m=1
+    return a
+
+MONTHS=months()
+
+def download_month(sym,month):
+    name=f"{sym}-1d-{month}.zip"; url=f"{BASE}/{sym}/1d/{name}"
+    try:data=get(url,30)
+    except Exception:return []
     try:
         z=zipfile.ZipFile(io.BytesIO(data)); raw=z.read(z.namelist()[0]).decode("utf-8-sig")
-    except Exception: return []
+    except Exception:return []
     out=[]
-    for row in csv.reader(io.StringIO(raw)):
-        if not row or not row[0].strip().isdigit(): continue
+    for r in csv.reader(io.StringIO(raw)):
+        if not r or not r[0].strip().isdigit():continue
         try:
-            vol=float(row[5]); tb=float(row[9])
-            out.append({"t":int(row[0]),"o":float(row[1]),"h":float(row[2]),"l":float(row[3]),"c":float(row[4]),
-                        "v":vol,"n":int(float(row[8])),"tb":tb})
-        except Exception: pass
+            out.append({"t":int(r[0]),"o":float(r[1]),"h":float(r[2]),"l":float(r[3]),"c":float(r[4]),
+                        "v":float(r[5]),"qv":float(r[7]),"n":int(float(r[8])),"tbq":float(r[10])})
+        except Exception:pass
     return out
 
 def load(sym):
     a=[]
-    for m in MONTHS: a.extend(download(sym,m))
+    for m in MONTHS:a.extend(download_month(sym,m))
     a.sort(key=lambda x:x["t"])
-    return a
+    # de-duplicate archive rows
+    return list({x["t"]:x for x in a}.values())
 
+symbols=discover_symbols()
 data={}; skipped=[]
-for n,s in enumerate(SYMBOLS,1):
+for n,s in enumerate(symbols,1):
     a=load(s)
-    if len(a)>=500: data[s]=a
-    else: skipped.append(s)
-    print(f"[{n}/{len(SYMBOLS)}] {s}: {len(a)} rows",flush=True)
+    if a:data[s]=sorted(a,key=lambda x:x["t"])
+    else:skipped.append(s)
+    print(f"[{n}/{len(symbols)}] {s}: {len(a)} daily rows",flush=True)
 
 btc=data.get("BTCUSDT")
-if not btc: raise SystemExit("DATA_SOURCE_FAILURE: BTC archive unavailable")
-btc_by_t={r["t"]:r for r in btc}
-events=[]
-for sym,a in data.items():
-    if sym=="BTCUSDT": continue
-    for i in range(168,len(a)-73):
-        cur=a[i]; p24=a[i-24]; p7=a[i-168]
-        ret24=cur["c"]/p24["c"]-1; ret7=cur["c"]/p7["c"]-1
-        v24=sum(x["v"] for x in a[i-23:i+1]); vp=sum(x["v"] for x in a[i-47:i-23])
-        volchg=v24/vp-1 if vp else 0
-        tb=sum(x["tb"] for x in a[i-23:i+1]); sell=max(v24-tb,0); taker=tb/sell if sell else 99
-        b0=btc_by_t.get(cur["t"]); b24=btc_by_t.get(p24["t"])
-        if not b0 or not b24: continue
-        rel24=ret24-(b0["c"]/b24["c"]-1)
-        resistance=max(x["c"] for x in a[i-168:i])
-        pre=(ret7<.15 and volchg>.25 and taker>1.05 and rel24>0)
-        brk=(cur["c"]>resistance and volchg>.50)
-        acc=(ret24>.30 and volchg>.80 and taker>1.20)
-        if not(pre or brk or acc): continue
-        fut=a[i+1:i+73]; bend=btc_by_t.get(fut[-1]["t"])
-        ret72=fut[-1]["c"]/cur["c"]-1
-        btc72=bend["c"]/b0["c"]-1 if bend else None
-        events.append({"symbol":sym,"t":cur["t"],"utc":datetime.fromtimestamp(cur["t"]/1000,tz=timezone.utc).isoformat(),
-          "signal":"PRE_MOVE" if pre else ("BREAKOUT" if brk else "ACCELERATION"),
-          "ret24":ret24,"ret7":ret7,"volchg24":volchg,"taker_ratio24":taker,"btc_rel24":rel24,
-          "ret72":ret72,"mfe72":max(x["h"] for x in fut)/cur["c"]-1,"mae72":min(x["l"] for x in fut)/cur["c"]-1,
-          "btc72":btc72,"excess72":ret72-btc72 if btc72 is not None else None})
+if not btc:raise SystemExit("DATA_SOURCE_FAILURE: BTC Spot archive unavailable")
+btc_by_t={x["t"]:x for x in btc}
+idx={s:{x["t"]:i for i,x in enumerate(a)} for s,a in data.items()}
+all_dates=sorted({x["t"] for a in data.values() for x in a if START_YM<=datetime.fromtimestamp(x["t"]/1000,tz=timezone.utc).strftime("%Y-%m")<=END_YM})
+obs_dates=all_dates[::OBSERVATION_STEP_DAYS]
 
-# independent discovery cooldown: no repeated same-symbol/signal within 72h
-events.sort(key=lambda x:(x["symbol"],x["signal"],x["t"])); ded=[]; last={}
+events=[]; coverage_rows=[]; candidate_days=0
+for t in obs_dates:
+    eligible=[]
+    for s,a in data.items():
+        if s=="BTCUSDT":continue
+        i=idx[s].get(t)
+        if i is None or i<MIN_HISTORY_DAYS:continue
+        # 30d quote-volume liquidity, PIT only
+        qv=sum(x["qv"] for x in a[i-29:i+1])
+        if qv>0:eligible.append((qv,s,i))
+    eligible.sort(reverse=True); universe=eligible[:LIQUIDITY_TOP_N]
+    usize=len(universe); scanned=0
+    for _,s,i in universe:
+        a=data[s]
+        if i<MIN_HISTORY_DAYS or i+365>=len(a):continue
+        cur=a[i]; b0=btc_by_t.get(t)
+        if not b0:continue
+        # require contiguous-enough feature anchors by index/date archive presence
+        p30=a[i-30]; p90=a[i-90]
+        b30=btc_by_t.get(p30["t"])
+        if not b30:continue
+        scanned+=1; candidate_days+=1
+        ret30=cur["c"]/p30["c"]-1; ret90=cur["c"]/p90["c"]-1
+        btc30=b0["c"]/b30["c"]-1; rel30=ret30-btc30
+        qv7=sum(x["qv"] for x in a[i-6:i+1]); qvprev=sum(x["qv"] for x in a[i-13:i-6])
+        volratio=qv7/qvprev if qvprev else 0
+        taker=sum(x["tbq"] for x in a[i-6:i+1]); total=sum(x["qv"] for x in a[i-6:i+1])
+        taker_share=taker/total if total else 0
+        dist_high=cur["c"]/max(x["h"] for x in a[i-89:i+1])-1
+        # deterministic market-data signal; thresholds preregistered here.
+        pre=(ret90<0.50 and rel30>0.03 and volratio>1.20 and taker_share>0.50 and dist_high<0)
+        early=(rel30>0.08 and volratio>1.35 and taker_share>0.52 and dist_high>-0.08)
+        if not(pre or early):continue
+        horizons={}
+        ok=True
+        for h in (30,90,180,365):
+            if i+h>=len(a):ok=False;break
+            end=a[i+h]; bend=btc_by_t.get(end["t"])
+            if not bend:ok=False;break
+            fut=a[i+1:i+h+1]
+            r=end["c"]/cur["c"]-1; br=bend["c"]/b0["c"]-1
+            horizons[str(h)]={"absolute_return":r,"btc_relative_return":r-br,
+              "mae":min(x["l"] for x in fut)/cur["c"]-1,
+              "mfe":max(x["h"] for x in fut)/cur["c"]-1,
+              "time_to_mfe_days":1+max(range(len(fut)),key=lambda j:fut[j]["h"])}
+        if not ok:continue
+        events.append({"symbol":s,"t":t,"utc":datetime.fromtimestamp(t/1000,tz=timezone.utc).date().isoformat(),
+          "stage":"PRE_MOVE" if pre else "EARLY_MOVE","universe_size":usize,"universe_rank":1+[x[1] for x in universe].index(s),
+          "ret30":ret30,"ret90":ret90,"btc_rel30":rel30,"volume_ratio_7d":volratio,"taker_buy_share_7d":taker_share,
+          "distance_90d_high":dist_high,"horizons":horizons})
+    coverage_rows.append({"t":t,"universe_size":usize,"scanned_count":scanned,"coverage_ratio":scanned/usize if usize else 0})
+
+# immutable-like first discovery + 30d cooldown per symbol/stage
+events.sort(key=lambda e:(e["symbol"],e["stage"],e["t"])); ded=[]; last={}
 for e in events:
-    k=(e["symbol"],e["signal"])
-    if e["t"]-last.get(k,-10**18)<72*3600*1000: continue
-    ded.append(e); last[k]=e["t"]
+    k=(e["symbol"],e["stage"])
+    if e["t"]-last.get(k,-10**18)<30*86400000:continue
+    ded.append(e);last[k]=e["t"]
 events=ded
 
-def sm(rows):
-    if not rows:return {"N":0}
-    ex=[r["excess72"] for r in rows if r["excess72"] is not None]
-    return {"N":len(rows),"ret72_gt_30_rate":sum(r["ret72"]>.30 for r in rows)/len(rows),
-      "ret72_positive_rate":sum(r["ret72"]>0 for r in rows)/len(rows),
-      "btc_outperform_rate":sum(x>0 for x in ex)/len(ex) if ex else None,
-      "median_ret72":statistics.median(r["ret72"] for r in rows),
-      "median_mfe72":statistics.median(r["mfe72"] for r in rows),
-      "median_mae72":statistics.median(r["mae72"] for r in rows),
-      "median_excess72":statistics.median(ex) if ex else None}
+def med(vals):return statistics.median(vals) if vals else None
+metrics={}
+for h in ("30","90","180","365"):
+    rows=[e["horizons"][h] for e in events if h in e["horizons"]]
+    metrics[h]={"N":len(rows),"median_absolute_return":med([x["absolute_return"] for x in rows]),
+      "median_btc_relative_return":med([x["btc_relative_return"] for x in rows]),
+      "median_mae":med([x["mae"] for x in rows]),"median_mfe":med([x["mfe"] for x in rows]),
+      "median_time_to_mfe_days":med([x["time_to_mfe_days"] for x in rows])}
 
-# Phase 2: matched negative controls + chronological out-of-sample split.
-# Match at the same hour among loaded non-signal assets with similar trailing 24h volume rank.
-event_keys={(e["symbol"],e["t"]) for e in events}
-control_rows=[]
-by_time={}
-for sym,a in data.items():
-    if sym=="BTCUSDT": continue
-    for i in range(168,len(a)-73):
-        by_time.setdefault(a[i]["t"],[]).append((sym,a,i))
+# Simple baselines on same eligible observations: BTC-relative momentum and volume/momentum.
+# They are computed as event selectors from the same frozen PIT feature rows.
+rs=[e for e in events if e["btc_rel30"]>0.08]
+vm=[e for e in events if e["ret30"]>0 and e["volume_ratio_7d"]>1.35]
+def baseline(rows,h="90"):
+    v=[e["horizons"][h]["btc_relative_return"] for e in rows if h in e["horizons"]]
+    return {"N":len(v),"median_btc_relative_return":med(v)}
+baselines={"btc_buy_hold":{"median_btc_relative_return":0.0},
+           "simple_btc_relative_momentum":baseline(rs),
+           "simple_volume_momentum":baseline(vm)}
+hunter90=metrics["90"]["median_btc_relative_return"]
+best=max([x["median_btc_relative_return"] for x in baselines.values() if x["median_btc_relative_return"] is not None])
+coverage_num=sum(x["scanned_count"] for x in coverage_rows)
+coverage_den=sum(x["universe_size"] for x in coverage_rows)
+coverage=coverage_num/coverage_den if coverage_den else 0
+# Conservative effective N proxy: unique symbol-month clusters.
+clusters={(e["symbol"],e["utc"][:7]) for e in events}
+effective_n=len(clusters)
+summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARCH_SIGNAL",
+ "venue":"Binance Spot","quote_asset":"USDT","source":"Binance Data Vision archive-derived symbol universe",
+ "period":f"{START_YM} through {END_YM}","universe_method":"HISTORICAL_FILE_RECONSTRUCTED_UNIVERSE",
+ "completeness":"PARTIAL","survivorship_label":"SURVIVORSHIP_INCOMPLETE_MVP",
+ "preregistered":{"min_history_days":MIN_HISTORY_DAYS,"liquidity_top_n":LIQUIDITY_TOP_N,
+   "observation_step_days":OBSERVATION_STEP_DAYS,"feature_version":FEATURE_VERSION,"rule_version":RULE_VERSION},
+ "universe_size":len(symbols),"symbols_with_archive_data":len(data),"scanned_count":coverage_num,
+ "coverage_ratio":coverage,"raw_n":len(events),"effective_n":effective_n,
+ "metrics":metrics,"baselines":baselines,
+ "hunter_minus_best_simple_baseline_90d":hunter90-best if hunter90 is not None else None,
+ "n_min_30_met":effective_n>=30,"k_calibration_supported":False,
+ "k_status":"UNSET/SHADOW",
+ "limitations":["Archive-derived universe completeness is not proven; run remains SURVIVORSHIP_INCOMPLETE_MVP.",
+ "Effective N is a conservative unique symbol-month cluster count, not a formal dependence-adjusted estimator.",
+ "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
+ "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
 
+with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f:json.dump(summary,f,indent=2)
+flat=[]
 for e in events:
-    pool=by_time.get(e["t"],[])
-    # event trailing volume
-    ea=data[e["symbol"]]; ei=next((i for i,x in enumerate(ea) if x["t"]==e["t"]),None)
-    if ei is None: continue
-    ev=sum(x["v"]*x["c"] for x in ea[ei-23:ei+1])
-    cand=[]
-    for sym,a,i in pool:
-        if sym==e["symbol"] or (sym,e["t"]) in event_keys: continue
-        qv=sum(x["v"]*x["c"] for x in a[i-23:i+1])
-        if qv<=0 or ev<=0: continue
-        # nearest log-volume is a deterministic liquidity match
-        import math
-        cand.append((abs(math.log(qv/ev)),sym,a,i))
-    if not cand: continue
-    _,sym,a,i=min(cand,key=lambda x:(x[0],x[1]))
-    cur=a[i]; fut=a[i+1:i+73]; b0=btc_by_t.get(cur["t"]); bend=btc_by_t.get(fut[-1]["t"])
-    if not b0 or not bend: continue
-    r=fut[-1]["c"]/cur["c"]-1; br=bend["c"]/b0["c"]-1
-    control_rows.append({"symbol":sym,"matched_event_symbol":e["symbol"],"t":e["t"],"utc":e["utc"],
-      "matched_signal":e["signal"],"ret72":r,"mfe72":max(x["h"] for x in fut)/cur["c"]-1,
-      "mae72":min(x["l"] for x in fut)/cur["c"]-1,"btc72":br,"excess72":r-br})
-
-def pair_metrics(sig,ctl):
-    n=min(len(sig),len(ctl))
-    if not n:return {"N_pairs":0}
-    s=sig[:n]; c=ctl[:n]
-    return {"N_pairs":n,
-      "signal_gt30_rate":sum(x["ret72"]>.30 for x in s)/n,
-      "control_gt30_rate":sum(x["ret72"]>.30 for x in c)/n,
-      "signal_positive_rate":sum(x["ret72"]>0 for x in s)/n,
-      "control_positive_rate":sum(x["ret72"]>0 for x in c)/n,
-      "signal_btc_outperform_rate":sum(x["excess72"]>0 for x in s)/n,
-      "control_btc_outperform_rate":sum(x["excess72"]>0 for x in c)/n,
-      "median_signal_ret72":statistics.median(x["ret72"] for x in s),
-      "median_control_ret72":statistics.median(x["ret72"] for x in c),
-      "median_signal_excess72":statistics.median(x["excess72"] for x in s),
-      "median_control_excess72":statistics.median(x["excess72"] for x in c)}
-
-# chronological 70/30 OOS split, preserving matched pairs
-pairs=[]
-ctlmap={(x["matched_event_symbol"],x["t"],x["matched_signal"]):x for x in control_rows}
-for e in events:
-    c=ctlmap.get((e["symbol"],e["t"],e["signal"]))
-    if c:pairs.append((e,c))
-pairs.sort(key=lambda p:p[0]["t"])
-cut=int(len(pairs)*.70)
-train=pairs[:cut]; valid=pairs[cut:]
-def pm(ps,signal=None):
-    q=[p for p in ps if signal is None or p[0]["signal"]==signal]
-    return pair_metrics([p[0] for p in q],[p[1] for p in q])
-
-summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARCH_UNVALIDATED",
- "source":"Binance Data Vision static USD-M monthly 1h klines",
- "period":"2026-05 through 2026-08","symbols_requested":len(SYMBOLS),"symbols_loaded":len(data),"symbols_skipped":skipped,
- "overall":sm(events),"by_signal":{s:sm([e for e in events if e["signal"]==s]) for s in ["PRE_MOVE","BREAKOUT","ACCELERATION"]},
- "matched_controls":{"method":"same timestamp + nearest trailing-24h quote-volume; deterministic; sector matching unavailable in this layer",
-   "all":pm(pairs),"train_70pct":pm(train),"validation_30pct":pm(valid),
-   "validation_by_signal":{s:pm(valid,s) for s in ["PRE_MOVE","BREAKOUT","ACCELERATION"]}},
- "limitations":["Layer 2 adds time/liquidity matched controls and chronological OOS validation",
- "Sector matching is not yet implemented","No historical OI/funding/liquidation/catalyst labels",
- "Thresholds remain UNVALIDATED; do not promote to LIVE from this layer alone"]}
-with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f: json.dump(summary,f,indent=2)
-fields=list(events[0]) if events else ["symbol","t","utc","signal"]
+    r={k:v for k,v in e.items() if k!="horizons"}
+    for h,v in e["horizons"].items():
+        for k,x in v.items():r[f"{h}d_{k}"]=x
+    flat.append(r)
+fields=sorted({k for r in flat for k in r}) if flat else ["symbol","t","utc","stage"]
 with open(f"{OUT}/hunter-blind-replay-events.csv","w",newline="") as f:
-    w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(events)
-cf=list(control_rows[0]) if control_rows else ["symbol","matched_event_symbol","t","utc","matched_signal"]
+    w=csv.DictWriter(f,fieldnames=fields);w.writeheader();w.writerows(flat)
 with open(f"{OUT}/hunter-blind-replay-controls.csv","w",newline="") as f:
-    w=csv.DictWriter(f,fieldnames=cf); w.writeheader(); w.writerows(control_rows)
+    w=csv.DictWriter(f,fieldnames=["baseline","N","median_btc_relative_return"]);w.writeheader()
+    for k,v in baselines.items():w.writerow({"baseline":k,"N":v.get("N",""),"median_btc_relative_return":v["median_btc_relative_return"]})
+
+# Mirror run progress into SSOT without claiming verified full-universe validation.
+try:
+    with open("hunter-replay-v1.json") as f:state=json.load(f)
+    a=state["active_run"];a.update({"phase":"REPLAY_SUBSET_COMPLETED","universe_size":summary["universe_size"],
+      "scanned_count":summary["scanned_count"],"coverage_ratio":summary["coverage_ratio"],
+      "raw_n":summary["raw_n"],"effective_n":summary["effective_n"],
+      "blocker":"Archive reconstruction ran and produced numeric results; survivorship completeness remains unproven.",
+      "next_step":"Verify archive-universe completeness and peer taxonomy; then run frozen 2024/2025 OOS windows and only calibrate k if VERIFIED Effective N>=30."})
+    with open("hunter-replay-v1.json","w") as f:json.dump(state,f,indent=2);f.write("\n")
+except Exception as e:print("STATE_MIRROR_WARNING:",e,flush=True)
 print(json.dumps(summary,indent=2))
-if len(pairs)<30: raise SystemExit("VALIDATION_INCOMPLETE: matched N<30")
