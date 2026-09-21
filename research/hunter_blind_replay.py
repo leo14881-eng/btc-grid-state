@@ -8,23 +8,29 @@ Does NOT change frozen Hunter production logic and does NOT authorize trades.
 import csv, json, math, os, statistics, time, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
-BASE="https://fapi.binance.com"
+BASES=["https://fapi.binance.com","https://fapi1.binance.com","https://fapi2.binance.com","https://fapi3.binance.com","https://fapi4.binance.com"]
 OUT="research/results"
 os.makedirs(OUT, exist_ok=True)
 EXCLUDE_SUFFIX=("UPUSDT","DOWNUSDT","BULLUSDT","BEARUSDT")
 
-def get(path, params=None, tries=5):
-    url=BASE+path
-    if params: url += "?" + urllib.parse.urlencode(params)
+def get(path, params=None, tries=2):
+    # Binance documents fapi1..fapi4 as alternative futures API hosts.
+    # GitHub-hosted runners can receive 451 from one edge, so rotate official hosts.
     last=None
-    for i in range(tries):
-        try:
-            req=urllib.request.Request(url, headers={"User-Agent":"hunter-replay/0.1"})
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return json.loads(r.read().decode())
-        except Exception as e:
-            last=e; time.sleep(1.5*(i+1))
-    raise RuntimeError(f"GET failed {url}: {last}")
+    for base in BASES:
+        url=base+path
+        if params: url += "?" + urllib.parse.urlencode(params)
+        for i in range(tries):
+            try:
+                req=urllib.request.Request(url, headers={"User-Agent":"hunter-replay/0.2"})
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    return json.loads(r.read().decode())
+            except Exception as e:
+                last=e
+                # 451 is geographic edge denial: immediately try another official host.
+                if getattr(e, "code", None)==451: break
+                time.sleep(.7*(i+1))
+    raise RuntimeError(f"All official Binance futures hosts failed for {path}: {last}")
 
 def klines(symbol, interval="1h", limit=1000):
     raw=get("/fapi/v1/klines",{"symbol":symbol,"interval":interval,"limit":limit})
