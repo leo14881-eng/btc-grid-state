@@ -1,1 +1,35 @@
-{"schema_version":"1.0.0","status":"V1_FROZEN_AWAITING_FIRST_REPLAY","created_at":"2026-09-18","freeze_ref":"hunter-market-data-validation-v1-freeze.md","active_run":null,"runs":[],"research_hypotheses":[]}
+{
+  "schema_version": "1.0.0",
+  "status": "V1_REPLAY_ACTIVE",
+  "created_at": "2026-09-18",
+  "freeze_ref": "hunter-market-data-validation-v1-freeze.md",
+  "active_run": {
+    "run_id": "V1-BLIND-REPLAY-001",
+    "started_at": "2026-09-21T18:03:00+07:00",
+    "venue": "Binance Spot",
+    "quote_asset": "USDT",
+    "calibration_window": "2022-01-01/2023-12-31",
+    "oos_windows": [
+      "2024-01-01/2024-12-31",
+      "2025-01-01/2025-12-31"
+    ],
+    "data_source": "Binance Public Data (data.binance.vision)",
+    "mode": "BLIND_FULL_UNIVERSE",
+    "rules_frozen": true,
+    "outcome_peeking_forbidden": true,
+    "retrospective_cases_excluded": [
+      "HYPE-2026-09",
+      "ZEC-2026-09"
+    ],
+    "phase": "PIT_UNIVERSE_RECONSTRUCTION",
+    "universe_size": null,
+    "scanned_count": 0,
+    "coverage_ratio": null,
+    "raw_n": 0,
+    "effective_n": 0,
+    "blocker": "Reconstruct point-in-time Binance USDT spot universe including later-delisted symbols before feature scan; current exchangeInfo alone is not valid historical universe.",
+    "next_step": "Build PIT symbol availability from Binance public archive/listing history, then execute frozen feature scan without future outcomes."
+  },
+  "runs": [],
+  "research_hypotheses": []
+}
