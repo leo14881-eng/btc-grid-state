@@ -23,11 +23,12 @@
     "effective_n": 0,
     "blocker": "No verified official dated Binance Spot symbol manifest has been located. Current exchangeInfo is current-state only and therefore cannot reconstruct later-delisted USDT symbols without survivorship bias. Binance Public Data documents per-symbol historical archives, but archive documentation does not itself provide a dated historical universe manifest.",
     "next_step": "Reconstruct a candidate PIT USDT symbol set from Binance Public Data archive existence/first-and-last kline availability, then cross-check listing/delisting announcements. Before outcome computation, freeze exact universe formation thresholds and mark SURVIVORSHIP_INCOMPLETE_MVP if completeness still cannot be demonstrated.",
-    "blocker_last_attacked_at": "2026-09-21T23:07:00+07:00",
+    "blocker_last_attacked_at": "2026-09-22T00:07:45+07:00",
     "blocker_evidence": [
-      "Binance Public Data README: historical per-symbol klines are available and helper scripts enumerate current running symbols, not a dated historical manifest.",
-      "Binance exchangeInfo documentation: endpoint returns symbols currently available/statused on the exchange.",
-      "Binance listing/delisting announcements can serve as cross-check evidence but are not yet assembled into a complete PIT manifest."
+      "Binance Public Data README confirms historical per-symbol klines are available and says its helper for all symbols enumerates current running symbols.",
+      "Official fetch-all-trading-pairs.sh calls the live /api/v3/exchangeInfo endpoint, confirming that helper output is current-state rather than a dated historical manifest.",
+      "Binance Public Data archive documentation provides deterministic per-symbol/month paths and checksums, supporting archive-existence/first-last-kline reconstruction as the next honest PIT-universe method.",
+      "No official dated historical Binance Spot universe manifest was verified in this run; therefore survivorship completeness remains unproven and outcome computation/calibration remains blocked."
     ]
   },
   "runs": [],
