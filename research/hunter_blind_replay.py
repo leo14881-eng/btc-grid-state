@@ -7,6 +7,7 @@ global STOP. Only archive-observed symbols are used; no current-symbol allowlist
 """
 import csv, io, json, math, os, statistics, urllib.parse, urllib.request, zipfile
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -19,7 +20,8 @@ MIN_HISTORY_DAYS=90
 LIQUIDITY_TOP_N=100
 OBSERVATION_STEP_DAYS=7
 FEATURE_VERSION="spot-daily-v1"
-RULE_VERSION="blind-full-universe-v1.0"
+RULE_VERSION="blind-full-universe-v1.1-parallel"
+MAX_DOWNLOAD_WORKERS=12
 STABLE_BASES={"USDC","BUSD","TUSD","FDUSD","USDP","DAI","USDS","UST","USTC","EUR","TRY","BRL","GBP","AUD","RUB","UAH","BIDR","IDRT","NGN","VAI","PAX","SUSD"}
 LEVERAGED_SUFFIXES=("UP","DOWN","BULL","BEAR")
 
@@ -89,11 +91,19 @@ def load(sym):
 
 symbols=discover_symbols()
 data={}; skipped=[]
-for n,s in enumerate(symbols,1):
-    a=load(s)
-    if a:data[s]=sorted(a,key=lambda x:x["t"])
-    else:skipped.append(s)
-    print(f"[{n}/{len(symbols)}] {s}: {len(a)} daily rows",flush=True)
+# Download symbols concurrently. Each symbol still loads its monthly archives
+# deterministically; concurrency changes transport speed only, not research rules.
+with ThreadPoolExecutor(max_workers=MAX_DOWNLOAD_WORKERS) as ex:
+    futs={ex.submit(load,s):s for s in symbols}
+    done=0
+    for fut in as_completed(futs):
+        s=futs[fut]; done+=1
+        try:a=fut.result()
+        except Exception as e:
+            a=[]; print(f"[{done}/{len(symbols)}] {s}: DOWNLOAD_ERROR {type(e).__name__}",flush=True)
+        if a:data[s]=sorted(a,key=lambda x:x["t"])
+        else:skipped.append(s)
+        print(f"[{done}/{len(symbols)}] {s}: {len(a)} daily rows",flush=True)
 
 btc=data.get("BTCUSDT")
 if not btc:raise SystemExit("DATA_SOURCE_FAILURE: BTC Spot archive unavailable")
@@ -194,7 +204,7 @@ summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARC
  "period":f"{START_YM} through {END_YM}","universe_method":"HISTORICAL_FILE_RECONSTRUCTED_UNIVERSE",
  "completeness":"PARTIAL","survivorship_label":"SURVIVORSHIP_INCOMPLETE_MVP",
  "preregistered":{"min_history_days":MIN_HISTORY_DAYS,"liquidity_top_n":LIQUIDITY_TOP_N,
-   "observation_step_days":OBSERVATION_STEP_DAYS,"feature_version":FEATURE_VERSION,"rule_version":RULE_VERSION},
+   "observation_step_days":OBSERVATION_STEP_DAYS,"feature_version":FEATURE_VERSION,"rule_version":RULE_VERSION,"max_download_workers":MAX_DOWNLOAD_WORKERS},
  "universe_size":len(symbols),"symbols_with_archive_data":len(data),"scanned_count":coverage_num,
  "coverage_ratio":coverage,"raw_n":len(events),"effective_n":effective_n,
  "metrics":metrics,"baselines":baselines,
