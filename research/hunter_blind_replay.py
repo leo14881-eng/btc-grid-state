@@ -95,14 +95,84 @@ def sm(rows):
       "median_mae72":statistics.median(r["mae72"] for r in rows),
       "median_excess72":statistics.median(ex) if ex else None}
 
+# Phase 2: matched negative controls + chronological out-of-sample split.
+# Match at the same hour among loaded non-signal assets with similar trailing 24h volume rank.
+event_keys={(e["symbol"],e["t"]) for e in events}
+control_rows=[]
+by_time={}
+for sym,a in data.items():
+    if sym=="BTCUSDT": continue
+    for i in range(168,len(a)-73):
+        by_time.setdefault(a[i]["t"],[]).append((sym,a,i))
+
+for e in events:
+    pool=by_time.get(e["t"],[])
+    # event trailing volume
+    ea=data[e["symbol"]]; ei=next((i for i,x in enumerate(ea) if x["t"]==e["t"]),None)
+    if ei is None: continue
+    ev=sum(x["v"]*x["c"] for x in ea[ei-23:ei+1])
+    cand=[]
+    for sym,a,i in pool:
+        if sym==e["symbol"] or (sym,e["t"]) in event_keys: continue
+        qv=sum(x["v"]*x["c"] for x in a[i-23:i+1])
+        if qv<=0 or ev<=0: continue
+        # nearest log-volume is a deterministic liquidity match
+        import math
+        cand.append((abs(math.log(qv/ev)),sym,a,i))
+    if not cand: continue
+    _,sym,a,i=min(cand,key=lambda x:(x[0],x[1]))
+    cur=a[i]; fut=a[i+1:i+73]; b0=btc_by_t.get(cur["t"]); bend=btc_by_t.get(fut[-1]["t"])
+    if not b0 or not bend: continue
+    r=fut[-1]["c"]/cur["c"]-1; br=bend["c"]/b0["c"]-1
+    control_rows.append({"symbol":sym,"matched_event_symbol":e["symbol"],"t":e["t"],"utc":e["utc"],
+      "matched_signal":e["signal"],"ret72":r,"mfe72":max(x["h"] for x in fut)/cur["c"]-1,
+      "mae72":min(x["l"] for x in fut)/cur["c"]-1,"btc72":br,"excess72":r-br})
+
+def pair_metrics(sig,ctl):
+    n=min(len(sig),len(ctl))
+    if not n:return {"N_pairs":0}
+    s=sig[:n]; c=ctl[:n]
+    return {"N_pairs":n,
+      "signal_gt30_rate":sum(x["ret72"]>.30 for x in s)/n,
+      "control_gt30_rate":sum(x["ret72"]>.30 for x in c)/n,
+      "signal_positive_rate":sum(x["ret72"]>0 for x in s)/n,
+      "control_positive_rate":sum(x["ret72"]>0 for x in c)/n,
+      "signal_btc_outperform_rate":sum(x["excess72"]>0 for x in s)/n,
+      "control_btc_outperform_rate":sum(x["excess72"]>0 for x in c)/n,
+      "median_signal_ret72":statistics.median(x["ret72"] for x in s),
+      "median_control_ret72":statistics.median(x["ret72"] for x in c),
+      "median_signal_excess72":statistics.median(x["excess72"] for x in s),
+      "median_control_excess72":statistics.median(x["excess72"] for x in c)}
+
+# chronological 70/30 OOS split, preserving matched pairs
+pairs=[]
+ctlmap={(x["matched_event_symbol"],x["t"],x["matched_signal"]):x for x in control_rows}
+for e in events:
+    c=ctlmap.get((e["symbol"],e["t"],e["signal"]))
+    if c:pairs.append((e,c))
+pairs.sort(key=lambda p:p[0]["t"])
+cut=int(len(pairs)*.70)
+train=pairs[:cut]; valid=pairs[cut:]
+def pm(ps,signal=None):
+    q=[p for p in ps if signal is None or p[0]["signal"]==signal]
+    return pair_metrics([p[0] for p in q],[p[1] for p in q])
+
 summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARCH_UNVALIDATED",
  "source":"Binance Data Vision static USD-M monthly 1h klines",
  "period":"2026-05 through 2026-08","symbols_requested":len(SYMBOLS),"symbols_loaded":len(data),"symbols_skipped":skipped,
  "overall":sm(events),"by_signal":{s:sm([e for e in events if e["signal"]==s]) for s in ["PRE_MOVE","BREAKOUT","ACCELERATION"]},
- "limitations":["Layer 1 only: no historical OI/funding/liquidation/catalyst labels","No matched negative-control layer yet","Thresholds remain UNVALIDATED until controls and out-of-sample validation are complete"]}
+ "matched_controls":{"method":"same timestamp + nearest trailing-24h quote-volume; deterministic; sector matching unavailable in this layer",
+   "all":pm(pairs),"train_70pct":pm(train),"validation_30pct":pm(valid),
+   "validation_by_signal":{s:pm(valid,s) for s in ["PRE_MOVE","BREAKOUT","ACCELERATION"]}},
+ "limitations":["Layer 2 adds time/liquidity matched controls and chronological OOS validation",
+ "Sector matching is not yet implemented","No historical OI/funding/liquidation/catalyst labels",
+ "Thresholds remain UNVALIDATED; do not promote to LIVE from this layer alone"]}
 with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f: json.dump(summary,f,indent=2)
 fields=list(events[0]) if events else ["symbol","t","utc","signal"]
 with open(f"{OUT}/hunter-blind-replay-events.csv","w",newline="") as f:
     w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(events)
+cf=list(control_rows[0]) if control_rows else ["symbol","matched_event_symbol","t","utc","matched_signal"]
+with open(f"{OUT}/hunter-blind-replay-controls.csv","w",newline="") as f:
+    w=csv.DictWriter(f,fieldnames=cf); w.writeheader(); w.writerows(control_rows)
 print(json.dumps(summary,indent=2))
-if summary["overall"]["N"]<30: raise SystemExit("VALIDATION_INCOMPLETE: N<30")
+if len(pairs)<30: raise SystemExit("VALIDATION_INCOMPLETE: matched N<30")
