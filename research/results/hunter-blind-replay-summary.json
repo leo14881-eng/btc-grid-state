@@ -1,125 +1,82 @@
 {
-  "generated_at": "2026-09-21T15:18:11.847539+00:00",
-  "status": "RESEARCH_UNVALIDATED",
-  "source": "Binance Data Vision static USD-M monthly 1h klines",
-  "period": "2026-05 through 2026-08",
-  "symbols_requested": 63,
-  "symbols_loaded": 62,
-  "symbols_skipped": [
-    "PEPEUSDT"
-  ],
-  "overall": {
-    "N": 640,
-    "ret72_gt_30_rate": 0.0234375,
-    "ret72_positive_rate": 0.4265625,
-    "btc_outperform_rate": 0.4109375,
-    "median_ret72": -0.010773790009172335,
-    "median_mfe72": 0.04026075650672478,
-    "median_mae72": -0.04333686340584014,
-    "median_excess72": -0.010229747849176185
+  "generated_at": "2026-09-21T20:17:52.256496+00:00",
+  "status": "RESEARCH_SIGNAL",
+  "venue": "Binance Spot",
+  "quote_asset": "USDT",
+  "source": "Binance Data Vision archive-derived symbol universe",
+  "period": "2022-01 through 2025-12",
+  "universe_method": "HISTORICAL_FILE_RECONSTRUCTED_UNIVERSE",
+  "completeness": "PARTIAL",
+  "survivorship_label": "SURVIVORSHIP_INCOMPLETE_MVP",
+  "preregistered": {
+    "min_history_days": 90,
+    "liquidity_top_n": 100,
+    "observation_step_days": 7,
+    "feature_version": "spot-daily-v1",
+    "rule_version": "blind-full-universe-v1.1-parallel",
+    "max_download_workers": 12
   },
-  "by_signal": {
-    "PRE_MOVE": {
-      "N": 350,
-      "ret72_gt_30_rate": 0.017142857142857144,
-      "ret72_positive_rate": 0.42,
-      "btc_outperform_rate": 0.38857142857142857,
-      "median_ret72": -0.008477990934070034,
-      "median_mfe72": 0.03227016144252992,
-      "median_mae72": -0.039291117043545654,
-      "median_excess72": -0.010456342863729873
+  "universe_size": 669,
+  "symbols_with_archive_data": 560,
+  "scanned_count": 13597,
+  "coverage_ratio": 0.6937244897959184,
+  "raw_n": 334,
+  "effective_n": 333,
+  "metrics": {
+    "30": {
+      "N": 334,
+      "median_absolute_return": -0.10931605907490166,
+      "median_btc_relative_return": -0.1052183582098819,
+      "median_mae": -0.2276267299970462,
+      "median_mfe": 0.158278437896071,
+      "median_time_to_mfe_days": 6.0
     },
-    "BREAKOUT": {
-      "N": 290,
-      "ret72_gt_30_rate": 0.03103448275862069,
-      "ret72_positive_rate": 0.43448275862068964,
-      "btc_outperform_rate": 0.4379310344827586,
-      "median_ret72": -0.012548649827488878,
-      "median_mfe72": 0.05821975821975822,
-      "median_mae72": -0.04982394282930608,
-      "median_excess72": -0.009144375542826766
+    "90": {
+      "N": 334,
+      "median_absolute_return": -0.14023207951801053,
+      "median_btc_relative_return": -0.20698516890091684,
+      "median_mae": -0.34483494933344266,
+      "median_mfe": 0.2671628387082353,
+      "median_time_to_mfe_days": 18.0
     },
-    "ACCELERATION": {
-      "N": 0
+    "180": {
+      "N": 334,
+      "median_absolute_return": -0.2083739045764363,
+      "median_btc_relative_return": -0.3560383901688587,
+      "median_mae": -0.45656473736239267,
+      "median_mfe": 0.46027792717238214,
+      "median_time_to_mfe_days": 52.0
+    },
+    "365": {
+      "N": 334,
+      "median_absolute_return": -0.3330622092870416,
+      "median_btc_relative_return": -0.8558031530638615,
+      "median_mae": -0.5454744056543157,
+      "median_mfe": 0.6762482376700408,
+      "median_time_to_mfe_days": 91.0
     }
   },
-  "matched_controls": {
-    "method": "same timestamp + nearest trailing-24h quote-volume; deterministic; sector matching unavailable in this layer",
-    "all": {
-      "N_pairs": 640,
-      "signal_gt30_rate": 0.0234375,
-      "control_gt30_rate": 0.028125,
-      "signal_positive_rate": 0.4265625,
-      "control_positive_rate": 0.45,
-      "signal_btc_outperform_rate": 0.4109375,
-      "control_btc_outperform_rate": 0.4296875,
-      "median_signal_ret72": -0.010773790009172335,
-      "median_control_ret72": -0.007966649715405671,
-      "median_signal_excess72": -0.010229747849176185,
-      "median_control_excess72": -0.007579571761542003
+  "baselines": {
+    "btc_buy_hold": {
+      "median_btc_relative_return": 0.0
     },
-    "train_70pct": {
-      "N_pairs": 448,
-      "signal_gt30_rate": 0.004464285714285714,
-      "control_gt30_rate": 0.002232142857142857,
-      "signal_positive_rate": 0.3392857142857143,
-      "control_positive_rate": 0.3638392857142857,
-      "signal_btc_outperform_rate": 0.375,
-      "control_btc_outperform_rate": 0.390625,
-      "median_signal_ret72": -0.020271082888343672,
-      "median_control_ret72": -0.019851743665382338,
-      "median_signal_excess72": -0.01213686020713195,
-      "median_control_excess72": -0.010704849594885935
+    "simple_btc_relative_momentum": {
+      "N": 273,
+      "median_btc_relative_return": -0.21150470723904347
     },
-    "validation_30pct": {
-      "N_pairs": 192,
-      "signal_gt30_rate": 0.06770833333333333,
-      "control_gt30_rate": 0.08854166666666667,
-      "signal_positive_rate": 0.6302083333333334,
-      "control_positive_rate": 0.6510416666666666,
-      "signal_btc_outperform_rate": 0.4947916666666667,
-      "control_btc_outperform_rate": 0.5208333333333334,
-      "median_signal_ret72": 0.03168460577437915,
-      "median_control_ret72": 0.029038424915400762,
-      "median_signal_excess72": -0.0023944355746569057,
-      "median_control_excess72": 0.002362418687201273
-    },
-    "validation_by_signal": {
-      "PRE_MOVE": {
-        "N_pairs": 99,
-        "signal_gt30_rate": 0.06060606060606061,
-        "control_gt30_rate": 0.0707070707070707,
-        "signal_positive_rate": 0.5353535353535354,
-        "control_positive_rate": 0.6060606060606061,
-        "signal_btc_outperform_rate": 0.42424242424242425,
-        "control_btc_outperform_rate": 0.5050505050505051,
-        "median_signal_ret72": 0.007421276774288277,
-        "median_control_ret72": 0.01685823754789273,
-        "median_signal_excess72": -0.010801904638328974,
-        "median_control_excess72": 0.0018356770516596566
-      },
-      "BREAKOUT": {
-        "N_pairs": 93,
-        "signal_gt30_rate": 0.07526881720430108,
-        "control_gt30_rate": 0.10752688172043011,
-        "signal_positive_rate": 0.7311827956989247,
-        "control_positive_rate": 0.6989247311827957,
-        "signal_btc_outperform_rate": 0.5698924731182796,
-        "control_btc_outperform_rate": 0.5376344086021505,
-        "median_signal_ret72": 0.08770718232044183,
-        "median_control_ret72": 0.06761363636363638,
-        "median_signal_excess72": 0.013056050984743939,
-        "median_control_excess72": 0.002870812769926845
-      },
-      "ACCELERATION": {
-        "N_pairs": 0
-      }
+    "simple_volume_momentum": {
+      "N": 268,
+      "median_btc_relative_return": -0.21720214529139104
     }
   },
+  "hunter_minus_best_simple_baseline_90d": -0.20698516890091684,
+  "n_min_30_met": true,
+  "k_calibration_supported": false,
+  "k_status": "UNSET/SHADOW",
   "limitations": [
-    "Layer 2 adds time/liquidity matched controls and chronological OOS validation",
-    "Sector matching is not yet implemented",
-    "No historical OI/funding/liquidation/catalyst labels",
-    "Thresholds remain UNVALIDATED; do not promote to LIVE from this layer alone"
+    "Archive-derived universe completeness is not proven; run remains SURVIVORSHIP_INCOMPLETE_MVP.",
+    "Effective N is a conservative unique symbol-month cluster count, not a formal dependence-adjusted estimator.",
+    "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
+    "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."
   ]
 }
