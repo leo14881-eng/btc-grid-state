@@ -25,6 +25,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Normalize Binance archive timestamps
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('research/hunter_blind_replay.py')
+          s=p.read_text()
+          old='out.append({"t":int(r[0]),"o":float(r[1]),"h":float(r[2]),"l":float(r[3]),"c":float(r[4]),'
+          new='ts=int(r[0]); ts=ts//1000 if ts>10**14 else ts\n            out.append({"t":ts,"o":float(r[1]),"h":float(r[2]),"l":float(r[3]),"c":float(r[4]),'
+          if old not in s: raise SystemExit('timestamp patch target missing')
+          p.write_text(s.replace(old,new))
+          PY
       - name: Run blind replay
         run: python research/hunter_blind_replay.py
       - name: Commit research results
