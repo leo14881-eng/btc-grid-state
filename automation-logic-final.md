@@ -240,6 +240,15 @@ Discovery objective: find assets whose **non-price evidence is improving before 
 - Apply only investability/safety exclusions needed to avoid obviously unusable assets (e.g. non-tradable, pathological liquidity, scam/exploit/dead project evidence). Do not narrow the universe merely because an asset lacks recent momentum.
 - Persist `universe_size / scanned_count / excluded_count / exclusion_reasons / coverage_ratio / scan_as_of` each run. If broad-universe coverage cannot be established, label `UNIVERSE_COVERAGE_INSUFFICIENT`; do not pretend the existing watchlist is a full scan.
 
+### Discovery coverage closure — PATCH v2.13.6 (operational correctness; no capital-gate change)
+- A run may claim `NO EARLY CANDIDATE TODAY` or `NO PRE_MOVE FOUND` only when `universe_size`, `scanned_count`, and `coverage_ratio` are numeric, the declared universe construction is reproducible, and coverage meets the run's preregistered minimum.
+- If coverage is UNKNOWN, partial, non-reproducible, or below the declared minimum, output `DISCOVERY_COVERAGE_FAILURE` and `EARLY_CANDIDATE_STATUS=UNKNOWN`. Never convert incomplete coverage into a negative discovery conclusion.
+- Audit accounting must distinguish `MISSED_DISCOVERY` (asset was not evaluated before the move) from `REJECTED_BY_GATE` (asset was evaluated and failed a recorded rule). An unevaluated asset may never be credited as a correct rejection.
+- Prior material appreciation / prior ATH does not remove an asset from the research universe. A fundamentally qualified leader that pulls back may remain on a `REACCELERATION_WATCH`; renewed price/volume/RS may confirm re-acceleration only after the asset already has qualifying independent non-price evidence. `REACCELERATION_WATCH` is research state only and creates no BUY authority.
+- Every coverage failure must persist the smallest concrete blocker and next remediation target in `scan_summary`; repeated UNKNOWN coverage without a blocker/remediation record is a system error.
+- HYPE/ZEC 2026-09 audit cases are retrospective diagnostics only and MUST NOT count toward Blind Replay, k calibration, precision/recall, or OOS N.
+- This patch enforces the already-mandatory Full-Universe contract. It does NOT loosen Stage, FQ, EA, Forward Upside Gate, Risk Governor, Allocation Gate, or capital limits.
+
 ### PRE_MOVE discovery evidence
 Search first for non-price or weakly-price-correlated inflections: protocol revenue/fees/users/TVL quality; token value-capture activation; buyback/burn; supply/unlock/emission inflection; governance changes; product/mainnet/upgrade milestones; developer/ecosystem adoption; stablecoin/RWA/DeFi/AI/infra demand; exchange/on-chain accumulation where definition is reliable; regulatory/listing/distribution changes; valuation dislocation; neglected narrative with improving fundamentals.
 
