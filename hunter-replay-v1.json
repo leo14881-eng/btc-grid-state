@@ -9,26 +9,26 @@
     "venue": "Binance Spot",
     "quote_asset": "USDT",
     "calibration_window": "2022-01-01/2023-12-31",
-    "oos_windows": [
-      "2024-01-01/2024-12-31",
-      "2025-01-01/2025-12-31"
-    ],
+    "oos_windows": ["2024-01-01/2024-12-31", "2025-01-01/2025-12-31"],
     "data_source": "Binance Public Data (data.binance.vision)",
     "mode": "BLIND_FULL_UNIVERSE",
     "rules_frozen": true,
     "outcome_peeking_forbidden": true,
-    "retrospective_cases_excluded": [
-      "HYPE-2026-09",
-      "ZEC-2026-09"
-    ],
+    "retrospective_cases_excluded": ["HYPE-2026-09", "ZEC-2026-09"],
     "phase": "PIT_UNIVERSE_RECONSTRUCTION",
     "universe_size": null,
     "scanned_count": 0,
     "coverage_ratio": null,
     "raw_n": 0,
     "effective_n": 0,
-    "blocker": "Reconstruct point-in-time Binance USDT spot universe including later-delisted symbols before feature scan; current exchangeInfo alone is not valid historical universe.",
-    "next_step": "Build PIT symbol availability from Binance public archive/listing history, then execute frozen feature scan without future outcomes."
+    "blocker": "No verified official dated Binance Spot symbol manifest has been located. Current exchangeInfo is current-state only and therefore cannot reconstruct later-delisted USDT symbols without survivorship bias. Binance Public Data documents per-symbol historical archives, but archive documentation does not itself provide a dated historical universe manifest.",
+    "next_step": "Reconstruct a candidate PIT USDT symbol set from Binance Public Data archive existence/first-and-last kline availability, then cross-check listing/delisting announcements. Before outcome computation, freeze exact universe formation thresholds and mark SURVIVORSHIP_INCOMPLETE_MVP if completeness still cannot be demonstrated.",
+    "blocker_last_attacked_at": "2026-09-21T23:07:00+07:00",
+    "blocker_evidence": [
+      "Binance Public Data README: historical per-symbol klines are available and helper scripts enumerate current running symbols, not a dated historical manifest.",
+      "Binance exchangeInfo documentation: endpoint returns symbols currently available/statused on the exchange.",
+      "Binance listing/delisting announcements can serve as cross-check evidence but are not yet assembled into a complete PIT manifest."
+    ]
   },
   "runs": [],
   "research_hypotheses": []
