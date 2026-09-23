@@ -112,7 +112,7 @@ idx={s:{x["t"]:i for i,x in enumerate(a)} for s,a in data.items()}
 all_dates=sorted({x["t"] for a in data.values() for x in a if START_YM<=datetime.fromtimestamp(x["t"]/1000,tz=timezone.utc).strftime("%Y-%m")<=END_YM})
 obs_dates=all_dates[::OBSERVATION_STEP_DAYS]
 
-events=[]; coverage_rows=[]; candidate_days=0
+events=[]; controls=[]; coverage_rows=[]; candidate_days=0
 for t in obs_dates:
     eligible=[]
     for s,a in data.items():
@@ -126,10 +126,11 @@ for t in obs_dates:
     usize=len(universe); scanned=0
     for _,s,i in universe:
         a=data[s]
-        if i<MIN_HISTORY_DAYS or i+365>=len(a):continue
+        if i<MIN_HISTORY_DAYS:continue
         cur=a[i]; b0=btc_by_t.get(t)
         if not b0:continue
-        # require contiguous-enough feature anchors by index/date archive presence
+        # Feature eligibility is PIT-only. Never require future outcome availability
+        # to count discovery coverage: that would leak the future into scanned_count.
         p30=a[i-30]; p90=a[i-90]
         b30=btc_by_t.get(p30["t"])
         if not b30:continue
@@ -141,27 +142,28 @@ for t in obs_dates:
         taker=sum(x["tbq"] for x in a[i-6:i+1]); total=sum(x["qv"] for x in a[i-6:i+1])
         taker_share=taker/total if total else 0
         dist_high=cur["c"]/max(x["h"] for x in a[i-89:i+1])-1
-        # deterministic market-data signal; thresholds preregistered here.
-        pre=(ret90<0.50 and rel30>0.03 and volratio>1.20 and taker_share>0.50 and dist_high<0)
-        early=(rel30>0.08 and volratio>1.35 and taker_share>0.52 and dist_high>-0.08)
-        if not(pre or early):continue
         horizons={}
-        ok=True
         for h in (30,90,180,365):
-            if i+h>=len(a):ok=False;break
+            if i+h>=len(a):continue
             end=a[i+h]; bend=btc_by_t.get(end["t"])
-            if not bend:ok=False;break
+            if not bend:continue
             fut=a[i+1:i+h+1]
+            if not fut:continue
             r=end["c"]/cur["c"]-1; br=bend["c"]/b0["c"]-1
             horizons[str(h)]={"absolute_return":r,"btc_relative_return":r-br,
               "mae":min(x["l"] for x in fut)/cur["c"]-1,
               "mfe":max(x["h"] for x in fut)/cur["c"]-1,
               "time_to_mfe_days":1+max(range(len(fut)),key=lambda j:fut[j]["h"])}
-        if not ok:continue
-        events.append({"symbol":s,"t":t,"utc":datetime.fromtimestamp(t/1000,tz=timezone.utc).date().isoformat(),
-          "stage":"PRE_MOVE" if pre else "EARLY_MOVE","universe_size":usize,"universe_rank":1+[x[1] for x in universe].index(s),
-          "ret30":ret30,"ret90":ret90,"btc_rel30":rel30,"volume_ratio_7d":volratio,"taker_buy_share_7d":taker_share,
-          "distance_90d_high":dist_high,"horizons":horizons})
+        control={"symbol":s,"t":t,"utc":datetime.fromtimestamp(t/1000,tz=timezone.utc).date().isoformat(),
+          "ret30":ret30,"ret90":ret90,"btc_rel30":rel30,"volume_ratio_7d":volratio,
+          "taker_buy_share_7d":taker_share,"distance_90d_high":dist_high,"horizons":horizons}
+        controls.append(control)
+        # deterministic market-data signal; thresholds remain frozen.
+        pre=(ret90<0.50 and rel30>0.03 and volratio>1.20 and taker_share>0.50 and dist_high<0)
+        early=(rel30>0.08 and volratio>1.35 and taker_share>0.52 and dist_high>-0.08)
+        if not(pre or early):continue
+        events.append({**control,"stage":"PRE_MOVE" if pre else "EARLY_MOVE",
+          "universe_size":usize,"universe_rank":1+[x[1] for x in universe].index(s)})
     coverage_rows.append({"t":t,"universe_size":usize,"scanned_count":scanned,"coverage_ratio":scanned/usize if usize else 0})
 
 # immutable-like first discovery + 30d cooldown per symbol/stage
@@ -181,10 +183,10 @@ for h in ("30","90","180","365"):
       "median_mae":med([x["mae"] for x in rows]),"median_mfe":med([x["mfe"] for x in rows]),
       "median_time_to_mfe_days":med([x["time_to_mfe_days"] for x in rows])}
 
-# Simple baselines on same eligible observations: BTC-relative momentum and volume/momentum.
-# They are computed as event selectors from the same frozen PIT feature rows.
-rs=[e for e in events if e["btc_rel30"]>0.08]
-vm=[e for e in events if e["ret30"]>0 and e["volume_ratio_7d"]>1.35]
+# Simple baselines MUST be selected from the full eligible PIT control universe,
+# not from Hunter hits. Otherwise the benchmark is conditioned on Hunter itself.
+rs=[e for e in controls if e["btc_rel30"]>0.08]
+vm=[e for e in controls if e["ret30"]>0 and e["volume_ratio_7d"]>1.35]
 def baseline(rows,h="90"):
     v=[e["horizons"][h]["btc_relative_return"] for e in rows if h in e["horizons"]]
     return {"N":len(v),"median_btc_relative_return":med(v)}
@@ -214,7 +216,7 @@ summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARC
  "limitations":["Archive-derived universe completeness is not proven; run remains SURVIVORSHIP_INCOMPLETE_MVP.",
  "Effective N is a conservative unique symbol-month cluster count, not a formal dependence-adjusted estimator.",
  "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
- "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
+ "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",\n "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",\n "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
 
 with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f:json.dump(summary,f,indent=2)
 flat=[]
