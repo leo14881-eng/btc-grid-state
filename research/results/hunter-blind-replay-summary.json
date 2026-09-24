@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-24T07:23:14.828376+00:00",
+  "generated_at": "2026-09-24T18:20:01.429237+00:00",
   "status": "RESEARCH_SIGNAL",
   "venue": "Binance Spot",
   "quote_asset": "USDT",
@@ -13,7 +13,7 @@
     "liquidity_top_n": 100,
     "observation_step_days": 7,
     "feature_version": "spot-daily-v1",
-    "rule_version": "blind-full-universe-v1.2-pit-coverage-baseline-fix",
+    "rule_version": "blind-full-universe-v1.3-frozen-window-reporting",
     "max_download_workers": 12
   },
   "universe_size": 669,
@@ -69,6 +69,167 @@
       "median_btc_relative_return": -0.2692318148789117
     }
   },
+  "window_results": {
+    "calibration_2022_2023": {
+      "window": "2022-01-01/2023-12-31",
+      "raw_n": 251,
+      "effective_n": 251,
+      "metrics": {
+        "30": {
+          "N": 250,
+          "median_absolute_return": -0.11361589862601201,
+          "median_btc_relative_return": -0.08913128995037922,
+          "median_mae": -0.22441734130723223,
+          "median_mfe": 0.15629690198328772,
+          "median_time_to_mfe_days": 7.0
+        },
+        "90": {
+          "N": 249,
+          "median_absolute_return": -0.13633927887927733,
+          "median_btc_relative_return": -0.17298748950034915,
+          "median_mae": -0.33714303355870456,
+          "median_mfe": 0.24574512245745117,
+          "median_time_to_mfe_days": 15
+        },
+        "180": {
+          "N": 245,
+          "median_absolute_return": -0.14769877861360525,
+          "median_btc_relative_return": -0.24457180185620675,
+          "median_mae": -0.405144694533762,
+          "median_mfe": 0.49056603773584895,
+          "median_time_to_mfe_days": 48
+        },
+        "365": {
+          "N": 239,
+          "median_absolute_return": -0.2600834492350488,
+          "median_btc_relative_return": -0.760113912110735,
+          "median_mae": -0.5052314935914204,
+          "median_mfe": 0.6792452830188678,
+          "median_time_to_mfe_days": 98
+        }
+      },
+      "baselines": {
+        "btc_buy_hold": {
+          "median_btc_relative_return": 0.0
+        },
+        "simple_btc_relative_momentum": {
+          "N": 3062,
+          "median_btc_relative_return": -0.1981234429512978
+        },
+        "simple_volume_momentum": {
+          "N": 1403,
+          "median_btc_relative_return": -0.20790507026076588
+        }
+      },
+      "hunter_minus_best_simple_baseline_90d": -0.17298748950034915
+    },
+    "oos_2024": {
+      "window": "2024-01-01/2024-12-31",
+      "raw_n": 107,
+      "effective_n": 106,
+      "metrics": {
+        "30": {
+          "N": 106,
+          "median_absolute_return": -0.09727188938934272,
+          "median_btc_relative_return": -0.13739831515749612,
+          "median_mae": -0.24393770280495042,
+          "median_mfe": 0.16117224695937726,
+          "median_time_to_mfe_days": 5.0
+        },
+        "90": {
+          "N": 106,
+          "median_absolute_return": -0.17710885512136904,
+          "median_btc_relative_return": -0.30977865423508444,
+          "median_mae": -0.37353844376708806,
+          "median_mfe": 0.29999703667513433,
+          "median_time_to_mfe_days": 19.0
+        },
+        "180": {
+          "N": 101,
+          "median_absolute_return": -0.3283208020050127,
+          "median_btc_relative_return": -0.6099699416614667,
+          "median_mae": -0.5569555468122743,
+          "median_mfe": 0.42947368421052623,
+          "median_time_to_mfe_days": 49
+        },
+        "365": {
+          "N": 95,
+          "median_absolute_return": -0.4715370018975332,
+          "median_btc_relative_return": -1.112839285700104,
+          "median_mae": -0.7071846282372598,
+          "median_mfe": 0.6424087550691628,
+          "median_time_to_mfe_days": 84
+        }
+      },
+      "baselines": {
+        "btc_buy_hold": {
+          "median_btc_relative_return": 0.0
+        },
+        "simple_btc_relative_momentum": {
+          "N": 1666,
+          "median_btc_relative_return": -0.379545433478237
+        },
+        "simple_volume_momentum": {
+          "N": 879,
+          "median_btc_relative_return": -0.38128274920140237
+        }
+      },
+      "hunter_minus_best_simple_baseline_90d": -0.30977865423508444
+    },
+    "oos_2025": {
+      "window": "2025-01-01/2025-12-31",
+      "raw_n": 138,
+      "effective_n": 138,
+      "metrics": {
+        "30": {
+          "N": 128,
+          "median_absolute_return": -0.10943341412284274,
+          "median_btc_relative_return": -0.1269056547411343,
+          "median_mae": -0.2303120443014901,
+          "median_mfe": 0.1352502219145596,
+          "median_time_to_mfe_days": 6.0
+        },
+        "90": {
+          "N": 111,
+          "median_absolute_return": -0.20596085409252685,
+          "median_btc_relative_return": -0.26345958044140727,
+          "median_mae": -0.45273631840796025,
+          "median_mfe": 0.1893238434163702,
+          "median_time_to_mfe_days": 15
+        },
+        "180": {
+          "N": 61,
+          "median_absolute_return": -0.3754893104486601,
+          "median_btc_relative_return": -0.47976811757739757,
+          "median_mae": -0.719340570969039,
+          "median_mfe": 0.3962073324905184,
+          "median_time_to_mfe_days": 34
+        },
+        "365": {
+          "N": 0,
+          "median_absolute_return": null,
+          "median_btc_relative_return": null,
+          "median_mae": null,
+          "median_mfe": null,
+          "median_time_to_mfe_days": null
+        }
+      },
+      "baselines": {
+        "btc_buy_hold": {
+          "median_btc_relative_return": 0.0
+        },
+        "simple_btc_relative_momentum": {
+          "N": 1037,
+          "median_btc_relative_return": -0.30360630238052655
+        },
+        "simple_volume_momentum": {
+          "N": 489,
+          "median_btc_relative_return": -0.28102073806406924
+        }
+      },
+      "hunter_minus_best_simple_baseline_90d": -0.26345958044140727
+    }
+  },
   "hunter_minus_best_simple_baseline_90d": -0.22018257495144766,
   "n_min_30_met": true,
   "k_calibration_supported": false,
@@ -79,6 +240,7 @@
     "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
     "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",
     "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",
+    "Frozen calibration and OOS windows are now reported separately without changing signal thresholds or tuning on OOS outcomes.",
     "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."
   ]
 }
