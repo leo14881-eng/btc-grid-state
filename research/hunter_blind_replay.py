@@ -216,7 +216,9 @@ summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARC
  "limitations":["Archive-derived universe completeness is not proven; run remains SURVIVORSHIP_INCOMPLETE_MVP.",
  "Effective N is a conservative unique symbol-month cluster count, not a formal dependence-adjusted estimator.",
  "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
- "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",\n "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",\n "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
+ "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",
+ "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",
+ "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
 
 with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f:json.dump(summary,f,indent=2)
 flat=[]
