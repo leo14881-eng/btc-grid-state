@@ -246,7 +246,8 @@ summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARC
  "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
  "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",
  "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",
- "Frozen calibration and OOS windows are now reported separately without changing signal thresholds or tuning on OOS outcomes.",\n "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
+ "Frozen calibration and OOS windows are now reported separately without changing signal thresholds or tuning on OOS outcomes.",
+ "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
 
 with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f:json.dump(summary,f,indent=2)
 flat=[]
