@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-21T20:17:52.256496+00:00",
+  "generated_at": "2026-09-24T07:23:14.828376+00:00",
   "status": "RESEARCH_SIGNAL",
   "venue": "Binance Spot",
   "quote_asset": "USDT",
@@ -13,39 +13,39 @@
     "liquidity_top_n": 100,
     "observation_step_days": 7,
     "feature_version": "spot-daily-v1",
-    "rule_version": "blind-full-universe-v1.1-parallel",
+    "rule_version": "blind-full-universe-v1.2-pit-coverage-baseline-fix",
     "max_download_workers": 12
   },
   "universe_size": 669,
   "symbols_with_archive_data": 560,
-  "scanned_count": 13597,
-  "coverage_ratio": 0.6937244897959184,
-  "raw_n": 334,
-  "effective_n": 333,
+  "scanned_count": 19600,
+  "coverage_ratio": 1.0,
+  "raw_n": 496,
+  "effective_n": 495,
   "metrics": {
     "30": {
-      "N": 334,
+      "N": 484,
       "median_absolute_return": -0.10931605907490166,
-      "median_btc_relative_return": -0.1052183582098819,
-      "median_mae": -0.2276267299970462,
-      "median_mfe": 0.158278437896071,
+      "median_btc_relative_return": -0.10910448039809201,
+      "median_mae": -0.2289169892210144,
+      "median_mfe": 0.15219936869972506,
       "median_time_to_mfe_days": 6.0
     },
     "90": {
-      "N": 334,
-      "median_absolute_return": -0.14023207951801053,
-      "median_btc_relative_return": -0.20698516890091684,
-      "median_mae": -0.34483494933344266,
-      "median_mfe": 0.2671628387082353,
-      "median_time_to_mfe_days": 18.0
+      "N": 466,
+      "median_absolute_return": -0.17008375449088275,
+      "median_btc_relative_return": -0.22018257495144766,
+      "median_mae": -0.36800495874569317,
+      "median_mfe": 0.23894855393939718,
+      "median_time_to_mfe_days": 16.0
     },
     "180": {
-      "N": 334,
-      "median_absolute_return": -0.2083739045764363,
-      "median_btc_relative_return": -0.3560383901688587,
-      "median_mae": -0.45656473736239267,
-      "median_mfe": 0.46027792717238214,
-      "median_time_to_mfe_days": 52.0
+      "N": 407,
+      "median_absolute_return": -0.24347826086956514,
+      "median_btc_relative_return": -0.38078343145948157,
+      "median_mae": -0.49864498644986444,
+      "median_mfe": 0.43696422448279804,
+      "median_time_to_mfe_days": 46
     },
     "365": {
       "N": 334,
@@ -61,15 +61,15 @@
       "median_btc_relative_return": 0.0
     },
     "simple_btc_relative_momentum": {
-      "N": 273,
-      "median_btc_relative_return": -0.21150470723904347
+      "N": 5765,
+      "median_btc_relative_return": -0.26840555371468466
     },
     "simple_volume_momentum": {
-      "N": 268,
-      "median_btc_relative_return": -0.21720214529139104
+      "N": 2771,
+      "median_btc_relative_return": -0.2692318148789117
     }
   },
-  "hunter_minus_best_simple_baseline_90d": -0.20698516890091684,
+  "hunter_minus_best_simple_baseline_90d": -0.22018257495144766,
   "n_min_30_met": true,
   "k_calibration_supported": false,
   "k_status": "UNSET/SHADOW",
@@ -77,6 +77,8 @@
     "Archive-derived universe completeness is not proven; run remains SURVIVORSHIP_INCOMPLETE_MVP.",
     "Effective N is a conservative unique symbol-month cluster count, not a formal dependence-adjusted estimator.",
     "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
+    "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",
+    "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",
     "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."
   ]
 }
