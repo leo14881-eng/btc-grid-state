@@ -21,15 +21,15 @@
       "HYPE-2026-09",
       "ZEC-2026-09"
     ],
-    "phase": "REPLAY_SUBSET_COMPLETED",
+    "phase": "OOS_WINDOWS_COMPLETED_SURVIVORSHIP_INCOMPLETE",
     "universe_size": 669,
     "scanned_count": 19600,
-    "coverage_ratio": 1.0,
+    "coverage_ratio": 1,
     "raw_n": 496,
     "effective_n": 495,
-    "blocker": "Archive reconstruction ran and produced numeric results; survivorship completeness remains unproven.",
-    "next_step": "Verify archive-universe completeness and peer taxonomy; then run frozen 2024/2025 OOS windows and only calibrate k if VERIFIED Effective N>=30.",
-    "blocker_last_attacked_at": "2026-09-22T01:03:00+07:00",
+    "blocker": "Frozen 2024/2025 OOS windows completed, but archive-universe survivorship completeness is unproven; peer-relative return and Detection Lead/Lag remain UNKNOWN without frozen peer taxonomy/leader definition.",
+    "next_step": "Attack survivorship completeness first using historical archive/listing-delisting cross-checks without tuning frozen signal thresholds; separately define peer taxonomy only if already permitted by freeze. Keep k UNSET/SHADOW.",
+    "blocker_last_attacked_at": "2026-09-25T03:09:10+07:00",
     "blocker_evidence": [
       "Binance Public Data README confirms historical per-symbol klines are available and says its helper for all symbols enumerates current running symbols.",
       "Official fetch-all-trading-pairs.sh calls the live /api/v3/exchangeInfo endpoint, confirming that helper output is current-state rather than a dated historical manifest.",
@@ -51,6 +51,25 @@
       "survivorship_rule": "Retain later-delisted/failed assets whenever historical archive evidence is available; if completeness cannot be demonstrated, label SURVIVORSHIP_INCOMPLETE_MVP and do not claim Full-Universe validation.",
       "announcement_role": "Listing/delisting announcements are cross-check evidence, not the primary universe source.",
       "anti_stall_acceptance": "Each execution must attempt to produce numeric universe_size, scanned_count, coverage_ratio and Raw N/Effective N where computable. If these remain null/zero, record the concrete data/acquisition blocker and next executable remediation; architecture redesign is not a valid substitute."
+    },
+    "latest_oos_result": {
+      "rule_version": "blind-full-universe-v1.3-frozen-window-reporting",
+      "result_source": "research/results/hunter-blind-replay-summary.json",
+      "oos_2024": {
+        "raw_n": 107,
+        "effective_n": 106,
+        "median_90d_btc_relative_return": -0.30977865423508444,
+        "hunter_minus_best_simple_baseline_90d": -0.30977865423508444
+      },
+      "oos_2025": {
+        "raw_n": 138,
+        "effective_n": 138,
+        "median_90d_btc_relative_return": -0.26345958044140727,
+        "hunter_minus_best_simple_baseline_90d": -0.26345958044140727
+      },
+      "k_status": "UNSET/SHADOW",
+      "capital_authority": "FORCED_ZERO_SHADOW",
+      "interpretation": "Strong negative research evidence for frozen V1 market-data signal in both OOS windows; not full validation because survivorship completeness/dependence/peer requirements remain incomplete."
     }
   },
   "runs": [],
