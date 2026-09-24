@@ -20,7 +20,7 @@ MIN_HISTORY_DAYS=90
 LIQUIDITY_TOP_N=100
 OBSERVATION_STEP_DAYS=7
 FEATURE_VERSION="spot-daily-v1"
-RULE_VERSION="blind-full-universe-v1.2-pit-coverage-baseline-fix"
+RULE_VERSION="blind-full-universe-v1.3-frozen-window-reporting"
 MAX_DOWNLOAD_WORKERS=12
 STABLE_BASES={"USDC","BUSD","TUSD","FDUSD","USDP","DAI","USDS","UST","USTC","EUR","TRY","BRL","GBP","AUD","RUB","UAH","BIDR","IDRT","NGN","VAI","PAX","SUSD"}
 LEVERAGED_SUFFIXES=("UP","DOWN","BULL","BEAR")
@@ -198,6 +198,34 @@ best=max([x["median_btc_relative_return"] for x in baselines.values() if x["medi
 coverage_num=sum(x["scanned_count"] for x in coverage_rows)
 coverage_den=sum(x["universe_size"] for x in coverage_rows)
 coverage=coverage_num/coverage_den if coverage_den else 0
+def window_report(start_date,end_date):
+    ev=[e for e in events if start_date<=e["utc"]<=end_date]
+    ct=[e for e in controls if start_date<=e["utc"]<=end_date]
+    wm={}
+    for h in ("30","90","180","365"):
+        rows=[e["horizons"][h] for e in ev if h in e["horizons"]]
+        wm[h]={"N":len(rows),"median_absolute_return":med([x["absolute_return"] for x in rows]),
+          "median_btc_relative_return":med([x["btc_relative_return"] for x in rows]),
+          "median_mae":med([x["mae"] for x in rows]),"median_mfe":med([x["mfe"] for x in rows]),
+          "median_time_to_mfe_days":med([x["time_to_mfe_days"] for x in rows])}
+    wrs=[e for e in ct if e["btc_rel30"]>0.08]
+    wvm=[e for e in ct if e["ret30"]>0 and e["volume_ratio_7d"]>1.35]
+    wb={"btc_buy_hold":{"median_btc_relative_return":0.0},
+        "simple_btc_relative_momentum":baseline(wrs),
+        "simple_volume_momentum":baseline(wvm)}
+    h90=wm["90"]["median_btc_relative_return"]
+    bvals=[x["median_btc_relative_return"] for x in wb.values() if x["median_btc_relative_return"] is not None]
+    return {"window":f"{start_date}/{end_date}","raw_n":len(ev),
+      "effective_n":len({(e["symbol"],e["utc"][:7]) for e in ev}),
+      "metrics":wm,"baselines":wb,
+      "hunter_minus_best_simple_baseline_90d":h90-max(bvals) if h90 is not None and bvals else None}
+
+window_results={
+ "calibration_2022_2023":window_report("2022-01-01","2023-12-31"),
+ "oos_2024":window_report("2024-01-01","2024-12-31"),
+ "oos_2025":window_report("2025-01-01","2025-12-31")
+}
+
 # Conservative effective N proxy: unique symbol-month clusters.
 clusters={(e["symbol"],e["utc"][:7]) for e in events}
 effective_n=len(clusters)
@@ -209,7 +237,7 @@ summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARC
    "observation_step_days":OBSERVATION_STEP_DAYS,"feature_version":FEATURE_VERSION,"rule_version":RULE_VERSION,"max_download_workers":MAX_DOWNLOAD_WORKERS},
  "universe_size":len(symbols),"symbols_with_archive_data":len(data),"scanned_count":coverage_num,
  "coverage_ratio":coverage,"raw_n":len(events),"effective_n":effective_n,
- "metrics":metrics,"baselines":baselines,
+ "metrics":metrics,"baselines":baselines,"window_results":window_results,
  "hunter_minus_best_simple_baseline_90d":hunter90-best if hunter90 is not None else None,
  "n_min_30_met":effective_n>=30,"k_calibration_supported":False,
  "k_status":"UNSET/SHADOW",
@@ -218,7 +246,7 @@ summary={"generated_at":datetime.now(timezone.utc).isoformat(),"status":"RESEARC
  "Peer-relative return and Detection Lead/Lag require a frozen peer taxonomy/leader definition and remain UNKNOWN rather than fabricated.",
  "Future outcome availability is excluded from discovery coverage accounting; horizons are reported only where honestly available.",
  "Simple baselines are selected from the full eligible PIT control universe, not Hunter-selected events.",
- "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
+ "Frozen calibration and OOS windows are now reported separately without changing signal thresholds or tuning on OOS outcomes.",\n "This run cannot calibrate k until VERIFIED coverage and frozen OOS requirements are satisfied."]}
 
 with open(f"{OUT}/hunter-blind-replay-summary.json","w") as f:json.dump(summary,f,indent=2)
 flat=[]
