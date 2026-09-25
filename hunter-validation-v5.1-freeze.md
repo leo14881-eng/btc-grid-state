@@ -125,3 +125,19 @@ If FRM + Reverse Valuation + all EA-required inputs were valid when EA was calcu
 ## FREEZE declaration
 
 TASK 5 engine logic §0–§17 remains FROZEN at v5.1. This Validation Layer is FROZEN after the BLOCK taxonomy + V1 supply guard + FQ generation patch. Unfreeze only for a demonstrated structural defect that systematically misses/misclassifies a real opportunity and cannot be explained by data/fill error. Daily execution = data fill + assertions; it does not include logic modification.
+
+## STRUCTURAL DEFECT PATCH — 2026-09-25 — USER APPROVED
+
+Defect demonstrated: Hunter recorded JTO as a PRE_MOVE candidate at 0.4554 with two independent non-price/fundamental evidence domains, yet the architecture could not advance any otherwise valid candidate to a first-tranche human capital proposal because the separate quantitative BTC-Relative Gate had `k=UNSET/SHADOW`. This is a systematic process veto, not a daily data-fill error, and satisfies the FREEZE declaration's structural-defect exception.
+
+Validation semantics after this patch:
+- V1–V10, freshness, supply, FRM, Reverse Valuation, EA provenance and Risk Governor validations remain mandatory and unchanged.
+- The quantitative BTC-Relative Gate remains SHADOW until frozen Replay calibration requirements are met. SHADOW results cannot independently authorize BUY/ADD.
+- `k=UNSET` / incomplete Blind Replay is no longer, by itself, a validation failure or automatic capital=$0 for the separate `FUNDAMENTAL_EARLY_ENTRY_PROPOSAL_ELIGIBLE` lane defined in `automation-logic-final.md §8g`.
+- That lane may produce a **human capital proposal only** after complete current-price forward-return work plus Risk Governor, Portfolio Allocation, Drawdown and Counterparty gates. It never creates automatic execution authority.
+- Any actual validator failure under V1–V10 still blocks the lane where the failed field is required by §8g.
+- First tranche must be staged; subsequent tranches require better price structure or new independent confirmation, not mechanical averaging down.
+- $50,000 Crisis Reserve remains excluded. User remains sole executor.
+- Track `MISSED_EARLY_ENTRY` separately from `MISSED_DISCOVERY` and `REJECTED_BY_GATE` so system/process latency is measured rather than hidden as an investment rejection.
+
+This patch changes only the coupling between Replay SHADOW status and human-reviewed fundamental capital proposals. It does not retune k, alter the frozen Replay sample, change PRE_MOVE evidence requirements, or weaken V1–V10.
