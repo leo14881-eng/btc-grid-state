@@ -612,3 +612,33 @@ This patch is DATA-PIPELINE ONLY. It MUST NOT change any frozen Stage / Universe
 8. Transport/decode/parse/write/reread/contract failure => STATE CONTRACT ERROR + STATE PERSISTENCE FAILURE + fast_input_ready=false; Promotion blocked. Do not diagnose GitHub truncation unless the exact-path/base64-or-blob payload itself is incomplete or unparsable.
 9. Recovery: next genuine Slow evidence review executes this closure; on write+reread+contract PASS, persistence error clears and freshness resumes normally. No manual freshness repair or fabricated review.
 10. This transport contract supersedes older operational instructions permitting generic/page/search/raw readers for Hunter persistence. Research logic is unchanged.
+
+
+---
+
+## v2.16.0 — Early Optionality Entry / Anti-Late-Confirmation Patch (USER-APPROVED 2026-09-26)
+
+Purpose: prevent Hunter from repeatedly discovering a valid opportunity early but delaying any first-tranche proposal until the asset has already materially repriced. This patch strengthens left-side discovery and proposal timing without weakening fatal-risk controls.
+
+1. **Research completeness is not future certainty.** Hunter must investigate the asset, token economics, supply/unlocks, liquidity, catalyst, value capture, competition, permanent-loss paths and current valuation before proposing capital. It MUST NOT require the catalyst to have already succeeded, revenue to have already scaled, a breakout to have occurred, or every bullish assumption to be confirmed before a small first-tranche proposal can become eligible.
+2. Add execution state `OPTIONALITY-ENTRY-ELIGIBLE-SMALL`. It is available only for PRE_MOVE / EARLY_MOVE candidates with:
+   - at least 2 causally independent evidence domains, including >=1 non-price domain;
+   - a real, falsifiable forward thesis and dated/observable catalyst or structural inflection;
+   - current-price Forward Return Map with same-horizon BTC benchmark, even if ranges must be conservative;
+   - no unresolved fatal blocker in token legitimacy, material supply/unlocks, liquidity/executability, permanent-loss risk, Counterparty Gate, Portfolio Allocation Gate or Drawdown Budget;
+   - prospective remaining upside sufficient to justify the asset's incremental risk versus BTC.
+3. **Unknown != veto.** Non-fatal future uncertainties (for example: catalyst not yet approved, revenue not yet scaled, adoption not yet proven) are scenario inputs and position-sizing reasons, not automatic WAIT reasons. Mark them explicitly and reduce first-tranche size when appropriate.
+4. **One-cycle closure for early candidates.** A newly discovered PRE_MOVE / EARLY_MOVE candidate with sufficient non-price evidence must receive, within the same hourly discovery cycle where feasible and no later than the next hourly cycle: provisional current-price FRM, BTC-relative remaining-upside assessment, fatal-blocker check, and one of:
+   - `OPTIONALITY-ENTRY-ELIGIBLE-SMALL`
+   - `WAIT_PRICE_ONLY`
+   - `DATA_BLOCKED_FATAL`
+   - `REJECT_FORWARD_ODDS`
+   - `REJECT_PERMANENT_LOSS`
+   It may not remain in generic RESEARCH/WATCH solely because full confirmation has not happened.
+5. **First tranche is option value, not conviction sizing.** For OPTIONALITY-ENTRY-ELIGIBLE-SMALL, propose only a small staged first tranche; normally no more than 20% of that asset's eventual maximum position, subject to Portfolio Allocation/Drawdown/Counterparty gates. If eventual max position is not yet defined, give percentage logic only and do not fabricate a USDT amount.
+6. **Price discipline without missed-opportunity paralysis.** A preferred left-side zone is not a hard blocker when current-price FRM still has strong BTC-relative asymmetry. If current price is above the ideal zone but remaining upside remains compelling and crowding is not excessive, Hunter may propose a smaller optionality tranche rather than waiting indefinitely. Conversely, a large recent rise must reduce sizing / worsen valuation assumptions but is never an automatic reject.
+7. **Do not wait for right-side confirmation to authorize the first tranche.** Breakout confirmation, moving-average recovery, post-catalyst revenue proof and broad market confirmation are reserved for later tranche upgrades. They are not mandatory for the optionality tranche.
+8. **Repricing alarm.** Persist `decision_latency_price` and `decision_latency_return_pct` from discovery to first completed capital decision. If price moves >=15% before Hunter completes the first capital decision, label `PROCESS_LATENCY_ALERT`; >=25% => `MISSED_EARLY_ENTRY_PROCESS_FAILURE` unless a documented fatal blocker justified the delay.
+9. **Candidate priority queue.** PRE_MOVE candidates with a credible non-price catalyst/value-capture/supply inflection outrank replay/calibration/architecture work. Live candidate closure always has priority over non-blocking system research.
+10. **MNT-specific watch added as a current research example, not an automatic buy:** track Bybit ecosystem utility expansion, any formal revenue-based MNT buyback/burn governance progression, Mantle RWA/stablecoin activity, Treasury supply movements, circulating/FDV dilution and current-price BTC-relative FRM. Do not wait for a buyback to be fully implemented before evaluating an optionality tranche; treat proposal-stage progression as a probabilistic catalyst and size accordingly.
+11. User remains sole executor. `OPTIONALITY-ENTRY-ELIGIBLE-SMALL` means a capital proposal may be surfaced early; it never means automatic execution.
