@@ -1,7 +1,7 @@
 {
-  "version": "2.15.0",
+  "version": "2.16.0",
   "status": "ACTIVE_INITIALIZED",
-  "updated_at": "2026-09-25",
+  "updated_at": "2026-09-26",
   "initialized_at": "2026-09-14T07:35:00+07:00",
   "state_ownership": "hunter_research_and_position_ledger_only",
   "portfolio_ssot": "portfolio-state.json",
@@ -628,5 +628,49 @@
     "staging": "FIRST_TRANCHE_ONLY_THEN_BETTER_STRUCTURE_OR_NEW_INDEPENDENT_CONFIRMATION",
     "crisis_reserve": "EXCLUDED",
     "execution_authority": "USER_ONLY"
+  },
+  "early_optionality_entry_lane": {
+    "status": "ENABLED_USER_APPROVED_2026-09-26",
+    "objective": "PREVENT_VALID_EARLY_DISCOVERY_FROM_WAITING_FOR_FULL_CONFIRMATION_UNTIL_AFTER_REPRICING",
+    "eligible_stages": [
+      "PRE_MOVE",
+      "EARLY_MOVE"
+    ],
+    "evidence_rule": ">=2_CAUSALLY_INDEPENDENT_DOMAINS_WITH_>=1_NON_PRICE",
+    "capital_state": "OPTIONALITY-ENTRY-ELIGIBLE-SMALL",
+    "closure_sla": "SAME_CYCLE_WHERE_FEASIBLE__HARD_MAX_NEXT_HOURLY_CYCLE",
+    "fatal_blockers": [
+      "TOKEN_LEGITIMACY",
+      "MATERIAL_SUPPLY_UNLOCK_UNKNOWN",
+      "LIQUIDITY_EXECUTION",
+      "PERMANENT_LOSS",
+      "COUNTERPARTY_GATE",
+      "PORTFOLIO_ALLOCATION_GATE",
+      "DRAWDOWN_BUDGET"
+    ],
+    "nonfatal_unknown_policy": "SCENARIO_AND_SIZE_INPUT_NOT_AUTOMATIC_WAIT",
+    "first_tranche": "SMALL_STAGED__NORMALLY_<=20_PERCENT_OF_EVENTUAL_ASSET_MAX_POSITION",
+    "right_side_confirmation_required_for_first_tranche": false,
+    "preferred_price_zone_is_hard_blocker": false,
+    "recent_price_appreciation": "VALUATION_CROWDING_SIZE_INPUT_NOT_AUTO_REJECT",
+    "latency_alert_pct": 15,
+    "missed_early_entry_process_failure_pct": 25,
+    "priority": "LIVE_PRE_MOVE_CLOSURE_OVER_NONBLOCKING_REPLAY_CALIBRATION_ARCHITECTURE",
+    "execution_authority": "USER_ONLY"
+  },
+  "priority_watch": {
+    "MNT": {
+      "status": "EARLY_OPTIONALITY_RESEARCH",
+      "thesis": "Bybit core ecosystem utility plus Mantle network/RWA/Treasury optionality; major upside re-rating would require stronger token value capture such as formal revenue-based buyback/burn or materially stronger organic network economics.",
+      "monitor": [
+        "BYBIT_MNT_UTILITY_EXPANSION",
+        "REVENUE_BASED_BUYBACK_GOVERNANCE",
+        "MANTLE_RWA_STABLECOIN_ACTIVITY",
+        "TREASURY_SUPPLY_MOVEMENTS",
+        "CIRCULATING_FDV_DILUTION",
+        "CURRENT_PRICE_BTC_RELATIVE_FRM"
+      ],
+      "rule": "DO_NOT_REQUIRE_BUYBACK_IMPLEMENTATION_BEFORE_OPTIONALITY_ENTRY_EVALUATION"
+    }
   }
 }
