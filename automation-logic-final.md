@@ -706,3 +706,56 @@ The prior ASTER concrete sizing proposal is withdrawn and is NOT a frozen strate
 
 ### F. STX continuity
 Existing user-confirmed STX fills remain valid and locked against the altcoin pool. The existing 600 USDT @ 0.308 pending plan remains a reservation unless filled/cancelled by the user. This v2.17 accounting patch does not itself alter the STX trading thesis or order.
+
+
+## v2.17.1 — Existing Candidate Opportunity Capture (USER-APPROVED 2026-09-26)
+
+Goal: Hunter must capture investable opportunities, not merely produce research.
+
+### 1. Dual queue every live run
+Every run processes both queues:
+- NEW_DISCOVERY_QUEUE: new PRE_MOVE/EARLY_MOVE assets.
+- EXISTING_CANDIDATE_QUEUE: every non-permanently-rejected candidate already in Hunter.
+Existing candidates may not be skipped merely because new candidates were found.
+
+### 2. Mandatory repricing/catalyst trigger
+Refresh current price and new non-price evidence for existing candidates. Same-cycle Capital Readiness/FRM re-evaluation becomes mandatory when any trigger fires:
+- absolute 24h move >= 8%;
+- absolute move from last reviewed price >= 12%;
+- new material governance/tokenomics/unlock/product/revenue/value-capture catalyst;
+- price enters a previously defined left-side research/buy zone.
+Triggered existing candidates outrank routine new-candidate research.
+
+### 3. Latency accountability
+If an existing or discoverable candidate appreciates >=15% before the required capital decision, persist PROCESS_LATENCY_ALERT.
+If it appreciates >=25% before decision and no contemporaneous documented fatal blocker justified waiting, persist MISSED_EARLY_ENTRY_PROCESS_FAILURE.
+Classify failure as MISSED_DISCOVERY, MISSED_REEVALUATION, or VALID_REJECTION. Do not rewrite history.
+
+### 4. Opportunity-capture KPI
+Persist rolling metrics:
+- material_candidates_detected;
+- capital_ready_before_15pct_repricing;
+- missed_discovery_count;
+- missed_reevaluation_count;
+- valid_rejection_count;
+- profitable_frozen_strategies;
+- losing_frozen_strategies;
+- realized_alt_pnl;
+- BTC-relative realized pnl.
+Research volume is NOT success. Success is early discovery + complete diligence + timely capital decision + realized risk-adjusted outcome.
+
+### 5. Decision SLA
+For a candidate with >=2 causally independent evidence domains including >=1 non-price domain:
+- create provisional research record immediately;
+- complete currently knowable Capital Readiness fields in the same cycle where feasible;
+- hard maximum next hourly cycle for unresolved non-fatal fields;
+- a material factual blocker must name the exact missing fact and the active remediation source/path.
+No generic WATCH/RESEARCH state may persist without a concrete blocker or price condition.
+
+### 6. ENA defect classification
+ENA is a process-audit case:
+- material discoverable evidence existed by 2026-08-27 (investor-overhang restructuring + fee-switch proposal);
+- Hunter first recorded ENA on 2026-09-19 after material repricing;
+- later Hunter runs failed to force-refresh ENA despite additional material repricing/catalysts.
+Classify as MISSED_DISCOVERY + MISSED_REEVALUATION, not VALID_REJECTION.
+Do not chase ENA merely to compensate for the miss. Rebuild current-price Capital Readiness and forward odds.
