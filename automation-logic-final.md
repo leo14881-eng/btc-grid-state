@@ -642,3 +642,67 @@ Purpose: prevent Hunter from repeatedly discovering a valid opportunity early bu
 9. **Candidate priority queue.** PRE_MOVE candidates with a credible non-price catalyst/value-capture/supply inflection outrank replay/calibration/architecture work. Live candidate closure always has priority over non-blocking system research.
 10. **MNT-specific watch added as a current research example, not an automatic buy:** track Bybit ecosystem utility expansion, any formal revenue-based MNT buyback/burn governance progression, Mantle RWA/stablecoin activity, Treasury supply movements, circulating/FDV dilution and current-price BTC-relative FRM. Do not wait for a buyback to be fully implemented before evaluating an optionality tranche; treat proposal-stage progression as a probabilistic catalyst and size accordingly.
 11. User remains sole executor. `OPTIONALITY-ENTRY-ELIGIBLE-SMALL` means a capital proposal may be surfaced early; it never means automatic execution.
+
+
+## v2.17.0 — Capital Readiness + Strategy Lock + Fixed Altcoin Pool (USER-APPROVED 2026-09-26)
+
+### A. Fixed Altcoin Capital Pool — authoritative allocation SSOT
+1. The total altcoin capital pool is a fixed **20,000 USDT acquisition-cost hard cap**. This supersedes legacy Portfolio Asymmetric percentage caps (8% total / 2% single asset) for altcoin allocation decisions.
+2. There is **no preset equal split and no fixed per-asset percentage cap**. Hunter/Asset Management must determine each asset's maximum position from project-specific evidence: Capital Readiness, current-price FRM, downside/permanent-loss, supply/unlocks, liquidity, catalyst/value capture, BTC-relative opportunity cost, correlation/concentration, and remaining pool capacity.
+3. A confirmed altcoin buy locks its executed ORIGINAL ACQUISITION COST against the 20,000 USDT pool while that quantity remains open.
+4. Live pending buy orders are reservations, not locked cost, but pre-trade checks MUST enforce:
+   `LOCKED_COST + LIVE_PENDING_RESERVATIONS + NEW_PROPOSED_ORDER <= 20,000 USDT`.
+   Cancelled/unfilled orders release only their reservation.
+5. On a **realized profitable sale**, release the proportional original cost basis of the sold quantity from locked cost. Record realized profit separately. **Profit does not increase the 20,000 USDT pool cap** and may not silently compound the cap above 20,000.
+6. If a position is closed at a realized loss, remove the closed quantity from active locked cost, record the realized loss/proceeds, and require portfolio reconciliation before treating loss-attributable capacity as reusable. Never fabricate replenishment.
+7. Crisis Reserve remains excluded. BTC Core and BTC Grid are not part of this altcoin pool.
+8. Every capital proposal MUST print: `ALT_POOL_CAP / LOCKED_COST / PENDING_RESERVATIONS / AVAILABLE_AFTER_RESERVATIONS / PROPOSED_ORDER / POST_ORDER_LOCKED_OR_RESERVED`.
+
+### B. Capital Readiness Gate — mandatory before any BUY/ADD sizing
+Discovery speed does not waive known-fact diligence. Before Hunter may output a concrete BUY/ADD amount or price, ALL material known-fact fields must be reviewed with primary/authoritative evidence where available:
+- official tokenomics and token legitimacy;
+- circulating / total / max supply and concentration;
+- material 30/90/180-day unlocks, emissions, vesting, treasury/foundation/team/VC supply;
+- protocol/product revenue, fees, usage and liquidity relevant to the thesis;
+- exact token value-capture mechanism and whether buyback/burn is proposed, approved, funded and actually executed;
+- current market cap / FDV and valuation implications;
+- catalyst and priced-in assessment;
+- executable venue/counterparty;
+- current-price FRM with valuation derivation, same-horizon BTC benchmark, downside/permanent-loss case and invalidation;
+- portfolio correlation/concentration and fixed-alt-pool capacity.
+
+A MATERIAL UNKNOWN or unresolved primary-vs-secondary source conflict => `CAPITAL_READINESS=BLOCKED`; research/watch may continue, but concrete BUY/ADD sizing is prohibited.
+
+Future outcome uncertainty is NOT itself a blocker: a catalyst need not already succeed, revenue need not already scale, and right-side breakout confirmation is not required for a small early tranche when all currently knowable material facts are sufficiently researched.
+
+### C. Position sizing
+Only after `CAPITAL_READINESS=PASS`:
+1. derive an asset-specific `MAX_POSITION_COST_USDT`; do not inherit a stale generic cap;
+2. explain why that asset deserves that amount relative to the 20,000 USDT pool and BTC/cash alternatives;
+3. derive first tranche and later tranche conditions from that max;
+4. verify pool invariant before every proposal;
+5. user remains sole executor.
+
+### D. Strategy Lock — stop conversational strategy drift
+Once a concrete asset capital plan is presented after Capital Readiness PASS, persist a versioned `STRATEGY_LOCK` containing at minimum:
+`asset / version / locked_at / evidence_as_of / max_position_cost / first_tranche / later_tranche_conditions / invalidation / exit_or_profit_ladder / alt_pool_snapshot / rationale`.
+
+Status becomes `FROZEN`. A FROZEN strategy MUST NOT change merely because:
+- the user questions it;
+- price moves normally inside the modeled range;
+- another sizing heuristic is remembered;
+- another chat/session evaluates the same asset.
+
+A strategy may change only for:
+1. a predeclared trigger/invalidation in the frozen strategy; or
+2. genuinely new MATERIAL EVIDENCE that changes valuation, supply, risk, catalyst, liquidity, counterparty or portfolio capacity.
+
+Any change requires a persisted amendment:
+`OLD -> NEW / MATERIAL_EVIDENCE / SOURCE / IMPACT / VERSION_INCREMENT / TIMESTAMP`.
+No silent replacement.
+
+### E. ASTER process correction
+The prior ASTER concrete sizing proposal is withdrawn and is NOT a frozen strategy. ASTER remains `CAPITAL_READINESS=BLOCKED` until its forward supply/unlock schedule and source conflicts are reconciled and its FRM is rebuilt from valuation inputs. Do not revive the old 160/400/600/800/2000/3000 USDT figures.
+
+### F. STX continuity
+Existing user-confirmed STX fills remain valid and locked against the altcoin pool. The existing 600 USDT @ 0.308 pending plan remains a reservation unless filled/cancelled by the user. This v2.17 accounting patch does not itself alter the STX trading thesis or order.
