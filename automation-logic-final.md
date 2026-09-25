@@ -486,6 +486,33 @@ FROZEN without a proven systematic misclassification defect: Gate logic, BTC ban
 
 Data blockers to exit SHADOW: (1) verifiable current + forward circulating supply/dilution per candidate; (2) one versioned BTC BEAR/BASE/BULL benchmark for the horizon; (3) required universe coverage threshold; and (4) calibrated k. Capital stays zero while k is UNSET.
 
+## 8g. Fundamental Early-Entry Capital Proposal Lane — USER-APPROVED PATCH 2026-09-25
+
+Purpose: repair the systematic misclassification/inaction defect where a valid PRE_MOVE/EARLY_MOVE fundamental candidate can be discovered before repricing but can never reach a human capital proposal solely because the separate Blind-Replay BTC-Relative Gate remains SHADOW / k=UNSET.
+
+This patch **does not unfreeze or validate the quantitative BTC-Relative Gate**. Its outputs remain SHADOW and may not independently authorize capital. It creates a separate, human-reviewed proposal lane for fundamental early opportunities.
+
+A candidate may reach `FUNDAMENTAL_EARLY_ENTRY_PROPOSAL_ELIGIBLE` only when ALL are true:
+1. stage is PRE_MOVE or EARLY_MOVE at the decision timestamp; POST_MOVE may enter only if prospective current-price asymmetry independently remains sufficient under the same tests;
+2. at least two causally independent evidence domains exist and at least one is non-price;
+3. current-price FRM is complete on one explicit horizon with BEAR/BASE/BULL/EXTREME_BULL, same-horizon BTC benchmark, dilution/unlocks, catalyst remaining/priced-in, crowding, liquidity, permanent-loss/downside, invalidation and risk/reward;
+4. without using the uncalibrated k, the candidate has a defensible prospective BTC-relative edge in BASE and no fatal BEAR/permanent-loss disadvantage; uncertainty must be stated rather than converted into a fabricated probability;
+5. Risk Governor is ALLOW or REDUCE_SIZE, never WAIT/VETO;
+6. Portfolio Allocation Gate + Portfolio Drawdown Gate + Counterparty Gate pass;
+7. funding source excludes the $50,000 Crisis Reserve and respects BTC Core / dry-powder protections;
+8. proposal is explicitly staged: first tranche only. Later tranches require better price structure or new independent thesis confirmation, never mechanical averaging down;
+9. user remains the sole executor. `PROPOSAL_ELIGIBLE != BUY_EXECUTED`.
+
+The quantitative SHADOW Gate is recorded alongside this lane as a diagnostic. `k=UNSET` alone is **not** a veto for this fundamental lane. Conversely, a SHADOW PASS is never sufficient to enter this lane.
+
+### Missed-opportunity accounting
+For every PRE_MOVE/EARLY_MOVE candidate that was discovered but did not reach a first-tranche proposal before a material subsequent repricing, record `MISSED_EARLY_ENTRY` separately from `MISSED_DISCOVERY` and `REJECTED_BY_GATE`. Persist discovery price, first eligible/review timestamp when known, subsequent observed price/return, the exact blocker that prevented proposal, and whether the blocker was fundamental evidence, forward return, risk, portfolio/counterparty, data quality, or system/process latency.
+
+A process blocker such as `k=UNSET`, Replay incompleteness, persistence engineering, or missing nonessential calibration may not be relabeled as an investment-thesis rejection.
+
+### Operating priority
+Live Full-Universe discovery + current-price Forward Return closure has priority over non-blocking Replay engineering. Blind Replay continues every run, but it must not consume the run while fresh PRE_MOVE/EARLY_MOVE candidates remain unevaluated. Normal research promotion still does not equal BUY/ADD.
+
 ## 9. Comparison rule — no scalar EV
 
 Do not calculate `Σ(p×multiple)` or invent pseudo-precise probabilities. Use a dominance test: rank A above B only if A remains superior across all reasonable bucket assignments. Otherwise output `INCOMPARABLE` and require human judgment. Low-probability high-multiple versus high-probability low-multiple defaults to `INCOMPARABLE`.
