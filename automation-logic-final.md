@@ -759,3 +759,34 @@ ENA is a process-audit case:
 - later Hunter runs failed to force-refresh ENA despite additional material repricing/catalysts.
 Classify as MISSED_DISCOVERY + MISSED_REEVALUATION, not VALID_REJECTION.
 Do not chase ENA merely to compensate for the miss. Rebuild current-price Capital Readiness and forward odds.
+
+
+## v2.17.2 — Explosive Upside / Non-Continuous BTC Outperformance (USER-APPROVED 2026-09-26)
+
+Purpose: Hunter must not reject an asymmetric altcoin merely because it is expected to underperform BTC during an intermediate sub-period. The objective is to capture assets capable of a later discontinuous/explosive repricing from the acquisition price.
+
+1. BTC-relative performance is an OPPORTUNITY-COST BENCHMARK, not a requirement that the altcoin outperform BTC continuously or in every short horizon.
+2. Remove any rule that rejects a candidate solely because its 1M/3M/base-path return is below BTC while a later thesis-driven repricing window remains credible.
+3. Add EXPLOSIVE_UPSIDE_MAP for each serious candidate:
+   - acquisition/current price;
+   - plausible catalyst window, expressed as a range rather than a fabricated exact date;
+   - pre-catalyst downside / dilution / drawdown;
+   - base terminal value;
+   - explosive/bull terminal value;
+   - extreme terminal value;
+   - catalyst required for each higher bucket;
+   - probability is not fabricated when evidence cannot support it;
+   - permanent-loss path and thesis invalidation.
+4. A candidate may be capital-eligible before it is expected to beat BTC in the near term when ALL are true:
+   - material known facts pass Capital Readiness;
+   - there is a credible non-price mechanism for later repricing (revenue/value capture, supply inflection, product/adoption inflection, governance implementation, major distribution/access change, or other falsifiable catalyst);
+   - prospective explosive upside from entry is materially larger than BTC's plausible upside over the full thesis horizon;
+   - downside/permanent-loss and dilution are bounded enough to justify staged sizing;
+   - liquidity/counterparty/portfolio gates pass.
+5. Near-term BTC underperformance affects SIZE and ENTRY PRICE, not automatic eligibility.
+6. For assets with a known near-term supply shock before a later catalyst, explicitly model two phases:
+   PHASE_A = pre-catalyst/supply-risk window;
+   PHASE_B = catalyst/value-capture repricing window.
+   Hunter may establish a small left-side optionality tranche in PHASE_A if Capital Readiness passes, rather than waiting for PHASE_B confirmation.
+7. Reject only when prospective terminal explosive upside is insufficient for the permanent-loss/dilution risk, the catalyst lacks a defensible causal path to token value, or material facts remain unresolved.
+8. Current-price FRM remains mandatory, but BASE underperformance versus BTC alone is NOT a hard FAIL.
