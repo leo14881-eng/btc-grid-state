@@ -1,7 +1,7 @@
 {
-  "version": "1.5",
+  "version": "1.6",
   "status": "ACTIVE",
-  "updated_at": "2026-09-20T15:00:00+07:00",
+  "updated_at": "2026-09-26T00:15:00+07:00",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -29,7 +29,7 @@
     ]
   },
   "ordinary_portfolio": {
-    "valuation_timestamp": "2026-09-13T08:04:00+07:00",
+    "valuation_timestamp": "2026-09-26T00:15:00+07:00",
     "total_usd": 39905.42,
     "btc_core": {
       "usd": 21480.42,
@@ -43,11 +43,11 @@
       "data_status": "USER_CONFIRMED_WALLET_BALANCE_AND_PERMANENT_FLOOR_RULE_2026_09_13"
     },
     "cash_tbill": {
-      "usd": 18425,
-      "weight_pct": 46.2,
-      "usdt_quantity": 18425,
-      "wallet_display_usd": 18425,
-      "data_status": "USER_CONFIRMED_2026_09_20_AFTER_GRID_CAPITAL_INCREASE"
+      "usd": 17025,
+      "weight_pct": 42.66,
+      "usdt_quantity": 17025,
+      "wallet_display_usd": "ESTIMATED_AFTER_USER_CONFIRMED_STX_EXECUTIONS_FROM_PRIOR_18425_USDT",
+      "data_status": "DERIVED_FROM_PRIOR_USER_CONFIRMED_18425_MINUS_TWO_CONFIRMED_700_USDT_STX_BUYS__REVERIFY_NEXT_BALANCE_SCREENSHOT"
     },
     "structural": {
       "usd": 0,
@@ -56,10 +56,34 @@
       "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
     },
     "asymmetric": {
-      "usd": 0,
-      "weight_pct": 0,
-      "positions": [],
-      "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
+      "usd": 1400,
+      "weight_pct": 3.51,
+      "positions": [
+        {
+          "position_id": "STX-20260925-FIRST-STAGE",
+          "asset": "STX",
+          "cost_usd": 1400,
+          "quantity": 4317.34008654,
+          "avg_cost": 0.324274,
+          "confirmed_fills": [
+            {
+              "usd": 700,
+              "price": 0.3308
+            },
+            {
+              "usd": 700,
+              "price": 0.318
+            }
+          ],
+          "pending_plan": {
+            "usd": 600,
+            "limit_price": 0.308,
+            "status": "USER_PLAN_NOT_EXECUTED"
+          },
+          "data_status": "USER_CONFIRMED_FILLS"
+        }
+      ],
+      "data_status": "USER_CONFIRMED_STX_POSITION_RECORDED"
     }
   },
   "btc_cycle_policy": {
@@ -76,7 +100,7 @@
     "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward."
   },
   "execution_state": {
-    "last_confirmed_execution": null,
+    "last_confirmed_execution": "STX-EXEC-20260925-0318-700",
     "btc_cycle": {
       "last_buy_execution_timestamp": null,
       "last_sell_execution_timestamp": null,
@@ -87,8 +111,10 @@
       "last_sell_journal_id": null
     },
     "asymmetric": {
-      "last_execution_timestamp": null,
-      "open_position_ids": []
+      "last_execution_timestamp": "2026-09-25T23:30:00+07:00",
+      "open_position_ids": [
+        "STX-20260925-FIRST-STAGE"
+      ]
     },
     "structural": {
       "last_execution_timestamp": null,
