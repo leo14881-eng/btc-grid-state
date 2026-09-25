@@ -1,5 +1,5 @@
 {
-  "version": "2.17.1",
+  "version": "2.17.2",
   "status": "ACTIVE_INITIALIZED",
   "updated_at": "2026-09-26",
   "initialized_at": "2026-09-14T07:35:00+07:00",
@@ -194,7 +194,7 @@
       "fast_input_ready": true,
       "current_price_reference": 0.2466,
       "current_price_reference_as_of": "2026-09-25/26 live-market review",
-      "execution_state": "NO_BUY_CURRENT_PRICE__WAIT_LEFT_SIDE_REEVALUATION",
+      "execution_state": "URGENT_EXPLOSIVE_UPSIDE_REAUDIT__CAPITAL_READINESS_SUPPLY_BLOCKER_REMAINS",
       "capital_readiness": "BLOCKED_FOR_BUY__EXACT_OCT5_SELLABLE_FRACTION_AND_ECOSYSTEM_RELEASE_CALENDAR_NOT_FULLY_KNOWN",
       "process_review": {
         "status": "MISSED_EARLY_ENTRY_PROCESS_FAILURE",
@@ -277,8 +277,8 @@
         "base": 95000,
         "base_return_pct_approx": 12.7
       },
-      "forward_upside_gate": "FAIL_AT_0_26044__BASE_CASE_UNDERPERFORMS_BTC_AND_HAS_NEGATIVE_ABSOLUTE_RETURN",
-      "current_price_capital_decision": "VALID_REJECTION_AT_CURRENT_PRICE__DO_NOT_CHASE",
+      "forward_upside_gate": "REOPENED_UNDER_V2_17_2__BASE_UNDERPERFORMANCE_VS_BTC_IS_NOT_HARD_FAIL",
+      "current_price_capital_decision": "REOPENED_FOR_EXPLOSIVE_UPSIDE_ANALYSIS__NO_AUTOMATIC_REJECT_SOLELY_FROM_BASE_BTC_COMPARISON",
       "reeval_zones": [
         {
           "price_range": "0.215-0.230",
@@ -293,7 +293,19 @@
           "action": "HIGH_PRIORITY_ASYMMETRY_REVIEW_IF_THESIS_AND_USDE_GROWTH_INTACT"
         }
       ],
-      "strategy_lock": "NONE__NO_CAPITAL_PLAN_ISSUED"
+      "strategy_lock": "NONE__NO_CAPITAL_PLAN_ISSUED",
+      "explosive_upside_map": {
+        "phase_a": "NOW_TO_OCT5_SUPPLY_EVENT_AND_POST_EVENT_ABSORPTION",
+        "phase_b": "USDE_SCALE_AND_FEE_SWITCH_VALUE_CAPTURE_REPRICING_WINDOW",
+        "current_price": 0.26044,
+        "prior_scenario_terminal_values": {
+          "base": 0.214,
+          "bull": 0.333,
+          "extreme": 0.492
+        },
+        "interpretation": "Near-term/base BTC underperformance no longer rejects ENA. Capital decision depends on exact sellable Oct5 supply, ecosystem release calendar, and whether later bull/extreme value-capture path offers sufficient asymmetry.",
+        "blocker": "EXACT_OCT5_SELLABLE_FRACTION_AND_ECOSYSTEM_RELEASE_CALENDAR_UNRESOLVED"
+      }
     },
     "CRO": {
       "archetype": "VALUE_CAPTURE_PRODUCT_INFLECTION",
@@ -652,7 +664,7 @@
     "existing_candidate_queue": "MANDATORY_EVERY_RUN",
     "urgent_existing_candidate": "ENA",
     "process_failure": "ENA_MISSED_EARLY_ENTRY_PROCESS_FAILURE",
-    "ENA_current_decision": "NO_BUY_0.26044__REEVALUATE_0.215_0.230_AND_0.190_0.205"
+    "ENA_current_decision": "REOPENED_V2_17_2__EXPLOSIVE_UPSIDE_REAUDIT_REQUIRED__SUPPLY_FACTS_STILL_BLOCK_CONCRETE_BUY"
   },
   "candidate_snapshots": [
     {
@@ -1119,5 +1131,12 @@
       "ENA"
     ],
     "note": "Research volume is not success. Track capital decision latency and realized outcomes."
+  },
+  "explosive_upside_policy": {
+    "status": "ACTIVE",
+    "btc_relative_role": "OPPORTUNITY_COST_BENCHMARK_NOT_CONTINUOUS_OUTPERFORMANCE_GATE",
+    "near_term_btc_underperformance": "SIZE_AND_ENTRY_INPUT_NOT_AUTOMATIC_REJECT",
+    "capital_eligibility": "ALLOWED_IF_CAPITAL_READINESS_PASS_AND_LATER_EXPLOSIVE_REPRICING_PATH_IS_CREDIBLE_AND_ASYMMETRIC",
+    "two_phase_model": "PHASE_A_PRE_CATALYST_RISK__PHASE_B_CATALYST_REPRICING"
   }
 }
