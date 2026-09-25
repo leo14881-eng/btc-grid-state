@@ -90,6 +90,15 @@ def load(sym):
     return list({x["t"]:x for x in a}.values())
 
 symbols=discover_symbols()
+# Persist the archive-derived symbol manifest for survivorship cross-checking.
+# This is observational output only: it does not alter the frozen signal, thresholds,
+# candidate selection, outcomes, calibration, or OOS windows.
+with open(f"{OUT}/hunter-archive-symbol-manifest.json","w") as f:
+    json.dump({"source":"Binance Data Vision S3 archive prefixes",
+      "period":f"{START_YM} through {END_YM}",
+      "universe_method":"HISTORICAL_FILE_RECONSTRUCTED_UNIVERSE",
+      "symbol_count":len(symbols),"symbols":symbols},f,indent=2)
+    f.write("\n")
 data={}; skipped=[]
 # Download symbols concurrently. Each symbol still loads its monthly archives
 # deterministically; concurrency changes transport speed only, not research rules.
