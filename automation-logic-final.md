@@ -159,6 +159,9 @@ While total BTC remains below the 0.5 BTC permanent-core floor, early downside/d
 ### Anti-hindsight
 Forbidden: explaining a large move after it occurs and relabeling the move itself as the signal. Persist `primary_state`, `first_detected_at`, `main_path`, `leading_evidence`, `reversal_triggers`, `early_action`, `confirmation_status` and `data_gaps` in Sentinel-owned runtime state so Detection Lead/Lag can be audited later.
 
+### Sentinel persistence concurrency override
+For `sentinel-state.json` and any other Sentinel-owned GitHub write, Shared Global Rule **1A GitHub optimistic-concurrency + retry contract** is mandatory and supersedes any older automation-prompt wording that treats the first SHA conflict as final failure. A SHA conflict MUST trigger refetch -> rebase Sentinel-owned fields only -> revalidate -> retry, up to **3 total attempts**, sequentially. Only after successful reread verification may Sentinel report `PERSISTED=TRUE`; only after retries are exhausted may it report `STATE PERSISTENCE FAILURE: CONCURRENCY_EXHAUSTED`. Never overwrite concurrent Hunter/portfolio/Grid changes and never parallel-write the same path.
+
 ## Mandatory current-data acquisition
 
 Attempt current BTC price + daily/4H structure; latest complete US spot-BTC ETF trading-day flow; US 2Y/10Y/30Y yields, USD, Fed expectations and macro liquidity; BTC OI/funding/liquidations; major CPI/labor/FOMC/banking/credit/Treasury-function shocks. If first source fails, try at least one reliable alternative before marking unknown.
