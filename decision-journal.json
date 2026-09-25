@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "status": "ACTIVE",
-  "updated_at": "2026-09-11T14:00:00+07:00",
+  "updated_at": "2026-09-26T00:15:00+07:00",
   "description": "Append-only decision journal for the frozen 10-Year Wealth Compounding Architecture FINAL. Historical rationale must never be rewritten with future information.",
   "persistence_status": {
     "current_chat_write_verified": true,
@@ -13,7 +13,23 @@
     "append_only": true,
     "historical_rationale_immutable": true,
     "user_is_only_execution_authority": true,
-    "required_for": ["TACTICAL_BTC_BUY","TACTICAL_BTC_SELL","ASYMMETRIC_BUY","ASYMMETRIC_ADD","ASYMMETRIC_TP25","ASYMMETRIC_TP50","ASYMMETRIC_EXIT_MOST","ASYMMETRIC_EXIT_ALL","STRUCTURAL_BUY","STRUCTURAL_ADD","STRUCTURAL_REDUCE","STRUCTURAL_SELL","STRATEGIC_TERM_DEPOSIT_DECISION","CRISIS_RESERVE_STATE_CHANGE","ACTION_REQUIRED_REJECTED"]
+    "required_for": [
+      "TACTICAL_BTC_BUY",
+      "TACTICAL_BTC_SELL",
+      "ASYMMETRIC_BUY",
+      "ASYMMETRIC_ADD",
+      "ASYMMETRIC_TP25",
+      "ASYMMETRIC_TP50",
+      "ASYMMETRIC_EXIT_MOST",
+      "ASYMMETRIC_EXIT_ALL",
+      "STRUCTURAL_BUY",
+      "STRUCTURAL_ADD",
+      "STRUCTURAL_REDUCE",
+      "STRUCTURAL_SELL",
+      "STRATEGIC_TERM_DEPOSIT_DECISION",
+      "CRISIS_RESERVE_STATE_CHANGE",
+      "ACTION_REQUIRED_REJECTED"
+    ]
   },
   "entry_schema": {
     "id": "string",
@@ -31,17 +47,104 @@
     "funding_source": "string|null",
     "risk_budget": "string|null",
     "correlation_bucket": "string|null",
-    "evidence_available_at_time": ["string"],
+    "evidence_available_at_time": [
+      "string"
+    ],
     "alternative_action": "string|null",
     "btc_alternative": "string|null",
     "cash_tbill_alternative": "string|null",
     "opportunity_cost_conclusion": "string|null",
-    "invalidation_or_thesis_kill": ["string"],
+    "invalidation_or_thesis_kill": [
+      "string"
+    ],
     "cooldown_status": "string|null",
     "executed": "true | false | pending",
     "execution_timestamp": "ISO-8601 string|null",
     "rejection_reason": "string|null",
-    "outcome": {"status":"OPEN | CLOSED | NOT_APPLICABLE | UNKNOWN","updated_at":"ISO-8601 string|null","notes":"string|null"}
+    "outcome": {
+      "status": "OPEN | CLOSED | NOT_APPLICABLE | UNKNOWN",
+      "updated_at": "ISO-8601 string|null",
+      "notes": "string|null"
+    }
   },
-  "entries": []
+  "entries": [
+    {
+      "id": "STX-EXEC-20260925-03308-700",
+      "timestamp": "2026-09-25T23:30:00+07:00",
+      "asset": "STX",
+      "layer": "ASYMMETRIC",
+      "signal_source": "USER",
+      "signal": "USER_CONFIRMED_EXECUTION",
+      "allocation_gate": "RECOMMENDATION",
+      "price": 0.3308,
+      "action": "ASYMMETRIC_BUY",
+      "amount_usd": 700,
+      "portfolio_weight_before": null,
+      "portfolio_weight_after": null,
+      "funding_source": "ORDINARY_USDT_DRY_POWDER_PER_CURRENT_MANAGEMENT_CONTEXT",
+      "risk_budget": "STAGED_FIRST_STAGE_STX__NO_MECHANICAL_AVERAGING",
+      "correlation_bucket": "BTC_ECOSYSTEM_HIGH_BETA",
+      "evidence_available_at_time": [
+        "User confirmed execution in chat",
+        "Stacks Genesis Bond / PoX-5 catalyst active"
+      ],
+      "alternative_action": "Hold USDT dry powder",
+      "btc_alternative": "Buy BTC instead",
+      "cash_tbill_alternative": "Keep USDT/cash",
+      "opportunity_cost_conclusion": "STX first-stage catalyst position accepted; later additions require fresh gates.",
+      "invalidation_or_thesis_kill": [
+        "Bitcoin Staking/Bond scaling thesis materially weakens",
+        "STX demand/lock mechanics fail to scale",
+        "BTC market deterioration invalidates alt risk budget"
+      ],
+      "cooldown_status": null,
+      "executed": true,
+      "execution_timestamp": "2026-09-25T23:30:00+07:00",
+      "rejection_reason": null,
+      "outcome": {
+        "status": "OPEN",
+        "updated_at": "2026-09-26T00:15:00+07:00",
+        "notes": "User-confirmed execution; exact exchange order timestamp not supplied."
+      }
+    },
+    {
+      "id": "STX-EXEC-20260925-0318-700",
+      "timestamp": "2026-09-25T23:30:00+07:00",
+      "asset": "STX",
+      "layer": "ASYMMETRIC",
+      "signal_source": "USER",
+      "signal": "USER_CONFIRMED_EXECUTION",
+      "allocation_gate": "RECOMMENDATION",
+      "price": 0.318,
+      "action": "ASYMMETRIC_BUY",
+      "amount_usd": 700,
+      "portfolio_weight_before": null,
+      "portfolio_weight_after": null,
+      "funding_source": "ORDINARY_USDT_DRY_POWDER_PER_CURRENT_MANAGEMENT_CONTEXT",
+      "risk_budget": "STAGED_FIRST_STAGE_STX__NO_MECHANICAL_AVERAGING",
+      "correlation_bucket": "BTC_ECOSYSTEM_HIGH_BETA",
+      "evidence_available_at_time": [
+        "User confirmed execution in chat",
+        "Stacks Genesis Bond / PoX-5 catalyst active"
+      ],
+      "alternative_action": "Hold USDT dry powder",
+      "btc_alternative": "Buy BTC instead",
+      "cash_tbill_alternative": "Keep USDT/cash",
+      "opportunity_cost_conclusion": "STX first-stage catalyst position accepted; later additions require fresh gates.",
+      "invalidation_or_thesis_kill": [
+        "Bitcoin Staking/Bond scaling thesis materially weakens",
+        "STX demand/lock mechanics fail to scale",
+        "BTC market deterioration invalidates alt risk budget"
+      ],
+      "cooldown_status": null,
+      "executed": true,
+      "execution_timestamp": "2026-09-25T23:30:00+07:00",
+      "rejection_reason": null,
+      "outcome": {
+        "status": "OPEN",
+        "updated_at": "2026-09-26T00:15:00+07:00",
+        "notes": "User-confirmed execution; exact exchange order timestamp not supplied."
+      }
+    }
+  ]
 }
