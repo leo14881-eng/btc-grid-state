@@ -1,5 +1,5 @@
 {
-  "version": "2.16.0",
+  "version": "2.17.0",
   "status": "ACTIVE_INITIALIZED",
   "updated_at": "2026-09-26",
   "initialized_at": "2026-09-14T07:35:00+07:00",
@@ -135,7 +135,9 @@
         "prior_state": "OPTIONALITY-ENTRY-ELIGIBLE-SMALL",
         "correction": "WITHDRAWN_BEFORE_USER_CONFIRMED_EXECUTION",
         "reason": "Material forward supply release was not fully reconciled before sizing/proposal."
-      }
+      },
+      "capital_readiness": "BLOCKED_FORWARD_SUPPLY_AND_SOURCE_RECONCILIATION",
+      "strategy_lock": "NONE__PRIOR_SIZING_WITHDRAWN_NOT_FROZEN"
     },
     "JTO": {
       "archetype": "VALUE_CAPTURE_PRODUCT_INFLECTION",
@@ -420,7 +422,7 @@
     "watchlist_count": 9,
     "early_count": 4,
     "eligible_count": 1,
-    "capital_authority": "USER_ONLY__V216_EARLY_OPTIONALITY_ACTIVE",
+    "capital_authority": "USER_ONLY__V217_CAPITAL_READINESS_AND_STRATEGY_LOCK",
     "universe_size": "BYBIT_SPOT_DIRECTORY_519_URLS_PLUS_EVENT_DISCOVERY_WEB_PASS",
     "scanned_count": "PARTIAL_EVENT_DRIVEN_BROAD_SCAN_NOT_DETERMINISTIC_FULL_519_ASSET_FUNDAMENTAL_SCAN",
     "coverage_ratio": "UNKNOWN",
@@ -429,7 +431,7 @@
     "no_pre_move_claim_allowed": false,
     "top_new_candidate": "CRO-20260926-001",
     "top_bybit_executable_candidate": "NONE_PENDING_REAUDIT",
-    "note": "ASTER prior small-entry proposal withdrawn before execution: official Stage 6 63.379M vested-claim supply and broader unlock schedule require reconciliation. No Bybit-executable new optionality candidate is approved until capital data is complete."
+    "note": "v2.17 active: fixed 20,000 USDT altcoin acquisition-cost pool; per-asset sizing is research/risk determined; confirmed cost locks capacity; profitable sale releases proportional original cost; concrete plans require Capital Readiness PASS then Strategy Lock."
   },
   "candidate_snapshots": [
     {
@@ -806,5 +808,61 @@
       ],
       "rule": "DO_NOT_REQUIRE_BUYBACK_IMPLEMENTATION_BEFORE_OPTIONALITY_ENTRY_EVALUATION"
     }
+  },
+  "altcoin_capital_pool": {
+    "status": "ACTIVE_USER_CONFIRMED_2026-09-26",
+    "hard_cap_cost_usdt": 20000,
+    "locked_cost_usdt": 1400,
+    "pending_reservations_usdt": 600,
+    "available_after_reservations_usdt": 18000,
+    "sizing_authority": "ASSET_SPECIFIC_RESEARCH_AND_RISK_GATES__NO_FIXED_PER_ASSET_CAP",
+    "lock_basis": "CONFIRMED_EXECUTED_ACQUISITION_COST",
+    "profitable_sale_release": "RELEASE_PROPORTIONAL_ORIGINAL_COST_BASIS__PROFIT_RECORDED_SEPARATELY__CAP_REMAINS_20000",
+    "overbooking_formula": "LOCKED_COST + PENDING_RESERVATIONS + NEW_PROPOSED_ORDER <= 20000",
+    "execution_authority": "USER_ONLY"
+  },
+  "capital_readiness_gate": {
+    "status": "ENABLED_V2_17",
+    "required_before_concrete_buy_or_add_sizing": true,
+    "material_unknown_blocks_capital": true,
+    "primary_secondary_source_conflict_blocks_capital": true,
+    "future_outcome_uncertainty_is_not_automatic_blocker": true,
+    "right_side_confirmation_required": false,
+    "required_domains": [
+      "TOKENOMICS_LEGITIMACY",
+      "CIRC_TOTAL_MAX_SUPPLY",
+      "30_90_180D_UNLOCKS_EMISSIONS",
+      "TEAM_VC_TREASURY_FOUNDATION_CONCENTRATION",
+      "REVENUE_FEES_USAGE",
+      "TOKEN_VALUE_CAPTURE",
+      "MARKET_CAP_FDV_VALUATION",
+      "CATALYST_PRICED_IN",
+      "LIQUIDITY_EXECUTION",
+      "CURRENT_PRICE_FRM_VALUATION_DERIVATION",
+      "BTC_BENCHMARK",
+      "PERMANENT_LOSS_INVALIDATION",
+      "CORRELATION_CONCENTRATION",
+      "ALT_POOL_CAPACITY"
+    ]
+  },
+  "strategy_lock_policy": {
+    "status": "ENABLED_V2_17",
+    "freeze_after_capital_plan": true,
+    "mutable_only_on": [
+      "PREDECLARED_TRIGGER_OR_INVALIDATION",
+      "NEW_MATERIAL_EVIDENCE"
+    ],
+    "conversational_challenge_is_not_change_reason": true,
+    "normal_price_noise_is_not_change_reason": true,
+    "amendment_fields": [
+      "OLD",
+      "NEW",
+      "MATERIAL_EVIDENCE",
+      "SOURCE",
+      "IMPACT",
+      "VERSION_INCREMENT",
+      "TIMESTAMP"
+    ],
+    "silent_replacement_forbidden": true
   }
 }
