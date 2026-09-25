@@ -76,28 +76,28 @@
       "eligibility": "BTC_RELATIVE_TASK5_RESEARCH",
       "thesis": "99% of daily platform fees programmatically buy back ASTER while an equal reserve amount is burned; the 400M team allocation cliff was extended by 12 months to Sep 2027, reducing near-term dilution before a large price repricing.",
       "invalidation": "Fee-funded buybacks materially weaken, delayed team vesting is reversed, emissions overwhelm burns, or platform activity/revenue deteriorates materially.",
-      "updated_at": "2026-09-26T00:15:00+07:00",
+      "updated_at": "2026-09-26T00:28:00+07:00",
       "stage": "EARLY_MOVE",
       "candidate_id": "ASTER-20260919-001",
       "discovered_at": "2026-09-19T23:05:00+07:00",
       "discovery_price": 0.763,
       "discovery_stage_immutable": "PRE_MOVE",
       "stage_correction_reason": "Post-discovery evidence review: Sep tokenomics catalyst had already produced material price pulses before first Hunter discovery; current stage corrected prospectively without rewriting immutable first-discovery event.",
-      "reviewed_at": "2026-09-26T00:15:00+07:00",
-      "evidence_as_of": "2026-09-26T00:15:00+07:00",
-      "review_id": "HUNTER-V216-RUN-20260926-001",
+      "reviewed_at": "2026-09-26T00:28:00+07:00",
+      "evidence_as_of": "2026-09-26T00:28:00+07:00",
+      "review_id": "ASTER-SUPPLY-AUDIT-20260926-002",
       "reread_verified": true,
       "fast_input_ready": true,
       "current_price": 0.710283,
       "current_price_as_of": "2026-09-26T00:15:00+07:00",
-      "execution_state": "OPTIONALITY-ENTRY-ELIGIBLE-SMALL",
+      "execution_state": "DATA_BLOCKED_FATAL",
       "evidence_domains": [
         "99_PERCENT_FEE_FUNDED_BUYBACK",
         "MATCHED_RESERVE_TEAM_BURN",
         "TEAM_CLIFF_DELAY_TO_2027",
         "REAL_PROTOCOL_HOLDER_REVENUE"
       ],
-      "supply_risk": "HIGH_LONG_TERM__2.70B_CIRC_VS_8B_MAX__NEAR_TERM_TEAM_CLIFF_IMPROVED",
+      "supply_risk": "HIGH_AND_INCOMPLETELY_RECONCILED__2.70B_CIRC_VS_8B_MAX__OFFICIAL_STAGE6_63.379M_LOCKED_UNTIL_2026-11-04__TEAM_400M_DELAYED_TO_2027-09-17__THIRD_PARTY_SCHEDULE_CONFLICTS_REMAIN",
       "liquidity": "GOOD__24H_VOLUME_APPROX_87.6M_USD",
       "forward_return_map": {
         "bear": 0.55,
@@ -111,14 +111,31 @@
         "base": 95000,
         "bull": 100000
       },
-      "forward_upside_gate": "PASS_PROVISIONAL",
-      "risk_governor": "REDUCE_SIZE",
+      "forward_upside_gate": "BLOCKED_PENDING_COMPLETE_SUPPLY_RECONCILIATION",
+      "risk_governor": "WAIT",
       "first_tranche_logic": "Under current ordinary portfolio asymmetric single-asset 2% hard cap, eventual max is ~798 USD; v2.16 first tranche normally <=20% => ~160 USD maximum proposal.",
       "thesis_kill": [
         "99% fee-funded buyback materially weakens",
         "Holder revenue collapses",
         "Unlock/emissions accelerate beyond modeled near-term schedule"
-      ]
+      ],
+      "capital_authority": "NO_PROPOSAL_UNTIL_SUPPLY_SCHEDULE_RECONCILED",
+      "supply_audit": {
+        "status": "MATERIAL_DATA_GAP_FOUND_AFTER_PREMATURE_CAPITAL_PROPOSAL",
+        "official_stage6_locked_aster": 63379391.84,
+        "official_stage6_vested_claim_window": "2026-11-04_to_2026-12-04",
+        "stage6_pct_of_current_circulating_approx": 2.34,
+        "team_allocation_aster": 400000000,
+        "team_cliff_delayed_to": "2027-09-17",
+        "unresolved": "Reconcile all remaining Airdrop/Ecosystem/Treasury/Liquidity releases through the intended holding horizon; third-party schedules conflict and one tracker contains internally inconsistent wording.",
+        "required_before_capital": "Complete month-by-month net supply map, subtract modeled buyback/burn, then rerun current-price FRM and position sizing."
+      },
+      "process_review": {
+        "status": "PREMATURE_CAPITAL_PROPOSAL_PROCESS_FAILURE",
+        "prior_state": "OPTIONALITY-ENTRY-ELIGIBLE-SMALL",
+        "correction": "WITHDRAWN_BEFORE_USER_CONFIRMED_EXECUTION",
+        "reason": "Material forward supply release was not fully reconciled before sizing/proposal."
+      }
     },
     "JTO": {
       "archetype": "VALUE_CAPTURE_PRODUCT_INFLECTION",
@@ -402,7 +419,7 @@
     "as_of": "2026-09-26T00:15:00+07:00",
     "watchlist_count": 9,
     "early_count": 4,
-    "eligible_count": 2,
+    "eligible_count": 1,
     "capital_authority": "USER_ONLY__V216_EARLY_OPTIONALITY_ACTIVE",
     "universe_size": "BYBIT_SPOT_DIRECTORY_519_URLS_PLUS_EVENT_DISCOVERY_WEB_PASS",
     "scanned_count": "PARTIAL_EVENT_DRIVEN_BROAD_SCAN_NOT_DETERMINISTIC_FULL_519_ASSET_FUNDAMENTAL_SCAN",
@@ -411,8 +428,8 @@
     "early_candidate_status": "FOUND",
     "no_pre_move_claim_allowed": false,
     "top_new_candidate": "CRO-20260926-001",
-    "top_bybit_executable_candidate": "ASTER-20260919-001",
-    "note": "v2.16 first live run found CRO PRE_MOVE but Bybit spot unavailable; ASTER clears provisional small optionality lane; MNT waits on price/value-capture improvement; JTO remains materially supply-data blocked."
+    "top_bybit_executable_candidate": "NONE_PENDING_REAUDIT",
+    "note": "ASTER prior small-entry proposal withdrawn before execution: official Stage 6 63.379M vested-claim supply and broader unlock schedule require reconciliation. No Bybit-executable new optionality candidate is approved until capital data is complete."
   },
   "candidate_snapshots": [
     {
