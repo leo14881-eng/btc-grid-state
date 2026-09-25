@@ -1,7 +1,7 @@
 {
-  "version": "1.6",
+  "version": "1.7",
   "status": "ACTIVE",
-  "updated_at": "2026-09-26T00:15:00+07:00",
+  "updated_at": "2026-09-26T00:40:00+07:00",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -20,13 +20,10 @@
       30
     ],
     "structural_single_asset_hard_cap_pct": 5,
-    "asymmetric_base_pct": 5,
-    "asymmetric_hard_cap_pct": 8,
-    "asymmetric_single_asset_hard_cap_pct": 2,
-    "same_correlation_bucket_guideline_cap_pct": [
-      4,
-      5
-    ]
+    "asymmetric_base_pct": "SUPERSEDED_BY_FIXED_ALT_POOL_20000_USDT",
+    "asymmetric_hard_cap_pct": "SUPERSEDED_BY_FIXED_ALT_POOL_20000_USDT",
+    "asymmetric_single_asset_hard_cap_pct": "NO_FIXED_PERCENT_CAP__PER_ASSET_MAX_DECIDED_BY_RESEARCH_AND_RISK_GATES",
+    "same_correlation_bucket_guideline_cap_pct": "GUIDELINE_ONLY__MUST_NOT_OVERRIDE_FIXED_ALT_POOL_AND_ASSET_SPECIFIC_RISK_DECISION"
   },
   "ordinary_portfolio": {
     "valuation_timestamp": "2026-09-26T00:15:00+07:00",
@@ -176,16 +173,20 @@
   "allocation_gate_policy": {
     "required_checks": [
       "current_portfolio_weights_and_ranges",
+      "altcoin_pool_locked_cost_and_available_capacity",
+      "all_live_pending_alt_order_reservations",
       "funding_source",
       "risk_budget",
       "correlation_exposure",
       "opportunity_cost_vs_btc_or_cash_tbill",
-      "fund_layer_compliance",
+      "capital_readiness_gate",
+      "strategy_lock_status",
       "btc_permanent_floor_protection",
       "crisis_reserve_protection"
     ],
     "btc_sell_floor_rule": "No ordinary cycle BTC sale may reduce total BTC below 0.5 BTC.",
-    "execution_authority": "USER_ONLY"
+    "execution_authority": "USER_ONLY",
+    "altcoin_pool_rule": "All non-BTC crypto capital proposals must use altcoin_pool. Total active locked acquisition cost may never exceed 20,000 USDT. Per-asset size is research/risk determined, not a fixed percentage."
   },
   "update_rules": {
     "user_confirmed_execution_overrides_prior_state": true,
@@ -194,5 +195,41 @@
     "hunter_ledger_source": "opportunity-hunter-state.json",
     "sentinel_state_source": "sentinel-state.json",
     "never_infer_missing_balances": true
+  },
+  "altcoin_pool": {
+    "currency": "USDT",
+    "hard_cap_cost_usdt": 20000,
+    "accounting_basis": "ACTIVE_OPEN_ALTCOIN_POSITION_COST_BASIS",
+    "locked_cost_usdt": 1400,
+    "available_capacity_usdt": 18600,
+    "pending_order_reservation_usdt": 600,
+    "available_after_live_pending_reservations_usdt": 18000,
+    "current_locked_positions": [
+      {
+        "asset": "STX",
+        "position_id": "STX-20260925-FIRST-STAGE",
+        "locked_cost_usdt": 1400,
+        "status": "OPEN_LOCKED"
+      }
+    ],
+    "live_pending_reservations": [
+      {
+        "asset": "STX",
+        "amount_usdt": 600,
+        "limit_price": 0.308,
+        "status": "PENDING_USER_PLAN",
+        "note": "Reservation only; becomes locked cost only if filled."
+      }
+    ],
+    "per_asset_allocation_rule": "NO_PRESET_EQUAL_SPLIT_OR_FIXED_SINGLE_ASSET_CAP. Assistant determines each asset max position only after Capital Readiness Gate, FRM, downside/permanent-loss, liquidity, supply/unlocks, BTC-relative opportunity cost, correlation and current pool capacity.",
+    "lock_rule": "Each confirmed altcoin buy locks its executed acquisition cost against the 20,000 USDT hard cap while that quantity remains open.",
+    "pending_rule": "A live pending buy is not locked cost, but reserves capacity for pre-trade overbooking checks. LOCKED_COST + LIVE_PENDING_RESERVATIONS + NEW_PROPOSED_ORDER must never exceed 20,000 USDT.",
+    "profitable_sale_release_rule": "When altcoin quantity is sold at a realized profit, release the proportional ORIGINAL COST BASIS of the sold quantity from locked_cost. Realized profit does NOT raise the 20,000 USDT hard cap; it is recorded separately and may not be auto-redeployed above the cap.",
+    "loss_sale_rule": "If a position is sold at a realized loss, do not guess pool treatment. Record proceeds and loss, release the closed quantity from active locked cost mechanically, but require explicit portfolio reconciliation before reusing any capacity attributable to the loss.",
+    "profit_accounting": "REALIZED_ALT_PROFIT_TRACKED_SEPARATELY__DOES_NOT_INCREASE_POOL_CAP",
+    "realized_profit_usdt": 0,
+    "hard_invariant": "ACTIVE_LOCKED_ALT_COST_USDT <= 20000",
+    "execution_authority": "USER_ONLY",
+    "source": "USER_CONFIRMED_2026-09-26"
   }
 }
