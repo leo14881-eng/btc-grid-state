@@ -98,6 +98,50 @@ Read in order: `portfolio-state.json` -> `decision-journal.json` -> `sentinel-st
 
 Identify early changes affecting BTC bear-market accumulation, late-bull distribution, liquidity, Grid risk, strategic term deposit or systemic risk. Do not redesign the portfolio architecture.
 
+## Leading Warning Engine — USER-APPROVED AMENDMENT 2026-09-25
+
+TASK 1 is **LEADING-WARNING FIRST**, not confirmation-first. Its primary job is to detect conditions building **before** a large BTC move. Post-move confirmation is diagnostic only and MUST NOT be the primary alert or decision trigger.
+
+### Primary leading state
+Every run must classify exactly one:
+- `EARLY_UPSIDE_BUILDING`
+- `EARLY_DOWNSIDE_BUILDING`
+- `EARLY_ACCUMULATION_WINDOW`
+- `EARLY_DISTRIBUTION_RISK`
+- `NEUTRAL_MIXED`
+- `SYSTEMIC_RISK`
+
+When sufficient leading evidence exists, do not use `CANDIDATE_NOT_CONFIRMED` as the main conclusion and do not wait for breakout/breakdown confirmation.
+
+### Leading evidence
+Evaluate both direction and rate of change across:
+1. ETF/spot demand: acceleration/deceleration, multi-day slope, issuer breadth, price response per dollar of flow, spot volume/CVD/order-book absorption when verifiable.
+2. Price-response asymmetry: bad news failing to push BTC lower, shallower pullbacks, fast reclaims and higher lows are early upside evidence; good news failing to lift BTC, repeated rejection, weaker bounces/lower highs and support-absorption failure are early downside evidence.
+3. Leverage: OI/funding/basis relative to price. Price rising without leverage expansion is healthier; price stalling while leverage expands is an early downside warning; price falling while OI is flushed and spot absorbs can support early accumulation.
+4. Macro-liquidity response: changes in 2Y/10Y/30Y, USD, Fed pricing, liquidity/credit stress and BTC's response to them.
+5. Supply/holder behavior: exchange flows, realized selling, SOPR/LTH and large-holder accumulation/distribution when current and definition-clear.
+6. Options/gamma/skew/IV/expiry are modifiers only, never standalone directional triggers.
+
+A directional early warning requires at least **2 causally independent evidence domains**, including at least one from ETF/spot demand, leverage, macro-liquidity response or holder/supply behavior. Price momentum alone is insufficient.
+
+### Required decision output
+Each manual run or material alert must persist and output:
+- `MAIN_PATH`: one primary path for the relevant forward horizon; no symmetric “could rise/could fall” substitute.
+- `LEADING_EVIDENCE`: 2–4 strongest forward-looking observations.
+- `REVERSAL_TRIGGERS`: observable conditions that invalidate or flip MAIN_PATH.
+- `EARLY_ACTION`: HOLD / SMALL_STAGED_ACCUMULATION_PROPOSAL / STOP_ADDING / CYCLE_DISTRIBUTION_WATCH / RISK_EXIT.
+- `CONFIRMATION_STATUS`: optional diagnostic only; never headline logic.
+
+If evidence is incomplete, output the strongest supported leading state plus `DATA_GAP` rather than mechanically waiting for confirmation. If missing/conflicting data is material to a capital action, Data Freshness Hard Gate still forces `STALE_DATA + NO NEW CAPITAL ACTION`.
+
+### Left-side capital policy
+Traditional right-side confirmation is **not required** for an A1 / early-accumulation small staged proposal when leading evidence meets the independence rule and Portfolio Allocation Gate + Drawdown Budget + Counterparty Gate all pass. Larger A2/A3/A4 deployment still requires progressively stronger multi-domain evidence. A single price level, FOMO or a single ETF print never authorizes capital.
+
+While total BTC remains below the 0.5 BTC permanent-core floor, early downside/distribution warnings may stop additions and protect dry powder, but ordinary BTC core selling remains prohibited by the permanent-core rule.
+
+### Anti-hindsight
+Forbidden: explaining a large move after it occurs and relabeling the move itself as the signal. Persist `primary_state`, `first_detected_at`, `main_path`, `leading_evidence`, `reversal_triggers`, `early_action`, `confirmation_status` and `data_gaps` in Sentinel-owned runtime state so Detection Lead/Lag can be audited later.
+
 ## Mandatory current-data acquisition
 
 Attempt current BTC price + daily/4H structure; latest complete US spot-BTC ETF trading-day flow; US 2Y/10Y/30Y yields, USD, Fed expectations and macro liquidity; BTC OI/funding/liquidations; major CPI/labor/FOMC/banking/credit/Treasury-function shocks. If first source fails, try at least one reliable alternative before marking unknown.
