@@ -284,6 +284,22 @@ If no PRE_MOVE/EARLY_MOVE asset qualifies, output `NO EARLY CANDIDATE TODAY`; ne
 ### Validation / anti-process rule
 Hunter success is measured by lead time, not by explaining winners after the move. Maintain `late_discovery_rate / pre_move_discovery_rate / missed_leader_rate / discovery_lead_time` through blind replay/forward validation. Architecture polishing must not replace producing these validation numbers. A candidate first found after +50%/+100% repricing is recorded as LATE_DISCOVERY, not a discovery win **for discovery-quality statistics**; this label does not automatically prohibit prospective TASK 5 capital evaluation or authorization if the remaining forward asymmetry independently passes every required Gate.
 
+
+## -1A. Discovery Coverage SLA — PATCH v2.14.1
+
+Hunter discovery must not go silent merely because no asset passes the capital gate. Every daily Task 5 run must produce a measurable discovery report before reviewing legacy candidates.
+
+Mandatory discovery pass:
+- Scan the broad liquid crypto universe first; existing watchlist review is secondary and cannot satisfy discovery coverage.
+- Search both PRE_MOVE and EARLY_MOVE evidence. Prior price appreciation is NOT an automatic reject; it is only a valuation/crowding/risk input. The forward question is remaining BTC-relative upside from the current price.
+- Use independent discovery families where data are available: protocol fees/revenue/value capture or buybacks; token supply/unlock/burn/emission inflections; product/mainnet/upgrade launches; TVL/stablecoin/user/volume/market-share inflections; governance/regulatory/listing/institutional-access catalysts; and abnormal spot-demand/relative-strength confirmation.
+- Each run must persist: universe/scanned count where measurable, discovery families attempted, data failures, NEW candidates, upgraded/downgraded candidates, and near-miss research leads. Zero new candidates is valid only after this coverage report exists.
+- Research admission is deliberately broader than BUY qualification. A plausible causal catalyst plus prospective BTC-relative upside may enter WATCH/RESEARCH even when valuation or capital gates are unresolved. This prevents the capital gate from suppressing discovery.
+- Candidate promotion to executable BUY/ADD remains blocked by the normal validation, allocation, dilution, liquidity, downside and capital-authority gates. Discovery breadth does not relax risk controls.
+- Anti-stall rule: two consecutive daily runs with no NEW/UPGRADED candidate AND no quantified coverage expansion must mark DISCOVERY_DEGRADED and the next run must attack the concrete missing data/source/coverage blocker rather than redesign architecture.
+- Daily user-facing output must include at least: NEW, UPGRADED, DOWNGRADED, NEAR_MISS, and NO_BUY_YET. Do not suppress research candidates merely because they are not executable.
+
+
 ## 0. Execution order — mandatory
 
 `DATA → VALUATION → SCENARIOS → FORWARD_RETURN_MAP → REVERSE_VALUATION → EA → FORWARD_UPSIDE_GATE → RISK_GOVERNOR → EXECUTION_STATE`
