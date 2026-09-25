@@ -30,6 +30,23 @@ This is the single canonical logic source for the five active investment automat
 
 User-confirmed actual execution data has priority. Never infer missing balances, quantities, execution prices or timestamps.
 
+## 1A. GitHub optimistic-concurrency + retry contract — USER-APPROVED 2026-09-25
+
+Applies to **all automations and every mutable GitHub SSOT file**, including Sentinel, Hunter, portfolio, journal and Grid state.
+
+1. **Never write from a stale SHA.** Every mutation starts with an exact-path `fetch_file(path, main)` returning the complete current content + blob SHA. Build the mutation only from that fetched base.
+2. **Single-path serialization.** Within one run, never issue two writes to the same path in parallel. Writes to one path are strictly sequential. Do not reuse a SHA after any successful write to that path.
+3. **Optimistic concurrency / compare-and-swap.** `update_file` must use the blob SHA fetched immediately before that mutation. A SHA/version conflict is treated as concurrent modification, not repository failure.
+4. **Conflict retry: maximum 3 attempts total.** On SHA/version conflict: discard the pending full-file replacement; refetch the newest complete blob + SHA from `main`; reapply **only this automation's owned-field/owned-section mutation** onto the new base; revalidate invariants; retry. Never blindly resend old serialized content.
+5. **Backoff semantics.** Attempts are sequential, never parallel. If the runtime supports waiting, use a short bounded backoff between retries; if it does not, immediate refetch/rebase/retry is acceptable. Correct rebase matters more than delay.
+6. **Post-write verification is mandatory.** After a successful update, exact-path reread `main`; verify new blob SHA/content and every expected owned field/section. Only then may the run report `PERSISTED=TRUE`.
+7. **Concurrent non-owned changes must survive.** Before retry, compare the newly fetched base with the prior base. Preserve all changes outside the automation's owned fields/section. If ownership overlaps or safe merge cannot be proven, stop with `STATE MERGE CONFLICT + NO NEW CAPITAL ACTION`; never choose one side silently.
+8. **Failure classification must be factual.** Report `SHA_CONFLICT_RETRYING` while retrying; after 3 exhausted conflict attempts report `STATE PERSISTENCE FAILURE: CONCURRENCY_EXHAUSTED`. Auth/permission/network/parse/contract failures use their actual returned class; never infer “security block”, “GitHub truncation” or permission failure without direct evidence.
+9. **Idempotency.** Before writing, check whether the intended owned-field mutation is already present in the latest base. If yes, skip the write and reread/verify; do not create duplicate events, duplicate ledger lines or timestamp-only commits.
+10. A failed persistence closure can block new capital actions as required by the owning task, but it must not erase the valid market/research result; preserve the result as unpersisted and retry persistence on the next eligible run.
+
+This contract supersedes any older persistence instruction that allows fewer conflict retries or reporting success before reread verification. It changes persistence mechanics only, not investment logic or capital gates.
+
 ## 2. Global state health check
 
 Before any capital recommendation verify required files are readable, critical fields/schema exist, and freshness is reasonable. If required state is stale, malformed, inconsistent or unavailable, output one of `STATE STALE`, `STATE CORRUPTED`, `STATE UNAVAILABLE`, `STATE SYNC VIOLATION` and issue `NO NEW CAPITAL ACTION` until repaired. Never fall back to chat memory or guessed balances.
@@ -560,7 +577,7 @@ This patch is DATA-PIPELINE ONLY. It MUST NOT change any frozen Stage / Universe
 3. Never build a replacement state from displayed/truncated tool output. A write is allowed only from the complete blob and its current blob SHA.
 4. Single-writer persistence closure: fetch full blob + SHA -> parse -> apply Hunter-owned mutations -> validate immutable snapshots -> atomically mirror mutable asset fields to same candidate_id eligibility_context -> serialize complete state -> update_file with fetched SHA on main -> exact-path reread -> parse -> compare required contract fields.
 5. Freshness proof is in the same closure. Slow may update reviewed_at/evidence_as_of/review_id/available_at only after real evidence review. reread_verified=true and fast_input_ready=true are valid only after post-write reread verification passes. Timestamp-only freshness writes are forbidden.
-6. SHA conflict: discard pending replacement, refetch full current blob + SHA, reapply mutation, revalidate, retry once. Never overwrite concurrent changes from an old base.
+6. SHA conflict: follow Shared Global Rule 1A. Discard pending replacement, refetch full current blob + SHA, reapply only Hunter-owned mutation, revalidate, and retry up to the global maximum of 3 total attempts. Never overwrite concurrent changes from an old base.
 7. Ledger append uses exact-path full-content read-modify-write; preserve old prefix exactly, append new observations only, write with current ledger SHA, reread and verify prefix + append.
 8. Transport/decode/parse/write/reread/contract failure => STATE CONTRACT ERROR + STATE PERSISTENCE FAILURE + fast_input_ready=false; Promotion blocked. Do not diagnose GitHub truncation unless the exact-path/base64-or-blob payload itself is incomplete or unparsable.
 9. Recovery: next genuine Slow evidence review executes this closure; on write+reread+contract PASS, persistence error clears and freshness resumes normally. No manual freshness repair or fabricated review.
