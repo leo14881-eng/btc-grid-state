@@ -1,7 +1,7 @@
 {
-  "version": "2.13.7",
+  "version": "2.14.0",
   "status": "ACTIVE_INITIALIZED",
-  "updated_at": "2026-09-21T17:04:00+07:00",
+  "updated_at": "2026-09-25",
   "initialized_at": "2026-09-14T07:35:00+07:00",
   "state_ownership": "hunter_research_and_position_ledger_only",
   "portfolio_ssot": "portfolio-state.json",
@@ -129,7 +129,7 @@
   "confirmed_asymmetric_positions_at_initialization": 0,
   "initialization_note": "Initialized after verifying the current portfolio Asymmetric allocation is zero and no Hunter asset position is present. Empty assets is valid when there are no confirmed Asymmetric positions. Future user-confirmed executions must follow decision journal -> portfolio state -> Hunter ledger synchronization.",
   "last_scan_at": "2026-09-21T17:04:00+07:00",
-  "data_quality": "DISCOVERY_COVERAGE_FAILURE",
+  "data_quality": "V1_NO_INCREMENTAL_VALUE_QUARANTINED",
   "eligibility_context": [
     {
       "asset": "HYPE",
@@ -558,7 +558,7 @@
     ],
     "N_MIN": 30
   },
-  "capital_authority": "FORCED_ZERO_WHILE_SHADOW",
+  "capital_authority": "FORCED_ZERO_SHADOW",
   "persistence_schema": {
     "version": "2.13.3",
     "state_role": "BOUNDED_CURRENT_STATE",
@@ -578,5 +578,20 @@
     "freshness_policy": "Use frozen/SSOT threshold if defined; otherwise max 2 Slow cycles (~2h).",
     "note": "Real Slow evidence review persisted; phase-1 reread and asset/context contract comparison PASS. Freshness restored under v2.13.4/v2.13.5.",
     "verified_at": "2026-09-21T17:04:00+07:00"
+  },
+  "validation_state": {
+    "v1_market_data_signal": "NO_INCREMENTAL_VALUE",
+    "evidence": {
+      "oos_2024_effective_n": 106,
+      "oos_2024_median_90d_btc_relative_return": -0.30977865423508444,
+      "oos_2025_effective_n": 138,
+      "oos_2025_median_90d_btc_relative_return": -0.26345958044140727
+    },
+    "capital_authority": "FORCED_ZERO_SHADOW",
+    "quarantine_rule": "V1 market-data score may not promote a candidate to executable BUY/ADD. Existing candidates remain research/watch evidence only.",
+    "anti_overfit_rule": "Do not tune V1 on the already-opened 2024/2025 OOS windows and relabel it validated.",
+    "next_research_track": "V2_FORWARD_SHADOW",
+    "v2_objective": "Prospective BTC-relative remaining-upside discovery using causal non-price evidence plus valuation/dilution/liquidity/risk; prior price appreciation is a risk/valuation input, not an automatic rejection.",
+    "v2_validation": "Forward-only shadow observations; no capital authority until independent evidence demonstrates positive BTC-relative incremental value."
   }
 }
