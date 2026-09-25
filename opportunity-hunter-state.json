@@ -1,5 +1,5 @@
 {
-  "version": "2.14.0",
+  "version": "2.15.0",
   "status": "ACTIVE_INITIALIZED",
   "updated_at": "2026-09-25",
   "initialized_at": "2026-09-14T07:35:00+07:00",
@@ -105,7 +105,13 @@
       "evidence_as_of": "2026-09-21T17:04:00+07:00",
       "review_id": "SLOW-REVIEW-20260921T170400+0700",
       "reread_verified": true,
-      "fast_input_ready": true
+      "fast_input_ready": true,
+      "process_review": {
+        "status": "MISSED_EARLY_ENTRY_REVIEW_REQUIRED",
+        "reason": "PRE_MOVE discovery did not reach first-tranche proposal before subsequent repricing because process/SHADOW coupling blocked proposal formation.",
+        "historical_gain_not_reject": true,
+        "current_price_forward_return_required": true
+      }
     },
     "ENA": {
       "archetype": "VALUE_CAPTURE_SUPPLY_RESTRUCTURE",
@@ -264,12 +270,12 @@
     "early_count": 2,
     "post_move_count": 5,
     "eligible_count": 0,
-    "capital_authority": "FORCED_ZERO_SHADOW",
+    "capital_authority": "FUNDAMENTAL_PROPOSAL_LANE_ENABLED__QUANT_SHADOW_ZERO",
     "universe_size": "UNKNOWN",
     "scanned_count": "PARTIAL_WEB_DISCOVERY_PASS",
     "coverage_ratio": "UNKNOWN",
     "coverage_status": "DISCOVERY_COVERAGE_FAILURE",
-    "note": "Real Slow evidence review completed for current monitored candidates. Broad-universe numeric coverage remains insufficient; no negative full-universe discovery claim is authorized.",
+    "note": "Real Slow evidence review completed for current monitored candidates. Broad-universe numeric coverage remains insufficient; no negative full-universe discovery claim is authorized. Structural-defect patch 2026-09-25: k=UNSET/Replay SHADOW alone no longer vetoes a complete human-reviewed fundamental early-entry capital proposal. Existing discovery coverage failure remains unresolved.",
     "early_candidate_status": "UNKNOWN",
     "no_pre_move_claim_allowed": false,
     "failure_reason": "Current run has universe_size=UNKNOWN, scanned_count=PARTIAL_WEB_DISCOVERY_PASS, coverage_ratio=UNKNOWN; incomplete coverage cannot support NO PRE_MOVE / NO EARLY CANDIDATE conclusions.",
@@ -558,7 +564,7 @@
     ],
     "N_MIN": 30
   },
-  "capital_authority": "FORCED_ZERO_SHADOW",
+  "capital_authority": "USER_ONLY__FUNDAMENTAL_PROPOSAL_LANE_ENABLED__QUANT_SHADOW_ZERO",
   "persistence_schema": {
     "version": "2.13.3",
     "state_role": "BOUNDED_CURRENT_STATE",
@@ -593,5 +599,25 @@
     "next_research_track": "V2_FORWARD_SHADOW",
     "v2_objective": "Prospective BTC-relative remaining-upside discovery using causal non-price evidence plus valuation/dilution/liquidity/risk; prior price appreciation is a risk/valuation input, not an automatic rejection.",
     "v2_validation": "Forward-only shadow observations; no capital authority until independent evidence demonstrates positive BTC-relative incremental value."
+  },
+  "fundamental_early_entry_lane": {
+    "status": "ENABLED_USER_APPROVED_2026-09-25",
+    "authority": "CAPITAL_PROPOSAL_ONLY_USER_EXECUTION_REQUIRED",
+    "quant_shadow_independence": "k_UNSET_ALONE_NOT_A_VETO",
+    "required_chain": [
+      "CURRENT_PRICE_FRM",
+      "BTC_BENCHMARK_SAME_HORIZON",
+      "DILUTION_UNLOCKS",
+      "CATALYST_PRICED_IN",
+      "CROWDING_LIQUIDITY",
+      "PERMANENT_LOSS_INVALIDATION",
+      "RISK_GOVERNOR",
+      "PORTFOLIO_ALLOCATION_GATE",
+      "PORTFOLIO_DRAWDOWN_GATE",
+      "COUNTERPARTY_GATE"
+    ],
+    "staging": "FIRST_TRANCHE_ONLY_THEN_BETTER_STRUCTURE_OR_NEW_INDEPENDENT_CONFIRMATION",
+    "crisis_reserve": "EXCLUDED",
+    "execution_authority": "USER_ONLY"
   }
 }
