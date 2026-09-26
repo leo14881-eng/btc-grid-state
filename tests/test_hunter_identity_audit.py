@@ -1,6 +1,8 @@
 import datetime as dt
 import importlib.util
 import pathlib
+import json
+import tempfile
 import urllib.error
 import unittest
 
@@ -26,6 +28,16 @@ def fact(address="0x123",pair="ABCUSDT",verified_at=AT):
         "verified_at_utc":verified_at}}
 
 class IdentityAuditTests(unittest.TestCase):
+    def test_contract_cache_written_as_valid_json_and_read_back(self):
+        cache={"compound-governance-token":{"coin_id":"compound-governance-token",
+                                              "platforms":{"ethereum":"0x123"}}}
+        with tempfile.TemporaryDirectory() as folder:
+            path=pathlib.Path(folder)/"cache.json"
+            audit.save_contract_cache(cache,path)
+            self.assertEqual(json.loads(path.read_text()),cache)
+            self.assertTrue(path.read_text().endswith("\\n")==False)
+            self.assertTrue(path.read_text().endswith("\n"))
+
     def test_pump_not_false_leveraged_and_tokenized_equity_review(self):
         self.assertEqual(audit.classify("PUMP"),"SPOT_TOKEN_UNVERIFIED")
         self.assertEqual(audit.classify("BTCUP"),"LEVERAGED_TOKEN_REVIEW")
