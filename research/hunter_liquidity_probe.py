@@ -17,7 +17,8 @@ SCAN=ROOT/"hunter-cex-universe-run.json"
 DOSSIERS=ROOT/"hunter-candidate-dossiers.json"
 OUT=ROOT/"hunter-liquidity-probe.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
-PER_LANE=8
+PER_LANE=6
+MAX_BOOKS=16
 
 def read(path):
     return json.loads(path.read_text())
@@ -59,10 +60,14 @@ def measure(book,now):
 def targets(dossiers,scan):
     coins=scan.get("coins") or {}
     selected=[];seen=set()
-    for lane in ("early_entry_watchlist","continuation_watchlist"):
+    for lane,names,quota in (
+        ("reviewed_watchlist",dossiers.get("reviewed_watchlist") or [],6),
+        ("early_entry_watchlist",dossiers.get("early_entry_watchlist") or [],PER_LANE),
+        ("continuation_watchlist",dossiers.get("continuation_watchlist") or [],PER_LANE),
+        ("overflow",[d["asset"] for d in dossiers.get("dossiers") or []],MAX_BOOKS)):
         n=0
-        for sym in dossiers.get(lane) or []:
-            if n>=PER_LANE:break
+        for sym in names:
+            if n>=quota or len(selected)>=MAX_BOOKS:break
             coin=coins.get(sym) or {}
             pairs=[p for p in coin.get("pairs") or [] if p.get("venue")=="binance"]
             if not pairs or sym in seen:continue
