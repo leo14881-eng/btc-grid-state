@@ -124,14 +124,18 @@ def main():
         except Exception as exc:
             errors[name]=str(exc);statuses[name]=dict(error=str(exc))
     report=build(results,previous,at)
-    report.update(venue_status=statuses,errors=errors,
-                  complete=len(results)==2 and all(not x["missing_or_invalid"] for x in statuses.values()))
+    binance_complete="binance" in results and not statuses["binance"]["missing_or_invalid"]
+    union_complete=len(results)==2 and all(not x["missing_or_invalid"] for x in statuses.values())
+    report.update(venue_status=statuses,errors=errors,complete=union_complete,
+                  binance_complete=binance_complete,bybit_complete="bybit" in results and not statuses["bybit"]["missing_or_invalid"] if "bybit" in results else False,
+                  coverage_status="BOTH_EXCHANGES_COMPLETE" if union_complete else "BINANCE_COMPLETE_BYBIT_UNAVAILABLE" if binance_complete else "INCOMPLETE")
     (OUT/"hunter-cex-universe-run.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
-    if report["complete"]:baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    # Preserve a usable Binance baseline even when Bybit's geo-restricted API is unavailable.
+    if binance_complete:baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     summary={k:v for k,v in report.items() if k!="coins"}
     (OUT/"hunter-cex-universe-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps(dict(complete=report["complete"],unique_base_tickers=report["unique_base_tickers"],
                           venue_status=statuses,errors=errors,leads=report["research_leads"][:10]),ensure_ascii=False))
-    return 0 if report["complete"] else 2
+    return 0 if report["binance_complete"] else 2
 
 if __name__=="__main__":raise SystemExit(main())
