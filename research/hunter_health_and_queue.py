@@ -71,9 +71,9 @@ def build(data,now):
     priority=early[:8]+cont[:8]+other[:8]
     health={"snapshot_consistent":not mismatches,
             "snapshot_mismatches":mismatches,
+            "required_venues":["binance"],
             "binance_complete":scan.get("binance_complete") is True,
-            "bybit_complete":scan.get("bybit_complete") is True,
-            "bybit_error":(scan.get("errors") or {}).get("bybit"),
+            "exchange_scope":"BINANCE_ONLY",
             "universe_size":len(scan.get("coins") or {}),
             "researched_cached":research.get("deep_research_total_cached"),
             "market_data_screened_cached":research.get("deep_research_total_cached"),
