@@ -17,6 +17,8 @@ on:
       - 'research/hunter_liquidity_probe.py'
       - 'research/hunter_identity_audit.py'
       - 'research/hunter_health_and_queue.py'
+      - 'research/hunter_primary_source_discovery.py'
+      - 'tests/test_hunter_primary_source_discovery.py'
       - 'tests/test_hunter_health_and_queue.py'
       - 'tests/test_hunter_identity_audit.py'
       - 'tests/test_hunter_liquidity_probe.py'
@@ -49,6 +51,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hunter_forward_audit.py' -v
       - name: Validate forward candidate dossiers and supply-adjusted scenarios
         run: python -m unittest discover -s tests -p 'test_hunter_candidate_dossiers.py' -v
+      - name: Validate rotating primary-source lead discovery
+        run: python -m unittest discover -s tests -p 'test_hunter_primary_source_discovery.py' -v
       - name: Validate pipeline self-check and evidence queue
         run: python -m unittest discover -s tests -p 'test_hunter_health_and_queue.py' -v
       - name: Validate token identity collision and asset-type safety
@@ -94,6 +98,11 @@ jobs:
         if: steps.final_dossiers.outcome == 'success' && steps.audit.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_health_and_queue.py
+      - name: Rotate independent project-link discovery for current candidate lanes
+        id: source_discovery
+        if: steps.health.outcome == 'success'
+        continue-on-error: true
+        run: python research/hunter_primary_source_discovery.py
       - name: Persist coverage, leads and explicit failures
         if: always()
         run: |
@@ -115,5 +124,5 @@ jobs:
           echo 'PERSISTENCE_FAILURE_AFTER_RETRIES'
           exit 1
       - name: Fail if verified Binance scan or forward research fails; report Bybit separately
-        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.final_dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success'
+        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.final_dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success' || steps.source_discovery.outcome != 'success'
         run: exit 2
