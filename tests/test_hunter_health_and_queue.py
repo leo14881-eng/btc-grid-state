@@ -35,9 +35,23 @@ class HealthQueueTests(unittest.TestCase):
         self.assertTrue(x["health"]["snapshot_consistent"])
         self.assertEqual(x["health"]["status"],"RESEARCH_RUNNING_CAPITAL_GATES_UNRESOLVED")
         self.assertEqual(x["health"]["capital_ready"],0)
-        self.assertIn("OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
+        self.assertIn("OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
                       x["research_priority_queue"][0]["blockers"])
         self.assertEqual(x["health"]["bybit_error"],"403")
+
+    def test_contract_only_is_not_full_fundamental_review(self):
+        data=fixture()
+        data["identity"]["counts"]={"THIRD_PARTY_CORROBORATED":1}
+        dossier=data["dossiers"]["dossiers"][0]
+        dossier["official_sources"]=["https://project.example/contract"]
+        dossier["identity_status"]="THIRD_PARTY_CORROBORATED"
+        x=h.build(data,NOW)
+        self.assertEqual(x["health"]["market_data_screened_cached"],1)
+        self.assertEqual(x["health"]["official_contract_identity_verified"],1)
+        self.assertEqual(x["health"]["forward_economic_scenario_ready"],0)
+        self.assertTrue(x["research_priority_queue"][0]["needs_human_primary_source_review"])
+        self.assertIn("OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
+                      x["research_priority_queue"][0]["blockers"])
 
     def test_mismatched_scan_is_fatal(self):
         data=fixture();data["identity"]["scan_as_of_utc"]="2026-09-01T00:00:00+00:00"
