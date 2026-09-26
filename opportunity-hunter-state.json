@@ -1,7 +1,7 @@
 {
   "version": "2.17.3",
   "status": "ACTIVE_INITIALIZED",
-  "updated_at": "2026-09-26",
+  "updated_at": "2026-09-26T14:48:16.753+07:00",
   "initialized_at": "2026-09-14T07:35:00+07:00",
   "state_ownership": "hunter_research_and_position_ledger_only",
   "portfolio_ssot": "portfolio-state.json",
@@ -559,7 +559,7 @@
   },
   "confirmed_asymmetric_positions_at_initialization": 0,
   "initialization_note": "Initialized after verifying the current portfolio Asymmetric allocation is zero and no Hunter asset position is present. Empty assets is valid when there are no confirmed Asymmetric positions. Future user-confirmed executions must follow decision journal -> portfolio state -> Hunter ledger synchronization.",
-  "last_scan_at": "2026-09-26T01:52:00+07:00",
+  "last_scan_at": "2026-09-26T14:48:16.753+07:00",
   "data_quality": "V1_NO_INCREMENTAL_VALUE_QUARANTINED",
   "eligibility_context": [
     {
@@ -690,21 +690,19 @@
     }
   ],
   "scan_summary": {
-    "as_of": "2026-09-26T01:52:00+07:00",
-    "mode": "V2.17.2_DUAL_QUEUE_EXPLOSIVE_UPSIDE",
-    "universe_coverage": "EVENT_DRIVEN_BROAD_WEB_SCAN_PLUS_EXISTING_CANDIDATE_REFRESH__NOT_DETERMINISTIC_FULL_UNIVERSE",
-    "coverage_status": "PARTIAL__NO_CLAIM_OF_NO_OTHER_CANDIDATES",
-    "new_material_candidate": "INJ-20260926-001",
-    "highest_priority_price_zone_candidate": "PUMP",
-    "highest_priority_existing_failure_reaudit": "ENA",
-    "actionable_new_order": "NONE_THIS_RUN",
-    "verdict": "NO_NEW_ORDER__BUT_TWO_HIGH_PRIORITY_RESEARCH_PATHS_PUMP_AND_ENA_PLUS_NEW_INJ_WATCH",
-    "reasons": [
-      "PUMP current ~0.003905 is attractive left-side zone and value capture is verified, but official forward vesting/community-ecosystem release timing remains unresolved.",
-      "ENA explosive-upside gate reopened under v2.17.2, but exact Oct5 sellable investor fraction remains unresolved.",
-      "INJ has unusually clean supply and real burn mechanics, but Hunter discovery is late after major September rerating; current usage/value-capture scale does not yet justify chasing 8.14.",
-      "AERO/MNT wait for better price or stronger value capture; JTO/ASTER remain supply blocked; CRO execution venue mismatch remains."
+    "as_of": "2026-09-26T14:48:16.753+07:00",
+    "mode": "V2.17.3_MANUAL_TRIGGERED_CLOSURE",
+    "coverage_status": "PARTIAL_EVENT_DRIVEN_NOT_FULL_UNIVERSE",
+    "reviewed_assets": [
+      "PUMP",
+      "ENA",
+      "CRO"
     ],
+    "closure_queue_processed": 2,
+    "overdue_count": 2,
+    "new_qualified_candidate_count": 0,
+    "new_order": "NONE",
+    "reason": "PUMP market float unresolved; ENA Oct5 actual sellable quantity undisclosed despite signed waiver; CRO vote outcome and executable venue unresolved",
     "alt_pool_snapshot": {
       "cap_usdt": 20000,
       "locked_cost_usdt": 1400,
@@ -1189,18 +1187,19 @@
   },
   "process_patch": {
     "version": "v2.17.3",
-    "status": "RULES_PERSISTED_LIVE_SCHEDULER_NOT_VERIFIED",
+    "status": "MANUAL_REVIEW_COMPLETE_SCHEDULER_RUN_NOT_TRIGGERED",
     "rules_commit": "359962e7583791232e17b976f333bb0f24c6cc91",
     "purpose": "ENFORCE_TRIGGERED_CANDIDATE_CLOSURE_AND_FATAL_BLOCKER_ESCALATION",
-    "last_actual_market_scan_at": "2026-09-26T01:52:00+07:00",
+    "last_actual_market_scan_at": "2026-09-26T14:48:16.753+07:00",
     "do_not_misstate_live_execution": true,
     "previous_last_scan_at": "2026-09-26T00:15:00+07:00",
-    "last_scan_at_correction": "Reconciled existing last_scan_at with already-persisted scan_summary.as_of; not a new live scan"
+    "last_scan_at_correction": "Reconciled existing last_scan_at with already-persisted scan_summary.as_of; not a new live scan",
+    "latest_run_scope": "PARTIAL"
   },
   "closure_queue": {
     "schema": "v2.17.3",
-    "as_of": "2026-09-26",
-    "execution_status": "AUDIT_QUEUE_CREATED__NO_NEW_LIVE_SOURCE_RECONCILIATION_CLAIMED",
+    "as_of": "2026-09-26T14:48:16.753+07:00",
+    "execution_status": "MANUAL_SOURCE_REVIEW_COMPLETE_BOTH_FATAL_FACTS_ESCALATED",
     "sla_policy": "NEXT_ACTUAL_HOURLY_HUNTER_CYCLE_FOR_NEW_TRIGGERS; EXISTING_OVERDUE_CASES_IMMEDIATE_NEXT_RUN",
     "items": [
       {
@@ -1208,38 +1207,63 @@
         "candidate_id": "PUMP-20260926-001",
         "trigger_reason": "LEFT_SIDE_ZONE_DISCOVERY_AND_SUBSEQUENT_REPRICING",
         "triggered_at": "2026-09-26T00:55:00+07:00",
-        "last_attempt_at": "2026-09-26T01:52:00+07:00",
+        "last_attempt_at": "2026-09-26T14:48:16.753+07:00",
         "decision_due_at": "NEXT_ACTUAL_HUNTER_RUN__OVERDUE_CASE",
-        "decision_status": "DATA_BLOCKED_FATAL",
-        "blocker_type": "MATERIAL_FORWARD_SUPPLY_SOURCE_CONFLICT",
-        "exact_missing_fact": "Authoritative 30/90/180-day community/ecosystem vesting and reconciliation of primary vs tracker circulating/total supply and Oct12 releases",
+        "decision_status": "SOURCE_UNAVAILABLE_ESCALATED",
+        "blocker_type": "FORWARD_COMMUNITY_ECOSYSTEM_ACTUAL_DISTRIBUTION_UNPUBLISHED",
+        "exact_missing_fact": "DefiLlama: Community/Ecosystem monthly releases did not follow original plan, vault tokens still undistributed and schedule TBD; Tokenomics Oct12 9.166666667B vs DefiLlama Oct12 6.875B tracked categories. Cannot infer real 30/90/180-day market float from unlocked tokens.",
         "remediation_source": [
           "PUMP official tokenomics/vesting and onchain contracts",
           "Tokenomics.com unlock calendar",
           "DefiLlama unlock calendar"
         ],
         "remediation_owner": "HUNTER",
-        "next_check_condition": "Resolve primary-source forward supply and compute current-price FRM; escalate SOURCE_UNAVAILABLE_ESCALATED if unavailable at next actual run",
-        "capital_action": "NONE"
+        "next_check_condition": "Obtain official vault transfers/updated forward vesting, reconcile tracked categories and compute fresh current-price 30/90/180-day float + FRM",
+        "capital_action": "NO_NEW_ORDER",
+        "primary_sources_attempted": [
+          "https://pump.fun/pump-token"
+        ],
+        "independent_sources_checked": [
+          "https://app.tokenomics.com/tokenomics/pump-fun/unlocks",
+          "https://defillama.com/unlocks/pump"
+        ],
+        "confirmed_findings": [
+          "Official daily burn history shows Sep24 211.8M PUMP burned, $832.4k spent; does not guarantee indefinite burns",
+          "Tokenomics ~466.665B circulating vs ~69.8% unlocked, 230.835B unlocked not yet market circulating",
+          "DefiLlama Oct12 4.167B team +2.708B investor =6.875B; Tokenomics Oct12 9.167B broader categories"
+        ]
       },
       {
         "asset": "ENA",
         "candidate_id": "ENA-20260919-001",
         "trigger_reason": "MISSED_DISCOVERY_AND_MISSED_REEVALUATION_AFTER_MATERIAL_REPRICING",
         "triggered_at": "2026-09-26T01:39:00+07:00",
-        "last_attempt_at": "2026-09-26T01:55:00+07:00",
+        "last_attempt_at": "2026-09-26T14:48:16.753+07:00",
         "decision_due_at": "NEXT_ACTUAL_HUNTER_RUN__OVERDUE_CASE",
-        "decision_status": "DATA_BLOCKED_FATAL",
-        "blocker_type": "MATERIAL_OCT5_SELLABLE_SUPPLY_UNKNOWN",
-        "exact_missing_fact": "Actual Foundation-approved sellable investor fraction at Oct5 and full ecosystem release calendar; lock expiry alone is not immediate sale",
+        "decision_status": "SOURCE_UNAVAILABLE_ESCALATED",
+        "blocker_type": "OCT5_LOCKUP_RELEASE_CONFIRMED_ACTUAL_APPROVED_SALES_UNPUBLISHED",
+        "exact_missing_fact": "Sep14 signed SEC waiver releases ALL StablecoinX ENA lockups Oct5 including former 48-month PIPE restriction; foundation retains prior consent; Funding Sales require 5 business-day notice, foundation purchase option, orderly sale. Exact StablecoinX holdings, foundation buyout fractions and planned sales / ecosystem releases not disclosed.",
         "remediation_source": [
           "StablecoinX/SEC disclosure and amendments",
           "Ethena Foundation primary communications",
           "Vesting/onchain wallet reconciliation"
         ],
         "remediation_owner": "HUNTER",
-        "next_check_condition": "Resolve actual sellable fraction or document primary-source unavailability; refresh price and 3-6m FRM without chase bias",
-        "capital_action": "NONE"
+        "next_check_condition": "Check amendments, Foundation disclosed consent or funding notice, exact treasury ENA and ecosystem vesting; rerun fresh-price FRM",
+        "capital_action": "NO_NEW_ORDER",
+        "primary_sources_attempted": [
+          "https://www.sec.gov/Archives/edgar/data/2080215/000121390026100751/ea030568601ex10-1.htm"
+        ],
+        "independent_sources_checked": [
+          "https://www.theblock.co/news/ecosystems/2026-08-27-ethena-foundation-proposes-fee-switch-ena-token-buybacks-other-updates-412951",
+          "https://insights.unlocks.app/ethena-bought-out-its-sellers-and-deleted-the-investor-unlock-calendar-the-buyback-replacing-it-arms-at-7-5b-usde/"
+        ],
+        "confirmed_findings": [
+          "CORRECTION: earlier reporting said StablecoinX separate 48-month lock remained; signed Sep14 SEC waiver now releases all Ethena-party lockups Oct5, so old claim is superseded",
+          "Waiver clause 4 retains Foundation consent and clause 5 requires 5-business-day sale notice and right of first purchase; unlock does NOT equal immediate unrestricted sale",
+          "Original investor cliff ~1.41B from independent derivation is NOT a confirmed freely sellable amount",
+          "Foundation buyout and StablecoinX precise float remain unavailable"
+        ]
       }
     ],
     "next_run_required_outputs": [
@@ -1252,6 +1276,43 @@
     ],
     "missed_opportunity_audit": "PUMP_PROCESS_DELAY__ENA_MISSED_DISCOVERY_AND_REEVALUATION",
     "guard_script": "research/hunter_closure_guard.py",
-    "guard_execution_status": "SCRIPT_PERSISTED_NOT_SCHEDULED_NOT_YET_EXECUTED"
+    "guard_execution_status": "LOGICAL_REVIEW_ONLY_NO_CI_SCRIPT_EXECUTION_CLAIM",
+    "coverage_status": "PARTIAL_EVENT_DRIVEN_PUMP_ENA_CRO__NOT_FULL_UNIVERSE",
+    "manual_run": {
+      "as_of": "2026-09-26T14:48:16.753+07:00",
+      "reviewed_assets": [
+        "PUMP",
+        "ENA",
+        "CRO"
+      ],
+      "overdue_count": 2,
+      "price_alert_status": "INSUFFICIENT_SAME_TIME_VERIFIED_EXCHANGE_TICKS",
+      "new_qualified_buy_count": 0,
+      "new_research_catalyst": "CRO_PROPOSAL_37_VOTE_ENDS_OCT3",
+      "capital_decision": "NO_NEW_ORDER"
+    }
+  },
+  "previous_scan_summary": {
+    "as_of": "2026-09-26T01:52:00+07:00",
+    "mode": "V2.17.2_DUAL_QUEUE_EXPLOSIVE_UPSIDE",
+    "universe_coverage": "EVENT_DRIVEN_BROAD_WEB_SCAN_PLUS_EXISTING_CANDIDATE_REFRESH__NOT_DETERMINISTIC_FULL_UNIVERSE",
+    "coverage_status": "PARTIAL__NO_CLAIM_OF_NO_OTHER_CANDIDATES",
+    "new_material_candidate": "INJ-20260926-001",
+    "highest_priority_price_zone_candidate": "PUMP",
+    "highest_priority_existing_failure_reaudit": "ENA",
+    "actionable_new_order": "NONE_THIS_RUN",
+    "verdict": "NO_NEW_ORDER__BUT_TWO_HIGH_PRIORITY_RESEARCH_PATHS_PUMP_AND_ENA_PLUS_NEW_INJ_WATCH",
+    "reasons": [
+      "PUMP current ~0.003905 is attractive left-side zone and value capture is verified, but official forward vesting/community-ecosystem release timing remains unresolved.",
+      "ENA explosive-upside gate reopened under v2.17.2, but exact Oct5 sellable investor fraction remains unresolved.",
+      "INJ has unusually clean supply and real burn mechanics, but Hunter discovery is late after major September rerating; current usage/value-capture scale does not yet justify chasing 8.14.",
+      "AERO/MNT wait for better price or stronger value capture; JTO/ASTER remain supply blocked; CRO execution venue mismatch remains."
+    ],
+    "alt_pool_snapshot": {
+      "cap_usdt": 20000,
+      "locked_cost_usdt": 1400,
+      "pending_reservations_usdt": 600,
+      "available_after_reservations_usdt": 18000
+    }
   }
 }
