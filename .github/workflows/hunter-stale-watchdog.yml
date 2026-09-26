@@ -11,7 +11,12 @@ on:
     paths:
       - '.github/workflows/hunter-stale-watchdog.yml'
   schedule:
+    - cron: '07 * * * *'
     - cron: '37 * * * *'
+    - cron: '52 * * * *'
+  workflow_run:
+    workflows: ['Hunter Binance Universe Scan']
+    types: [completed]
 permissions:
   contents: read
   actions: write
@@ -77,12 +82,12 @@ jobs:
             exit 0
           fi
           case "$decision" in
-            ACTIVE) echo 'HUNTER_STALE_ACTIVE_PRODUCER'; exit 1 ;;
-            COOLDOWN) echo 'HUNTER_STALE_RECOVERY_COOLDOWN'; exit 1 ;;
+            ACTIVE) echo 'HUNTER_STALE_ACTIVE_PRODUCER; awaiting active run'; exit 0 ;;
+            COOLDOWN) echo 'HUNTER_STALE_RECOVERY_COOLDOWN; awaiting recovery run'; exit 0 ;;
             DISPATCH)
               gh workflow run hunter-cex-universe.yml --ref main
               echo 'HUNTER_RECOVERY_DISPATCHED; pending producer outcome verification'
-              exit 1 ;;
+              exit 0 ;;
             *) echo 'HUNTER_RECOVERY_DECISION_INVALID'; exit 1 ;;
           esac
       - name: Normal freshness proof
