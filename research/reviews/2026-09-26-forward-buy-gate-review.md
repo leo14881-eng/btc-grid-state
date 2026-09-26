@@ -32,3 +32,9 @@
 2. Research AERO/Aero merger and effective per-token revenue under ongoing issuance; do not assume current AERO directly receives veAERO revenue.
 3. On KMNO and 2Z reconcile next cliff and confirm live saleable supply before any capital proposal.
 4. All BUY proposals must pass fresh orderbook, full portfolio cost+reservation <=20,000 USDT, drawdown budget, counterparty and BTC-core/reserve segregation. If any fatal blocker persists, **zero new order**; continue researching other candidates. No invented target prices, probabilities, return guarantees or portfolio allocation.
+
+## Additional live token-rights and liquidity cross-check
+
+- DefiLlama DOLO token-rights page, updated Apr15 2026, explicitly lists **Fee Switch Off**, no direct buybacks/dividends; therefore the ~$235k/30d Dolomite protocol revenue must **never** be counted as DOLO tokenholder income. https://defillama.com/token/DOLO
+- DefiLlama DOLO market snapshot displays ~$1.34m 24h centralized spot vs ~$8.8m USD perpetual trading volume. Headline volume must not be misrepresented as spot liquidity; independently verify the actual Binance executable order book before even a small staged proposal. https://defillama.com/token/DOLO
+- Aerodrome official legal disclosures distinguish liquid AERO from revenue-earning locked veAERO. DefiLlama AERO token-rights page updated Sep25 2026 documents active fee sharing to veAERO and AERO buybacks, but buyback volume relative to new issuance and Aero migration conversion remain unquantified. https://defillama.com/token/AERO and https://aerodrome.finance/docs
