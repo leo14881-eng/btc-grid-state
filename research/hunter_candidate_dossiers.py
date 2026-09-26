@@ -13,6 +13,7 @@ ROOT=pathlib.Path("research/results")
 RESEARCH=ROOT/"hunter-forward-research.json"
 SCAN=ROOT/"hunter-cex-universe-run.json"
 FACTS=pathlib.Path("research/hunter-verified-facts.json")
+REVIEWS=pathlib.Path("research/hunter-reviewed-watchlist.json")
 IDENTITY=ROOT/"hunter-identity-audit.json"
 LIQUIDITY=ROOT/"hunter-liquidity-probe.json"
 OUT=ROOT/"hunter-candidate-dossiers.json"
@@ -104,7 +105,7 @@ def classify_cohort(item):
     return "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED"
 
 
-def balanced_candidates(full):
+def balanced_candidates(full,reviewed=None):
     """Reserve separate lanes so recent winners cannot crowd out early setups."""
     early=[r for r in full if classify_cohort(r[1])=="EARLY_FLOW_ATTENTION"]
     cont=[r for r in full if classify_cohort(r[1])=="CONTINUATION_FORWARD_UPSIDE_ATTENTION"]
@@ -123,6 +124,15 @@ def balanced_candidates(full):
                 -int(row[5]),row[0])
     early.sort(key=early_key)
     selected=[];seen=set()
+    # Dedicated continuity lane: already-researched candidates must not vanish
+    # when their volume signal rotates. This is NOT a predicted-return rank.
+    reviewed=reviewed or {}
+    indexed={r[0]:r for r in full}
+    for sym,review in (reviewed.get("assets") or {}).items():
+        if sym not in indexed or not isinstance(review,dict):continue
+        if review.get("review_status")=="CLOSED":continue
+        selected.append(indexed[sym]);seen.add(sym)
+        if len(selected)>=6:break
     for group,quota in ((early,EARLY_QUOTA),(cont,CONTINUATION_QUOTA),(full,MAX_DOSSIERS)):
         for row in group:
             if len(selected)>=MAX_DOSSIERS or quota<=0:break
@@ -204,7 +214,7 @@ def fresh_execution_evidence(liquidity,scan,sym,now):
             "liquidity_orderbook_depth_2pct_usdt":min(bid,ask)},[]
 
 
-def build(research,scan,registry,now,identity=None,liquidity=None):
+def build(research,scan,registry,now,identity=None,liquidity=None,reviewed=None):
     if research.get("universe_scan_as_of_utc")!=scan.get("as_of_utc"):
         raise ValueError("Refuse mismatched research and exchange snapshot")
     if not scan.get("binance_complete"):raise ValueError("Incomplete Binance coverage")
@@ -214,11 +224,14 @@ def build(research,scan,registry,now,identity=None,liquidity=None):
     liquidity=liquidity or {}
     identity_fresh=(identity.get("scan_as_of_utc")==scan.get("as_of_utc"))
     identity_assets=identity.get("assets") or {}
+    reviewed=reviewed or {}
+    reviews=reviewed.get("assets") or {}
     cases=[];full=prioritize(research,scan)
-    selected,cohort_stats=balanced_candidates(full)
+    selected,cohort_stats=balanced_candidates(full,reviewed)
     facts_all=registry.get("assets") or {}
     for sym,item,coin,attention,evidence_count,fresh in selected:
         fact=facts_all.get(sym) or {}
+        review=reviews.get(sym) or {}
         entry=float(coin["reference_price"])
         scen,missing=scenario_map(fact,entry,now)
         execution,evidence_blockers=fresh_execution_evidence(liquidity,scan,sym,now)
@@ -235,6 +248,10 @@ def build(research,scan,registry,now,identity=None,liquidity=None):
         if not identity_pass:
             ready=False
             capital_blockers.append("CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE")
+        risk=review.get("risk_event") or {}
+        if risk.get("status")=="PENDING_ONCHAIN_RECONCILIATION":
+            ready=False
+            capital_blockers.append("MATERIAL_SUPPLY_EVENT_REQUIRES_ONCHAIN_RECONCILIATION")
         case={"asset":sym,"as_of_utc":now.isoformat(),
               "exchange_price_as_of_utc":scan["as_of_utc"],
               "entry_reference_price":entry,"venue":coin.get("reference_venue"),
@@ -245,13 +262,21 @@ def build(research,scan,registry,now,identity=None,liquidity=None):
                   if k not in ("market_structure",)},
               "market_structure":(item.get("observations") or {}).get("market_structure"),
               "research_source_urls":item.get("source_urls") or [],
-              "official_sources":fact.get("official_sources") or [],
+              "official_sources":list(dict.fromkeys((fact.get("official_sources") or [])+(review.get("official_sources") or []))),
+              "reviewed_evidence":{
+                  "review_status":review.get("review_status"),
+                  "reviewed_at_utc":review.get("reviewed_at_utc"),
+                  "findings":review.get("verified_findings") or [],
+                  "corroborating_sources":review.get("corroborating_sources") or [],
+                  "review_action":review.get("review_action"),
+                  "risk_event":risk} if review else None,
               "identity_status":ident.get("identity_status","AUDIT_MISSING"),
               "identity_blockers":ident.get("blockers") or ["IDENTITY_AUDIT_MISSING"],
               "live_orderbook_evidence":execution,
               "scenario_map":scen,"capital_gate_blockers":capital_blockers,
               "research_questions":list(dict.fromkeys(
-                  (item.get("missing_facts") or [])+missing)),
+                  (item.get("missing_facts") or [])+missing+
+                  (review.get("open_questions") or []))),
               "attention_reasons":{"triggered":sym in set(research.get("triggered_researched") or []),
                   "attention_signal_count":len(item.get("research_attention_signals") or []),
                   "evidence_fields_present":evidence_count},
@@ -264,6 +289,7 @@ def build(research,scan,registry,now,identity=None,liquidity=None):
             "market_universe_size":len(scan.get("coins") or {}),
             "deep_research_cached_count":len(research.get("research_results") or {}),
             "dossier_count":len(cases),"cohort_coverage":cohort_stats,
+            "reviewed_watchlist":[x["asset"] for x in cases if x["reviewed_evidence"]],
             "early_entry_watchlist":[x["asset"] for x in cases if x["opportunity_cohort"]=="EARLY_FLOW_ATTENTION"],
             "continuation_watchlist":[x["asset"] for x in cases if x["opportunity_cohort"]=="CONTINUATION_FORWARD_UPSIDE_ATTENTION"],
             "unresearched_market_count":max(0,
@@ -278,7 +304,7 @@ def build(research,scan,registry,now,identity=None,liquidity=None):
 def main():
     now=dt.datetime.now(dt.timezone.utc)
     report=build(read(RESEARCH,{}),read(SCAN,{}),read(FACTS,{}),now,
-                 read(IDENTITY,{}),read(LIQUIDITY,{}))
+                 read(IDENTITY,{}),read(LIQUIDITY,{}),read(REVIEWS,{}))
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({k:report[k] for k in ("as_of_utc","market_universe_size",
         "deep_research_cached_count","dossier_count","unresearched_market_count",
