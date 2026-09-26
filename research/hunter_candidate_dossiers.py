@@ -13,7 +13,9 @@ RESEARCH=ROOT/"hunter-forward-research.json"
 SCAN=ROOT/"hunter-cex-universe-run.json"
 FACTS=pathlib.Path("research/hunter-verified-facts.json")
 OUT=ROOT/"hunter-candidate-dossiers.json"
-MAX_DOSSIERS=25
+MAX_DOSSIERS=40
+EARLY_QUOTA=16
+CONTINUATION_QUOTA=12
 
 def read(path,default):
     try:return json.loads(path.read_text())
@@ -81,6 +83,77 @@ def prioritize(research,scan):
     rows.sort(key=lambda r:(-r[3],-r[4],not r[5],r[0]))
     return rows
 
+def classify_cohort(item):
+    """Parallel opportunity lanes; a past rally never disqualifies an asset."""
+    m=(item.get("observations") or {}).get("market_structure") or {}
+    change=m.get("return_vs_7_completed_days_pct")
+    volume=m.get("volume_7d_ratio")
+    if isinstance(change,(float,int)) and isinstance(volume,(float,int)):
+        if change<=20 and volume>=1.3:
+            return "EARLY_FLOW_ATTENTION"
+        if change>20 and volume>=1.3:
+            return "CONTINUATION_FORWARD_UPSIDE_ATTENTION"
+    return "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED"
+
+
+def balanced_candidates(full):
+    """Reserve separate lanes so recent winners cannot crowd out early setups."""
+    early=[r for r in full if classify_cohort(r[1])=="EARLY_FLOW_ATTENTION"]
+    cont=[r for r in full if classify_cohort(r[1])=="CONTINUATION_FORWARD_UPSIDE_ATTENTION"]
+    selected=[];seen=set()
+    for group,quota in ((early,EARLY_QUOTA),(cont,CONTINUATION_QUOTA),(full,MAX_DOSSIERS)):
+        for row in group:
+            if len(selected)>=MAX_DOSSIERS or quota<=0:break
+            if row[0] not in seen:
+                selected.append(row);seen.add(row[0]);quota-=1
+    return selected,{"early_available":len(early),"continuation_available":len(cont),
+        "early_selected":sum(classify_cohort(r[1])=="EARLY_FLOW_ATTENTION" for r in selected),
+        "continuation_selected":sum(classify_cohort(r[1])=="CONTINUATION_FORWARD_UPSIDE_ATTENTION" for r in selected)}
+
+
+def capital_gate(fact,scenario,entry,now):
+    """No permanent false gate: independently documented facts can unlock review.
+
+    This is a proposal eligibility check, never an automatic exchange order.
+    """
+    blockers=[]
+    if scenario is None:
+        return False,["EVIDENCE_GATED_SCENARIO_UNAVAILABLE"]
+    required=("liquidity_verified_at_utc","portfolio_verified_at_utc",
+              "drawdown_budget_verified","counterparty_verified",
+              "btc_same_horizon_base_return_pct","liquidity_max_spread_bps",
+              "liquidity_orderbook_depth_2pct_usdt","portfolio_open_cost_usdt",
+              "portfolio_pending_reservations_usdt","max_proposed_new_cost_usdt")
+    for key in required:
+        if key not in fact or fact[key] is None:
+            blockers.append("MISSING_"+key)
+    if blockers:return False,blockers
+    try:
+        for key in ("liquidity_verified_at_utc","portfolio_verified_at_utc"):
+            age=(now-parse(fact[key])).total_seconds()/3600
+            if age<0 or age>1: blockers.append("STALE_"+key)
+        if not fact["drawdown_budget_verified"]:blockers.append("DRAWDOWN_BUDGET_UNVERIFIED")
+        if not fact["counterparty_verified"]:blockers.append("COUNTERPARTY_UNVERIFIED")
+        spread=float(fact["liquidity_max_spread_bps"])
+        depth=float(fact["liquidity_orderbook_depth_2pct_usdt"])
+        open_cost=float(fact["portfolio_open_cost_usdt"])
+        pending=float(fact["portfolio_pending_reservations_usdt"])
+        proposal=float(fact["max_proposed_new_cost_usdt"])
+        btc_base=float(fact["btc_same_horizon_base_return_pct"])
+        if spread<0 or spread>50:blockers.append("SPREAD_EXCEEDS_50_BPS")
+        if depth<max(10000,proposal*10):blockers.append("DEPTH_INSUFFICIENT")
+        if min(open_cost,pending,proposal)<0 or proposal<=0 or open_cost+pending+proposal>20000:
+            blockers.append("ALT_POOL_20000_USDT_CAP")
+        if scenario["base_return_pct"]<=btc_base:
+            blockers.append("BASE_CASE_NOT_ABOVE_SAME_HORIZON_BTC")
+        downside=abs(min(0,scenario["bear_return_pct"]))
+        if downside<=0 or scenario["bull_return_pct"]/downside<2:
+            blockers.append("UPSIDE_DOWNSIDE_BELOW_2")
+    except (ValueError,TypeError,KeyError,OverflowError):
+        blockers.append("INVALID_CAPITAL_GATE_INPUT")
+    return not blockers,blockers
+
+
 def build(research,scan,registry,now):
     if research.get("universe_scan_as_of_utc")!=scan.get("as_of_utc"):
         raise ValueError("Refuse mismatched research and exchange snapshot")
@@ -88,37 +161,48 @@ def build(research,scan,registry,now):
     if (now-parse(scan["as_of_utc"])).total_seconds()>7200:
         raise ValueError("Exchange snapshot stale (>2h)")
     cases=[];full=prioritize(research,scan)
+    selected,cohort_stats=balanced_candidates(full)
     facts_all=registry.get("assets") or {}
-    for sym,item,coin,attention,evidence_count,fresh in full[:MAX_DOSSIERS]:
+    for sym,item,coin,attention,evidence_count,fresh in selected:
         fact=facts_all.get(sym) or {}
         entry=float(coin["reference_price"])
         scen,missing=scenario_map(fact,entry,now)
+        ready,capital_blockers=capital_gate(fact,scen,entry,now)
         case={"asset":sym,"as_of_utc":now.isoformat(),
               "exchange_price_as_of_utc":scan["as_of_utc"],
               "entry_reference_price":entry,"venue":coin.get("reference_venue"),
               "prior_rally_never_auto_rejects":True,
+              "opportunity_cohort":classify_cohort(item),
               "research_attention_signals":item.get("research_attention_signals") or [],
               "nonprice_observations":{k:v for k,v in (item.get("observations") or {}).items()
                   if k not in ("market_structure",)},
               "market_structure":(item.get("observations") or {}).get("market_structure"),
               "research_source_urls":item.get("source_urls") or [],
               "official_sources":fact.get("official_sources") or [],
-              "scenario_map":scen,"research_questions":list(dict.fromkeys(
+              "scenario_map":scen,"capital_gate_blockers":capital_blockers,
+              "research_questions":list(dict.fromkeys(
                   (item.get("missing_facts") or [])+missing)),
               "attention_reasons":{"triggered":sym in set(research.get("triggered_researched") or []),
                   "attention_signal_count":len(item.get("research_attention_signals") or []),
                   "evidence_fields_present":evidence_count},
-              "status":"SCENARIO_RESEARCH_READY" if scen else "RESEARCH_INCOMPLETE",
-              "capital_ready":False,"trade_action":"NONE"}
+              "status":"CAPITAL_REVIEW_ELIGIBLE" if ready else
+                  ("SCENARIO_RESEARCH_READY" if scen else "RESEARCH_INCOMPLETE"),
+              "capital_ready":ready,"trade_action":"USER_REVIEW_REQUIRED" if ready else "NONE"}
         cases.append(case)
     return {"schema":"hunter_candidate_dossiers_v1","as_of_utc":now.isoformat(),
             "market_universe_size":len(scan.get("coins") or {}),
             "deep_research_cached_count":len(research.get("research_results") or {}),
-            "dossier_count":len(cases),"unresearched_market_count":max(0,
+            "dossier_count":len(cases),"cohort_coverage":cohort_stats,
+            "early_entry_watchlist":[x["asset"] for x in cases if x["opportunity_cohort"]=="EARLY_FLOW_ATTENTION"],
+            "continuation_watchlist":[x["asset"] for x in cases if x["opportunity_cohort"]=="CONTINUATION_FORWARD_UPSIDE_ATTENTION"],
+            "unresearched_market_count":max(0,
                 len(scan.get("coins") or {})-len(research.get("research_results") or {})),
             "selection_note":"Research attention and evidence availability only, NOT expected return ranking.",
             "scenario_policy":"No numeric price targets without dated official verified supply, token capture and explicit market-cap assumptions.",
-            "capital_ready":[],"buy_proposals":[],"dossiers":cases}
+            "capital_ready":[x["asset"] for x in cases if x["capital_ready"]],
+            "buy_proposals":[{"asset":x["asset"],"status":"USER_REVIEW_REQUIRED_NOT_AN_ORDER",
+                "scenario_map":x["scenario_map"]} for x in cases if x["capital_ready"]],
+            "dossiers":cases}
 
 def main():
     now=dt.datetime.now(dt.timezone.utc)
