@@ -93,6 +93,21 @@ def enrichment(now,previous,errors):
     errors.update(result["errors"])
     return result
 
+def compact_market(market,universe):
+    """Persist only matched symbols and fields; never commit raw 12MB API dumps."""
+    allowed=set(universe)
+    keep={"coingecko":("symbol","id","market_cap","fully_diluted_valuation",
+                       "circulating_supply","total_supply"),
+          "defillama":("symbol","name","slug","tvl","change_7d","change_1m")}
+    for source,fields in keep.items():
+        rows=market.get(source) or []
+        market[source]=[{k:r.get(k) for k in fields}
+                        for r in rows if isinstance(r,dict)
+                        and str(r.get("symbol") or "").upper() in allowed]
+    market["cache_scope"]="ONLY_CURRENT_CEX_SYMBOLS_AND_RESEARCH_FIELDS"
+    market["cache_universe_count"]=len(allowed)
+    return market
+
 def select_rotation(coins,previous):
     symbols=sorted(coins)
     if not symbols:return [],0,[]
@@ -234,7 +249,7 @@ def main():
     previous=read(OUT,{})
     errors={}
     cached=read(CACHE,{})
-    market=enrichment(now,cached,errors)
+    market=compact_market(enrichment(now,cached,errors),scan.get("coins") or {})
     CACHE.write_text(json.dumps(market,ensure_ascii=False,indent=2)+"\n")
     report=build_report(scan,previous,market,now)
     report["enrichment_errors"]=errors
