@@ -1,6 +1,10 @@
 name: Hunter Stale-Result Watchdog
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hunter-stale-watchdog.yml'
   schedule:
     - cron: '37 * * * *'
 permissions:
