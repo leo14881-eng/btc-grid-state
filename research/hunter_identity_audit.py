@@ -60,7 +60,9 @@ def fetch_contract_platforms(coin_id):
         data=json.load(response)
     if data.get("id")!=coin_id or not isinstance(data.get("platforms"),dict):
         raise ValueError("COINGECKO_ID_OR_PLATFORMS_INVALID")
-    return {"coin_id":coin_id,"platforms":data["platforms"],
+    return {"coin_id":coin_id,"symbol":str(data.get("symbol") or "").upper(),
+            "asset_platform_id":data.get("asset_platform_id"),
+            "platforms":data["platforms"],
             "source_url":"https://www.coingecko.com/en/coins/"+coin_id}
 
 
@@ -73,10 +75,16 @@ def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,li
     results={};failures={};fetched=0
     for sym,fact in assets.items():
         if not fact.get("contract_verified") or sym in collisions:continue
-        row=by.get(sym)
-        if not row:continue
         ident=fact.get("identity") or {}
-        if ident.get("native_asset"):continue
+        row=by.get(sym)
+        declared_id=ident.get("coingecko_id")
+        if row and declared_id and row.get("id")!=declared_id:
+            failures[sym]="THIRD_PARTY_MARKET_FEED_ID_CONFLICT"
+            continue
+        if not row:
+            if not declared_id:continue
+            row={"symbol":sym,"id":declared_id}
+            rows.append(row)
         coin_id=row.get("id")
         if not isinstance(coin_id,str):continue
         saved=cache.get(coin_id) or {}
@@ -90,13 +98,19 @@ def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,li
             fetched+=1
             try:
                 fresh=fetch(coin_id)
+                if fresh.get("coin_id")!=coin_id or fresh.get("symbol")!=sym:
+                    raise ValueError("INDEPENDENT_COIN_ID_OR_SYMBOL_MISMATCH")
                 saved={"as_of_utc":now.isoformat(),**fresh}
                 cache[coin_id]=saved
             except Exception as exc:
                 failures[sym]=type(exc).__name__+": "+str(exc)[:140]
                 # Never use stale cached contract corroboration as fresh.
                 continue
+        if saved.get("coin_id")!=coin_id or saved.get("symbol")!=sym:
+            failures[sym]="STALE_CACHE_ID_OR_SYMBOL_MISMATCH"
+            continue
         row["platforms"]=saved.get("platforms") or {}
+        row["asset_platform_id"]=saved.get("asset_platform_id")
         row["contract_as_of_utc"]=saved.get("as_of_utc")
         results[sym]=saved.get("source_url")
     market=dict(market,coingecko=rows)
@@ -123,11 +137,17 @@ def identity_status(sym,coin,fact,third_party,now):
     except (ValueError,TypeError,AttributeError):
         return "BLOCKED",["OFFICIAL_CONTRACT_ATTESTATION_TIME_INVALID"]
     if ident.get("native_asset"):
-        if not ident.get("native_chain"):
-            return "BLOCKED",["NATIVE_CHAIN_MISSING"]
-        # Native assets may lack token contracts, but still need independent
-        # exchange-chain corroboration before an automated capital proposal.
-        return "ANALYST_ATTESTED_ONLY",["INDEPENDENT_NATIVE_CHAIN_CORROBORATION_MISSING"]
+        if not ident.get("native_chain") or not ident.get("coingecko_id"):
+            return "BLOCKED",["NATIVE_CHAIN_OR_INDEPENDENT_ID_MISSING"]
+        cg=third_party.get(sym) or {}
+        if cg.get("id")!=ident["coingecko_id"] or cg.get("asset_platform_id") is not None:
+            return "ANALYST_ATTESTED_ONLY",["INDEPENDENT_NATIVE_ASSET_ID_UNCORROBORATED"]
+        try:
+            age=(now-dt.datetime.fromisoformat(cg["contract_as_of_utc"])).total_seconds()/3600
+            if age<0 or age>24:raise ValueError("stale")
+        except (KeyError,TypeError,ValueError):
+            return "ANALYST_ATTESTED_ONLY",["INDEPENDENT_NATIVE_ID_STALE"]
+        return "THIRD_PARTY_NATIVE_CORROBORATED",[]
     chain=ident.get("platform")
     address=normalize_contract(ident.get("contract_address"))
     if not chain or not address:
@@ -163,7 +183,7 @@ def build(scan,market,registry,now):
         status,blockers=identity_status(sym,coin,fact,cg,now)
         if sym in collisions:
             blockers.append("COINGECKO_TICKER_COLLISION")
-            if status=="THIRD_PARTY_CORROBORATED":
+            if status in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED"):
                 status="UNVERIFIED"
         if typ!="SPOT_TOKEN_UNVERIFIED":
             blockers.append("ASSET_TYPE_REQUIRES_INDEPENDENT_REVIEW")
@@ -172,7 +192,8 @@ def build(scan,market,registry,now):
         assets[sym]={"asset_class":typ,"identity_status":status,
                      "coingecko_symbol_only_id":(cg.get(sym) or {}).get("id"),
                      "blockers":blockers,
-                     "capital_identity_pass":status=="THIRD_PARTY_CORROBORATED"
+                     "capital_identity_pass":status in ("THIRD_PARTY_CORROBORATED",
+                                                         "THIRD_PARTY_NATIVE_CORROBORATED")
                      and typ=="SPOT_TOKEN_UNVERIFIED"
                      and "CROSS_VENUE_CONTRACT_MAPPING_UNVERIFIED" not in blockers}
         counts[status]=counts.get(status,0)+1
