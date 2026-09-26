@@ -1,4 +1,10 @@
 import importlib.util
+import datetime as dt
+import io
+import json
+import os
+import tempfile
+import urllib.error
 import pathlib
 import unittest
 from unittest.mock import patch
@@ -62,6 +68,47 @@ class CexUniverseTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"malformed ticker"):
                 scan.bybit_with_fallback()
         self.assertEqual(fn.call_count,1)
+
+    def test_known_geo_block_is_not_retried(self):
+        denied=urllib.error.HTTPError(
+            "https://api.bytick.com/v5/market/time",403,"Forbidden",{},
+            io.BytesIO(b"The Amazon CloudFront distribution is configured to block access from your country"))
+        with patch.object(scan.urllib.request,"urlopen",side_effect=denied) as fn:
+            with self.assertRaisesRegex(RuntimeError,"BYBIT_GEO_BLOCKED_EGRESS_COUNTRY"):
+                scan.fetch("https://api.bytick.com/v5/market/time")
+        self.assertEqual(fn.call_count,1)
+
+    def test_us_runner_skips_repeated_geo_block_without_regional_snapshot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(os.environ,{
+                "HUNTER_BYBIT_DIRECT_DISABLED":"1",
+                "HUNTER_BYBIT_REGIONAL_SNAPSHOT":str(pathlib.Path(folder)/"absent.json")}):
+                with patch.object(scan,"bybit_with_fallback") as direct:
+                    with self.assertRaisesRegex(RuntimeError,"COLLECTOR_NOT_CONFIGURED"):
+                        scan.bybit_from_authorized_region()
+                    direct.assert_not_called()
+
+    def test_scan_accepts_fresh_official_regional_snapshot(self):
+        file=pathlib.Path(__file__).resolve().parents[1]/"research/hunter_bybit_regional.py"
+        spec=importlib.util.spec_from_file_location("hunter_bybit_regional",file)
+        reg=importlib.util.module_from_spec(spec);spec.loader.exec_module(reg)
+        now=dt.datetime.now(dt.timezone.utc)
+        rows=[{"venue":"bybit","pair":"ABCUSDT","base":"ABC","price":1.2,
+               "volume_24h_usdt":3000.0,"change_24h_pct":2.0}]
+        status={"active_pairs":1,"valid_pairs":1,"missing_or_invalid":[]}
+        with patch.dict(os.environ,{"HUNTER_BYBIT_RUNNER_COUNTRY":"VN"}):
+            snap=reg.collect(now,fetcher=lambda:(rows,status),country="VN")
+        with tempfile.TemporaryDirectory() as folder:
+            path=pathlib.Path(folder)/"snapshot.json"
+            path.write_text(json.dumps(snap))
+            with patch.dict(os.environ,{
+                "HUNTER_BYBIT_DIRECT_DISABLED":"1",
+                "HUNTER_BYBIT_REGIONAL_SNAPSHOT":str(path)}):
+                with patch.object(scan,"bybit_with_fallback") as direct:
+                    loaded,meta=scan.bybit_from_authorized_region()
+                    direct.assert_not_called()
+        self.assertEqual(loaded,rows)
+        self.assertEqual(meta["source"],reg.SOURCE)
 
     def test_cross_venue_union_and_existing_baseline(self):
         b={"venue":"binance","pair":"ABCUSDT","base":"ABC","price":1.03,"volume_24h_usdt":50000,"change_24h_pct":5}
