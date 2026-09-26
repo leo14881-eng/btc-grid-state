@@ -230,7 +230,7 @@ def main():
         state=cooldown.record_429(state,now,lookups.get("retry_after"),"identity")
         cooldown.save(state)
     lookups["shared_cooldown_active"]=cooldown.blocked(state,now)
-    CONTRACT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\\n")
+    CONTRACT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\n")
     report=build(json.loads(SCAN.read_text()),market,registry,now)
     report["third_party_contract_lookup"]=lookups
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
