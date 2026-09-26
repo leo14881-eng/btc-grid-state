@@ -32,6 +32,19 @@ class LiquidityTests(unittest.TestCase):
                     for sym in ("AAA","BBB","CCC")}}
         self.assertEqual([x[0] for x in h.targets(d,s)],["AAA","BBB","CCC"])
 
+    def test_reviewed_dolo_and_2z_get_live_books_despite_rotation(self):
+        symbols=["DOLO","2Z"]+["E"+str(i) for i in range(12)]+["C"+str(i) for i in range(12)]
+        scan={"coins":{sym:{"pairs":[{"venue":"binance","pair":sym+"USDT",
+             "volume_24h_usdt":1000}]} for sym in symbols}}
+        dossier={"reviewed_watchlist":["DOLO","2Z"],
+                 "early_entry_watchlist":["E"+str(i) for i in range(12)],
+                 "continuation_watchlist":["C"+str(i) for i in range(12)],
+                 "dossiers":[{"asset":sym} for sym in symbols]}
+        targets=h.targets(dossier,scan)
+        self.assertEqual([x[0] for x in targets[:2]],["DOLO","2Z"])
+        self.assertEqual(len(targets),16)
+        self.assertEqual(len(set(x[0] for x in targets)),16)
+
     def test_failure_does_not_mask_other_assets(self):
         s={"as_of_utc":AT,"coins":{sym:{"pairs":[{"venue":"binance","pair":sym+"USDT",
              "volume_24h_usdt":1000}]} for sym in ("AAA","BBB")}}
