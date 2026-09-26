@@ -1,0 +1,44 @@
+name: Hunter Bybit 403 root-cause diagnostic
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hunter-bybit-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - name: Inspect runner country and Bybit official HTTP denial
+        shell: python
+        run: |
+          import json,urllib.request,urllib.error
+          def inspect(url):
+              try:
+                  req=urllib.request.Request(url,headers={"User-Agent":"hunter-diagnostic/1.0","Accept":"application/json"})
+                  with urllib.request.urlopen(req,timeout=12) as r:
+                      body=r.read(400).decode("utf-8","replace")
+                      return {"status":r.status,"server":r.headers.get("Server"),
+                              "content_type":r.headers.get("Content-Type"),
+                              "body_excerpt":body[:240]}
+              except urllib.error.HTTPError as e:
+                  body=e.read(500).decode("utf-8","replace")
+                  return {"status":e.code,"server":e.headers.get("Server"),
+                          "content_type":e.headers.get("Content-Type"),
+                          "body_excerpt":body[:400]}
+              except Exception as e:return {"error":type(e).__name__+": "+str(e)[:180]}
+          region=inspect("https://www.cloudflare.com/cdn-cgi/trace")
+          # Only log loc and colo, not the machine's public IP.
+          raw=region.get("body_excerpt","")
+          fields=dict(x.split("=",1) for x in raw.splitlines() if "=" in x)
+          print("RUNNER_NETWORK_REGION",json.dumps({k:fields.get(k) for k in ("loc","colo")}))
+          for host in ("api.bytick.com","api.bybit.com"):
+              for endpoint in ("/v5/market/time","/v5/market/instruments-info?category=spot"):
+                  print("OFFICIAL_BYBIT_HTTP",host,endpoint,json.dumps(inspect("https://"+host+endpoint)))
