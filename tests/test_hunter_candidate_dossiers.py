@@ -85,6 +85,50 @@ class DossierTests(unittest.TestCase):
         self.assertEqual(evidence["RALLY"],0)
         self.assertEqual(evidence["DOWN"],1)
 
+    def test_reviewed_dolo_cannot_disappear_in_rotating_top_40(self):
+        def row(sym):
+            return (sym,{"observations":{"market_structure":{
+                "return_vs_7_completed_days_pct":4,"volume_7d_ratio":2}}},
+                {"reference_price":1},2,1,True)
+        full=[row("NOISE"+str(i)) for i in range(55)]+[row("DOLO")]
+        reviewed={"assets":{"DOLO":{"review_status":"OFFICIAL_MECHANICS_REVIEW"}}}
+        selected,_=d.balanced_candidates(full,reviewed)
+        self.assertEqual(len(selected),40)
+        self.assertEqual(selected[0][0],"DOLO")
+        self.assertEqual(len(set(r[0] for r in selected)),40)
+
+    def test_unresolved_material_unlock_blocks_capital_even_if_other_gates_pass(self):
+        r,s=fixtures()
+        s["coins"]["RALLY"]["pairs"]=[{"venue":"binance","pair":"RALLYUSDT"}]
+        r["research_results"]={"RALLY":r["research_results"]["RALLY"]}
+        facts={"verified_at_utc":AT,"official_sources":["https://project.example/official"],
+               "contract_verified":True,"forward_supply_verified":True,
+               "token_value_capture_verified":True,"credible_catalyst_verified":True,
+               "supply_future":100,"bear_market_cap_usd":100,
+               "base_market_cap_usd":400,"bull_market_cap_usd":800,
+               "portfolio_verified_at_utc":AT,"drawdown_budget_verified":True,
+               "counterparty_verified":True,"btc_same_horizon_base_return_pct":10,
+               "portfolio_open_cost_usdt":1000,"portfolio_pending_reservations_usdt":0,
+               "max_proposed_new_cost_usdt":1000}
+        ident={"scan_as_of_utc":AT,"assets":{"RALLY":{
+            "capital_identity_pass":True,"identity_status":"THIRD_PARTY_CORROBORATED"}}}
+        books={"scan_as_of_utc":AT,"snapshots":{"RALLY":{
+            "pair":"RALLYUSDT","venue":"binance","as_of_utc":AT,
+            "spread_bps":12,"bid_depth_2pct_usdt":30000,
+            "ask_depth_2pct_usdt":22000}}}
+        reviewed={"assets":{"RALLY":{
+            "review_status":"MATERIAL_UNLOCK",
+            "risk_event":{"status":"PENDING_ONCHAIN_RECONCILIATION",
+                          "date_utc":"2026-10-02T00:00:00+00:00"}}}}
+        report=d.build(r,s,{"assets":{"RALLY":facts}},NOW,ident,books,reviewed)
+        self.assertEqual(report["reviewed_watchlist"],["RALLY"])
+        self.assertEqual(report["capital_ready"],[])
+        self.assertIn("MATERIAL_SUPPLY_EVENT_REQUIRES_ONCHAIN_RECONCILIATION",
+                      report["dossiers"][0]["capital_gate_blockers"])
+        reviewed["assets"]["RALLY"]["risk_event"]["status"]="ONCHAIN_RECONCILED"
+        cleared=d.build(r,s,{"assets":{"RALLY":facts}},NOW,ident,books,reviewed)
+        self.assertEqual(cleared["capital_ready"],["RALLY"])
+
     def test_early_flow_not_selected_alphabetically(self):
         def row(sym,vol):
             return (sym,{"observations":{"market_cap":100000000,
