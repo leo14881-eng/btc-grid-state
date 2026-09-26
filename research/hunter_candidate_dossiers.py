@@ -252,14 +252,21 @@ def build(research,scan,registry,now,identity=None,liquidity=None,reviewed=None)
         if risk.get("status")=="PENDING_ONCHAIN_RECONCILIATION":
             ready=False
             capital_blockers.append("MATERIAL_SUPPLY_EVENT_REQUIRES_ONCHAIN_RECONCILIATION")
+        observations={k:v for k,v in (item.get("observations") or {}).items()
+                      if k!="market_structure"}
+        declared_id=(fact.get("identity") or {}).get("coingecko_id")
+        if fact.get("contract_verified") and declared_id and not observations.get("coingecko_id"):
+            observations["coingecko_id"]=declared_id
+            observations["coingecko_match_status"]=(
+                "INDEPENDENT_ID_CORROBORATED" if identity_pass else
+                "OFFICIAL_CONTRACT_COIN_ID_LINK_PENDING_INDEPENDENT_CORROBORATION")
         case={"asset":sym,"as_of_utc":now.isoformat(),
               "exchange_price_as_of_utc":scan["as_of_utc"],
               "entry_reference_price":entry,"venue":coin.get("reference_venue"),
               "prior_rally_never_auto_rejects":True,
               "opportunity_cohort":classify_cohort(item),
               "research_attention_signals":item.get("research_attention_signals") or [],
-              "nonprice_observations":{k:v for k,v in (item.get("observations") or {}).items()
-                  if k not in ("market_structure",)},
+              "nonprice_observations":observations,
               "market_structure":(item.get("observations") or {}).get("market_structure"),
               "research_source_urls":item.get("source_urls") or [],
               "official_sources":list(dict.fromkeys((fact.get("official_sources") or [])+(review.get("official_sources") or []))),
