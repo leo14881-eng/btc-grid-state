@@ -39,6 +39,6 @@ jobs:
           git commit -m 'research: hourly Hunter CEX universe coverage and candidates'
           git pull --rebase origin main
           git push origin HEAD:main
-      - name: Mark incomplete venue coverage as failure
+      - name: Fail if Binance coverage incomplete; report Bybit separately
         if: steps.scan.outcome != 'success'
         run: exit 2
