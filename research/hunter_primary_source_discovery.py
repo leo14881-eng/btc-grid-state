@@ -10,6 +10,7 @@ import json
 import os
 import pathlib
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -100,6 +101,11 @@ def build(dossiers,cache,now,fetcher=fetch,budget=BUDGET):
         fetched+=1
         try:
             updated[sym]=extract(fetcher(coin_id),sym,coin_id,now)
+        except urllib.error.HTTPError as exc:
+            failures[sym]="HTTP_"+str(exc.code)+": "+str(exc)[:120]
+            if exc.code==429:
+                failures["_source_rate_limit"]="COINGECKO_429__DEFER_REMAINING_TO_NEXT_CYCLE"
+                break
         except Exception as exc:
             failures[sym]=type(exc).__name__+": "+str(exc)[:150]
     # Only expose currently selected dossier symbols; never mistake cached
