@@ -148,7 +148,7 @@ def candle_features(candles,turnover):
     return {"last_7d_quote_volume":round(new_volume,2),
             "previous_7d_quote_volume":round(old_volume,2),
             "volume_7d_ratio":round(new_volume/old_volume,3) if old_volume>0 else None,
-            "drawdown_from_completed_30d_high_pct":round((price/high30-1)*100,3),
+            "drawdown_from_completed_30d_high_pct":round(min(0,(price/high30-1)*100),3),
             "return_vs_7_completed_days_pct":round((price/last7[0][0]-1)*100,3),
             "volume_24h_usdt":turnover},None
 
