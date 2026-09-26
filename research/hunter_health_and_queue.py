@@ -40,7 +40,8 @@ def build(data,now):
     for d in dossiers.get("dossiers") or []:
         sym=d["asset"];book=probe.get(sym)
         blockers=list(d.get("capital_gate_blockers") or [])
-        if d.get("identity_status")!="THIRD_PARTY_CORROBORATED":
+        if d.get("identity_status") not in ("THIRD_PARTY_CORROBORATED",
+                                           "THIRD_PARTY_NATIVE_CORROBORATED"):
             blockers.append("IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT")
         if not d.get("official_sources"):
             blockers.append("OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING")
@@ -75,7 +76,8 @@ def build(data,now):
             "researched_cached":research.get("deep_research_total_cached"),
             "unresearched":dossiers.get("unresearched_market_count"),
             "dossiers":len(queue),
-            "identity_corroborated":(identity.get("counts") or {}).get("THIRD_PARTY_CORROBORATED",0),
+            "identity_corroborated":sum((identity.get("counts") or {}).get(k,0) for k in
+                ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
             "liquidity_requested":liquidity.get("requested_count"),
             "liquidity_successful":liquidity.get("successful_count"),
             "liquidity_failures":liquidity.get("failures") or {},
