@@ -7,6 +7,7 @@ independent primary-source review. Rotate requests to avoid rate-limit stalls.
 """
 import datetime as dt
 import json
+import importlib.util
 import os
 import pathlib
 import re
@@ -19,6 +20,10 @@ DOSSIERS=ROOT/"hunter-candidate-dossiers.json"
 CACHE=ROOT/"hunter-primary-source-cache.json"
 OUT=ROOT/"hunter-primary-source-leads.json"
 CG=os.getenv("HUNTER_COINGECKO_API","https://api.coingecko.com/api/v3")
+_spec=importlib.util.spec_from_file_location(
+    "hunter_api_cooldown",pathlib.Path(__file__).resolve().parent/"hunter_api_cooldown.py")
+cooldown=importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(cooldown)
 BUDGET=6
 
 def safe_url(url):
@@ -75,7 +80,7 @@ def extract(data,expected_sym,expected_id,now):
 def build(dossiers,cache,now,fetcher=fetch,budget=BUDGET):
     order=lanes(dossiers)
     old=cache.get("assets") or {}
-    updated=dict(old);failures={};fetched=0
+    updated=dict(old);failures={};fetched=0;retry_after=None
     eligible=[d for d in order if isinstance(
         (d.get("nonprice_observations") or {}).get("coingecko_id"),str)]
     if not eligible:
@@ -104,7 +109,8 @@ def build(dossiers,cache,now,fetcher=fetch,budget=BUDGET):
         except urllib.error.HTTPError as exc:
             failures[sym]="HTTP_"+str(exc.code)+": "+str(exc)[:120]
             if exc.code==429:
-                failures["_source_rate_limit"]="COINGECKO_429__DEFER_REMAINING_TO_NEXT_CYCLE"
+                retry_after=exc.headers.get("Retry-After") if exc.headers else None
+                failures["_source_rate_limit"]="COINGECKO_429__SHARED_COOLDOWN"
                 break
         except Exception as exc:
             failures[sym]=type(exc).__name__+": "+str(exc)[:150]
@@ -116,6 +122,7 @@ def build(dossiers,cache,now,fetcher=fetch,budget=BUDGET):
             "as_of_utc":now.isoformat(),"dossier_as_of_utc":dossiers["as_of_utc"],
             "target_count":len(eligible),"fresh_fetched":fetched,
             "cache_reused":cache_reused,"failures":failures,"leads":leads,
+            "rate_limit_retry_after":retry_after,
             "capital_authority":"NONE__UNVERIFIED_LINKS"}
     return result,{"cursor":new_cursor,"assets":updated}
 
@@ -123,7 +130,15 @@ def main():
     dossiers=json.loads(DOSSIERS.read_text())
     try:cache=json.loads(CACHE.read_text())
     except (OSError,ValueError):cache={}
-    result,updated=build(dossiers,cache,dt.datetime.now(dt.timezone.utc))
+    now=dt.datetime.now(dt.timezone.utc)
+    state=cooldown.load()
+    result,updated=build(dossiers,cache,now,
+                         budget=0 if cooldown.blocked(state,now) else BUDGET)
+    if "_source_rate_limit" in result["failures"]:
+        state=cooldown.record_429(state,now,result.get("rate_limit_retry_after"),"source_discovery")
+        cooldown.save(state)
+    result["shared_cooldown_active"]=cooldown.blocked(state,now)
+    result["shared_cooldown_until_utc"]=state.get("blocked_until_utc") if result["shared_cooldown_active"] else None
     CACHE.write_text(json.dumps(updated,indent=2,ensure_ascii=False)+"\n")
     OUT.write_text(json.dumps(result,indent=2,ensure_ascii=False)+"\n")
     print(json.dumps({k:result[k] for k in
