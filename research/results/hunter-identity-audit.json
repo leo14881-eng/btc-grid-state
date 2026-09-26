@@ -1,11 +1,11 @@
 {
   "schema": "hunter_identity_audit_v1",
-  "as_of_utc": "2026-09-26T10:06:15.071318+00:00",
-  "scan_as_of_utc": "2026-09-26T10:05:54.669581+00:00",
+  "as_of_utc": "2026-09-26T10:06:57.335788+00:00",
+  "scan_as_of_utc": "2026-09-26T10:06:38.685443+00:00",
   "universe_count": 490,
   "counts": {
     "UNVERIFIED": 489,
-    "THIRD_PARTY_CORROBORATED": 1
+    "ANALYST_ATTESTED_ONLY": 1
   },
   "ticker_collisions": [],
   "assets": {
@@ -1039,10 +1039,12 @@
     },
     "COMP": {
       "asset_class": "SPOT_TOKEN_UNVERIFIED",
-      "identity_status": "THIRD_PARTY_CORROBORATED",
+      "identity_status": "ANALYST_ATTESTED_ONLY",
       "coingecko_symbol_only_id": "compound-governance-token",
-      "blockers": [],
-      "capital_identity_pass": true
+      "blockers": [
+        "INDEPENDENT_PLATFORM_CONTRACT_UNAVAILABLE"
+      ],
+      "capital_identity_pass": false
     },
     "COOKIE": {
       "asset_class": "SPOT_TOKEN_UNVERIFIED",
@@ -4429,12 +4431,12 @@
   },
   "capital_authority": "NONE__ANALYST_EVIDENCE_AND_EXECUTION_GATES_SEPARATE",
   "third_party_contract_lookup": {
-    "fetched": 1,
-    "source_urls": {
-      "COMP": "https://www.coingecko.com/en/coins/compound-governance-token"
+    "fetched": 0,
+    "source_urls": {},
+    "failures": {
+      "COMP": "CONTRACT_LOOKUP_RATE_LIMIT_DEFERRED"
     },
-    "failures": {},
     "retry_after": null,
-    "shared_cooldown_active": false
+    "shared_cooldown_active": true
   }
 }
