@@ -59,7 +59,11 @@ def build(data,now):
                 blockers.append("SPREAD_GT_50_BPS")
             if min(book["bid_depth_2pct_usdt"],book["ask_depth_2pct_usdt"])<10000:
                 blockers.append("TWO_SIDED_VISIBLE_DEPTH_LT_10000_USDT")
+        review=d.get("reviewed_evidence") or {}
         queue.append({"asset":sym,"cohort":d.get("opportunity_cohort"),
+                      "review_status":review.get("review_status"),
+                      "review_action":review.get("review_action"),
+                      "risk_event":review.get("risk_event") or None,
                       "status":d.get("status"),"blockers":list(dict.fromkeys(blockers)),
                       "has_current_orderbook":bool(book) and "ORDERBOOK_STALE" not in blockers,
                       "needs_human_primary_source_review":not bool(d.get("scenario_map")),
@@ -68,7 +72,8 @@ def build(data,now):
     early=[x for x in queue if x["cohort"]=="EARLY_FLOW_ATTENTION"]
     cont=[x for x in queue if x["cohort"]=="CONTINUATION_FORWARD_UPSIDE_ATTENTION"]
     other=[x for x in queue if x not in early and x not in cont]
-    priority=early[:8]+cont[:8]+other[:8]
+    reviewed=[x for x in queue if x.get("review_status")]
+    priority=list({x["asset"]:x for x in (reviewed[:6]+early[:8]+cont[:8]+other[:8])}.values())
     health={"snapshot_consistent":not mismatches,
             "snapshot_mismatches":mismatches,
             "required_venues":["binance"],
@@ -84,6 +89,9 @@ def build(data,now):
             "coverage_warning":"MARKET_SCREENING_IS_NOT_VERIFIED_FUNDAMENTAL_RESEARCH",
             "unresearched":dossiers.get("unresearched_market_count"),
             "dossiers":len(queue),
+            "reviewed_candidates_retained":len(reviewed),
+            "unresolved_material_supply_events":sum(bool(x.get("risk_event")) and
+                x["risk_event"].get("status")=="PENDING_ONCHAIN_RECONCILIATION" for x in reviewed),
             "identity_corroborated":sum((identity.get("counts") or {}).get(k,0) for k in
                 ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
             "liquidity_requested":liquidity.get("requested_count"),
