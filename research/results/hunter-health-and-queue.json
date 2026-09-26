@@ -1,7 +1,7 @@
 {
   "schema": "hunter_health_queue_v1",
-  "as_of_utc": "2026-09-26T09:24:30.608138+00:00",
-  "scan_as_of_utc": "2026-09-26T09:23:53.386144+00:00",
+  "as_of_utc": "2026-09-26T09:25:23.716424+00:00",
+  "scan_as_of_utc": "2026-09-26T09:24:46.090689+00:00",
   "health": {
     "snapshot_consistent": true,
     "snapshot_mismatches": {},
@@ -9,8 +9,8 @@
     "bybit_complete": false,
     "bybit_error": "https://api.bytick.com/v5/market/instruments-info: HTTPError: HTTP Error 403: Forbidden",
     "universe_size": 490,
-    "researched_cached": 475,
-    "unresearched": 15,
+    "researched_cached": 490,
+    "unresearched": 0,
     "dossiers": 40,
     "identity_corroborated": 0,
     "liquidity_requested": 16,
@@ -21,6 +21,21 @@
     "status": "RESEARCH_RUNNING_CAPITAL_GATES_UNRESOLVED"
   },
   "research_priority_queue": [
+    {
+      "asset": "ZAMA",
+      "cohort": "EARLY_FLOW_ATTENTION",
+      "status": "RESEARCH_INCOMPLETE",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+      ],
+      "has_current_orderbook": true,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
     {
       "asset": "HOT",
       "cohort": "EARLY_FLOW_ATTENTION",
@@ -113,21 +128,6 @@
     },
     {
       "asset": "ETC",
-      "cohort": "EARLY_FLOW_ATTENTION",
-      "status": "RESEARCH_INCOMPLETE",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
-      ],
-      "has_current_orderbook": true,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
-      "asset": "WIF",
       "cohort": "EARLY_FLOW_ATTENTION",
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
@@ -241,7 +241,8 @@
         "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "TWO_SIDED_VISIBLE_DEPTH_LT_10000_USDT"
       ],
       "has_current_orderbook": true,
       "needs_human_primary_source_review": true,
@@ -298,6 +299,21 @@
     }
   ],
   "all_candidate_blockers": [
+    {
+      "asset": "ZAMA",
+      "cohort": "EARLY_FLOW_ATTENTION",
+      "status": "RESEARCH_INCOMPLETE",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+      ],
+      "has_current_orderbook": true,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
     {
       "asset": "HOT",
       "cohort": "EARLY_FLOW_ATTENTION",
@@ -409,12 +425,14 @@
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
         "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
       ],
-      "has_current_orderbook": true,
+      "has_current_orderbook": false,
       "needs_human_primary_source_review": true,
       "capital_ready": false
     },
@@ -538,23 +556,6 @@
       "capital_ready": false
     },
     {
-      "asset": "FLOW",
-      "cohort": "EARLY_FLOW_ATTENTION",
-      "status": "RESEARCH_INCOMPLETE",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
-        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
-      ],
-      "has_current_orderbook": false,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
       "asset": "2Z",
       "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
       "status": "RESEARCH_INCOMPLETE",
@@ -654,7 +655,8 @@
         "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "TWO_SIDED_VISIBLE_DEPTH_LT_10000_USDT"
       ],
       "has_current_orderbook": true,
       "needs_human_primary_source_review": true,
@@ -727,7 +729,7 @@
       "capital_ready": false
     },
     {
-      "asset": "XPL",
+      "asset": "ZRO",
       "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
@@ -746,23 +748,6 @@
     {
       "asset": "ARK",
       "cohort": "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED",
-      "status": "RESEARCH_INCOMPLETE",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
-        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
-      ],
-      "has_current_orderbook": false,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
-      "asset": "VIRTUAL",
-      "cohort": "EARLY_FLOW_ATTENTION",
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
@@ -932,6 +917,23 @@
     },
     {
       "asset": "SHIB",
+      "cohort": "EARLY_FLOW_ATTENTION",
+      "status": "RESEARCH_INCOMPLETE",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
+      ],
+      "has_current_orderbook": false,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
+    {
+      "asset": "STX",
       "cohort": "EARLY_FLOW_ATTENTION",
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
