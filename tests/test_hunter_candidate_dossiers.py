@@ -74,6 +74,48 @@ class DossierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"mismatched"):
             d.build(r,s,{},NOW)
 
+    def test_early_and_continuation_get_separate_slots(self):
+        def row(sym,change,volume):
+            item={"observations":{"market_structure":{
+                "return_vs_7_completed_days_pct":change,"volume_7d_ratio":volume}}}
+            return (sym,item,{},1,1,True)
+        full=[row("HOT"+str(i),40,3) for i in range(35)]+[
+            row("EARLY"+str(i),5,2) for i in range(20)]
+        selected,stats=d.balanced_candidates(full)
+        self.assertEqual(len(selected),40)
+        self.assertEqual(stats["early_selected"],16)
+        self.assertGreaterEqual(stats["continuation_selected"],12)
+        self.assertIn("EARLY0",[x[0] for x in selected])
+
+    def test_complete_verified_capital_gate_can_become_review_eligible(self):
+        scenario={"bear_return_pct":-30,"base_return_pct":50,"bull_return_pct":90}
+        fact={"liquidity_verified_at_utc":AT,"portfolio_verified_at_utc":AT,
+              "drawdown_budget_verified":True,"counterparty_verified":True,
+              "btc_same_horizon_base_return_pct":15,"liquidity_max_spread_bps":12,
+              "liquidity_orderbook_depth_2pct_usdt":30000,
+              "portfolio_open_cost_usdt":1400,
+              "portfolio_pending_reservations_usdt":600,
+              "max_proposed_new_cost_usdt":1000}
+        eligible,blockers=d.capital_gate(fact,scenario,2,NOW)
+        self.assertTrue(eligible,blockers)
+        fact["liquidity_orderbook_depth_2pct_usdt"]=100
+        eligible,blockers=d.capital_gate(fact,scenario,2,NOW)
+        self.assertFalse(eligible)
+        self.assertIn("DEPTH_INSUFFICIENT",blockers)
+
+    def test_pool_overbook_blocks_even_complete_evidence(self):
+        scenario={"bear_return_pct":-30,"base_return_pct":50,"bull_return_pct":90}
+        fact={"liquidity_verified_at_utc":AT,"portfolio_verified_at_utc":AT,
+              "drawdown_budget_verified":True,"counterparty_verified":True,
+              "btc_same_horizon_base_return_pct":15,"liquidity_max_spread_bps":12,
+              "liquidity_orderbook_depth_2pct_usdt":50000,
+              "portfolio_open_cost_usdt":18000,
+              "portfolio_pending_reservations_usdt":1000,
+              "max_proposed_new_cost_usdt":2000}
+        eligible,blockers=d.capital_gate(fact,scenario,2,NOW)
+        self.assertFalse(eligible)
+        self.assertIn("ALT_POOL_20000_USDT_CAP",blockers)
+
     def test_stale_exchange_data_fails(self):
         r,s=fixtures()
         r["universe_scan_as_of_utc"]=s["as_of_utc"]="2026-09-20T00:00:00+00:00"
