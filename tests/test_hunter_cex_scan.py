@@ -38,6 +38,31 @@ class CexUniverseTests(unittest.TestCase):
         self.assertEqual(status["active_pairs"],1)
         self.assertEqual(rows[0]["change_24h_pct"],-11)
 
+    def test_bybit_403_retries_only_alternate_official_host(self):
+        good=([{"venue":"bybit","base":"ABC","pair":"ABCUSDT",
+                "price":1.0,"volume_24h_usdt":1000,"change_24h_pct":0}],
+              {"active_pairs":1,"valid_pairs":1,"missing_or_invalid":[]})
+        with patch.object(scan,"bybit",side_effect=[
+                RuntimeError("HTTP Error 403: Forbidden"),good]) as fn:
+            rows,status=scan.bybit_with_fallback()
+        self.assertEqual(fn.call_count,2)
+        self.assertEqual(fn.call_args_list[1].args[0],"https://api.bybit.com")
+        self.assertEqual(status["api_host_used"],"https://api.bybit.com")
+        self.assertEqual(rows[0]["base"],"ABC")
+
+    def test_bybit_two_official_hosts_fail_without_fake_coverage(self):
+        with patch.object(scan,"bybit",side_effect=[
+                RuntimeError("HTTP Error 403: Forbidden"),
+                RuntimeError("HTTP Error 403: Forbidden")]):
+            with self.assertRaisesRegex(RuntimeError,"BYBIT_OFFICIAL_HOSTS_UNAVAILABLE"):
+                scan.bybit_with_fallback()
+
+    def test_bybit_non_access_error_not_hidden_by_fallback(self):
+        with patch.object(scan,"bybit",side_effect=RuntimeError("malformed ticker")) as fn:
+            with self.assertRaisesRegex(RuntimeError,"malformed ticker"):
+                scan.bybit_with_fallback()
+        self.assertEqual(fn.call_count,1)
+
     def test_cross_venue_union_and_existing_baseline(self):
         b={"venue":"binance","pair":"ABCUSDT","base":"ABC","price":1.03,"volume_24h_usdt":50000,"change_24h_pct":5}
         y={"venue":"bybit","pair":"ABCUSDT","base":"ABC","price":1.02,"volume_24h_usdt":10000,"change_24h_pct":4}
