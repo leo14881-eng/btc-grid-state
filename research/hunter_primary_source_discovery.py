@@ -116,8 +116,12 @@ def build(dossiers,cache,now,fetcher=fetch,budget=BUDGET):
             failures[sym]=type(exc).__name__+": "+str(exc)[:150]
     # Only expose currently selected dossier symbols; never mistake cached
     # links for fresh contract attestations.
-    active={d["asset"] for d in order}
-    leads={sym:entry for sym,entry in updated.items() if sym in active}
+    # A ticker can be reassigned or incorrectly matched between cycles.
+    # Never expose a stale link belonging to a different CoinGecko ID.
+    active={d["asset"]:(d.get("nonprice_observations") or {}).get("coingecko_id")
+            for d in order}
+    leads={sym:entry for sym,entry in updated.items()
+           if sym in active and entry.get("coingecko_id")==active[sym]}
     result={"schema":"hunter_primary_source_leads_v1",
             "as_of_utc":now.isoformat(),"dossier_as_of_utc":dossiers["as_of_utc"],
             "target_count":len(eligible),"fresh_fetched":fetched,
