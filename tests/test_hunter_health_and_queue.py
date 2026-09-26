@@ -56,6 +56,18 @@ class HealthQueueTests(unittest.TestCase):
         self.assertIn("OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
                       x["research_priority_queue"][0]["blockers"])
 
+    def test_reviewed_supply_risk_is_visible_in_priority_queue(self):
+        data=fixture()
+        data["dossiers"]["dossiers"][0]["reviewed_evidence"]={
+            "review_status":"MATERIAL_UNLOCK",
+            "review_action":"WAIT_FOR_UNLOCK_NOT_BUY",
+            "risk_event":{"status":"PENDING_ONCHAIN_RECONCILIATION"}}
+        report=h.build(data,NOW)
+        self.assertEqual(report["health"]["reviewed_candidates_retained"],1)
+        self.assertEqual(report["health"]["unresolved_material_supply_events"],1)
+        self.assertEqual(report["research_priority_queue"][0]["review_action"],
+                         "WAIT_FOR_UNLOCK_NOT_BUY")
+
     def test_mismatched_scan_is_fatal(self):
         data=fixture();data["identity"]["scan_as_of_utc"]="2026-09-01T00:00:00+00:00"
         x=h.build(data,NOW)
