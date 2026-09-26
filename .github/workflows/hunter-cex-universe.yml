@@ -15,6 +15,8 @@ on:
       - 'tests/test_hunter_candidate_dossiers.py'
       - 'research/hunter-verified-facts.json'
       - 'research/hunter_liquidity_probe.py'
+      - 'research/hunter_identity_audit.py'
+      - 'tests/test_hunter_identity_audit.py'
       - 'tests/test_hunter_liquidity_probe.py'
       - '.github/workflows/hunter-cex-universe.yml'
   schedule:
@@ -45,6 +47,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hunter_forward_audit.py' -v
       - name: Validate forward candidate dossiers and supply-adjusted scenarios
         run: python -m unittest discover -s tests -p 'test_hunter_candidate_dossiers.py' -v
+      - name: Validate token identity collision and asset-type safety
+        run: python -m unittest discover -s tests -p 'test_hunter_identity_audit.py' -v
       - name: Validate fresh orderbook evidence and failure isolation
         run: python -m unittest discover -s tests -p 'test_hunter_liquidity_probe.py' -v
       - name: Scan Binance and Bybit active USDT spot universes
@@ -56,6 +60,11 @@ jobs:
         if: steps.scan.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_forward_research.py
+      - name: Audit asset types and fail-closed official contract identities
+        id: identity
+        if: steps.research.outcome == 'success'
+        continue-on-error: true
+        run: python research/hunter_identity_audit.py
       - name: Freeze discovery snapshots and record actual forward outcomes
         id: audit
         if: steps.research.outcome == 'success'
@@ -63,7 +72,7 @@ jobs:
         run: python research/hunter_forward_audit.py
       - name: Generate forward candidate dossiers with explicit evidence gaps
         id: dossiers
-        if: steps.research.outcome == 'success'
+        if: steps.research.outcome == 'success' && steps.identity.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_candidate_dossiers.py
       - name: Probe current public Binance orderbook for early and continuation lanes
@@ -92,5 +101,5 @@ jobs:
           echo 'PERSISTENCE_FAILURE_AFTER_RETRIES'
           exit 1
       - name: Fail if verified Binance scan or forward research fails; report Bybit separately
-        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.liquidity.outcome != 'success'
+        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.liquidity.outcome != 'success'
         run: exit 2
