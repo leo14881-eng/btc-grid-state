@@ -9,16 +9,22 @@ No network requests or trading authority in this stage.
 import datetime as dt
 import json
 import pathlib
+import os
+import re
+import urllib.parse
+import urllib.request
 
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 MARKET=ROOT/"hunter-market-enrichment.json"
 FACTS=pathlib.Path("research/hunter-verified-facts.json")
 OUT=ROOT/"hunter-identity-audit.json"
+CONTRACT_CACHE=ROOT/"hunter-contract-corroboration-cache.json"
+CG=os.getenv("HUNTER_COINGECKO_API","https://api.coingecko.com/api/v3")
 
 # Explicit review list, never suffix-only exclusion: PUMP, ARB, etc. are valid.
 KNOWN_TOKENIZED_EQUITY={"AAPLB","MSFTB","MSTRB","NFLXB","NOKB","GOOGLB",
-    "TSLAB","AMZNB","NVDAB","META B"}
+    "TSLAB","AMZNB","NVDAB"}
 LEVERAGED_ROOTS={"BTC","ETH","BNB","XRP","SOL","DOGE","ADA","DOT",
     "LTC","LINK","AVAX","TRX"}
 LEVERAGED_SUFFIXES=("UP","DOWN","BULL","BEAR")
@@ -41,6 +47,61 @@ def source_candidates(rows):
         else:by[symbol]=row
     for symbol in ambiguous:by.pop(symbol,None)
     return by,ambiguous
+
+def fetch_contract_platforms(coin_id):
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{2,100}",coin_id):
+        raise ValueError("INVALID_COINGECKO_ID")
+    query=urllib.parse.urlencode({"localization":"false","tickers":"false",
+        "market_data":"false","community_data":"false","developer_data":"false"})
+    url=CG+"/coins/"+urllib.parse.quote(coin_id,safe="")+"?"+query
+    req=urllib.request.Request(url,headers={"User-Agent":"hunter-contract-audit/1.0",
+                                             "Accept":"application/json"})
+    with urllib.request.urlopen(req,timeout=7) as response:
+        data=json.load(response)
+    if data.get("id")!=coin_id or not isinstance(data.get("platforms"),dict):
+        raise ValueError("COINGECKO_ID_OR_PLATFORMS_INVALID")
+    return {"coin_id":coin_id,"platforms":data["platforms"],
+            "source_url":"https://www.coingecko.com/en/coins/"+coin_id}
+
+
+def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,limit=8):
+    """Only look up an independently attested contract; cache source timestamps."""
+    rows=[dict(x) for x in market.get("coingecko") or [] if isinstance(x,dict)]
+    by,collisions=source_candidates(rows)
+    assets=registry.get("assets") or {}
+    cache=dict(cache or {})
+    results={};failures={};fetched=0
+    for sym,fact in assets.items():
+        if not fact.get("contract_verified") or sym in collisions:continue
+        row=by.get(sym)
+        if not row:continue
+        ident=fact.get("identity") or {}
+        if ident.get("native_asset"):continue
+        coin_id=row.get("id")
+        if not isinstance(coin_id,str):continue
+        saved=cache.get(coin_id) or {}
+        try:
+            age=(now-dt.datetime.fromisoformat(saved["as_of_utc"])).total_seconds()/3600
+        except (KeyError,ValueError,TypeError):age=float("inf")
+        if age<0 or age>24:
+            if fetched>=limit:
+                failures[sym]="CONTRACT_LOOKUP_RATE_LIMIT_DEFERRED"
+                continue
+            fetched+=1
+            try:
+                fresh=fetch(coin_id)
+                saved={"as_of_utc":now.isoformat(),**fresh}
+                cache[coin_id]=saved
+            except Exception as exc:
+                failures[sym]=type(exc).__name__+": "+str(exc)[:140]
+                # Never use stale cached contract corroboration as fresh.
+                continue
+        row["platforms"]=saved.get("platforms") or {}
+        row["contract_as_of_utc"]=saved.get("as_of_utc")
+        results[sym]=saved.get("source_url")
+    market=dict(market,coingecko=rows)
+    return market,cache,{"fetched":fetched,"source_urls":results,"failures":failures}
+
 
 def normalize_contract(value):
     return str(value or "").strip().lower()
@@ -76,6 +137,12 @@ def identity_status(sym,coin,fact,third_party,now):
     external=normalize_contract(platforms.get(chain))
     if not external:
         return "ANALYST_ATTESTED_ONLY",["INDEPENDENT_PLATFORM_CONTRACT_UNAVAILABLE"]
+    try:
+        external_age=(now-dt.datetime.fromisoformat(cg["contract_as_of_utc"])).total_seconds()/3600
+        if external_age<0 or external_age>24:
+            return "ANALYST_ATTESTED_ONLY",["THIRD_PARTY_CONTRACT_EVIDENCE_STALE"]
+    except (KeyError,ValueError,TypeError):
+        return "ANALYST_ATTESTED_ONLY",["THIRD_PARTY_CONTRACT_TIMESTAMP_MISSING"]
     if external!=address:
         return "BLOCKED",["THIRD_PARTY_CONTRACT_MISMATCH"]
     return "THIRD_PARTY_CORROBORATED",[]
@@ -116,9 +183,14 @@ def build(scan,market,registry,now):
 
 def main():
     now=dt.datetime.now(dt.timezone.utc)
-    report=build(json.loads(SCAN.read_text()),
-                 json.loads(MARKET.read_text()),
-                 json.loads(FACTS.read_text()),now)
+    market=json.loads(MARKET.read_text())
+    registry=json.loads(FACTS.read_text())
+    try:cache=json.loads(CONTRACT_CACHE.read_text())
+    except (OSError,ValueError):cache={}
+    market,cache,lookups=enrich_contracts(market,registry,cache,now)
+    CONTRACT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\\n")
+    report=build(json.loads(SCAN.read_text()),market,registry,now)
+    report["third_party_contract_lookup"]=lookups
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({"universe_count":report["universe_count"],
                       "identity_counts":report["counts"],
