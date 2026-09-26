@@ -15,6 +15,26 @@ scan=importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(scan)
 
 class CexUniverseTests(unittest.TestCase):
+    def test_production_scan_never_calls_bybit(self):
+        row={"venue":"binance","pair":"ABCUSDT","base":"ABC",
+             "price":1.0,"volume_24h_usdt":50000,"change_24h_pct":3}
+        status={"active_pairs":1,"valid_pairs":1,"missing_or_invalid":[]}
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(scan,"OUT",pathlib.Path(folder)):
+                with patch.object(scan,"binance",return_value=([row],status)):
+                    with patch.object(scan,"bybit_from_authorized_region") as bybit:
+                        with patch.object(scan,"bybit_with_fallback") as fallback:
+                            self.assertEqual(scan.main(),0)
+                            bybit.assert_not_called()
+                            fallback.assert_not_called()
+            report=json.loads((pathlib.Path(folder)/
+                               "hunter-cex-universe-run.json").read_text())
+            self.assertEqual(report["required_venues"],["binance"])
+            self.assertEqual(report["coverage_status"],"BINANCE_COMPLETE")
+            self.assertTrue(report["complete"])
+            self.assertEqual(set(report["venue_status"]),{"binance"})
+            self.assertNotIn("bybit",report["errors"])
+
     def test_pump_not_dropped_by_up_suffix(self):
         self.assertTrue(scan.valid("PUMP"))
         self.assertTrue(scan.valid("BTC"))
