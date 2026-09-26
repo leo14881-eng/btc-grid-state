@@ -559,7 +559,7 @@
   },
   "confirmed_asymmetric_positions_at_initialization": 0,
   "initialization_note": "Initialized after verifying the current portfolio Asymmetric allocation is zero and no Hunter asset position is present. Empty assets is valid when there are no confirmed Asymmetric positions. Future user-confirmed executions must follow decision journal -> portfolio state -> Hunter ledger synchronization.",
-  "last_scan_at": "2026-09-26T00:15:00+07:00",
+  "last_scan_at": "2026-09-26T01:52:00+07:00",
   "data_quality": "V1_NO_INCREMENTAL_VALUE_QUARANTINED",
   "eligibility_context": [
     {
@@ -1192,8 +1192,10 @@
     "status": "RULES_PERSISTED_LIVE_SCHEDULER_NOT_VERIFIED",
     "rules_commit": "359962e7583791232e17b976f333bb0f24c6cc91",
     "purpose": "ENFORCE_TRIGGERED_CANDIDATE_CLOSURE_AND_FATAL_BLOCKER_ESCALATION",
-    "last_actual_market_scan_at": "2026-09-26T00:15:00+07:00",
-    "do_not_misstate_live_execution": true
+    "last_actual_market_scan_at": "2026-09-26T01:52:00+07:00",
+    "do_not_misstate_live_execution": true,
+    "previous_last_scan_at": "2026-09-26T00:15:00+07:00",
+    "last_scan_at_correction": "Reconciled existing last_scan_at with already-persisted scan_summary.as_of; not a new live scan"
   },
   "closure_queue": {
     "schema": "v2.17.3",
@@ -1248,6 +1250,8 @@
       "SLA_STATUS",
       "CAPITAL_GATE_STATUS"
     ],
-    "missed_opportunity_audit": "PUMP_PROCESS_DELAY__ENA_MISSED_DISCOVERY_AND_REEVALUATION"
+    "missed_opportunity_audit": "PUMP_PROCESS_DELAY__ENA_MISSED_DISCOVERY_AND_REEVALUATION",
+    "guard_script": "research/hunter_closure_guard.py",
+    "guard_execution_status": "SCRIPT_PERSISTED_NOT_SCHEDULED_NOT_YET_EXECUTED"
   }
 }
