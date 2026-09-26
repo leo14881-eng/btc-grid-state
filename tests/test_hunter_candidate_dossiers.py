@@ -74,6 +74,17 @@ class DossierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"mismatched"):
             d.build(r,s,{},NOW)
 
+    def test_ticker_only_wrong_market_cap_does_not_raise_priority(self):
+        research,scan=fixtures()
+        research["research_results"]["RALLY"]["observations"]["market_cap"]=999999999
+        research["research_results"]["RALLY"]["observations"]["coingecko_match_status"]="TICKER_ONLY__PROJECT_IDENTITY_UNVERIFIED"
+        research["research_results"]["DOWN"]["observations"]["market_cap"]=100000
+        research["research_results"]["DOWN"]["observations"]["coingecko_match_status"]="INDEPENDENT_ID_CORROBORATED"
+        ranked=d.prioritize(research,scan)
+        evidence={row[0]:row[4] for row in ranked}
+        self.assertEqual(evidence["RALLY"],0)
+        self.assertEqual(evidence["DOWN"],1)
+
     def test_early_flow_not_selected_alphabetically(self):
         def row(sym,vol):
             return (sym,{"observations":{"market_cap":100000000,
