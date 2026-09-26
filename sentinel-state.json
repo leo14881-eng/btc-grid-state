@@ -1,7 +1,7 @@
 {
-  "version": "3.36",
-  "updated_at": "2026-09-25T06:07:17+07:00",
-  "last_scan_at": "2026-09-25T06:07:17+07:00",
+  "version": "3.37",
+  "updated_at": "2026-09-26T08:23:26+07:00",
+  "last_scan_at": "2026-09-26T08:23:26+07:00",
   "persistence": {
     "provider": "github",
     "writable": true,
@@ -10,9 +10,9 @@
   "state_ownership": {
     "purpose": "Sentinel market and signal state only",
     "portfolio_source_of_truth": "portfolio-state.json",
-    "observed_portfolio_state_version": "1.5",
-    "observed_portfolio_state_updated_at": "2026-09-20T15:00:00+07:00",
-    "observed_portfolio_content_sha": "3a097f82c97e36bd60fe50f7e22ee9afdb010035"
+    "observed_portfolio_state_version": "1.7",
+    "observed_portfolio_state_updated_at": "2026-09-26T00:40:00+07:00",
+    "observed_portfolio_content_sha": "23992fe025d80cd64eafd0e9cb7c053b833c1e12"
   },
   "architecture_source": {
     "file": "4-year-wealth-architecture.md",
@@ -26,17 +26,17 @@
   },
   "market_state_freshness": {
     "status": "PARTIAL_DATA_NO_NEW_CAPITAL_ACTION",
-    "as_of": "2026-09-25T06:07:17+07:00",
-    "reason": "BTC was about 84.4K on the latest timestamped Sep24 price evidence after an intraday recovery from the low-83Ks, but remains below the prior 86-87K rejection zone. Sep24 US spot-BTC ETF final fund-level flow is not yet consistently verifiable; latest complete session remains Sep23 +346.98M. Treasury/dollar conditions remain restrictive; same-definition current BTC OI/funding/liquidations are incomplete. Data Freshness Hard Gate blocks new capital."
+    "as_of": "2026-09-26T08:23:26+07:00",
+    "reason": "Sep25 US spot-BTC ETF final fund-level flow is not yet reliably verifiable in this scan. Fresh Sep25 evidence shows BTC around 83.8-84K after failing to hold >85K intraday, while Treasury yields remain historically restrictive. Fresh reporting also shows leverage reduction and large exchange outflows/whale accumulation, creating meaningful counter-evidence to distribution risk. Data Freshness Hard Gate blocks new capital."
   },
-  "last_price": 83942.62,
-  "last_price_quality": "VERIFIED CURRENT SECONDARY SNAPSHOT Sep24 10:00 ET; exact exchange tick varies.",
+  "last_price": 83808.65,
+  "last_price_quality": "VERIFIED FRESH SECONDARY SNAPSHOT Sep25 late US morning; exact exchange tick varies.",
   "last_regime": "bear_market_accumulation_watch_breakout_candidate_under_pullback_not_confirmed",
   "etf_flow_acceleration": {
-    "status": "NO_NEW_VERIFIED_ACCELERATION_SEP24_PROVISIONAL",
-    "last_checked_at": "2026-09-25T06:07:17+07:00",
-    "current_session_date": "2026-09-24",
-    "current_session_state": "PROVISIONAL_NOT_VERIFIED_COMPLETE",
+    "status": "DECELERATION_THROUGH_SEP24__SEP25_FINAL_PENDING",
+    "last_checked_at": "2026-09-26T08:23:26+07:00",
+    "current_session_date": "2026-09-25",
+    "current_session_state": "FINAL_NOT_RELIABLY_VERIFIED",
     "trigger_reference": {
       "minimum_current_net_inflow_usd_m": 250,
       "minimum_improvement_vs_prior_complete_day_usd_m": 200
@@ -47,27 +47,24 @@
       "status": "VERIFIED_COMPLETE_SESSION"
     },
     "latest_complete_session": {
-      "date": "2026-09-23",
-      "net_inflow_usd_m": 346.98,
+      "date": "2026-09-24",
+      "net_inflow_usd_m": 190.7,
       "status": "VERIFIED_COMPLETE_SESSION",
       "major_contributors_usd_m": {
-        "IBIT": 166.29,
-        "FBTC": 143.24,
-        "ARKB": 5.04,
-        "MSBT": 32.41
+        "IBIT": 163
       }
     },
     "trigger_test": {
-      "result": "NO_NEW_VERIFIED_ETF_FLOW_ACCELERATION_TRIGGER",
-      "actionability": "REGIME_INPUT_ONLY_NO_CAPITAL_ACTION"
+      "result": "NO_NEW_VERIFIED_ACCELERATION__MULTI_DAY_DECELERATION_ACTIVE",
+      "actionability": "LEADING_DISTRIBUTION_RISK_INPUT__NO_CAPITAL_ACTION_DUE_FRESHNESS_GAP"
     },
     "last_trigger": {
       "date": "2026-09-21",
       "type": "ETF_FLOW_ACCELERATION",
       "status": "HISTORICAL_COMPLETED_SESSION_RECORDED_NO_DUPLICATE_ALERT"
     },
-    "divergence_status": "ETF_FLOW_PRICE_DIVERGENCE_PERSISTS_NOT_NEW",
-    "divergence_note": "Strong completed ETF inflows through Sep23 did not produce a sustained hold above the 86-87K rejection zone. Sep24 final flow remains provisional, so no new acceleration or divergence escalation is declared."
+    "divergence_status": "ETF_FLOW_PRICE_DIVERGENCE_PERSISTS",
+    "divergence_note": "Six-session ETF demand remained strongly positive through Sep24, but daily inflows decelerated for three sessions from the Sep21 peak while BTC failed to sustain >87K. Sep25 final ETF flow is not yet reliably verified."
   },
   "macro_state": {
     "as_of": "2026-09-24T22:53:30+07:00",
@@ -117,8 +114,8 @@
   },
   "allocation_gate": {
     "status": "NO_ACTION",
-    "recomputed_at": "2026-09-24T22:53:30+07:00",
-    "reason": "Accumulation Gate NOT_MET; adverse rate shock persists, ETF-flow/price divergence persists, Sep24 ETF flow is provisional, and stabilization remains unconfirmed."
+    "recomputed_at": "2026-09-26T08:23:26+07:00",
+    "reason": "Leading distribution risk persists and Data Freshness Hard Gate is not fully satisfied because Sep25 final ETF flow and harmonized current derivatives data remain incomplete."
   },
   "drawdown_budget": {
     "status": "NO_NEW_PROPOSAL_TO_STRESS_TEST",
@@ -134,14 +131,14 @@
   },
   "bybit_counterparty_risk": {
     "status": "GREEN",
-    "last_checked_at": "2026-09-25T06:07:17+07:00",
+    "last_checked_at": "2026-09-26T08:23:26+07:00",
     "withdrawal_status": "NO_CREDIBLE_PLATFORM_WIDE_WITHDRAWAL_SUSPENSION_FOUND",
     "por_status": "Latest readily verifiable official PoR evidence found remains older (36th report, balances as of 2026-05-27) with major reported assets above 100%; this is supportive but stale for real-time solvency and not a comprehensive audit.",
     "wallet_status": "NO_NEW_CREDIBLE_PLATFORM_LEVEL_ABNORMAL_LOSS_OR_OUTFLOW_FOUND",
     "security_incident": "NO_NEW_MAJOR_BYBIT_SECURITY_OR_CUSTODY_INCIDENT_VERIFIED",
     "regulatory_status": "NO_VERIFIED_NEW_PLATFORM_WIDE_FREEZE_INSOLVENCY_THREAT_OR_MAJOR_ENFORCEMENT_EVENT_FOUND",
     "source_conflict": false,
-    "note": "A fresh single Reddit report describes an individual compliance restriction; under frozen rules a single account/KYC-compliance case does not independently trigger YELLOW. No high-confidence direct major anomaly or two independent early-risk domains found. GREEN does not mean zero CEX risk.",
+    "note": "Fresh scan found normal current Bybit announcement activity and no high-confidence direct major anomaly or two independent early-risk domains. Older official PoR evidence remains supportive but stale for real-time solvency. GREEN does not mean zero CEX risk.",
     "recommended_action": "GREEN: normal operation allowed with residual CEX risk; YELLOW+ vetoes additions and triggers withdrawal-priority policy."
   },
   "regime": {
@@ -149,7 +146,29 @@
     "status": "CANDIDATE_NOT_CONFIRMED"
   },
   "action": {
-    "current": "NO_NEW_CAPITAL_ACTION_NO_CORE_SELL_KEEP_GRID_UNCHANGED",
-    "reason": "Data Freshness Hard Gate is not fully satisfied: Sep24 ETF final flow and same-definition current derivatives data are incomplete. BTC remains below the prior 86-87K rejection zone; macro rates/dollar backdrop is restrictive. Keep 14,000 USDT Grid unchanged, preserve ordinary dry powder, keep 50,000 USD Crisis Reserve isolated, and do not reduce BTC core while below the 0.5 BTC permanent floor. User retains execution authority."
+    "current": "STOP_ADDING_NO_NEW_CAPITAL_ACTION_NO_CORE_SELL_KEEP_GRID_UNCHANGED",
+    "reason": "Maintain 14,000 USDT Grid unchanged; do not add BTC/Grid capital while freshness gate is incomplete and leading distribution risk persists. Preserve ordinary dry powder and strictly isolate 50,000 USD Crisis Reserve. BTC core remains below 0.5 BTC permanent floor, so ordinary core selling remains prohibited. User retains execution authority."
+  },
+  "leading_warning": {
+    "primary_state": "EARLY_DISTRIBUTION_RISK",
+    "first_detected_at": "2026-09-25T18:30:00+07:00",
+    "main_path": "NEXT_24_72H__CONSOLIDATION_OR_SUPPORT_RETEST_BEFORE_ANY_SUSTAINED_87K_90K_BREAK__DISTRIBUTION_RISK_REMAINS_BUT_NOT_DOWNSIDE_CONFIRMED",
+    "leading_evidence": [
+      "ETF demand decelerated for three consecutive complete sessions through Sep24: about +999M -> +714.7M -> +346.98M -> +190.7M, while BTC failed to sustain >87K; marginal demand/price-response efficiency weakened.",
+      "Sep25 BTC failed to hold an intraday push above 85K and traded around 83.8K despite the prior six-session ETF inflow streak; this preserves the price-response divergence.",
+      "Counter-evidence: more than 13,800 BTC left Binance in a day and roughly 20,000 BTC over four days; fresh reporting also cites large-wallet accumulation, reducing confidence in a broad completed distribution thesis.",
+      "Counter-evidence: BTC held near 84K despite a severe Treasury-yield shock while about $1.7B of leverage was reportedly cut, suggesting deleveraging without a disorderly spot breakdown."
+    ],
+    "reversal_triggers": [
+      "Flip toward EARLY_UPSIDE_BUILDING if a complete ETF session reaches >=250M USD and improves >=200M vs prior complete day, BTC price response strengthens/accepts 86-87.4K+, and leverage does not re-expand aggressively.",
+      "Escalate toward EARLY_DOWNSIDE_BUILDING if 82K-area support fails to recover promptly AND at least one independent domain also worsens: ETF/spot demand turns materially negative, leverage expands into price weakness, macro liquidity tightens further with weaker BTC reaction, or fresh definition-clear holder/exchange supply turns distributive."
+    ],
+    "early_action": "STOP_ADDING",
+    "confirmation_status": "NO_DOWNSIDE_CONFIRMATION_REQUIRED_FOR_WARNING__DOWNSIDE_NOT_CONFIRMED",
+    "data_gaps": [
+      "Sep25 final US spot-BTC ETF fund-level net flow not reliably verified in this scan.",
+      "Same-definition current BTC OI/funding/basis/liquidations dataset incomplete.",
+      "Fresh definition-clear SOPR/LTH cohort supply data incomplete."
+    ]
   }
 }
