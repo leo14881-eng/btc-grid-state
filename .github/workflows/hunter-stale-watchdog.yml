@@ -1,0 +1,55 @@
+name: Hunter Stale-Result Watchdog
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 * * * *'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: hunter-watchdog-main
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Detect stale committed Hunter results
+        id: stale
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,datetime,os
+          p='research/results/hunter-cex-universe-summary.json'
+          try:
+              d=json.load(open(p))
+              t=datetime.datetime.fromisoformat(d['as_of_utc'].replace('Z','+00:00'))
+              age=(datetime.datetime.now(datetime.timezone.utc)-t).total_seconds()/60
+          except Exception as e:
+              print('HUNTER_RESULT_INVALID',repr(e))
+              age=float('inf')
+          print('HUNTER_RESULT_AGE_MINUTES',age)
+          stale=age>90 or age< -5
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              print('stale='+str(stale).lower(),file=f)
+          PY
+      - name: Check latest producer run and recover if no active run
+        if: steps.stale.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/hunter-cex-universe.yml/runs?per_page=5")
+          echo "$runs" | python -c 'import json,sys; d=json.load(sys.stdin); print("LATEST_PRODUCER_RUNS",[(r["id"],r["status"],r["conclusion"],r["created_at"]) for r in d["workflow_runs"]])'
+          active=$(echo "$runs" | python -c 'import json,sys; print(any(r["status"] in ("queued","in_progress","waiting","requested","pending") for r in json.load(sys.stdin)["workflow_runs"]))')
+          if [ "$active" = True ]; then
+            echo "HUNTER_STALE_ACTIVE_RUN_PRESENT: do not duplicate dispatch"
+            exit 1
+          fi
+          echo "HUNTER_STALE_RECOVERY_DISPATCH"
+          gh workflow run hunter-cex-universe.yml --ref main
+          exit 1
