@@ -54,12 +54,13 @@ def binance():
         rows.append(dict(venue="binance",pair=symbol,base=base,price=price,volume_24h_usdt=vol,change_24h_pct=change))
     return rows,dict(active_pairs=len(active),valid_pairs=len(rows),missing_or_invalid=missing)
 
-def bybit():
+def bybit(base_url=None):
+    base_url=base_url or BB
     active={};cursor="";seen=set()
     while True:
         params={"category":"spot"}
         if cursor:params["cursor"]=cursor
-        page=fetch(BB+"/v5/market/instruments-info?"+urllib.parse.urlencode(params))
+        page=fetch(base_url+"/v5/market/instruments-info?"+urllib.parse.urlencode(params))
         if page.get("retCode")!=0:raise RuntimeError("Bybit instruments: "+str(page.get("retMsg")))
         result=page.get("result") or {}
         for p in result.get("list") or []:
@@ -70,7 +71,7 @@ def bybit():
         if not next_cursor:break
         if next_cursor in seen or len(seen)>=100:raise RuntimeError("Bybit cursor loop/overflow")
         seen.add(next_cursor);cursor=next_cursor
-    page=fetch(BB+"/v5/market/tickers?category=spot")
+    page=fetch(base_url+"/v5/market/tickers?category=spot")
     if page.get("retCode")!=0:raise RuntimeError("Bybit tickers: "+str(page.get("retMsg")))
     quotes={p["symbol"]:p for p in (page.get("result") or {}).get("list",[]) if "symbol" in p}
     rows=[];missing=[]
@@ -81,6 +82,30 @@ def bybit():
             missing.append(symbol);continue
         rows.append(dict(venue="bybit",pair=symbol,base=base,price=price,volume_24h_usdt=vol,change_24h_pct=round(change*100,4)))
     return rows,dict(active_pairs=len(active),valid_pairs=len(rows),missing_or_invalid=missing)
+
+def bybit_with_fallback():
+    """Try the alternate official Bybit API host only on access denial.
+
+    Never substitute third-party exchange listings for genuine Bybit coverage.
+    """
+    try:
+        return bybit(BB)
+    except RuntimeError as first:
+        if "HTTP Error 403" not in str(first) and "HTTP Error 451" not in str(first):
+            raise
+        fallback="https://api.bybit.com"
+        if BB.rstrip("/")==fallback:
+            raise
+        try:
+            rows,status=bybit(fallback)
+            status["api_host_used"]=fallback
+            status["primary_host_access_error"]=str(first)
+            return rows,status
+        except Exception as second:
+            raise RuntimeError(
+                "BYBIT_OFFICIAL_HOSTS_UNAVAILABLE primary="+str(first)+
+                " fallback="+str(second)) from second
+
 
 def build(results,previous,at):
     grouped={}
@@ -127,7 +152,7 @@ def main():
     except (ValueError,OSError):previous={}
     at=dt.datetime.now(dt.timezone.utc).isoformat()
     results={};statuses={};errors={}
-    for name,fn in (("binance",binance),("bybit",bybit)):
+    for name,fn in (("binance",binance),("bybit",bybit_with_fallback)):
         try:
             rows,status=fn();results[name]=rows;statuses[name]=status
         except Exception as exc:
