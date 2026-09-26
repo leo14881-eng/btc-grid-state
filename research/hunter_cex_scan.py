@@ -116,7 +116,9 @@ def build(results,previous,at):
                 scope="ALL active Binance and Bybit USDT spot pairs, excluding stablecoin bases; leveraged-like tickers retained for separate risk classification",
                 limitations="Ticker dedup is provisional until contract IDs verified; venue 24h volumes overlap and must not be summed as unique demand.",
                 unique_base_tickers=len(coins),venue_counts={k:len(v) for k,v in results.items()},
-                coins=coins,research_leads=leads,capital_authority="NONE_RESEARCH_ONLY",\n                research_mandate="MAXIMIZE_CREDIBLE_FUTURE_UPSIDE_FROM_CURRENT_ENTRY_PRICE_REGARDLESS_OF_PRIOR_RALLY",\n                research_coverage_count=len(leads))
+                coins=coins,research_leads=leads,capital_authority="NONE_RESEARCH_ONLY",
+                research_mandate="MAXIMIZE_CREDIBLE_FUTURE_UPSIDE_FROM_CURRENT_ENTRY_PRICE_REGARDLESS_OF_PRIOR_RALLY",
+                research_coverage_count=len(leads))
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
