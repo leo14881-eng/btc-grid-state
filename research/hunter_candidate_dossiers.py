@@ -90,7 +90,7 @@ def classify_cohort(item):
     change=m.get("return_vs_7_completed_days_pct")
     volume=m.get("volume_7d_ratio")
     if isinstance(change,(float,int)) and isinstance(volume,(float,int)):
-        if change<=20 and volume>=1.3:
+        if -10<=change<=20 and volume>=1.3:
             return "EARLY_FLOW_ATTENTION"
         if change>20 and volume>=1.3:
             return "CONTINUATION_FORWARD_UPSIDE_ATTENTION"
