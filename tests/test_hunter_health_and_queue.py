@@ -37,7 +37,10 @@ class HealthQueueTests(unittest.TestCase):
         self.assertEqual(x["health"]["capital_ready"],0)
         self.assertIn("OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
                       x["research_priority_queue"][0]["blockers"])
-        self.assertEqual(x["health"]["bybit_error"],"403")
+        self.assertEqual(x["health"]["exchange_scope"],"BINANCE_ONLY")
+        self.assertEqual(x["health"]["required_venues"],["binance"])
+        self.assertNotIn("bybit_error",x["health"])
+        self.assertNotIn("bybit_complete",x["health"])
 
     def test_contract_only_is_not_full_fundamental_review(self):
         data=fixture()
