@@ -54,12 +54,12 @@ def lanes(dossiers):
     early=[x for x in dossiers.get("early_entry_watchlist") or [] if x in by]
     cont=[x for x in dossiers.get("continuation_watchlist") or [] if x in by]
     other=[x for x in by if x not in early and x not in cont]
-    order=[]
+    order=[s for s in dossiers.get("reviewed_watchlist") or [] if s in by]
     for i in range(max(len(early),len(cont))):
         if i<len(early):order.append(early[i])
         if i<len(cont):order.append(cont[i])
     order.extend(other)
-    return [by[s] for s in order]
+    return [by[s] for s in dict.fromkeys(order)]
 
 def extract(data,expected_sym,expected_id,now):
     if data.get("id")!=expected_id or str(data.get("symbol") or "").upper()!=expected_sym:
