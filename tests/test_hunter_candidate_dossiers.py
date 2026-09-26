@@ -215,6 +215,10 @@ class DossierTests(unittest.TestCase):
             "ask_depth_2pct_usdt":22000}}}
         yes_identity=d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity,liquidity)
         self.assertEqual(yes_identity["capital_ready"],["RALLY"])
+        self.assertEqual(yes_identity["dossiers"][0]["identity_blockers"],[])
+        self.assertNotIn("Primary-source token contract and exact asset identity not verified",
+                         yes_identity["dossiers"][0]["research_questions"])
+
         self.assertEqual(yes_identity["dossiers"][0]["live_orderbook_evidence"]["liquidity_max_spread_bps"],12)
         stale_liquidity=dict(liquidity,scan_as_of_utc="2026-09-01T00:00:00+00:00")
         self.assertEqual(d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity,stale_liquidity)["capital_ready"],[])
