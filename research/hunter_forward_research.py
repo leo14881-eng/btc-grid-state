@@ -163,6 +163,8 @@ def research_one(sym,coin,cg,dl,now):
     cap=cg.get(sym)
     if cap:
         result["observations"]["coingecko_id"]=cap.get("id")
+        result["observations"]["coingecko_match_status"]="TICKER_ONLY__PROJECT_IDENTITY_UNVERIFIED"
+        result["missing_facts"].append("CoinGecko ticker-only match may be a different token: independent contract+project ID required before treating market cap or supply as verified")
         for key in ("market_cap","fully_diluted_valuation","circulating_supply","total_supply"):
             result["observations"][key]=finite(cap.get(key))
         result["source_urls"].append("https://www.coingecko.com/en/coins/"+str(cap.get("id")))
@@ -203,8 +205,10 @@ def research_one(sym,coin,cg,dl,now):
     signals=[]
     if (market.get("volume_7d_ratio") or 0)>=1.5:
         signals.append("7D_VOLUME_EXPANSION")
+    # Do not create an attention trigger from an unrelated protocol with
+    # the same ticker; protocol association needs independent verification.
     if proto and (finite(proto.get("change_1m")) or 0)>=20:
-        signals.append("PROTOCOL_TVL_1M_GROWTH_PROXY_UNVERIFIED")
+        result["missing_facts"].append("Ticker-only protocol TVL growth needs independent protocol-token identity verification")
     if (finite(coin.get("change_since_previous_scan_pct")) or 0)>=8:
         signals.append("RECENT_REPRICING_REEVALUATE_FORWARD_UPSIDE")
     result["research_attention_signals"]=signals
