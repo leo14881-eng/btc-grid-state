@@ -216,6 +216,10 @@ def build(scan,market,registry,now):
             "counts":counts,"ticker_collisions":sorted(collisions),
             "assets":assets,"capital_authority":"NONE__ANALYST_EVIDENCE_AND_EXECUTION_GATES_SEPARATE"}
 
+def save_contract_cache(cache,path):
+    """Persist strict JSON, not a literal backslash-n suffix."""
+    path.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\n")
+
 def main():
     now=dt.datetime.now(dt.timezone.utc)
     market=json.loads(MARKET.read_text())
@@ -230,7 +234,7 @@ def main():
         state=cooldown.record_429(state,now,lookups.get("retry_after"),"identity")
         cooldown.save(state)
     lookups["shared_cooldown_active"]=cooldown.blocked(state,now)
-    CONTRACT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\n")
+    save_contract_cache(cache,CONTRACT_CACHE)
     report=build(json.loads(SCAN.read_text()),market,registry,now)
     report["third_party_contract_lookup"]=lookups
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
