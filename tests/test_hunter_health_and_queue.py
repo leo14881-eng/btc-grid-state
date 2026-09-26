@@ -16,7 +16,7 @@ def fixture():
                     "errors":{"bybit":"403"},"coins":{"ABC":{}}},
             "research":{"universe_scan_as_of_utc":AT,"deep_research_total_cached":1},
             "identity":{"scan_as_of_utc":AT,"counts":{}},
-            "dossiers":{"market_universe_size":1,"unresearched_market_count":0,
+            "dossiers":{"scan_as_of_utc":AT,"market_universe_size":1,"unresearched_market_count":0,
                 "dossiers":[{"asset":"ABC","opportunity_cohort":"EARLY_FLOW_ATTENTION",
                              "status":"RESEARCH_INCOMPLETE","identity_status":"UNVERIFIED",
                              "capital_gate_blockers":["EVIDENCE_GATED_SCENARIO_UNAVAILABLE"],
