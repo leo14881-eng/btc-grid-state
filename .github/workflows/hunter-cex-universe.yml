@@ -69,8 +69,18 @@ jobs:
           git add -A research/results/
           git diff --cached --quiet && exit 0
           git commit -m 'research: hourly Hunter CEX universe coverage and candidates'
-          git pull --rebase origin main
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git rebase origin/main || { echo 'PERSISTENCE_REBASE_CONFLICT'; git rebase --abort; exit 1; }
+            if git push origin HEAD:main; then
+              echo "PERSISTENCE_VERIFIED_PUSH attempt=$attempt"
+              exit 0
+            fi
+            echo "PERSISTENCE_CONCURRENT_UPDATE retry=$attempt"
+            sleep $((attempt * 2))
+          done
+          echo 'PERSISTENCE_FAILURE_AFTER_RETRIES'
+          exit 1
       - name: Fail if verified Binance scan or forward research fails; report Bybit separately
         if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.dossiers.outcome != 'success'
         run: exit 2
