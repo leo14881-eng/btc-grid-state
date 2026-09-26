@@ -1,4 +1,5 @@
 import datetime as dt
+import copy
 import importlib.util
 import os
 import pathlib
@@ -18,7 +19,7 @@ STATUS={"active_pairs":1,"valid_pairs":1,"missing_or_invalid":[]}
 def sample():
     payload={"schema":"hunter_bybit_regional_v1","source":r.SOURCE,
              "captured_at_utc":NOW.isoformat(),"egress_country":"VN",
-             "rows":ROWS,"venue_status":STATUS}
+             "rows":copy.deepcopy(ROWS),"venue_status":copy.deepcopy(STATUS)}
     payload["snapshot_sha256"]=r.checksum(payload)
     return payload
 
