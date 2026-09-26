@@ -74,6 +74,11 @@ class DossierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"mismatched"):
             d.build(r,s,{},NOW)
 
+    def test_falling_knife_not_misclassified_as_early_flow(self):
+        self.assertEqual(d.classify_cohort({"observations":{"market_structure":{
+            "return_vs_7_completed_days_pct":-46,
+            "volume_7d_ratio":3}}}),"ROTATING_FUNDAMENTALS_OR_UNCONFIRMED")
+
     def test_early_and_continuation_get_separate_slots(self):
         def row(sym,change,volume):
             item={"observations":{"market_structure":{
