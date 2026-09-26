@@ -8,6 +8,8 @@ on:
       - 'tests/test_hunter_cex_scan.py'
       - 'research/hunter_forward_research.py'
       - 'tests/test_hunter_forward_research.py'
+      - 'research/hunter_forward_audit.py'
+      - 'tests/test_hunter_forward_audit.py'
       - '.github/workflows/hunter-cex-universe.yml'
   schedule:
     - cron: '11 * * * *'
@@ -33,6 +35,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v
       - name: Validate forward research and evidence gates
         run: python -m unittest discover -s tests -p 'test_hunter_forward_research.py' -v
+      - name: Validate point-in-time prospective performance audit
+        run: python -m unittest discover -s tests -p 'test_hunter_forward_audit.py' -v
       - name: Scan Binance and Bybit active USDT spot universes
         id: scan
         continue-on-error: true
@@ -42,6 +46,11 @@ jobs:
         if: steps.scan.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_forward_research.py
+      - name: Freeze discovery snapshots and record actual forward outcomes
+        id: audit
+        if: steps.research.outcome == 'success'
+        continue-on-error: true
+        run: python research/hunter_forward_audit.py
       - name: Persist coverage, leads and explicit failures
         if: always()
         run: |
@@ -53,5 +62,5 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
       - name: Fail if verified Binance scan or forward research fails; report Bybit separately
-        if: steps.scan.outcome != 'success' || steps.research.outcome == 'failure'
+        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success'
         run: exit 2
