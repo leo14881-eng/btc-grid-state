@@ -90,6 +90,16 @@ class ForwardResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"No CEX coins"):
             engine.build_report({"coins":{}},{},{},NOW)
 
+    def test_cache_compaction_keeps_only_relevant_minimal_fields(self):
+        market={"coingecko":[{"symbol":"AAA","id":"aaa","market_cap":10,"image":"huge"},
+                             {"symbol":"ZZZ","id":"zzz","market_cap":20}],
+                "defillama":[{"symbol":"AAA","name":"AAA","tvl":50,"audit":"huge"}]}
+        result=engine.compact_market(market,{"AAA":{}})
+        self.assertEqual(len(result["coingecko"]),1)
+        self.assertNotIn("image",result["coingecko"][0])
+        self.assertNotIn("audit",result["defillama"][0])
+        self.assertEqual(result["cache_universe_count"],1)
+
     def test_refresh_failure_retains_timestamp_not_fresh_fake(self):
         old={"as_of_utc":"2026-09-20T00:00:00+00:00",
              "coingecko":[{"symbol":"AAA","id":"aaa"}],"defillama":[]}
