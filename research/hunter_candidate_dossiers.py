@@ -14,6 +14,7 @@ RESEARCH=ROOT/"hunter-forward-research.json"
 SCAN=ROOT/"hunter-cex-universe-run.json"
 FACTS=pathlib.Path("research/hunter-verified-facts.json")
 IDENTITY=ROOT/"hunter-identity-audit.json"
+LIQUIDITY=ROOT/"hunter-liquidity-probe.json"
 OUT=ROOT/"hunter-candidate-dossiers.json"
 MAX_DOSSIERS=40
 EARLY_QUOTA=16
@@ -172,13 +173,40 @@ def capital_gate(fact,scenario,entry,now):
     return not blockers,blockers
 
 
-def build(research,scan,registry,now,identity=None):
+def fresh_execution_evidence(liquidity,scan,sym,now):
+    """Public partial orderbook evidence only; never a fill guarantee."""
+    if liquidity.get("scan_as_of_utc")!=scan.get("as_of_utc"):
+        return {},["LIVE_ORDERBOOK_SCAN_MISMATCH"]
+    snapshot=(liquidity.get("snapshots") or {}).get(sym) or {}
+    pair=snapshot.get("pair")
+    pairs={p.get("pair") for p in (scan.get("coins") or {}).get(sym,{}).get("pairs") or []
+           if p.get("venue")=="binance"}
+    if pair not in pairs or snapshot.get("venue")!="binance":
+        return {},["LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH"]
+    try:
+        age=(now-parse(snapshot["as_of_utc"])).total_seconds()/3600
+        if age<0 or age>1:
+            return {},["LIVE_ORDERBOOK_STALE"]
+        spread=float(snapshot["spread_bps"])
+        bid=float(snapshot["bid_depth_2pct_usdt"])
+        ask=float(snapshot["ask_depth_2pct_usdt"])
+        if not all(math.isfinite(x) for x in (spread,bid,ask)) or min(spread,bid,ask)<0:
+            return {},["LIVE_ORDERBOOK_INVALID"]
+    except (ValueError,TypeError,KeyError,OverflowError):
+        return {},["LIVE_ORDERBOOK_INVALID"]
+    return {"liquidity_verified_at_utc":snapshot["as_of_utc"],
+            "liquidity_max_spread_bps":spread,
+            "liquidity_orderbook_depth_2pct_usdt":min(bid,ask)},[]
+
+
+def build(research,scan,registry,now,identity=None,liquidity=None):
     if research.get("universe_scan_as_of_utc")!=scan.get("as_of_utc"):
         raise ValueError("Refuse mismatched research and exchange snapshot")
     if not scan.get("binance_complete"):raise ValueError("Incomplete Binance coverage")
     if (now-parse(scan["as_of_utc"])).total_seconds()>7200:
         raise ValueError("Exchange snapshot stale (>2h)")
     identity=identity or {}
+    liquidity=liquidity or {}
     identity_fresh=(identity.get("scan_as_of_utc")==scan.get("as_of_utc"))
     identity_assets=identity.get("assets") or {}
     cases=[];full=prioritize(research,scan)
@@ -188,7 +216,15 @@ def build(research,scan,registry,now,identity=None):
         fact=facts_all.get(sym) or {}
         entry=float(coin["reference_price"])
         scen,missing=scenario_map(fact,entry,now)
-        ready,capital_blockers=capital_gate(fact,scen,entry,now)
+        execution,evidence_blockers=fresh_execution_evidence(liquidity,scan,sym,now)
+        capital_facts=dict(fact)
+        # Prevent a manually entered liquidity claim from bypassing fresh API data.
+        for key in ("liquidity_verified_at_utc","liquidity_max_spread_bps",
+                    "liquidity_orderbook_depth_2pct_usdt"):
+            capital_facts.pop(key,None)
+        capital_facts.update(execution)
+        ready,capital_blockers=capital_gate(capital_facts,scen,entry,now)
+        capital_blockers.extend(evidence_blockers)
         ident=identity_assets.get(sym) or {}
         identity_pass=identity_fresh and ident.get("capital_identity_pass") is True
         if not identity_pass:
@@ -207,6 +243,7 @@ def build(research,scan,registry,now,identity=None):
               "official_sources":fact.get("official_sources") or [],
               "identity_status":ident.get("identity_status","AUDIT_MISSING"),
               "identity_blockers":ident.get("blockers") or ["IDENTITY_AUDIT_MISSING"],
+              "live_orderbook_evidence":execution,
               "scenario_map":scen,"capital_gate_blockers":capital_blockers,
               "research_questions":list(dict.fromkeys(
                   (item.get("missing_facts") or [])+missing)),
@@ -218,6 +255,7 @@ def build(research,scan,registry,now,identity=None):
               "capital_ready":ready,"trade_action":"USER_REVIEW_REQUIRED" if ready else "NONE"}
         cases.append(case)
     return {"schema":"hunter_candidate_dossiers_v1","as_of_utc":now.isoformat(),
+            "scan_as_of_utc":scan["as_of_utc"],
             "market_universe_size":len(scan.get("coins") or {}),
             "deep_research_cached_count":len(research.get("research_results") or {}),
             "dossier_count":len(cases),"cohort_coverage":cohort_stats,
@@ -235,7 +273,7 @@ def build(research,scan,registry,now,identity=None):
 def main():
     now=dt.datetime.now(dt.timezone.utc)
     report=build(read(RESEARCH,{}),read(SCAN,{}),read(FACTS,{}),now,
-                 read(IDENTITY,{}))
+                 read(IDENTITY,{}),read(LIQUIDITY,{}))
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({k:report[k] for k in ("as_of_utc","market_universe_size",
         "deep_research_cached_count","dossier_count","unresearched_market_count",
