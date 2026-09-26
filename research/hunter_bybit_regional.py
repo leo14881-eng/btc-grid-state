@@ -37,6 +37,9 @@ def validate(snapshot,now,max_age_seconds=MAX_AGE_SECONDS):
     body={k:v for k,v in snapshot.items() if k!="snapshot_sha256"}
     if snapshot.get("snapshot_sha256")!=checksum(body):
         raise ValueError("BYBIT_REGIONAL_SNAPSHOT_CHECKSUM_MISMATCH")
+    country=snapshot.get("egress_country")
+    if not isinstance(country,str) or len(country)!=2 or not country.isalpha() or country in ("US","CN"):
+        raise ValueError("BYBIT_REGIONAL_COUNTRY_INVALID_OR_BLOCKED")
     status=snapshot.get("venue_status")
     rows=snapshot.get("rows")
     if not isinstance(status,dict) or not isinstance(rows,list) or not rows:
