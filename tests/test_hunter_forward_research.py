@@ -74,6 +74,23 @@ class ForwardResearchTests(unittest.TestCase):
         self.assertTrue(any("FDV >=3x" in x for x in result["missing_facts"]))
         self.assertFalse(result["capital_ready"])
 
+    def test_ticker_only_coin_and_protocol_never_count_as_verified(self):
+        c=coin("AI",0,1)
+        cg={"AI":{"id":"artificial-inu-3","market_cap":200000000,
+                  "fully_diluted_valuation":200000000}}
+        dl={"AI":{"name":"Unrelated AI protocol","tvl":9000000,
+                  "change_1m":50}}
+        with patch.object(engine,"get",return_value=[]):
+            result=engine.research_one("AI",c,cg,dl,NOW)
+        obs=result["observations"]
+        self.assertEqual(obs["coingecko_match_status"],
+                         "TICKER_ONLY__PROJECT_IDENTITY_UNVERIFIED")
+        self.assertEqual(obs["protocol_match_status"],
+                         "TICKER_ONLY__OFFICIAL_CONTRACT_VERIFICATION_REQUIRED")
+        self.assertNotIn("PROTOCOL_TVL_1M_GROWTH_PROXY_UNVERIFIED",
+                         result["research_attention_signals"])
+        self.assertFalse(result["capital_ready"])
+
     def test_all_universe_scanned_even_when_deep_research_is_batched(self):
         coins={"RALLY":coin("RALLY",0,200),"DOWN":coin("DOWN",0,-90),
                "FLAT":coin("FLAT",0,0)}
