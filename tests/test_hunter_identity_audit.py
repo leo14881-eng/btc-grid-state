@@ -66,7 +66,7 @@ class IdentityAuditTests(unittest.TestCase):
         calls=[]
         def fake(coin_id):
             calls.append(coin_id)
-            return {"coin_id":coin_id,"platforms":{"ethereum":"0x123"},
+            return {"coin_id":coin_id,"symbol":"ABC","platforms":{"ethereum":"0x123"},
                     "source_url":"https://www.coingecko.com/en/coins/"+coin_id}
         enriched,cache,meta=audit.enrich_contracts(
             market,{"assets":{"ABC":fact()}},{},NOW,fetch=fake)
@@ -89,6 +89,36 @@ class IdentityAuditTests(unittest.TestCase):
         self.assertIn("ABC",meta["failures"])
         r=audit.build(scan(),enriched,{"assets":{"ABC":fact()}},NOW)
         self.assertFalse(r["assets"]["ABC"]["capital_identity_pass"])
+
+    def test_small_cap_not_in_market_top500_can_be_corrobated(self):
+        declared=fact()
+        declared["identity"]["coingecko_id"]="abc-project"
+        def fake(coin_id):
+            return {"coin_id":coin_id,"symbol":"ABC",
+                    "asset_platform_id":"ethereum",
+                    "platforms":{"ethereum":"0x123"},
+                    "source_url":"https://www.coingecko.com/en/coins/"+coin_id}
+        market,cache,meta=audit.enrich_contracts(
+            {"coingecko":[]},{"assets":{"ABC":declared}},{},NOW,fetch=fake)
+        r=audit.build(scan(),market,{"assets":{"ABC":declared}},NOW)
+        self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
+
+    def test_native_coin_needs_independent_current_coin_id(self):
+        declared={"contract_verified":True,"identity":{
+            "exchange_pair":"ABCUSDT","native_asset":True,
+            "native_chain":"abc-chain","coingecko_id":"abc-project",
+            "official_contract_source":"https://project.example/native",
+            "verified_at_utc":AT}}
+        def fake(coin_id):
+            return {"coin_id":coin_id,"symbol":"ABC",
+                    "asset_platform_id":None,"platforms":{},
+                    "source_url":"https://www.coingecko.com/en/coins/"+coin_id}
+        market,_,_=audit.enrich_contracts(
+            {"coingecko":[]},{"assets":{"ABC":declared}},{},NOW,fetch=fake)
+        r=audit.build(scan(),market,{"assets":{"ABC":declared}},NOW)
+        self.assertEqual(r["assets"]["ABC"]["identity_status"],
+                         "THIRD_PARTY_NATIVE_CORROBORATED")
+        self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
 
     def test_wrong_exchange_pair_blocks(self):
         status,blockers=audit.identity_status(
