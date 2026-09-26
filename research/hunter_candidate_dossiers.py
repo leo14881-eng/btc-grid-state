@@ -7,6 +7,7 @@ scenario maps. Protocol TVL, past rallies and volume are NOT token valuations.
 import datetime as dt
 import json
 import pathlib
+import math
 
 ROOT=pathlib.Path("research/results")
 RESEARCH=ROOT/"hunter-forward-research.json"
@@ -41,7 +42,7 @@ def scenario_map(facts,entry,now):
         if age<0 or age>336:return None,["Verified facts stale (>14d) or future dated"]
         supply=float(facts["supply_future"])
         caps=[float(facts[x]) for x in ("bear_market_cap_usd","base_market_cap_usd","bull_market_cap_usd")]
-        if supply<=0 or entry<=0 or any(x<=0 for x in caps) or caps!=sorted(caps):
+        if not all(math.isfinite(x) for x in [supply,entry]+caps) or supply<=0 or entry<=0 or any(x<=0 for x in caps) or caps!=sorted(caps):
             return None,["Scenario inputs nonpositive or market caps not ordered"]
     except (TypeError,ValueError,OverflowError,KeyError):
         return None,["Scenario inputs invalid"]
@@ -142,6 +143,8 @@ def capital_gate(fact,scenario,entry,now):
         btc_base=float(fact["btc_same_horizon_base_return_pct"])
         if spread<0 or spread>50:blockers.append("SPREAD_EXCEEDS_50_BPS")
         if depth<max(10000,proposal*10):blockers.append("DEPTH_INSUFFICIENT")
+        if not all(math.isfinite(x) for x in (spread,depth,open_cost,pending,proposal,btc_base)):
+            blockers.append("NONFINITE_CAPITAL_GATE_INPUT")
         if min(open_cost,pending,proposal)<0 or proposal<=0 or open_cost+pending+proposal>20000:
             blockers.append("ALT_POOL_20000_USDT_CAP")
         if scenario["base_return_pct"]<=btc_base:
