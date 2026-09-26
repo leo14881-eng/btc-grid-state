@@ -44,7 +44,9 @@ def build(data,now):
                                            "THIRD_PARTY_NATIVE_CORROBORATED"):
             blockers.append("IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT")
         if not d.get("official_sources"):
-            blockers.append("OFFICIAL_TOKENOMICS_AND_VALUE_CAPTURE_MISSING")
+            blockers.append("OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING")
+        if not d.get("scenario_map"):
+            blockers.append("OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING")
         if not d.get("scenario_map"):
             blockers.append("FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING")
         if not book:
@@ -60,7 +62,7 @@ def build(data,now):
         queue.append({"asset":sym,"cohort":d.get("opportunity_cohort"),
                       "status":d.get("status"),"blockers":list(dict.fromkeys(blockers)),
                       "has_current_orderbook":bool(book) and "ORDERBOOK_STALE" not in blockers,
-                      "needs_human_primary_source_review":not d.get("official_sources"),
+                      "needs_human_primary_source_review":not bool(d.get("scenario_map")),
                       "capital_ready":d.get("capital_ready") is True})
     # Balanced, bounded evidence queue; no expected-return ranking.
     early=[x for x in queue if x["cohort"]=="EARLY_FLOW_ATTENTION"]
@@ -74,6 +76,12 @@ def build(data,now):
             "bybit_error":(scan.get("errors") or {}).get("bybit"),
             "universe_size":len(scan.get("coins") or {}),
             "researched_cached":research.get("deep_research_total_cached"),
+            "market_data_screened_cached":research.get("deep_research_total_cached"),
+            "official_contract_identity_verified":sum((identity.get("counts") or {}).get(k,0)
+                for k in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
+            "forward_economic_scenario_ready":sum(bool(d.get("scenario_map"))
+                for d in dossiers.get("dossiers") or []),
+            "coverage_warning":"MARKET_SCREENING_IS_NOT_VERIFIED_FUNDAMENTAL_RESEARCH",
             "unresearched":dossiers.get("unresearched_market_count"),
             "dossiers":len(queue),
             "identity_corroborated":sum((identity.get("counts") or {}).get(k,0) for k in
