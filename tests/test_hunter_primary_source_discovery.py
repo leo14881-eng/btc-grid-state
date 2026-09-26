@@ -1,6 +1,7 @@
 import datetime as dt
 import importlib.util
 import pathlib
+import urllib.error
 import unittest
 
 spec=importlib.util.spec_from_file_location(
@@ -57,6 +58,17 @@ class PrimaryDiscoveryTests(unittest.TestCase):
         self.assertEqual(result["fresh_fetched"],1)
         self.assertEqual(len(result["failures"]),1)
         self.assertEqual(result["leads"],{})
+
+    def test_http_429_pauses_remaining_lookups(self):
+        calls=[]
+        def blocked(cid):
+            calls.append(cid)
+            raise urllib.error.HTTPError("https://api.coingecko.com",429,
+                                         "Too Many Requests",None,None)
+        result,_=m.build(dossiers(),{},NOW,fetcher=blocked,budget=6)
+        self.assertEqual(len(calls),1)
+        self.assertEqual(result["fresh_fetched"],1)
+        self.assertIn("_source_rate_limit",result["failures"])
 
     def test_no_coin_id_yields_explicit_empty_report(self):
         d=dossiers()
