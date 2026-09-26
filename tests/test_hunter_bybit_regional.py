@@ -36,6 +36,13 @@ class RegionalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"FUTURE"):
             r.validate(sample(),NOW-dt.timedelta(seconds=1))
 
+    def test_reject_known_blocked_country_even_with_valid_checksum(self):
+        p=sample();p["egress_country"]="US"
+        p["snapshot_sha256"]=r.checksum({k:v for k,v in p.items()
+                                        if k!="snapshot_sha256"})
+        with self.assertRaisesRegex(ValueError,"COUNTRY_INVALID_OR_BLOCKED"):
+            r.validate(p,NOW)
+
     def test_reject_corrupt_and_untrusted(self):
         p=sample();p["rows"][0]["price"]=2
         with self.assertRaisesRegex(ValueError,"CHECKSUM"):
