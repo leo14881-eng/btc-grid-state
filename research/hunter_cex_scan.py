@@ -100,16 +100,23 @@ def build(results,previous,at):
                          change_24h_pct=pct,change_since_previous_scan_pct=round(since,3) if since is not None else None,
                          stage=stage,venue_prices={r["venue"]:r["price"] for r in rows},
                          contract_identity_unverified=len(rows)>1)
-        if stage!="BASELINE":
-            leads.append(dict(base=base,stage=stage,reference_price=reference["price"],
-                              change_24h_pct=pct,change_since_previous_scan_pct=coins[base]["change_since_previous_scan_pct"],
-                              venues=coins[base]["venues"],research_only=True))
-    leads.sort(key=lambda r:(r["stage"]=="PRE_MOVE_WATCH",r["stage"]=="EARLY_MOVE",r["change_since_previous_scan_pct"] or 0),reverse=True)
+        # Every listed asset enters forward-upside research, irrespective of its
+        # prior return or price-only stage. A rally is neither an eligibility
+        # bonus nor an automatic rejection. Deep research must evaluate upside
+        # FROM THE CURRENT ENTRY PRICE and the credible catalyst window.
+        leads.append(dict(base=base,stage=stage,reference_price=reference["price"],
+                          change_24h_pct=pct,change_since_previous_scan_pct=coins[base]["change_since_previous_scan_pct"],
+                          venues=coins[base]["venues"],research_only=True,
+                          research_priority="FORWARD_UPSIDE_UNASSESSED",
+                          prior_rally_auto_reject=False))
+    # Stable alphabetical ordering prevents stage-biased top-N truncation.
+    # Momentum is retained for separate alerting, never as a buy ranking.
+    leads.sort(key=lambda r:r["base"])
     return dict(schema="hunter_cex_universe_v1",as_of_utc=at,
                 scope="ALL active Binance and Bybit USDT spot pairs, excluding stablecoin bases; leveraged-like tickers retained for separate risk classification",
                 limitations="Ticker dedup is provisional until contract IDs verified; venue 24h volumes overlap and must not be summed as unique demand.",
                 unique_base_tickers=len(coins),venue_counts={k:len(v) for k,v in results.items()},
-                coins=coins,research_leads=leads[:150],capital_authority="NONE_RESEARCH_ONLY")
+                coins=coins,research_leads=leads,capital_authority="NONE_RESEARCH_ONLY",\n                research_mandate="MAXIMIZE_CREDIBLE_FUTURE_UPSIDE_FROM_CURRENT_ENTRY_PRICE_REGARDLESS_OF_PRIOR_RALLY",\n                research_coverage_count=len(leads))
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
