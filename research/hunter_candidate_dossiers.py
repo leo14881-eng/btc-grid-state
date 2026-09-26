@@ -78,8 +78,13 @@ def prioritize(research,scan):
         # rallied and declined assets use identical rules.
         fresh=item.get("researched_at_utc")==research.get("as_of_utc")
         has_market=bool(market)
-        has_cap=obs.get("market_cap") is not None
-        has_tvl=obs.get("defillama_tvl_usd") is not None
+        # Ticker-only CoinGecko/DefiLlama matches are research hints, not
+        # independently corroborated evidence. Never reward a possibly
+        # unrelated token or protocol with a higher evidence priority.
+        has_cap=(obs.get("market_cap") is not None and
+                 obs.get("coingecko_match_status")=="INDEPENDENT_ID_CORROBORATED")
+        has_tvl=(obs.get("defillama_tvl_usd") is not None and
+                 obs.get("protocol_match_status")=="INDEPENDENT_PROTOCOL_CORROBORATED")
         attention=(3 if sym in triggered else 0)+(2 if sym in backlog else 0)+len(signals)
         evidence_count=int(has_market)+int(has_cap)+int(has_tvl)
         rows.append((sym,item,coin,attention,evidence_count,fresh))
@@ -110,7 +115,7 @@ def balanced_candidates(full):
         obs=row[1].get("observations") or {}
         market=obs.get("market_structure") or {}
         vol=market.get("volume_7d_ratio") or 0
-        cap=obs.get("market_cap")
+        cap=obs.get("market_cap") if obs.get("coingecko_match_status")=="INDEPENDENT_ID_CORROBORATED" else None
         # 1.5x-6x is the non-extreme flow band; extreme spikes are still
         # eligible for continuation/overflow research, never banned.
         controlled=1.5<=vol<=6
