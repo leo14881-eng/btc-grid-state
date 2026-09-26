@@ -1,0 +1,110 @@
+{
+  "schema": "hunter_reviewed_watchlist_v1",
+  "as_of_utc": "2026-09-26T10:20:00+00:00",
+  "policy": "Dated analyst evidence queue, NOT an expected-return ranking or trade approval. Keep independently researched assets in dossiers even when flow rotation changes. Reverify time-sensitive events and sources; no automatic BUY.",
+  "assets": {
+    "DOLO": {
+      "reviewed_at_utc": "2026-09-26T10:20:00+00:00",
+      "review_status": "OFFICIAL_TOKEN_MECHANICS_VERIFIED_FORWARD_ECONOMICS_PENDING",
+      "official_sources": [
+        "https://docs.dolomite.io/dolo/token-mechanics",
+        "https://docs.dolomite.io/dolo/distribution"
+      ],
+      "corroborating_sources": [
+        "https://www.coingecko.com/en/coins/dolomite"
+      ],
+      "verified_findings": [
+        "Official DOLO Ethereum-compatible contract 0x0F81001eF0A83ecCE5ccebf63EB302c70a39a654",
+        "Official initial supply allocation 1,000,000,000; current and forward circulating supply NOT independently verified",
+        "Liquid DOLO has no automatic fee distribution; potential veDOLO fee share conditional on DAO activation",
+        "oDOLO pairing creates DOLO demand but is not direct holder revenue"
+      ],
+      "open_questions": [
+        "Confirm live fee switch on-chain; do not count protocol revenue as DOLO dividends",
+        "Verify 30/90/180d saleable supply, insider wallets, emissions",
+        "Measure Binance executable depth, BTC-relative forward upside and dilution-aware scenario"
+      ],
+      "review_action": "FUNDAMENTAL_DUE_DILIGENCE_NOT_BUY"
+    },
+    "2Z": {
+      "reviewed_at_utc": "2026-09-26T10:20:00+00:00",
+      "review_status": "MATERIAL_NEAR_TERM_SUPPLY_EVENT_REQUIRES_RECONCILIATION",
+      "official_sources": [
+        "https://doublezero.xyz/2z-tokenomics-disclosure.pdf"
+      ],
+      "corroborating_sources": [
+        "https://static.upbit.com/guide/circulating_supply/2Z_20251002.pdf",
+        "https://app.tokenomics.com/tokenomics/doublezero/unlocks"
+      ],
+      "verified_findings": [
+        "DoubleZero initial issuer disclosure documents multi-year insider vesting, no tokenholder rights to dividends or profit sharing",
+        "Upbit-published projected month-end 2Z circulating supply: September 2026 3,469,417,500 and October 2026 5,113,013,125; schedule is not proof of actual on-chain unlock",
+        "Independent third-party schedule indicates October 2 2026 large insider-heavy cliff; its projected token count differs from exchange monthly schedule"
+      ],
+      "open_questions": [
+        "Verify actual 2026-10-02 on-chain released and immediately saleable supply",
+        "Reconcile differences between issuer disclosure, Upbit monthly supply forecast and third-party cliff schedule",
+        "Do not infer actual price fall from arithmetic dilution"
+      ],
+      "risk_event": {
+        "kind": "LARGE_PROJECTED_UNLOCK",
+        "date_utc": "2026-10-02T00:00:00+00:00",
+        "baseline_circulating": 3469417500,
+        "projected_circulating": 5113013125,
+        "source": "https://static.upbit.com/guide/circulating_supply/2Z_20251002.pdf",
+        "status": "PENDING_ONCHAIN_RECONCILIATION"
+      },
+      "review_action": "WAIT_FOR_UNLOCK_AND_ONCHAIN_SUPPLY_VERIFICATION_NOT_BUY"
+    },
+    "AERO": {
+      "reviewed_at_utc": "2026-09-26T10:20:00+00:00",
+      "review_status": "TOKEN_CAPTURE_AND_MIGRATION_UNRESOLVED",
+      "official_sources": [
+        "https://aerodrome.finance/docs"
+      ],
+      "corroborating_sources": [
+        "https://defillama.com/token/AERO"
+      ],
+      "verified_findings": [
+        "Official Aerodrome documentation distinguishes liquid AERO from fee-earning locked veAERO"
+      ],
+      "open_questions": [
+        "Verify actual merger/migration terms and issuance schedule",
+        "Quantify current net value capture for liquid versus locked AERO",
+        "Recheck post-rally executable depth and forward return relative to BTC"
+      ],
+      "review_action": "VERIFY_MIGRATION_AND_NET_CAPTURE_NOT_BUY"
+    },
+    "ENA": {
+      "reviewed_at_utc": "2026-09-26T10:20:00+00:00",
+      "review_status": "FORWARD_SUPPLY_AND_VALUE_CAPTURE_UNRESOLVED",
+      "official_sources": [],
+      "corroborating_sources": [],
+      "verified_findings": [],
+      "open_questions": [
+        "Independently verify official token contract and 30/90/180d insider saleable supply",
+        "Confirm official tokenholder capture and demand relative to issuance",
+        "Quantify current forward scenarios and BTC-relative upside"
+      ],
+      "review_action": "FUNDAMENTAL_DUE_DILIGENCE_NOT_BUY"
+    },
+    "COMP": {
+      "reviewed_at_utc": "2026-09-26T10:20:00+00:00",
+      "review_status": "IDENTITY_CORROBORATED_FORWARD_ECONOMICS_PENDING",
+      "official_sources": [
+        "https://compound.finance/governance/comp",
+        "https://docs.compound.finance/v2/"
+      ],
+      "corroborating_sources": [],
+      "verified_findings": [
+        "COMP Ethereum contract already independently corroborated in Hunter identity registry"
+      ],
+      "open_questions": [
+        "Independently verify supply/emissions for 30/90/180d",
+        "Do not treat protocol revenue as direct COMP dividends without official mechanism",
+        "Build sourced forward market-cap scenarios"
+      ],
+      "review_action": "FUNDAMENTAL_DUE_DILIGENCE_NOT_BUY"
+    }
+  }
+}
