@@ -589,12 +589,13 @@
       "current_price_as_of": "2026-09-26T14:51:31.098+07:00",
       "current_price_source": "CMC LIVE SEP26",
       "thesis": "BENQI lending + staked AVAX protocol; full circulating supply, onchain fees but extreme volume/cap and >100% one-day repricing",
-      "capital_readiness": "REJECT_CURRENT_PRICE_ENTRY__RESEARCH_RECHECK_ONLY",
+      "capital_readiness": "BLOCKED_EXECUTION_VENUE_AND_POST_MOVE_FRM",
       "execution_state": "NO_ORDER",
       "missing_facts": "Holder revenue allocation/current earnings sustainability, post-spike depth, Bybit executable pair, forward return vs BTC",
       "market_cap_usd_approx": 25061430,
       "volume_24h_usd_approx": 84553871,
-      "move_24h_pct_approx": 132.87
+      "move_24h_pct_approx": 132.87,
+      "execution_constraint": "QI/USDT NOT FOUND in Bybit English spot directory (519 URLs) despite search-indexed /trade/spot/QI/USDT page; cannot authorize venue until exchange instruments API verifies active trading"
     },
     "PHA": {
       "candidate_id": "PHA-20260926-BROAD-001",
@@ -607,12 +608,13 @@
       "current_price_as_of": "2026-09-26T14:51:31.098+07:00",
       "current_price_source": "CoinMarket.vn SEP26 08:54",
       "thesis": "Confidential AI compute and new AI sector narrative; ~1B total, ~857M circulating",
-      "capital_readiness": "WAIT_REPRICE_AND_NONPRICE_VALIDATION",
+      "capital_readiness": "BLOCKED_EXECUTION_VENUE_AND_POST_MOVE_FRM",
       "execution_state": "NO_ORDER",
       "missing_facts": "Verify official usage revenue paid in PHA and burn/demand, >60% daily and >140% 7d rerating, Bybit depth, current FRM",
       "market_cap_usd_approx": 72657152,
       "volume_24h_usd_approx": 226525863,
-      "move_24h_pct_approx": 68.36
+      "move_24h_pct_approx": 68.36,
+      "execution_constraint": "PHA/USDT NOT FOUND in Bybit English spot directory; exchange instruments API verification needed"
     },
     "ALCH": {
       "candidate_id": "ALCH-20260926-BROAD-001",
@@ -625,10 +627,12 @@
       "current_price_as_of": "2026-09-26T14:51:31.098+07:00",
       "current_price_source": "CoinGecko SEP25 HISTORICAL",
       "thesis": "Smaller-cap AI app token, 7d rerating ~40% but no independently verified new product revenue catalyst",
-      "capital_readiness": "RESEARCH_ONLY__FUNDAMENTAL_DATA_INCOMPLETE",
+      "capital_readiness": "BLOCKED_MATERIAL_SUPPLY_CONFLICT_AND_NO_VERIFIED_TOKEN_VALUE_CAPTURE",
       "execution_state": "NO_ORDER",
       "missing_facts": "Current primary usage/revenue, supply, unlock, Bybit spot and independent demand",
-      "market_cap_usd_approx": 46237024
+      "market_cap_usd_approx": 46237024,
+      "execution_constraint": "ALCH/USDT appears in Bybit official spot directory, but orderbook and live instruments API not verified",
+      "supply_conflict": "CoinGecko/GiaCoin Sep25 circulating 850M vs Bybit Sep25 price page 999.95M; primary contract/float reconciliation required before capital"
     },
     "GRASS": {
       "candidate_id": "GRASS-20260926-BROAD-001",
@@ -645,7 +649,8 @@
       "execution_state": "NO_ORDER",
       "missing_facts": "Sep27 10.5M early-investor unlock ~1.55% float and future schedules, real token revenue",
       "market_cap_usd_approx": 350840000,
-      "move_24h_pct_approx": 17.27
+      "move_24h_pct_approx": 17.27,
+      "execution_constraint": "GRASS/USDT listed in Bybit spot directory, orderbook not verified"
     }
   },
   "confirmed_asymmetric_positions_at_initialization": 0,
@@ -929,7 +934,14 @@
       "pending_reservations_usdt": 600,
       "available_after_reservations_usdt": 18000
     },
-    "guard_status": "MANUAL_REVIEW_ONLY_NOT_AUTOMATED_DETERMINISTIC_FULL_UNIVERSE"
+    "guard_status": "MANUAL_REVIEW_ONLY_NOT_AUTOMATED_DETERMINISTIC_FULL_UNIVERSE",
+    "venue_crosscheck": {
+      "QI": "DIRECTORY_ABSENT__NO_EXECUTION",
+      "PHA": "DIRECTORY_ABSENT__NO_EXECUTION",
+      "ALCH": "DIRECTORY_PRESENT__SUPPLY_CONFLICT",
+      "GRASS": "DIRECTORY_PRESENT__SEP27_INVESTOR_UNLOCK",
+      "source": "https://www.bybit.com/sitemap/spot/en.html"
+    }
   },
   "candidate_snapshots": [
     {
