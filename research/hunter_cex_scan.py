@@ -2,6 +2,7 @@
 """Full Binance+Bybit active USDT spot universe; research only, never trades."""
 import datetime as dt
 import json
+import importlib.util
 import os
 import pathlib
 import random
@@ -24,6 +25,10 @@ def fetch(url):
             with urllib.request.urlopen(request,timeout=25) as response:return json.load(response)
         except (urllib.error.HTTPError,urllib.error.URLError,TimeoutError,ValueError) as exc:
             error=exc
+            if isinstance(exc,urllib.error.HTTPError) and exc.code==403 and ("bybit.com" in url or "bytick.com" in url):
+                body=exc.read(600).decode("utf-8","replace").lower()
+                if "block access from your country" in body:
+                    raise RuntimeError("BYBIT_GEO_BLOCKED_EGRESS_COUNTRY__REQUIRES_AUTHORIZED_REGIONAL_RUNNER") from exc
             if isinstance(exc,urllib.error.HTTPError) and exc.code in (400,401,403,404,451):break
             if i<3:time.sleep(min(2**i,8)+random.random()/5)
     raise RuntimeError(f"{url.split('?')[0]}: {type(error).__name__}: {error}")
@@ -91,6 +96,8 @@ def bybit_with_fallback():
     try:
         return bybit(BB)
     except RuntimeError as first:
+        if "BYBIT_GEO_BLOCKED_EGRESS_COUNTRY" in str(first):
+            raise
         if "HTTP Error 403" not in str(first) and "HTTP Error 451" not in str(first):
             raise
         fallback="https://api.bybit.com"
@@ -105,6 +112,29 @@ def bybit_with_fallback():
             raise RuntimeError(
                 "BYBIT_OFFICIAL_HOSTS_UNAVAILABLE primary="+str(first)+
                 " fallback="+str(second)) from second
+
+
+def bybit_from_authorized_region():
+    """Use only fresh complete official snapshots from a trusted repo runner.
+
+    On a missing or stale snapshot, attempt direct official endpoints and keep
+    failure explicit; never claim a Binance or third-party proxy as Bybit.
+    """
+    path=pathlib.Path(os.getenv(
+        "HUNTER_BYBIT_REGIONAL_SNAPSHOT",
+        "research/results/hunter-bybit-regional-snapshot.json"))
+    if path.exists():
+        spec=importlib.util.spec_from_file_location(
+            "hunter_bybit_regional",
+            pathlib.Path(__file__).resolve().parent/"hunter_bybit_regional.py")
+        regional=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(regional)
+        try:
+            return regional.load(path,dt.datetime.now(dt.timezone.utc))
+        except (ValueError,TypeError,KeyError,OverflowError,OSError) as exc:
+            # Invalid/stale regional evidence never becomes venue coverage.
+            print("BYBIT_REGIONAL_SNAPSHOT_REJECTED",type(exc).__name__,str(exc))
+    return bybit_with_fallback()
 
 
 def build(results,previous,at):
@@ -152,7 +182,7 @@ def main():
     except (ValueError,OSError):previous={}
     at=dt.datetime.now(dt.timezone.utc).isoformat()
     results={};statuses={};errors={}
-    for name,fn in (("binance",binance),("bybit",bybit_with_fallback)):
+    for name,fn in (("binance",binance),("bybit",bybit_from_authorized_region)):
         try:
             rows,status=fn();results[name]=rows;statuses[name]=status
         except Exception as exc:
