@@ -153,10 +153,31 @@ class DossierTests(unittest.TestCase):
         identity={"scan_as_of_utc":AT,
                   "assets":{"RALLY":{"capital_identity_pass":True,
                                      "identity_status":"THIRD_PARTY_CORROBORATED"}}}
-        yes_identity=d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity)
+        s["coins"]["RALLY"]["pairs"]=[{"venue":"binance","pair":"RALLYUSDT"}]
+        liquidity={"scan_as_of_utc":AT,"snapshots":{"RALLY":{
+            "pair":"RALLYUSDT","venue":"binance","as_of_utc":AT,
+            "spread_bps":12,"bid_depth_2pct_usdt":30000,
+            "ask_depth_2pct_usdt":22000}}}
+        yes_identity=d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity,liquidity)
         self.assertEqual(yes_identity["capital_ready"],["RALLY"])
+        self.assertEqual(yes_identity["dossiers"][0]["live_orderbook_evidence"]["liquidity_max_spread_bps"],12)
+        stale_liquidity=dict(liquidity,scan_as_of_utc="2026-09-01T00:00:00+00:00")
+        self.assertEqual(d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity,stale_liquidity)["capital_ready"],[])
         identity["scan_as_of_utc"]="2026-09-01T00:00:00+00:00"
         self.assertEqual(d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity)["capital_ready"],[])
+
+    def test_fake_manual_liquidity_never_bypasses_live_probe(self):
+        r,s=fixtures()
+        s["coins"]["RALLY"]["pairs"]=[{"venue":"binance","pair":"RALLYUSDT"}]
+        evidence,errors=d.fresh_execution_evidence({},s,"RALLY",NOW)
+        self.assertEqual(evidence,{})
+        self.assertIn("LIVE_ORDERBOOK_SCAN_MISMATCH",errors)
+        live={"scan_as_of_utc":AT,"snapshots":{"RALLY":{
+            "pair":"WRONGUSDT","venue":"binance","as_of_utc":AT,
+            "spread_bps":1,"bid_depth_2pct_usdt":999999,
+            "ask_depth_2pct_usdt":999999}}}
+        evidence,errors=d.fresh_execution_evidence(live,s,"RALLY",NOW)
+        self.assertIn("LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",errors)
 
     def test_stale_exchange_data_fails(self):
         r,s=fixtures()
