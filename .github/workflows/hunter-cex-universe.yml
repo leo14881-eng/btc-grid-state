@@ -1,14 +1,11 @@
 # Manual verification trigger: 2026-09-26 user-authorized full Hunter v1 rerun
-name: Hunter CEX Universe Scan
+name: Hunter Binance Universe Scan
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'research/hunter_cex_scan.py'
-      - 'research/hunter_bybit_regional.py'
-      - 'tests/test_hunter_bybit_regional.py'
-      - 'scripts/hunter_bybit_regional_publish.sh'
       - 'tests/test_hunter_cex_scan.py'
       - 'research/hunter_forward_research.py'
       - 'tests/test_hunter_forward_research.py'
@@ -48,10 +45,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate regional publisher shell syntax
-        run: bash -n scripts/hunter_bybit_regional_publish.sh
-      - name: Validate regional Bybit snapshot safety and freshness
-        run: python -m unittest discover -s tests -p 'test_hunter_bybit_regional.py' -v
       - name: Validate discovery, pagination and PUMP inclusion
         run: python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v
       - name: Validate forward research and evidence gates
@@ -70,11 +63,9 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hunter_identity_audit.py' -v
       - name: Validate fresh orderbook evidence and failure isolation
         run: python -m unittest discover -s tests -p 'test_hunter_liquidity_probe.py' -v
-      - name: Scan Binance and consume fresh authorized-region Bybit snapshot
+      - name: Scan Binance USDT spot universe only
         id: scan
         continue-on-error: true
-        env:
-          HUNTER_BYBIT_DIRECT_DISABLED: '1'
         run: python research/hunter_cex_scan.py
       - name: Rotate full-universe forward research and enrich selected assets
         id: research
@@ -136,6 +127,6 @@ jobs:
           done
           echo 'PERSISTENCE_FAILURE_AFTER_RETRIES'
           exit 1
-      - name: Fail if verified Binance scan or forward research fails; report Bybit separately
+      - name: Fail if Binance-only scan or downstream research fails
         if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.final_dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success' || steps.source_discovery.outcome != 'success'
         run: exit 2
