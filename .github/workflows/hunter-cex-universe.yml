@@ -8,6 +8,7 @@ on:
       - 'research/hunter_cex_scan.py'
       - 'research/hunter_bybit_regional.py'
       - 'tests/test_hunter_bybit_regional.py'
+      - 'scripts/hunter_bybit_regional_publish.sh'
       - 'tests/test_hunter_cex_scan.py'
       - 'research/hunter_forward_research.py'
       - 'tests/test_hunter_forward_research.py'
@@ -47,6 +48,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate regional publisher shell syntax
+        run: bash -n scripts/hunter_bybit_regional_publish.sh
       - name: Validate regional Bybit snapshot safety and freshness
         run: python -m unittest discover -s tests -p 'test_hunter_bybit_regional.py' -v
       - name: Validate discovery, pagination and PUMP inclusion
