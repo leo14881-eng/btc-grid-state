@@ -101,6 +101,20 @@ def balanced_candidates(full):
     """Reserve separate lanes so recent winners cannot crowd out early setups."""
     early=[r for r in full if classify_cohort(r[1])=="EARLY_FLOW_ATTENTION"]
     cont=[r for r in full if classify_cohort(r[1])=="CONTINUATION_FORWARD_UPSIDE_ATTENTION"]
+    # Within the early lane use independently observed flow and evidence, not
+    # alphabetic ticker order or 24h price appreciation. This is research
+    # triage only, never a predicted-return or buy ranking.
+    def early_key(row):
+        obs=row[1].get("observations") or {}
+        market=obs.get("market_structure") or {}
+        vol=market.get("volume_7d_ratio") or 0
+        cap=obs.get("market_cap")
+        # 1.5x-6x is the non-extreme flow band; extreme spikes are still
+        # eligible for continuation/overflow research, never banned.
+        controlled=1.5<=vol<=6
+        return (-int(controlled),-int(cap is not None),-min(vol,6),
+                -int(row[5]),row[0])
+    early.sort(key=early_key)
     selected=[];seen=set()
     for group,quota in ((early,EARLY_QUOTA),(cont,CONTINUATION_QUOTA),(full,MAX_DOSSIERS)):
         for row in group:
