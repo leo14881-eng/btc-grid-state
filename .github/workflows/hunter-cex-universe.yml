@@ -84,9 +84,14 @@ jobs:
         if: steps.dossiers.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_liquidity_probe.py
+      - name: Rebuild final dossiers with current verified orderbook evidence
+        id: final_dossiers
+        if: steps.liquidity.outcome == 'success'
+        continue-on-error: true
+        run: python research/hunter_candidate_dossiers.py
       - name: Cross-check stage timestamps and emit unresolved evidence queue
         id: health
-        if: steps.liquidity.outcome == 'success' && steps.audit.outcome == 'success'
+        if: steps.final_dossiers.outcome == 'success' && steps.audit.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_health_and_queue.py
       - name: Persist coverage, leads and explicit failures
@@ -110,5 +115,5 @@ jobs:
           echo 'PERSISTENCE_FAILURE_AFTER_RETRIES'
           exit 1
       - name: Fail if verified Binance scan or forward research fails; report Bybit separately
-        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success'
+        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.final_dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success'
         run: exit 2
