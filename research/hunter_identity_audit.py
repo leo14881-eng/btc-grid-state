@@ -13,7 +13,11 @@ import os
 import re
 import urllib.error
 import urllib.parse
-import hunter_api_cooldown as cooldown
+import importlib.util
+_spec=importlib.util.spec_from_file_location(
+    'hunter_api_cooldown',pathlib.Path(__file__).resolve().parent/'hunter_api_cooldown.py')
+cooldown=importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(cooldown)
 import urllib.request
 
 ROOT=pathlib.Path("research/results")
