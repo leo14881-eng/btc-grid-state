@@ -278,12 +278,16 @@ def build(research,scan,registry,now,identity=None,liquidity=None,reviewed=None)
                   "review_action":review.get("review_action"),
                   "risk_event":risk} if review else None,
               "identity_status":ident.get("identity_status","AUDIT_MISSING"),
-              "identity_blockers":ident.get("blockers") or ["IDENTITY_AUDIT_MISSING"],
+              "identity_blockers":(ident["blockers"] if "blockers" in ident else ["IDENTITY_AUDIT_MISSING"]),
               "live_orderbook_evidence":execution,
               "scenario_map":scen,"capital_gate_blockers":capital_blockers,
               "research_questions":list(dict.fromkeys(
-                  (item.get("missing_facts") or [])+missing+
-                  (review.get("open_questions") or []))),
+                  [q for q in (item.get("missing_facts") or [])
+                   if not (identity_pass and (
+                       q.startswith("Unique CoinGecko identity") or
+                       q.startswith("Primary-source token contract")))
+                   and not (execution and q.startswith("Executable venue depth"))]
+                  +missing+(review.get("open_questions") or []))),
               "attention_reasons":{"triggered":sym in set(research.get("triggered_researched") or []),
                   "attention_signal_count":len(item.get("research_attention_signals") or []),
                   "evidence_fields_present":evidence_count},
