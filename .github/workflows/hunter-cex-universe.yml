@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'research/hunter_cex_scan.py'
+      - 'research/hunter_bybit_regional.py'
+      - 'tests/test_hunter_bybit_regional.py'
       - 'tests/test_hunter_cex_scan.py'
       - 'research/hunter_forward_research.py'
       - 'tests/test_hunter_forward_research.py'
@@ -45,6 +47,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate regional Bybit snapshot safety and freshness
+        run: python -m unittest discover -s tests -p 'test_hunter_bybit_regional.py' -v
       - name: Validate discovery, pagination and PUMP inclusion
         run: python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v
       - name: Validate forward research and evidence gates
@@ -63,9 +67,11 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hunter_identity_audit.py' -v
       - name: Validate fresh orderbook evidence and failure isolation
         run: python -m unittest discover -s tests -p 'test_hunter_liquidity_probe.py' -v
-      - name: Scan Binance and Bybit active USDT spot universes
+      - name: Scan Binance and consume fresh authorized-region Bybit snapshot
         id: scan
         continue-on-error: true
+        env:
+          HUNTER_BYBIT_DIRECT_DISABLED: '1'
         run: python research/hunter_cex_scan.py
       - name: Rotate full-universe forward research and enrich selected assets
         id: research
