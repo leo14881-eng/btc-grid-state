@@ -77,6 +77,19 @@ class PrimaryDiscoveryTests(unittest.TestCase):
         self.assertEqual(result["leads"],{})
         self.assertEqual(result["target_count"],2)
 
+    def test_reassigned_ticker_never_reuses_old_project_links(self):
+        d=dossiers()
+        old={"cursor":0,"assets":{"EARLY":{
+            "asset":"EARLY","coingecko_id":"old-project",
+            "discovered_at_utc":AT,
+            "homepage_candidates":["https://old.example"],
+            "evidence_status":"UNVERIFIED_LINK_DISCOVERY_ONLY"}}}
+        def unavailable(cid):
+            raise RuntimeError("source unavailable")
+        result,_=m.build(d,old,NOW,fetcher=unavailable,budget=1)
+        self.assertNotIn("EARLY",result["leads"])
+        self.assertIn("EARLY",result["failures"])
+
     def test_no_coin_id_yields_explicit_empty_report(self):
         d=dossiers()
         for row in d["dossiers"]:row["nonprice_observations"]={}
