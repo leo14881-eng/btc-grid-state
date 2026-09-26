@@ -74,6 +74,16 @@ class DossierTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"mismatched"):
             d.build(r,s,{},NOW)
 
+    def test_early_flow_not_selected_alphabetically(self):
+        def row(sym,vol):
+            return (sym,{"observations":{"market_cap":100000000,
+                "market_structure":{"return_vs_7_completed_days_pct":5,
+                                    "volume_7d_ratio":vol}}},{},1,2,True)
+        full=[row("AAA"+str(i),1.35) for i in range(30)]+[row("COMP",4.7)]
+        selected,stats=d.balanced_candidates(full)
+        self.assertEqual(selected[0][0],"COMP")
+        self.assertGreaterEqual(stats["early_selected"],16)
+
     def test_falling_knife_not_misclassified_as_early_flow(self):
         self.assertEqual(d.classify_cohort({"observations":{"market_structure":{
             "return_vs_7_completed_days_pct":-46,
