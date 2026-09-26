@@ -29,7 +29,7 @@ jobs:
       - name: Detect stale committed Hunter results
         id: stale
         env:
-          SIMULATE_STALE: ${{ inputs.simulate_stale || 'false' }}
+          SIMULATE_STALE: ${{ github.event_name == 'push' || inputs.simulate_stale || 'false' }}
         run: |
           python - <<'PY'
           import json,datetime,os
@@ -50,7 +50,7 @@ jobs:
         if: steps.stale.outputs.stale == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ inputs.simulate_stale || 'false' }}
+          DRY_RUN: ${{ github.event_name == 'push' || inputs.simulate_stale || 'false' }}
         run: |
           set -euo pipefail
           runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=30")
