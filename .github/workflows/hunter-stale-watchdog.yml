@@ -58,7 +58,7 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'push' || inputs.simulate_stale || 'false' }}
         run: |
           set -euo pipefail
-          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=30" --jq '{workflow_runs: [.workflow_runs[] | {path,head_branch,status,event,created_at}]}')
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/hunter-cex-universe.yml/runs?branch=main&per_page=100" --jq '{workflow_runs: [.workflow_runs[] | {path,head_branch,status,event,created_at}]}')
           printf '%s' "$runs" > "$RUNNER_TEMP/hunter-runs.json"
           decision=$(python - <<'PY'
           import json,os,datetime
@@ -69,7 +69,10 @@ jobs:
           if any(r['status'] in active for r in producer):
               print('ACTIVE')
           elif any(r.get('event')=='workflow_dispatch' and
-                   (now-datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))).total_seconds()<3600
+                   0 <= (now-datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))).total_seconds()<3600
+                   for r in producer):
+              print('COOLDOWN')
+          elif any(0 <= (now-datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))).total_seconds()<900
                    for r in producer):
               print('COOLDOWN')
           else:
