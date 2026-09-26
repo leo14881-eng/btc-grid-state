@@ -16,6 +16,8 @@ on:
       - 'research/hunter-verified-facts.json'
       - 'research/hunter_liquidity_probe.py'
       - 'research/hunter_identity_audit.py'
+      - 'research/hunter_api_cooldown.py'
+      - 'tests/test_hunter_api_cooldown.py'
       - 'research/hunter_health_and_queue.py'
       - 'research/hunter_primary_source_discovery.py'
       - 'tests/test_hunter_primary_source_discovery.py'
@@ -51,6 +53,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_hunter_forward_audit.py' -v
       - name: Validate forward candidate dossiers and supply-adjusted scenarios
         run: python -m unittest discover -s tests -p 'test_hunter_candidate_dossiers.py' -v
+      - name: Validate shared API cooldown and Retry-After persistence
+        run: python -m unittest discover -s tests -p 'test_hunter_api_cooldown.py' -v
       - name: Validate rotating primary-source lead discovery
         run: python -m unittest discover -s tests -p 'test_hunter_primary_source_discovery.py' -v
       - name: Validate pipeline self-check and evidence queue
