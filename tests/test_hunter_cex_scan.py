@@ -46,4 +46,16 @@ class CexUniverseTests(unittest.TestCase):
         self.assertEqual(r["coins"]["ABC"]["stage"],"PRE_MOVE_WATCH")
         self.assertTrue(r["coins"]["ABC"]["contract_identity_unverified"])
 
+    def test_all_stages_enter_forward_upside_queue_even_after_rally(self):
+        changes={"RALLY":95,"FLAT":0,"DOWN":-35,"MID":9}
+        rows=[{"venue":"binance","pair":base+"USDT","base":base,
+               "price":1.0,"volume_24h_usdt":100000,"change_24h_pct":pct}
+              for base,pct in changes.items()]
+        report=scan.build({"binance":rows},{},"2026-09-26T00:00:00Z")
+        self.assertEqual(report["research_coverage_count"],4)
+        self.assertEqual({r["base"] for r in report["research_leads"]},set(changes))
+        self.assertTrue(all(r["prior_rally_auto_reject"] is False for r in report["research_leads"]))
+        self.assertEqual(report["coins"]["RALLY"]["stage"],"POST_MOVE")
+        self.assertEqual(report["coins"]["DOWN"]["stage"],"BASELINE")
+
 if __name__=="__main__":unittest.main()
