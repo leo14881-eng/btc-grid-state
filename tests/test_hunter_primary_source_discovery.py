@@ -45,6 +45,15 @@ class PrimaryDiscoveryTests(unittest.TestCase):
         self.assertEqual(len(calls),2)
         self.assertEqual(result2["cache_reused"],2)
 
+    def test_reviewed_candidates_get_first_source_discovery_slot(self):
+        d=dossiers()
+        d["dossiers"].append({"asset":"DOLO",
+                              "nonprice_observations":{"coingecko_id":"dolomite"}})
+        d["reviewed_watchlist"]=["DOLO"]
+        order=[x["asset"] for x in m.lanes(d)]
+        self.assertEqual(order,["DOLO","EARLY","CONT"])
+        self.assertEqual(len(set(order)),3)
+
     def test_third_party_identity_mismatch_fails_closed(self):
         def wrong(cid):
             d=data(cid);d["id"]="wrong";return d
