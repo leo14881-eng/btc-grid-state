@@ -27,6 +27,9 @@ def build(data,now):
                              ("audit","market_snapshot_as_of_utc")):
         if data[name].get(source_key)!=stamp:
             mismatches[name]={"expected":stamp,"actual":data[name].get(source_key)}
+    if dossiers.get("scan_as_of_utc")!=stamp:
+        mismatches["dossiers_snapshot"]={"expected":stamp,
+                                         "actual":dossiers.get("scan_as_of_utc")}
     if dossiers.get("market_universe_size")!=len(scan.get("coins") or {}):
         mismatches["dossiers_universe"]={"expected":len(scan.get("coins") or {}),
                                         "actual":dossiers.get("market_universe_size")}
