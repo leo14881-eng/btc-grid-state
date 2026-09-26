@@ -13,6 +13,7 @@ ROOT=pathlib.Path("research/results")
 RESEARCH=ROOT/"hunter-forward-research.json"
 SCAN=ROOT/"hunter-cex-universe-run.json"
 FACTS=pathlib.Path("research/hunter-verified-facts.json")
+IDENTITY=ROOT/"hunter-identity-audit.json"
 OUT=ROOT/"hunter-candidate-dossiers.json"
 MAX_DOSSIERS=40
 EARLY_QUOTA=16
@@ -171,12 +172,15 @@ def capital_gate(fact,scenario,entry,now):
     return not blockers,blockers
 
 
-def build(research,scan,registry,now):
+def build(research,scan,registry,now,identity=None):
     if research.get("universe_scan_as_of_utc")!=scan.get("as_of_utc"):
         raise ValueError("Refuse mismatched research and exchange snapshot")
     if not scan.get("binance_complete"):raise ValueError("Incomplete Binance coverage")
     if (now-parse(scan["as_of_utc"])).total_seconds()>7200:
         raise ValueError("Exchange snapshot stale (>2h)")
+    identity=identity or {}
+    identity_fresh=(identity.get("scan_as_of_utc")==scan.get("as_of_utc"))
+    identity_assets=identity.get("assets") or {}
     cases=[];full=prioritize(research,scan)
     selected,cohort_stats=balanced_candidates(full)
     facts_all=registry.get("assets") or {}
@@ -185,6 +189,11 @@ def build(research,scan,registry,now):
         entry=float(coin["reference_price"])
         scen,missing=scenario_map(fact,entry,now)
         ready,capital_blockers=capital_gate(fact,scen,entry,now)
+        ident=identity_assets.get(sym) or {}
+        identity_pass=identity_fresh and ident.get("capital_identity_pass") is True
+        if not identity_pass:
+            ready=False
+            capital_blockers.append("CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE")
         case={"asset":sym,"as_of_utc":now.isoformat(),
               "exchange_price_as_of_utc":scan["as_of_utc"],
               "entry_reference_price":entry,"venue":coin.get("reference_venue"),
@@ -196,6 +205,8 @@ def build(research,scan,registry,now):
               "market_structure":(item.get("observations") or {}).get("market_structure"),
               "research_source_urls":item.get("source_urls") or [],
               "official_sources":fact.get("official_sources") or [],
+              "identity_status":ident.get("identity_status","AUDIT_MISSING"),
+              "identity_blockers":ident.get("blockers") or ["IDENTITY_AUDIT_MISSING"],
               "scenario_map":scen,"capital_gate_blockers":capital_blockers,
               "research_questions":list(dict.fromkeys(
                   (item.get("missing_facts") or [])+missing)),
@@ -223,7 +234,8 @@ def build(research,scan,registry,now):
 
 def main():
     now=dt.datetime.now(dt.timezone.utc)
-    report=build(read(RESEARCH,{}),read(SCAN,{}),read(FACTS,{}),now)
+    report=build(read(RESEARCH,{}),read(SCAN,{}),read(FACTS,{}),now,
+                 read(IDENTITY,{}))
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({k:report[k] for k in ("as_of_utc","market_universe_size",
         "deep_research_cached_count","dossier_count","unresearched_market_count",
