@@ -53,7 +53,7 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'push' || inputs.simulate_stale || 'false' }}
         run: |
           set -euo pipefail
-          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=30")
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=30" --jq '{workflow_runs: [.workflow_runs[] | {path,head_branch,status,event,created_at}]}')
           export RUNS_JSON="$runs"
           decision=$(python - <<'PY'
           import json,os,datetime
