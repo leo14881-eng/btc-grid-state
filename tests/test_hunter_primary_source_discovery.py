@@ -70,6 +70,13 @@ class PrimaryDiscoveryTests(unittest.TestCase):
         self.assertEqual(result["fresh_fetched"],1)
         self.assertIn("_source_rate_limit",result["failures"])
 
+    def test_shared_cooldown_budget_zero_does_not_call_network(self):
+        def forbidden(cid):raise AssertionError("429 cooldown bypass")
+        result,_=m.build(dossiers(),{},NOW,fetcher=forbidden,budget=0)
+        self.assertEqual(result["fresh_fetched"],0)
+        self.assertEqual(result["leads"],{})
+        self.assertEqual(result["target_count"],2)
+
     def test_no_coin_id_yields_explicit_empty_report(self):
         d=dossiers()
         for row in d["dossiers"]:row["nonprice_observations"]={}
