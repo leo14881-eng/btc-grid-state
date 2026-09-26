@@ -29,7 +29,7 @@ def fetch(url):
     raise RuntimeError(f"{url.split('?')[0]}: {type(error).__name__}: {error}")
 
 def valid(base):
-    return bool(base) and base not in EXCLUDE and not any(base.endswith(s) for s in LEVERAGED)
+    return bool(base) and base not in EXCLUDE
 
 def number(x):
     try:
@@ -57,7 +57,7 @@ def binance():
 def bybit():
     active={};cursor="";seen=set()
     while True:
-        params={"category":"spot","limit":1000}
+        params={"category":"spot"}
         if cursor:params["cursor"]=cursor
         page=fetch(BB+"/v5/market/instruments-info?"+urllib.parse.urlencode(params))
         if page.get("retCode")!=0:raise RuntimeError("Bybit instruments: "+str(page.get("retMsg")))
@@ -106,7 +106,7 @@ def build(results,previous,at):
                               venues=coins[base]["venues"],research_only=True))
     leads.sort(key=lambda r:(r["stage"]=="PRE_MOVE_WATCH",r["stage"]=="EARLY_MOVE",r["change_since_previous_scan_pct"] or 0),reverse=True)
     return dict(schema="hunter_cex_universe_v1",as_of_utc=at,
-                scope="ALL active Binance and Bybit USDT spot pairs, excluding stablecoin bases and leveraged tokens",
+                scope="ALL active Binance and Bybit USDT spot pairs, excluding stablecoin bases; leveraged-like tickers retained for separate risk classification",
                 limitations="Ticker dedup is provisional until contract IDs verified; venue 24h volumes overlap and must not be summed as unique demand.",
                 unique_base_tickers=len(coins),venue_counts={k:len(v) for k,v in results.items()},
                 coins=coins,research_leads=leads[:150],capital_authority="NONE_RESEARCH_ONLY")
