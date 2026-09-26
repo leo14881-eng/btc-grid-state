@@ -1,6 +1,7 @@
 import datetime as dt
 import importlib.util
 import pathlib
+import urllib.error
 import unittest
 
 spec=importlib.util.spec_from_file_location(
@@ -119,6 +120,20 @@ class IdentityAuditTests(unittest.TestCase):
         self.assertEqual(r["assets"]["ABC"]["identity_status"],
                          "THIRD_PARTY_NATIVE_CORROBORATED")
         self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
+
+    def test_identity_429_stops_other_requests(self):
+        facts={"assets":{"ABC":fact(),"PUMP":fact(pair="PUMPUSDT")}}
+        market={"coingecko":[{"symbol":"abc","id":"abc-project"},
+                              {"symbol":"pump","id":"pump-project"}]}
+        calls=[]
+        def blocked(cid):
+            calls.append(cid)
+            raise urllib.error.HTTPError("https://api.coingecko.com",429,
+                                         "Too Many Requests",{"Retry-After":"1800"},None)
+        _,_,meta=audit.enrich_contracts(market,facts,{},NOW,fetch=blocked)
+        self.assertEqual(len(calls),1)
+        self.assertIn("_source_rate_limit",meta["failures"])
+        self.assertEqual(meta["retry_after"],"1800")
 
     def test_wrong_exchange_pair_blocks(self):
         status,blockers=audit.identity_status(
