@@ -134,6 +134,8 @@ def bybit_from_authorized_region():
         except (ValueError,TypeError,KeyError,OverflowError,OSError) as exc:
             # Invalid/stale regional evidence never becomes venue coverage.
             print("BYBIT_REGIONAL_SNAPSHOT_REJECTED",type(exc).__name__,str(exc))
+    if os.getenv("HUNTER_BYBIT_DIRECT_DISABLED")=="1":
+        raise RuntimeError("BYBIT_REGIONAL_COLLECTOR_NOT_CONFIGURED_OR_STALE__US_RUNNER_GEO_BLOCKED")
     return bybit_with_fallback()
 
 
