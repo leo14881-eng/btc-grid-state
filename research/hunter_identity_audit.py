@@ -11,7 +11,9 @@ import json
 import pathlib
 import os
 import re
+import urllib.error
 import urllib.parse
+import hunter_api_cooldown as cooldown
 import urllib.request
 
 ROOT=pathlib.Path("research/results")
@@ -72,7 +74,7 @@ def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,li
     by,collisions=source_candidates(rows)
     assets=registry.get("assets") or {}
     cache=dict(cache or {})
-    results={};failures={};fetched=0
+    results={};failures={};fetched=0;retry_after=None
     for sym,fact in assets.items():
         if not fact.get("contract_verified") or sym in collisions:continue
         ident=fact.get("identity") or {}
@@ -102,6 +104,13 @@ def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,li
                     raise ValueError("INDEPENDENT_COIN_ID_OR_SYMBOL_MISMATCH")
                 saved={"as_of_utc":now.isoformat(),**fresh}
                 cache[coin_id]=saved
+            except urllib.error.HTTPError as exc:
+                failures[sym]="HTTP_"+str(exc.code)+": "+str(exc)[:140]
+                if exc.code==429:
+                    retry_after=exc.headers.get("Retry-After") if exc.headers else None
+                    failures["_source_rate_limit"]="COINGECKO_429__SHARED_COOLDOWN"
+                    break
+                continue
             except Exception as exc:
                 failures[sym]=type(exc).__name__+": "+str(exc)[:140]
                 # Never use stale cached contract corroboration as fresh.
@@ -114,7 +123,8 @@ def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,li
         row["contract_as_of_utc"]=saved.get("as_of_utc")
         results[sym]=saved.get("source_url")
     market=dict(market,coingecko=rows)
-    return market,cache,{"fetched":fetched,"source_urls":results,"failures":failures}
+    return market,cache,{"fetched":fetched,"source_urls":results,"failures":failures,
+                         "retry_after":retry_after}
 
 
 def normalize_contract(value):
@@ -208,7 +218,14 @@ def main():
     registry=json.loads(FACTS.read_text())
     try:cache=json.loads(CONTRACT_CACHE.read_text())
     except (OSError,ValueError):cache={}
-    market,cache,lookups=enrich_contracts(market,registry,cache,now)
+    state=cooldown.load()
+    market,cache,lookups=enrich_contracts(
+        market,registry,cache,now,
+        limit=0 if cooldown.blocked(state,now) else 8)
+    if "_source_rate_limit" in lookups["failures"]:
+        state=cooldown.record_429(state,now,lookups.get("retry_after"),"identity")
+        cooldown.save(state)
+    lookups["shared_cooldown_active"]=cooldown.blocked(state,now)
     CONTRACT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\\n")
     report=build(json.loads(SCAN.read_text()),market,registry,now)
     report["third_party_contract_lookup"]=lookups
