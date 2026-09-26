@@ -131,6 +131,33 @@ class DossierTests(unittest.TestCase):
         self.assertFalse(eligible)
         self.assertIn("ALT_POOL_20000_USDT_CAP",blockers)
 
+    def test_identity_audit_is_required_even_when_every_other_gate_passes(self):
+        r,s=fixtures()
+        facts={"verified_at_utc":AT,"official_sources":["https://example.org/official"],
+               "contract_verified":True,"forward_supply_verified":True,
+               "token_value_capture_verified":True,"credible_catalyst_verified":True,
+               "supply_future":100,"bear_market_cap_usd":100,
+               "base_market_cap_usd":400,"bull_market_cap_usd":800,
+               "liquidity_verified_at_utc":AT,"portfolio_verified_at_utc":AT,
+               "drawdown_budget_verified":True,"counterparty_verified":True,
+               "btc_same_horizon_base_return_pct":10,"liquidity_max_spread_bps":10,
+               "liquidity_orderbook_depth_2pct_usdt":20000,
+               "portfolio_open_cost_usdt":1000,
+               "portfolio_pending_reservations_usdt":0,
+               "max_proposed_new_cost_usdt":1000}
+        r["research_results"]={"RALLY":r["research_results"]["RALLY"]}
+        no_identity=d.build(r,s,{"assets":{"RALLY":facts}},NOW)
+        self.assertEqual(no_identity["capital_ready"],[])
+        self.assertIn("CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+                      no_identity["dossiers"][0]["capital_gate_blockers"])
+        identity={"scan_as_of_utc":AT,
+                  "assets":{"RALLY":{"capital_identity_pass":True,
+                                     "identity_status":"THIRD_PARTY_CORROBORATED"}}}
+        yes_identity=d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity)
+        self.assertEqual(yes_identity["capital_ready"],["RALLY"])
+        identity["scan_as_of_utc"]="2026-09-01T00:00:00+00:00"
+        self.assertEqual(d.build(r,s,{"assets":{"RALLY":facts}},NOW,identity)["capital_ready"],[])
+
     def test_stale_exchange_data_fails(self):
         r,s=fixtures()
         r["universe_scan_as_of_utc"]=s["as_of_utc"]="2026-09-20T00:00:00+00:00"
