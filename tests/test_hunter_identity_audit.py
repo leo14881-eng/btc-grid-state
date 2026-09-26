@@ -39,13 +39,13 @@ class IdentityAuditTests(unittest.TestCase):
         self.assertEqual(r["universe_count"],3)
 
     def test_exact_independent_contract_match(self):
-        market={"coingecko":[{"symbol":"abc","id":"abc","platforms":{"ethereum":"0x123"}}]}
+        market={"coingecko":[{"symbol":"abc","id":"abc","platforms":{"ethereum":"0x123"},"contract_as_of_utc":AT}]}
         r=audit.build(scan(),market,{"assets":{"ABC":fact()}},NOW)
         self.assertEqual(r["assets"]["ABC"]["identity_status"],"THIRD_PARTY_CORROBORATED")
         self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
 
     def test_mismatched_contract_blocks(self):
-        market={"coingecko":[{"symbol":"abc","id":"abc","platforms":{"ethereum":"0x999"}}]}
+        market={"coingecko":[{"symbol":"abc","id":"abc","platforms":{"ethereum":"0x999"},"contract_as_of_utc":AT}]}
         r=audit.build(scan(),market,{"assets":{"ABC":fact()}},NOW)
         self.assertEqual(r["assets"]["ABC"]["identity_status"],"BLOCKED")
         self.assertIn("THIRD_PARTY_CONTRACT_MISMATCH",r["assets"]["ABC"]["blockers"])
@@ -60,6 +60,35 @@ class IdentityAuditTests(unittest.TestCase):
         r=audit.build(scan(),market,{"assets":{"ABC":fact()}},NOW)
         self.assertFalse(r["assets"]["ABC"]["capital_identity_pass"])
         self.assertIn("ABC",r["ticker_collisions"])
+
+    def test_contract_fetch_only_for_attested_assets_and_timestamped(self):
+        market={"coingecko":[{"symbol":"abc","id":"abc-project"}]}
+        calls=[]
+        def fake(coin_id):
+            calls.append(coin_id)
+            return {"coin_id":coin_id,"platforms":{"ethereum":"0x123"},
+                    "source_url":"https://www.coingecko.com/en/coins/"+coin_id}
+        enriched,cache,meta=audit.enrich_contracts(
+            market,{"assets":{"ABC":fact()}},{},NOW,fetch=fake)
+        self.assertEqual(calls,["abc-project"])
+        r=audit.build(scan(),enriched,{"assets":{"ABC":fact()}},NOW)
+        self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
+        enriched2,cache,meta=audit.enrich_contracts(
+            market,{"assets":{"ABC":fact()}},cache,NOW,fetch=fake)
+        self.assertEqual(calls,["abc-project"])
+        self.assertEqual(meta["fetched"],0)
+
+    def test_contract_fetch_failure_never_reuses_stale_cache(self):
+        market={"coingecko":[{"symbol":"abc","id":"abc-project"}]}
+        cache={"abc-project":{"as_of_utc":"2026-09-01T00:00:00+00:00",
+                             "platforms":{"ethereum":"0x123"}}}
+        def broken(coin_id):
+            raise RuntimeError("rate limited")
+        enriched,cache,meta=audit.enrich_contracts(
+            market,{"assets":{"ABC":fact()}},cache,NOW,fetch=broken)
+        self.assertIn("ABC",meta["failures"])
+        r=audit.build(scan(),enriched,{"assets":{"ABC":fact()}},NOW)
+        self.assertFalse(r["assets"]["ABC"]["capital_identity_pass"])
 
     def test_wrong_exchange_pair_blocks(self):
         status,blockers=audit.identity_status(
