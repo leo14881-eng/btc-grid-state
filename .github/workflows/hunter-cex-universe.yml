@@ -14,6 +14,7 @@ on:
       - 'research/hunter_candidate_dossiers.py'
       - 'tests/test_hunter_candidate_dossiers.py'
       - 'research/hunter-verified-facts.json'
+      - 'research/hunter-reviewed-watchlist.json'
       - 'research/hunter_liquidity_probe.py'
       - 'research/hunter_identity_audit.py'
       - 'research/hunter_api_cooldown.py'
@@ -87,7 +88,7 @@ jobs:
         if: steps.research.outcome == 'success' && steps.identity.outcome == 'success'
         continue-on-error: true
         run: python research/hunter_candidate_dossiers.py
-      - name: Probe current public Binance orderbook for early and continuation lanes
+      - name: Probe current public Binance orderbook for reviewed, early and continuation lanes
         id: liquidity
         if: steps.dossiers.outcome == 'success'
         continue-on-error: true
