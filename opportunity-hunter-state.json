@@ -1,5 +1,5 @@
 {
-  "version": "2.17.2",
+  "version": "2.17.3",
   "status": "ACTIVE_INITIALIZED",
   "updated_at": "2026-09-26",
   "initialized_at": "2026-09-14T07:35:00+07:00",
@@ -1186,5 +1186,68 @@
     "near_term_btc_underperformance": "SIZE_AND_ENTRY_INPUT_NOT_AUTOMATIC_REJECT",
     "capital_eligibility": "ALLOWED_IF_CAPITAL_READINESS_PASS_AND_LATER_EXPLOSIVE_REPRICING_PATH_IS_CREDIBLE_AND_ASYMMETRIC",
     "two_phase_model": "PHASE_A_PRE_CATALYST_RISK__PHASE_B_CATALYST_REPRICING"
+  },
+  "process_patch": {
+    "version": "v2.17.3",
+    "status": "RULES_PERSISTED_LIVE_SCHEDULER_NOT_VERIFIED",
+    "rules_commit": "359962e7583791232e17b976f333bb0f24c6cc91",
+    "purpose": "ENFORCE_TRIGGERED_CANDIDATE_CLOSURE_AND_FATAL_BLOCKER_ESCALATION",
+    "last_actual_market_scan_at": "2026-09-26T00:15:00+07:00",
+    "do_not_misstate_live_execution": true
+  },
+  "closure_queue": {
+    "schema": "v2.17.3",
+    "as_of": "2026-09-26",
+    "execution_status": "AUDIT_QUEUE_CREATED__NO_NEW_LIVE_SOURCE_RECONCILIATION_CLAIMED",
+    "sla_policy": "NEXT_ACTUAL_HOURLY_HUNTER_CYCLE_FOR_NEW_TRIGGERS; EXISTING_OVERDUE_CASES_IMMEDIATE_NEXT_RUN",
+    "items": [
+      {
+        "asset": "PUMP",
+        "candidate_id": "PUMP-20260926-001",
+        "trigger_reason": "LEFT_SIDE_ZONE_DISCOVERY_AND_SUBSEQUENT_REPRICING",
+        "triggered_at": "2026-09-26T00:55:00+07:00",
+        "last_attempt_at": "2026-09-26T01:52:00+07:00",
+        "decision_due_at": "NEXT_ACTUAL_HUNTER_RUN__OVERDUE_CASE",
+        "decision_status": "DATA_BLOCKED_FATAL",
+        "blocker_type": "MATERIAL_FORWARD_SUPPLY_SOURCE_CONFLICT",
+        "exact_missing_fact": "Authoritative 30/90/180-day community/ecosystem vesting and reconciliation of primary vs tracker circulating/total supply and Oct12 releases",
+        "remediation_source": [
+          "PUMP official tokenomics/vesting and onchain contracts",
+          "Tokenomics.com unlock calendar",
+          "DefiLlama unlock calendar"
+        ],
+        "remediation_owner": "HUNTER",
+        "next_check_condition": "Resolve primary-source forward supply and compute current-price FRM; escalate SOURCE_UNAVAILABLE_ESCALATED if unavailable at next actual run",
+        "capital_action": "NONE"
+      },
+      {
+        "asset": "ENA",
+        "candidate_id": "ENA-20260919-001",
+        "trigger_reason": "MISSED_DISCOVERY_AND_MISSED_REEVALUATION_AFTER_MATERIAL_REPRICING",
+        "triggered_at": "2026-09-26T01:39:00+07:00",
+        "last_attempt_at": "2026-09-26T01:55:00+07:00",
+        "decision_due_at": "NEXT_ACTUAL_HUNTER_RUN__OVERDUE_CASE",
+        "decision_status": "DATA_BLOCKED_FATAL",
+        "blocker_type": "MATERIAL_OCT5_SELLABLE_SUPPLY_UNKNOWN",
+        "exact_missing_fact": "Actual Foundation-approved sellable investor fraction at Oct5 and full ecosystem release calendar; lock expiry alone is not immediate sale",
+        "remediation_source": [
+          "StablecoinX/SEC disclosure and amendments",
+          "Ethena Foundation primary communications",
+          "Vesting/onchain wallet reconciliation"
+        ],
+        "remediation_owner": "HUNTER",
+        "next_check_condition": "Resolve actual sellable fraction or document primary-source unavailability; refresh price and 3-6m FRM without chase bias",
+        "capital_action": "NONE"
+      }
+    ],
+    "next_run_required_outputs": [
+      "PRIMARY_SOURCE_ATTEMPT",
+      "INDEPENDENT_CROSSCHECK",
+      "EXACT_UNRESOLVED_VALUES",
+      "FRESH_PRICE_FRM",
+      "SLA_STATUS",
+      "CAPITAL_GATE_STATUS"
+    ],
+    "missed_opportunity_audit": "PUMP_PROCESS_DELAY__ENA_MISSED_DISCOVERY_AND_REEVALUATION"
   }
 }
