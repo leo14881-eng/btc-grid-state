@@ -136,4 +136,4 @@ jobs:
         if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.final_dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success' || steps.source_discovery.outcome != 'success'
         run: exit 2
 
-# Manual immediate Hunter rerun request 2026-09-27 15:51 ICT; full existing workflow, no trading.
+# Recovery trigger: rerun full Hunter scan after watchdog redundancy fix; preserve all existing gates.
