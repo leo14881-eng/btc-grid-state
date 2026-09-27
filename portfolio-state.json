@@ -221,5 +221,68 @@
     "source": "USER_CONFIRMED_2026-09-26",
     "realized_profit_note": "STX gross proceeds 1488.0028 minus prior recorded cost 1400 = 88.0028 gross estimate, not final net; historical sold/acquired quantity differs and fees unknown.",
     "capacity_status": "THEORETICAL_CAP_ONLY_NOT_SPENDABLE_CASH"
+  },
+  "isolated_sleeve_ledger_v1": {
+    "status": "SCHEMA_INITIALIZED__EXCHANGE_BALANCES_NOT_VERIFIED",
+    "budget_is_not_cash": true,
+    "sleeves": {
+      "A": {
+        "mandate": "BTC_DAILY_SPOT_SWING",
+        "planned_cap_usdt": 10000,
+        "verified_free_usdt": null,
+        "committed_principal_usdt": null,
+        "open_order_reserved_usdt": null,
+        "realized_net_pnl_usdt": null,
+        "unrealized_net_pnl_usdt": null
+      },
+      "B": {
+        "mandate": "BTC_INDEPENDENT_LARGE_SWING",
+        "planned_cap_usdt": 20000,
+        "staging_pct": [
+          30,
+          30,
+          40
+        ],
+        "verified_free_usdt": null,
+        "committed_principal_usdt": null,
+        "open_order_reserved_usdt": null,
+        "realized_net_pnl_usdt": null,
+        "unrealized_net_pnl_usdt": null
+      },
+      "C": {
+        "mandate": "ALTCOINS",
+        "planned_cap_usdt": 20000,
+        "verified_free_usdt": null,
+        "committed_principal_usdt": null,
+        "open_order_reserved_usdt": null,
+        "realized_net_pnl_usdt": null,
+        "unrealized_net_pnl_usdt": null
+      },
+      "D": {
+        "mandate": "LONG_TERM_BTC_PLANNED",
+        "planned_cap_usdt": 200000,
+        "verified_free_usdt": null,
+        "committed_principal_usdt": null,
+        "open_order_reserved_usdt": null,
+        "realized_net_pnl_usdt": null,
+        "unrealized_net_pnl_usdt": null
+      },
+      "E": {
+        "mandate": "INDEPENDENT_EXISTING_BTC_GRID",
+        "reference_cap_usdt": 14000,
+        "live_config_source": "state.json",
+        "exchange_live_verified": false,
+        "verified_free_usdt": null,
+        "committed_principal_usdt": null,
+        "open_order_reserved_usdt": null,
+        "realized_net_pnl_usdt": null,
+        "unrealized_net_pnl_usdt": null
+      }
+    },
+    "ab_designated_recovery_units": [],
+    "ab_unit_policy": "Only user-designated positions; B must enter independently; full combined exit proposal only on positive realizable net P&L after fees/slippage; keep A and B P&L separate; do not infer trades",
+    "existing_btc_swing_classification": "UNASSIGNED_PENDING_USER_CONFIRMATION",
+    "no_double_counting": true,
+    "crisis_reserve_separate_usd": 50000
   }
 }
