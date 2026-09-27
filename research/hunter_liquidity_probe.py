@@ -11,7 +11,12 @@ import os
 import pathlib
 import urllib.parse
 import urllib.request
-from hunter_execution_cost import estimate
+try:
+    from research.hunter_execution_cost import estimate
+except ModuleNotFoundError as exc:
+    if exc.name != 'research':
+        raise
+    from hunter_execution_cost import estimate
 
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
