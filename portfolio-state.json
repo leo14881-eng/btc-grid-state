@@ -1,7 +1,7 @@
 {
   "version": "1.8",
   "status": "ACTIVE",
-  "updated_at": "2026-09-27",
+  "updated_at": "2026-09-28",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -59,14 +59,38 @@
       "data_status": "USER_CONFIRMED_STX_FULL_EXIT__FEE_QUANTITY_RECONCILIATION_PENDING"
     },
     "btc_swing": {
-      "btc_quantity_gross": 0.01189,
-      "avg_execution_price_usdt": 84100,
-      "gross_cost_usdt": 999.949,
+      "btc_quantity_gross": 0.047498,
+      "avg_execution_price_usdt": 84233.50456861341,
+      "gross_cost_usdt": 4000.923,
       "exchange_order_id": "21503232",
       "funding_source": "UNVERIFIED",
       "fees": "UNVERIFIED",
       "separate_from_btc_core": true,
-      "status": "USER_CONFIRMED_RECONCILIATION_PENDING"
+      "status": "USER_CONFIRMED_TWO_BUYS__SLEEVE_CLASSIFICATION_PENDING__FEES_BALANCE_UNVERIFIED",
+      "exchange_order_ids": [
+        "21503232",
+        "86442752"
+      ],
+      "confirmed_buy_lots": [
+        {
+          "order_id": "21503232",
+          "btc_quantity_gross": 0.01189,
+          "price_usdt": 84100,
+          "gross_cost_usdt": 999.949,
+          "displayed_timestamp": "2026-09-25 20:28:32",
+          "timestamp_timezone": "UNVERIFIED",
+          "sleeve": "UNASSIGNED"
+        },
+        {
+          "order_id": "86442752",
+          "btc_quantity_gross": 0.035608,
+          "price_usdt": 84250,
+          "gross_cost_usdt": 3000.974,
+          "displayed_timestamp": "2026-09-27 18:50:56",
+          "timestamp_timezone": "UNVERIFIED",
+          "sleeve": "UNASSIGNED"
+        }
+      ]
     }
   },
   "btc_cycle_policy": {
@@ -83,14 +107,14 @@
     "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward."
   },
   "execution_state": {
-    "last_confirmed_execution": "STX-EXIT-ORDER-54049280",
+    "last_confirmed_execution": "BTC-BUY-ORDER-86442752",
     "btc_cycle": {
       "last_buy_execution_timestamp": null,
       "last_sell_execution_timestamp": null,
       "buy_cooldown_hours": 72,
       "cooldown_until": null,
       "cooldown_status": "RECONCILIATION_PENDING_EXACT_TIMESTAMP",
-      "last_buy_journal_id": "BTC-SWING-BUY-ORDER-21503232",
+      "last_buy_journal_id": "BTC-BUY-ORDER-86442752",
       "last_sell_journal_id": null
     },
     "asymmetric": {
@@ -114,9 +138,9 @@
       "on_partial_failure": "MARK_STATE_SYNC_DEGRADED_AND_DO_NOT_PRETEND_SUCCESS"
     },
     "reconciliation": {
-      "status": "PARTIAL_USER_EXECUTIONS_RECORDED__BALANCE_AND_FEES_UNVERIFIED",
-      "journal_sha": "29ff3d2a5315c029a2ce6e292ddebb7b80321541",
-      "gross_known_total_btc": 0.28992703,
+      "status": "TWO_BTC_SWING_BUYS_RECORDED__SLEEVE_BALANCE_FEES_UNVERIFIED",
+      "journal_sha": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
+      "gross_known_total_btc": 0.32553503,
       "ordinary_cash_unknown": true,
       "allocation_gate": "BLOCKED"
     }
@@ -281,7 +305,7 @@
     },
     "ab_designated_recovery_units": [],
     "ab_unit_policy": "Only user-designated positions; B must enter independently; full combined exit proposal only on positive realizable net P&L after fees/slippage; keep A and B P&L separate; do not infer trades",
-    "existing_btc_swing_classification": "UNASSIGNED_PENDING_USER_CONFIRMATION",
+    "existing_btc_swing_classification": "TWO_CONFIRMED_ORDERS_UNASSIGNED_PENDING_USER_CONFIRMATION",
     "no_double_counting": true,
     "crisis_reserve_separate_usd": 50000
   }
