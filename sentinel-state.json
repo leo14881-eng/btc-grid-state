@@ -13,9 +13,9 @@
   "state_ownership": {
     "purpose": "Sentinel market and signal state only",
     "portfolio_source_of_truth": "portfolio-state.json",
-    "observed_portfolio_state_version": "1.7",
-    "observed_portfolio_state_updated_at": "2026-09-26T00:40:00+07:00",
-    "observed_portfolio_content_sha": "23992fe025d80cd64eafd0e9cb7c053b833c1e12"
+    "observed_portfolio_state_version": "1.8",
+    "observed_portfolio_state_updated_at": "2026-09-27",
+    "observed_portfolio_content_sha": "d4c63e20a992d339ee85650a3db277b38b6c9715"
   },
   "architecture_source": {
     "file": "4-year-wealth-architecture.md",
@@ -28,9 +28,9 @@
     "version": "2026-09-19 v1.5"
   },
   "market_state_freshness": {
-    "status": "PARTIAL_DATA_NO_NEW_CAPITAL_ACTION",
+    "status": "STALE_NEEDS_NEW_SCAN_NO_NEW_CAPITAL_ACTION",
     "as_of": "2026-09-26T08:23:26+07:00",
-    "reason": "Sep25 US spot-BTC ETF final fund-level flow is not yet reliably verifiable in this scan. Fresh Sep25 evidence shows BTC around 83.8-84K after failing to hold >85K intraday, while Treasury yields remain historically restrictive. Fresh reporting also shows leverage reduction and large exchange outflows/whale accumulation, creating meaningful counter-evidence to distribution risk. Data Freshness Hard Gate blocks new capital."
+    "reason": "Last recorded market scan Sep26 08:23 ICT. This is an accounting-only reconciliation, not a new market scan."
   },
   "last_price": 83808.65,
   "last_price_quality": "VERIFIED FRESH SECONDARY SNAPSHOT Sep25 late US morning; exact exchange tick varies.",
@@ -118,14 +118,14 @@
   "allocation_gate": {
     "status": "NO_ACTION",
     "recomputed_at": "2026-09-26T08:23:26+07:00",
-    "reason": "Leading distribution risk persists and Data Freshness Hard Gate is not fully satisfied because Sep25 final ETF flow and harmonized current derivatives data remain incomplete."
+    "reason": "Confirmed STX exit and separate BTC swing now journal/portfolio/Hunter synchronized, but cash funding, fees and net balances unverified; market evidence last scan is stale. No new capital action."
   },
   "drawdown_budget": {
     "status": "NO_NEW_PROPOSAL_TO_STRESS_TEST",
     "note": "No capital proposal passed upstream gates; no fabricated hard drawdown threshold."
   },
   "portfolio_gates": {
-    "portfolio_allocation_gate": "NO_ACTION",
+    "portfolio_allocation_gate": "BLOCKED_UNKNOWN_ORDINARY_CASH_AND_FEES",
     "drawdown_budget_gate": "NO_NEW_PROPOSAL_TO_STRESS_TEST",
     "counterparty_gate": "PASS_GREEN",
     "crisis_reserve": "STRICTLY_ISOLATED_50000_USD",
@@ -173,5 +173,18 @@
       "Same-definition current BTC OI/funding/basis/liquidations dataset incomplete.",
       "Fresh definition-clear SOPR/LTH cohort supply data incomplete."
     ]
+  },
+  "operational_reconciliation": {
+    "status": "PARTIAL_COMPLETE",
+    "as_of": "2026-09-27",
+    "portfolio_sha": "d4c63e20a992d339ee85650a3db277b38b6c9715",
+    "journal_sha": "29ff3d2a5315c029a2ce6e292ddebb7b80321541",
+    "hunter_sha": "dafbb777d28ee5827339cb1a35480e4628e29366",
+    "remaining": [
+      "VERIFY_CURRENT_WALLET_BALANCES_AND_FEES",
+      "VERIFY_HOURLY_ACTIONS_RUNS",
+      "REFRESH_LIVE_MARKET_FEEDS"
+    ],
+    "note": "Do not alter last_scan_at or old market evidence; accounting reconciliation only."
   }
 }
