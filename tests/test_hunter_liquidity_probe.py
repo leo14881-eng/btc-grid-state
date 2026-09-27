@@ -66,4 +66,14 @@ class LiquidityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             h.build(s,d,lambda url:{},NOW)
 
+    def test_execution_scenarios_generated_in_pipeline(self):
+        s={"as_of_utc":AT,"coins":{"AAA":{"pairs":[{"venue":"binance","pair":"AAAUSDT","volume_24h_usdt":1000}]}}}
+        d={"market_universe_size":1,"dossiers":[],"early_entry_watchlist":["AAA"]}
+        book={"bids":[["99","1000"]],"asks":[["101","1000"]]}
+        report=h.build(s,d,lambda url:book,NOW)
+        self.assertEqual(report["successful_count"],1)
+        scenarios=report["snapshots"]["AAA"]["execution_scenarios"]
+        self.assertEqual(set(scenarios),{"2000","3000","4000"})
+        self.assertTrue(all(scenarios[n]["roundtrip_cost_usdt"]>0 for n in scenarios))
+
 if __name__=="__main__":unittest.main()
