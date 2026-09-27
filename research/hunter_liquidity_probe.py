@@ -90,7 +90,12 @@ def build(scan,dossiers,fetch,now):
             book=fetch(url)
             snapshot=measure(book,dt.datetime.now(dt.timezone.utc))
             snapshot.update(pair=pair,venue="binance",lane=lane)
-            snapshot["execution_scenarios"]={str(amount):estimate(book,amount) for amount in (2000,3000,4000)}
+            snapshot["execution_scenarios"]={}
+            for amount in (2000,3000,4000):
+                try:
+                    snapshot["execution_scenarios"][str(amount)]=estimate(book,amount)
+                except ValueError as exc:
+                    snapshot["execution_scenarios"][str(amount)]={"status":"BLOCKED","reason":str(exc)}
             records[sym]=snapshot
         except Exception as exc:
             failures[sym]=type(exc).__name__+": "+str(exc)[:160]
