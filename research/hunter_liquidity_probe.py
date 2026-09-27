@@ -11,6 +11,7 @@ import os
 import pathlib
 import urllib.parse
 import urllib.request
+from hunter_execution_cost import estimate
 
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
@@ -89,6 +90,7 @@ def build(scan,dossiers,fetch,now):
             book=fetch(url)
             snapshot=measure(book,dt.datetime.now(dt.timezone.utc))
             snapshot.update(pair=pair,venue="binance",lane=lane)
+            snapshot["execution_scenarios"]={str(amount):estimate(book,amount) for amount in (2000,3000,4000)}
             records[sym]=snapshot
         except Exception as exc:
             failures[sym]=type(exc).__name__+": "+str(exc)[:160]
