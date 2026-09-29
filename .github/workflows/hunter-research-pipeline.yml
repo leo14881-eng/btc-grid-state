@@ -70,6 +70,8 @@ jobs:
           print('DOWNSTREAM_GENERATION_VERIFIED',os.environ['EXPECTED'])
           PY
       - name: Persist downstream results without touching discovery
+        env:
+          EXPECTED: ${{ steps.generation.outputs.id }}
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
