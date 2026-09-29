@@ -74,12 +74,29 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add research/results/hunter-forward-research.json research/results/hunter-market-enrichment.json research/results/hunter-identity-audit.json research/results/hunter-forward-audit.json research/results/hunter-contract-corroboration-cache.json research/results/hunter-candidate-dossiers.json research/results/hunter-liquidity-probe.json research/results/hunter-health-and-queue.json research/results/hunter-research-completion.json research/results/hunter-primary-source-leads.json research/results/hunter-primary-source-cache.json research/results/hunter-api-cooldown.json 2>/dev/null || true
+          git add -f research/results/hunter-forward-research.json research/results/hunter-market-enrichment.json research/results/hunter-identity-audit.json research/results/hunter-forward-audit.json research/results/hunter-contract-corroboration-cache.json research/results/hunter-candidate-dossiers.json research/results/hunter-liquidity-probe.json research/results/hunter-health-and-queue.json research/results/hunter-research-completion.json research/results/hunter-primary-source-leads.json research/results/hunter-primary-source-cache.json research/results/hunter-api-cooldown.json 2>/dev/null || true
           git diff --cached --quiet && exit 0
           git commit -m 'research: Hunter downstream potential-candidate analysis'
           for attempt in 1 2 3 4 5; do
             git fetch origin main
-            if git rebase origin/main && git push origin HEAD:main; then exit 0; fi
+            if git rebase origin/main && git push origin HEAD:main; then
+              git fetch origin main
+              git show origin/main:research/results/hunter-cex-universe-run.json > /tmp/scan.json
+              git show origin/main:research/results/hunter-forward-research.json > /tmp/forward.json
+              git show origin/main:research/results/hunter-health-and-queue.json > /tmp/health.json
+              git show origin/main:research/results/hunter-research-completion.json > /tmp/completion.json
+              python - <<'PY'
+              import json,os
+              s=json.load(open('/tmp/scan.json'))
+              r=json.load(open('/tmp/forward.json'))
+              h=json.load(open('/tmp/health.json'))
+              assert s['generation_id']==os.environ['EXPECTED']
+              assert r['universe_scan_as_of_utc']==s['as_of_utc']
+              assert h['scan_as_of_utc']==s['as_of_utc']
+              print('PERSISTENCE_READBACK_VERIFIED',s['generation_id'])
+              PY
+              exit 0
+            fi
             git rebase --abort 2>/dev/null || true
             sleep $((attempt*2))
           done
