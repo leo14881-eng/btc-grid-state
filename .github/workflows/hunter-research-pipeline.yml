@@ -38,6 +38,8 @@ jobs:
         run: python research/hunter_forward_research.py
       - name: Identity audit
         run: python research/hunter_identity_audit.py
+      - name: Forward outcome audit
+        run: python research/hunter_forward_audit.py
       - name: Candidate dossiers
         run: python research/hunter_candidate_dossiers.py
       - name: Liquidity only for shortlisted candidates
@@ -68,7 +70,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add research/results/hunter-forward-research.json research/results/hunter-market-enrichment.json research/results/hunter-identity-audit.json research/results/hunter-contract-corroboration-cache.json research/results/hunter-candidate-dossiers.json research/results/hunter-liquidity-probe.json research/results/hunter-health-and-queue.json research/results/hunter-primary-source-leads.json research/results/hunter-primary-source-cache.json research/results/hunter-api-cooldown.json 2>/dev/null || true
+          git add research/results/hunter-forward-research.json research/results/hunter-market-enrichment.json research/results/hunter-identity-audit.json research/results/hunter-forward-audit.json research/results/hunter-contract-corroboration-cache.json research/results/hunter-candidate-dossiers.json research/results/hunter-liquidity-probe.json research/results/hunter-health-and-queue.json research/results/hunter-primary-source-leads.json research/results/hunter-primary-source-cache.json research/results/hunter-api-cooldown.json 2>/dev/null || true
           git diff --cached --quiet && exit 0
           git commit -m 'research: Hunter downstream potential-candidate analysis'
           for attempt in 1 2 3 4 5; do
