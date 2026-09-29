@@ -1,0 +1,78 @@
+name: Hunter Potential Research Pipeline
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Hunter Binance Universe Scan']
+    types: [completed]
+permissions:
+  contents: write
+concurrency:
+  group: hunter-research-main
+  cancel-in-progress: false
+jobs:
+  research:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Capture discovery generation
+        id: generation
+        run: |
+          python - <<'PY'
+          import json,os
+          d=json.load(open('research/results/hunter-cex-universe-run.json'))
+          assert d.get('binance_complete') is True and d.get('generation_id')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              print('id='+d['generation_id'],file=f)
+          print('RESEARCH_INPUT_GENERATION',d['generation_id'])
+          PY
+      - name: Forward-upside research
+        run: python research/hunter_forward_research.py
+      - name: Identity audit
+        run: python research/hunter_identity_audit.py
+      - name: Candidate dossiers
+        run: python research/hunter_candidate_dossiers.py
+      - name: Liquidity only for shortlisted candidates
+        run: python research/hunter_liquidity_probe.py
+      - name: Rebuild dossiers with execution evidence
+        run: python research/hunter_candidate_dossiers.py
+      - name: Health and candidate gate report
+        run: python research/hunter_health_and_queue.py
+      - name: Primary-source lead discovery
+        continue-on-error: true
+        run: python research/hunter_primary_source_discovery.py
+      - name: Reject mixed-generation research
+        env:
+          EXPECTED: ${{ steps.generation.outputs.id }}
+        run: |
+          python - <<'PY'
+          import json,os
+          s=json.load(open('research/results/hunter-cex-universe-run.json'))
+          r=json.load(open('research/results/hunter-forward-research.json'))
+          h=json.load(open('research/results/hunter-health-and-queue.json'))
+          assert s['generation_id']==os.environ['EXPECTED']
+          assert r['universe_scan_as_of_utc']==s['as_of_utc']
+          assert h['scan_as_of_utc']==s['as_of_utc']
+          print('DOWNSTREAM_GENERATION_VERIFIED',os.environ['EXPECTED'])
+          PY
+      - name: Persist downstream results without touching discovery
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add research/results/hunter-forward-research.json research/results/hunter-market-enrichment.json research/results/hunter-identity-audit.json research/results/hunter-contract-corroboration-cache.json research/results/hunter-candidate-dossiers.json research/results/hunter-liquidity-probe.json research/results/hunter-health-and-queue.json research/results/hunter-primary-source-leads.json research/results/hunter-primary-source-cache.json research/results/hunter-api-cooldown.json 2>/dev/null || true
+          git diff --cached --quiet && exit 0
+          git commit -m 'research: Hunter downstream potential-candidate analysis'
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt*2))
+          done
+          exit 1
