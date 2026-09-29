@@ -1,139 +1,68 @@
-# Manual Hunter full-pipeline rerun requested 2026-09-27; preserve existing scheduling and gates
+# Hunter v3 frozen stability baseline: discovery must remain independent of deep research.
 name: Hunter Binance Universe Scan
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '11 * * * *'
   push:
     branches: [main]
     paths:
       - 'research/hunter_cex_scan.py'
       - 'tests/test_hunter_cex_scan.py'
-      - 'research/hunter_forward_research.py'
-      - 'tests/test_hunter_forward_research.py'
-      - 'research/hunter_forward_audit.py'
-      - 'tests/test_hunter_forward_audit.py'
-      - 'research/hunter_candidate_dossiers.py'
-      - 'tests/test_hunter_candidate_dossiers.py'
-      - 'research/hunter-verified-facts.json'
-      - 'research/hunter-reviewed-watchlist.json'
-      - 'research/hunter_liquidity_probe.py'
-      - 'research/hunter_execution_cost.py'
-      - 'tests/test_hunter_execution_cost.py'
-      - 'research/hunter_identity_audit.py'
-      - 'research/hunter_api_cooldown.py'
-      - 'tests/test_hunter_api_cooldown.py'
-      - 'research/hunter_health_and_queue.py'
-      - 'research/hunter_primary_source_discovery.py'
-      - 'tests/test_hunter_primary_source_discovery.py'
-      - 'tests/test_hunter_health_and_queue.py'
-      - 'tests/test_hunter_identity_audit.py'
-      - 'tests/test_hunter_liquidity_probe.py'
       - '.github/workflows/hunter-cex-universe.yml'
-  schedule:
-    - cron: '11 * * * *'
 permissions:
   contents: write
 concurrency:
-  group: hunter-cex-universe-main
+  group: hunter-cex-discovery-main
   cancel-in-progress: false
 jobs:
-  scan:
+  discovery:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Refresh latest baseline after serialized queue
+      - name: Refresh latest published baseline
         run: |
           git fetch origin main
           git checkout -B main origin/main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate discovery, pagination and PUMP inclusion
+      - name: Validate discovery only
         run: python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v
-      - name: Validate forward research and evidence gates
-        run: python -m unittest discover -s tests -p 'test_hunter_forward_research.py' -v
-      - name: Validate point-in-time prospective performance audit
-        run: python -m unittest discover -s tests -p 'test_hunter_forward_audit.py' -v
-      - name: Validate forward candidate dossiers and supply-adjusted scenarios
-        run: python -m unittest discover -s tests -p 'test_hunter_candidate_dossiers.py' -v
-      - name: Validate shared API cooldown and Retry-After persistence
-        run: python -m unittest discover -s tests -p 'test_hunter_api_cooldown.py' -v
-      - name: Validate rotating primary-source lead discovery
-        run: python -m unittest discover -s tests -p 'test_hunter_primary_source_discovery.py' -v
-      - name: Validate pipeline self-check and evidence queue
-        run: python -m unittest discover -s tests -p 'test_hunter_health_and_queue.py' -v
-      - name: Validate token identity collision and asset-type safety
-        run: python -m unittest discover -s tests -p 'test_hunter_identity_audit.py' -v
-      - name: Validate depth-aware execution cost and insufficient-liquidity blocks
-        run: python -m unittest discover -s tests -p 'test_hunter_execution_cost.py' -v
-      - name: Validate fresh orderbook evidence and failure isolation
-        run: python -m unittest discover -s tests -p 'test_hunter_liquidity_probe.py' -v
-      - name: Scan Binance USDT spot universe only
-        id: scan
-        continue-on-error: true
+      - name: Scan Binance USDT spot universe
         run: python research/hunter_cex_scan.py
-      - name: Rotate full-universe forward research and enrich selected assets
-        id: research
-        if: steps.scan.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_forward_research.py
-      - name: Audit asset types and fail-closed official contract identities
-        id: identity
-        if: steps.research.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_identity_audit.py
-      - name: Freeze discovery snapshots and record actual forward outcomes
-        id: audit
-        if: steps.research.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_forward_audit.py
-      - name: Generate forward candidate dossiers with explicit evidence gaps
-        id: dossiers
-        if: steps.research.outcome == 'success' && steps.identity.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_candidate_dossiers.py
-      - name: Probe current public Binance orderbook for reviewed, early and continuation lanes
-        id: liquidity
-        if: steps.dossiers.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_liquidity_probe.py
-      - name: Rebuild final dossiers with current verified orderbook evidence
-        id: final_dossiers
-        if: steps.liquidity.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_candidate_dossiers.py
-      - name: Cross-check stage timestamps and emit unresolved evidence queue
-        id: health
-        if: steps.final_dossiers.outcome == 'success' && steps.audit.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_health_and_queue.py
-      - name: Rotate independent project-link discovery for current candidate lanes
-        id: source_discovery
-        if: steps.health.outcome == 'success'
-        continue-on-error: true
-        run: python research/hunter_primary_source_discovery.py
-      - name: Persist coverage, leads and explicit failures
-        if: always()
+      - name: Validate publishable discovery generation
         run: |
+          python - <<'PY'
+          import datetime as dt,json,pathlib
+          p=pathlib.Path('research/results/hunter-cex-universe-summary.json')
+          d=json.loads(p.read_text())
+          assert d.get('binance_complete') is True
+          assert d.get('coverage_status')=='BINANCE_COMPLETE'
+          assert d.get('generation_id')
+          t=dt.datetime.fromisoformat(d['as_of_utc'].replace('Z','+00:00'))
+          age=(dt.datetime.now(dt.timezone.utc)-t).total_seconds()
+          assert -300 <= age <= 600, age
+          print('DISCOVERY_GENERATION_VERIFIED',d['generation_id'],d.get('unique_base_tickers'))
+          PY
+      - name: Atomically persist discovery outputs only
+        run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A research/results/
-          git diff --cached --quiet && exit 0
-          git commit -m 'research: hourly Hunter CEX universe coverage and candidates'
+          git add research/results/hunter-cex-universe-run.json research/results/hunter-cex-universe-latest.json research/results/hunter-cex-universe-summary.json
+          git diff --cached --quiet && { echo 'DISCOVERY_NO_CHANGE'; exit 0; }
+          git commit -m 'research: publish verified Hunter discovery generation'
           for attempt in 1 2 3 4 5; do
             git fetch origin main
-            git rebase origin/main || { echo 'PERSISTENCE_REBASE_CONFLICT'; git rebase --abort; exit 1; }
-            if git push origin HEAD:main; then
-              echo "PERSISTENCE_VERIFIED_PUSH attempt=$attempt"
+            if git rebase origin/main && git push origin HEAD:main; then
+              echo "DISCOVERY_PERSISTENCE_VERIFIED attempt=$attempt"
               exit 0
             fi
-            echo "PERSISTENCE_CONCURRENT_UPDATE retry=$attempt"
+            git rebase --abort 2>/dev/null || true
+            echo "DISCOVERY_PERSISTENCE_RETRY attempt=$attempt"
             sleep $((attempt * 2))
           done
-          echo 'PERSISTENCE_FAILURE_AFTER_RETRIES'
+          echo 'DISCOVERY_PERSISTENCE_FAILURE'
           exit 1
-      - name: Fail if Binance-only scan or downstream research fails
-        if: steps.scan.outcome != 'success' || steps.research.outcome != 'success' || steps.audit.outcome != 'success' || steps.identity.outcome != 'success' || steps.dossiers.outcome != 'success' || steps.final_dossiers.outcome != 'success' || steps.liquidity.outcome != 'success' || steps.health.outcome != 'success' || steps.source_discovery.outcome != 'success'
-        run: exit 2
-
-# Recovery trigger: rerun full Hunter scan after watchdog redundancy fix; preserve all existing gates.

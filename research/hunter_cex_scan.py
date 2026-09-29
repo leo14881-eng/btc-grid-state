@@ -169,7 +169,8 @@ def build(results,previous,at):
     # Stable alphabetical ordering prevents stage-biased top-N truncation.
     # Momentum is retained for separate alerting, never as a buy ranking.
     leads.sort(key=lambda r:r["base"])
-    return dict(schema="hunter_cex_universe_v1",as_of_utc=at,
+    generation_id=dt.datetime.fromisoformat(at).strftime("%Y%m%dT%H%M%S%fZ")
+    return dict(schema="hunter_cex_universe_v2",generation_id=generation_id,as_of_utc=at,
                 scope="ALL active Binance USDT spot pairs, excluding stablecoin bases; leveraged-like tickers retained for separate risk classification",
                 limitations="Ticker dedup is provisional until contract IDs verified; venue 24h volumes overlap and must not be summed as unique demand.",
                 unique_base_tickers=len(coins),venue_counts={k:len(v) for k,v in results.items()},
