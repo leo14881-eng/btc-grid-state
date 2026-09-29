@@ -17,6 +17,7 @@ REVIEWS=pathlib.Path("research/hunter-reviewed-watchlist.json")
 IDENTITY=ROOT/"hunter-identity-audit.json"
 LIQUIDITY=ROOT/"hunter-liquidity-probe.json"
 OUT=ROOT/"hunter-candidate-dossiers.json"
+COMPLETION=ROOT/"hunter-research-completion.json"
 MAX_DOSSIERS=40
 EARLY_QUOTA=16
 CONTINUATION_QUOTA=12
@@ -127,6 +128,8 @@ def balanced_candidates(full,reviewed=None):
     # Dedicated continuity lane: already-researched candidates must not vanish
     # when their volume signal rotates. This is NOT a predicted-return rank.
     reviewed=reviewed or {}
+    completion=read(COMPLETION,{})
+    completion_assets=completion.get("assets") or {}
     indexed={r[0]:r for r in full}
     for sym,review in (reviewed.get("assets") or {}).items():
         if sym not in indexed or not isinstance(review,dict):continue
@@ -292,8 +295,11 @@ def build(research,scan,registry,now,identity=None,liquidity=None,reviewed=None)
               "attention_reasons":{"triggered":sym in set(research.get("triggered_researched") or []),
                   "attention_signal_count":len(item.get("research_attention_signals") or []),
                   "evidence_fields_present":evidence_count},
+              "research_completion":completion_assets.get(sym),
+              "potential_candidate": bool(item.get("research_attention_signals")) and not bool(risk.get("status")=="PENDING_ONCHAIN_RECONCILIATION"),
               "status":"CAPITAL_REVIEW_ELIGIBLE" if ready else
-                  ("SCENARIO_RESEARCH_READY" if scen else "RESEARCH_INCOMPLETE"),
+                  ("SCENARIO_RESEARCH_READY" if scen else
+                   ("POTENTIAL_CANDIDATE__EVIDENCE_OPEN" if item.get("research_attention_signals") else "RESEARCH_INCOMPLETE")),
               "capital_ready":ready,"trade_action":"USER_REVIEW_REQUIRED" if ready else "NONE"}
         cases.append(case)
     return {"schema":"hunter_candidate_dossiers_v1","as_of_utc":now.isoformat(),
@@ -308,6 +314,7 @@ def build(research,scan,registry,now,identity=None,liquidity=None,reviewed=None)
                 len(scan.get("coins") or {})-len(research.get("research_results") or {})),
             "selection_note":"Research attention and evidence availability only, NOT expected return ranking.",
             "scenario_policy":"No numeric price targets without dated official verified supply, token capture and explicit market-cap assumptions.",
+            "potential_candidates":[x["asset"] for x in cases if x.get("potential_candidate")],
             "capital_ready":[x["asset"] for x in cases if x["capital_ready"]],
             "buy_proposals":[{"asset":x["asset"],"status":"USER_REVIEW_REQUIRED_NOT_AN_ORDER",
                 "scenario_map":x["scenario_map"]} for x in cases if x["capital_ready"]],
