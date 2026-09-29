@@ -105,16 +105,7 @@ jobs:
               git show origin/main:research/results/hunter-forward-research.json > /tmp/forward.json
               git show origin/main:research/results/hunter-health-and-queue.json > /tmp/health.json
               git show origin/main:research/results/hunter-research-completion.json > /tmp/completion.json
-              python - <<'PY'
-              import json,os
-              s=json.load(open('/tmp/scan.json'))
-              r=json.load(open('/tmp/forward.json'))
-              h=json.load(open('/tmp/health.json'))
-              assert s['generation_id']==os.environ['EXPECTED']
-              assert r['universe_scan_as_of_utc']==s['as_of_utc']
-              assert h['scan_as_of_utc']==s['as_of_utc']
-              print('PERSISTENCE_READBACK_VERIFIED',s['generation_id'])
-              PY
+              python -c "import json,os; s=json.load(open('/tmp/scan.json')); r=json.load(open('/tmp/forward.json')); h=json.load(open('/tmp/health.json')); assert s['generation_id']==os.environ['EXPECTED']; assert r['universe_scan_as_of_utc']==s['as_of_utc']; assert h['scan_as_of_utc']==s['as_of_utc']; print('PERSISTENCE_READBACK_VERIFIED',s['generation_id'])"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
