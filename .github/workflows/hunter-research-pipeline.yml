@@ -76,8 +76,26 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -f research/results/hunter-forward-research.json research/results/hunter-market-enrichment.json research/results/hunter-identity-audit.json research/results/hunter-forward-audit.json research/results/hunter-contract-corroboration-cache.json research/results/hunter-candidate-dossiers.json research/results/hunter-liquidity-probe.json research/results/hunter-health-and-queue.json research/results/hunter-research-completion.json research/results/hunter-primary-source-leads.json research/results/hunter-primary-source-cache.json research/results/hunter-api-cooldown.json 2>/dev/null || true
-          git diff --cached --quiet && exit 0
+          for file in \
+            research/results/hunter-forward-research.json \
+            research/results/hunter-market-enrichment.json \
+            research/results/hunter-identity-audit.json \
+            research/results/hunter-forward-audit.json \
+            research/results/hunter-contract-corroboration-cache.json \
+            research/results/hunter-candidate-dossiers.json \
+            research/results/hunter-liquidity-probe.json \
+            research/results/hunter-health-and-queue.json \
+            research/results/hunter-research-completion.json \
+            research/results/hunter-primary-source-leads.json \
+            research/results/hunter-primary-source-cache.json \
+            research/results/hunter-api-cooldown.json; do
+            if [ -f "$file" ]; then git add -f "$file"; else echo "OPTIONAL_RESULT_MISSING $file"; fi
+          done
+          if git diff --cached --quiet; then
+            echo "PERSISTENCE_ERROR_NO_STAGED_RESULTS"
+            git status --short --ignored
+            exit 1
+          fi
           git commit -m 'research: Hunter downstream potential-candidate analysis'
           for attempt in 1 2 3 4 5; do
             git fetch origin main
