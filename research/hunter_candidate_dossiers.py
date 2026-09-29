@@ -229,6 +229,8 @@ def build(research,scan,registry,now,identity=None,liquidity=None,reviewed=None)
     identity_assets=identity.get("assets") or {}
     reviewed=reviewed or {}
     reviews=reviewed.get("assets") or {}
+    completion=read(COMPLETION,{})
+    completion_assets=completion.get("assets") or {}
     cases=[];full=prioritize(research,scan)
     selected,cohort_stats=balanced_candidates(full,reviewed)
     facts_all=registry.get("assets") or {}
