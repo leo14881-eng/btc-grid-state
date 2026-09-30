@@ -49,6 +49,8 @@ jobs:
       - name: Primary-source lead discovery
         continue-on-error: true
         run: python research/hunter_primary_source_discovery.py
+      - name: Official-source evidence enrichment
+        run: python research/hunter_evidence_enrichment.py
       - name: Research completion state
         run: python research/hunter_research_completion.py
       - name: Rebuild dossiers with completion state
@@ -86,6 +88,7 @@ jobs:
             research/results/hunter-liquidity-probe.json \
             research/results/hunter-health-and-queue.json \
             research/results/hunter-research-completion.json \
+            research/results/hunter-evidence-enrichment.json \
             research/results/hunter-primary-source-leads.json \
             research/results/hunter-primary-source-cache.json \
             research/results/hunter-api-cooldown.json; do
