@@ -11,7 +11,7 @@ on:
     paths:
       - '.github/workflows/hunter-stale-watchdog.yml'
   schedule:
-    - cron: '37 * * * *'
+    - cron: '07,37 * * * *'
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
@@ -45,7 +45,7 @@ jobs:
               print('HUNTER_RESULT_INVALID',repr(e))
               age=float('inf')
           print('HUNTER_RESULT_AGE_MINUTES',age)
-          stale=age>90 or age < -5 or os.environ['SIMULATE_STALE']=='true'
+          stale=age>70 or age < -5 or os.environ['SIMULATE_STALE']=='true'
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               print('stale='+str(stale).lower(),file=f)
           PY
