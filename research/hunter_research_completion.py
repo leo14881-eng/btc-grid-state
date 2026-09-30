@@ -25,7 +25,8 @@ def main():
     old=read(OUT,{})
     scan=read(SCAN,{})
     generation=scan.get("generation_id")
-    prev=old.get("assets") or {}
+    legacy_report=old.get("schema")!="hunter_research_completion_v2"
+    prev={} if legacy_report else (old.get("assets") or {})
     evidence=read(EVIDENCE,{})
     evidence_assets=evidence.get("assets") or {}
     assets={}
@@ -43,7 +44,7 @@ def main():
           "completion_state":("EVIDENCE_EXHAUSTED__DECIDE_WITH_KNOWN_UNKNOWNS" if terminal
                               else "EVIDENCE_COLLECTION_ACTIVE"),
           "terminal":terminal}
-    report={"schema":"hunter_research_completion_v1","as_of_utc":now,
+    report={"schema":"hunter_research_completion_v2","as_of_utc":now,
             "generation_id":generation,"max_attempts_before_terminal":MAX_ATTEMPTS,"assets":assets}
     OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n")
     print(json.dumps({"assets":len(assets),"terminal":sum(x["terminal"] for x in assets.values())}))
