@@ -46,15 +46,15 @@ jobs:
         run: python research/hunter_liquidity_probe.py
       - name: Rebuild dossiers with execution evidence
         run: python research/hunter_candidate_dossiers.py
+      - name: Primary-source lead discovery
+        continue-on-error: true
+        run: python research/hunter_primary_source_discovery.py
       - name: Research completion state
         run: python research/hunter_research_completion.py
       - name: Rebuild dossiers with completion state
         run: python research/hunter_candidate_dossiers.py
       - name: Health and candidate gate report
         run: python research/hunter_health_and_queue.py
-      - name: Primary-source lead discovery
-        continue-on-error: true
-        run: python research/hunter_primary_source_discovery.py
       - name: Reject mixed-generation research
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
