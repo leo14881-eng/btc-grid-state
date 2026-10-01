@@ -45,7 +45,7 @@ jobs:
               print('HUNTER_RESULT_INVALID',repr(e))
               age=float('inf')
           print('HUNTER_RESULT_AGE_MINUTES',age)
-          stale=age>70 or age < -5 or os.environ['SIMULATE_STALE']=='true'
+          stale=age>55 or age < -5 or os.environ['SIMULATE_STALE']=='true'
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               print('stale='+str(stale).lower(),file=f)
           PY
@@ -70,7 +70,7 @@ jobs:
                    0 <= (now-datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))).total_seconds()<3600
                    for r in producer):
               print('COOLDOWN')
-          elif any(0 <= (now-datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))).total_seconds()<900
+          elif any(0 <= (now-datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00'))).total_seconds()<600
                    for r in producer):
               print('COOLDOWN')
           else:
