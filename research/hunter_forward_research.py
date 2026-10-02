@@ -17,7 +17,8 @@ import urllib.request
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 OUT=ROOT/"hunter-forward-research.json"
-CACHE=ROOT/"hunter-market-enrichment.json"\nEARLY=ROOT/"hunter-early-signals.json"
+CACHE=ROOT/"hunter-market-enrichment.json"
+EARLY=ROOT/"hunter-early-signals.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 CG=os.getenv("HUNTER_COINGECKO_API","https://api.coingecko.com/api/v3")
 DL=os.getenv("HUNTER_DEFILLAMA_API","https://api.llama.fi")
