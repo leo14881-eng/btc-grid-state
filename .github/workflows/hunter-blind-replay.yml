@@ -2,6 +2,11 @@ name: Hunter Blind Replay
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '31 * * * *'
+  workflow_run:
+    workflows: ['Hunter Binance Universe Scan']
+    types: [completed]
   push:
     branches: [main]
     paths:
@@ -17,11 +22,18 @@ concurrency:
 
 jobs:
   replay:
-    if: github.actor != 'github-actions[bot]'
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') || (github.event_name == 'push' && github.actor != 'github-actions[bot]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Refresh latest main baseline
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -38,12 +50,23 @@ jobs:
           PY
       - name: Run blind replay
         run: python research/hunter_blind_replay.py
-      - name: Commit research results
+      - name: Commit research results with retry
         if: always()
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add research/results/hunter-blind-replay-summary.json research/results/hunter-blind-replay-events.csv research/results/hunter-blind-replay-controls.csv research/results/hunter-archive-symbol-manifest.json hunter-replay-v1.json || true
-          git diff --cached --quiet && exit 0
+          git diff --cached --quiet && { echo 'REPLAY_NO_CHANGE'; exit 0; }
           git commit -m "research: hunter blind replay results"
-          git push
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              echo "REPLAY_PERSISTENCE_VERIFIED attempt=$attempt"
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          echo 'REPLAY_PERSISTENCE_FAILURE'
+          exit 1
