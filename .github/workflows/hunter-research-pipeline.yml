@@ -64,6 +64,10 @@ jobs:
         run: python research/hunter_tactical_capital_review.py
       - name: Health and candidate gate report
         run: python research/hunter_health_and_queue.py
+      - name: Validate shadow-account engine
+        run: python -m unittest tests.test_hunter_shadow_trader -v
+      - name: Update Hunter shadow account
+        run: python research/hunter_shadow_trader.py
       - name: Reject mixed-generation research
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
@@ -101,7 +105,9 @@ jobs:
             research/results/hunter-evidence-enrichment.json \
             research/results/hunter-primary-source-leads.json \
             research/results/hunter-primary-source-cache.json \
-            research/results/hunter-api-cooldown.json; do
+            research/results/hunter-api-cooldown.json \
+            research/results/hunter-shadow-portfolio.json \
+            research/results/hunter-shadow-summary.json; do
             if [ -f "$file" ]; then git add -f "$file"; else echo "OPTIONAL_RESULT_MISSING $file"; fi
           done
           if git diff --cached --quiet; then
