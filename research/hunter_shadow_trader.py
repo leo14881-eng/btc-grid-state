@@ -67,13 +67,13 @@ def update_candidate_ledger(review,scan,now,btc):
     """Persistent forward-only discovery ledger. No real-capital authority."""
     d=load(LEDGER,{"schema":"hunter_shadow_candidate_ledger_v1","mode":"SIMULATION_ONLY_NO_REAL_ORDERS","candidates":[]})
     rows=d.setdefault("candidates",[])
-    by_key={(x.get("asset"),x.get("first_scan_generation_id")):x for x in rows}
+    by_key={x.get("asset"):x for x in rows if x.get("asset")}
     current_assets=set()
     for cand in review.get("candidates") or []:
         asset=cand.get("asset"); sig=cand.get("signal") or {}; p=price(scan,asset)
         if not asset or not p:continue
         current_assets.add(asset)
-        key=(asset,scan.get("generation_id"))
+        key=asset
         # One immutable discovery record per asset/generation. Repeated cycles mark it forward.
         if key not in by_key:
             ex=cand.get("execution_scenario") or {}
@@ -88,6 +88,9 @@ def update_candidate_ledger(review,scan,now,btc):
                 "max_hold_hours":MAX_HOLD_HOURS},"marks":[],"mfe_pct":0.0,"mae_pct":0.0,
               "capital_authority":"NONE_SHADOW_ONLY"}
             rows.append(rec);by_key[key]=rec
+        else:
+            by_key[key]["last_seen_generation_id"]=scan.get("generation_id")
+            by_key[key]["last_seen_at_utc"]=now.isoformat()
     # Mark every historical candidate when its asset is still priceable in the current scan.
     for rec in rows:
         p=price(scan,rec.get("asset"))
