@@ -11,7 +11,8 @@ ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 EARLY=ROOT/"hunter-early-signals.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"
-FACTS=pathlib.Path("research/hunter-verified-facts.json")\nSUPPLY=ROOT/"hunter-tactical-supply-risk.json"
+FACTS=pathlib.Path("research/hunter-verified-facts.json")
+SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
 OUT=ROOT/"hunter-tactical-capital-review.json"
 MAX_ALT_POOL=20000.0
 
@@ -28,7 +29,9 @@ def finite(v):
 
 def main():
     now=dt.datetime.now(dt.timezone.utc)
-    scan,early,liq,facts=read(SCAN),read(EARLY),read(LIQ),read(FACTS)\n    supply=read(SUPPLY)\n    supply_by=supply.get("assets") or {}
+    scan,early,liq,facts=read(SCAN),read(EARLY),read(LIQ),read(FACTS)
+    supply=read(SUPPLY)
+    supply_by=supply.get("assets") or {}
     if not scan.get("binance_complete"): raise SystemExit("INCOMPLETE_BINANCE_SCAN")
     if early.get("scan_generation_id")!=scan.get("generation_id"): raise SystemExit("EARLY_GENERATION_MISMATCH")
     if liq.get("scan_as_of_utc")!=scan.get("as_of_utc"): raise SystemExit("LIQUIDITY_GENERATION_MISMATCH")
@@ -84,7 +87,8 @@ def main():
       "alt_pool_cap_usdt":MAX_ALT_POOL,
       "capital_review_eligible":[x["asset"] for x in rows if x["capital_review_eligible"]],
       "candidates":rows[:40]}
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"
+")
     print(json.dumps({"reviewed":len(rows),"eligible":report["capital_review_eligible"],
       "top_blockers":{x["asset"]:x["blockers"] for x in rows[:10]}},ensure_ascii=False))
 if __name__=="__main__":main()
