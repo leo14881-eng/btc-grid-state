@@ -41,7 +41,8 @@ def main():
     for sym,sig in early_by.items():
         blockers=[]
         research_gaps=[]
-        f=fact_by.get(sym) or {}\n        supply_fact=supply_by.get(sym) or {}
+        f=fact_by.get(sym) or {}
+        supply_fact=supply_by.get(sym) or {}
         coin=(scan.get("coins") or {}).get(sym) or {}
         snap=(liq.get("snapshots") or {}).get(sym) or {}
         # Binance pair is the executable exchange identity; project/contract
