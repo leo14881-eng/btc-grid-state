@@ -76,10 +76,17 @@ def main():
         elif known_open+known_pending+proposal>MAX_ALT_POOL:
             blockers.append("ALT_POOL_20000_USDT_CAP")
         execution=(snap.get("execution_scenarios") or {}).get(str(int(proposal))) if snap else None
+        independent=int(sig.get("independent_signal_count") or 0)
+        score=finite(sig.get("score")) or 0.0
+        early_strength=(independent>=2 and ((rel1 or 0)>=0.8 or (rel4 or 0)>=1.5) and score>=8)
+        entry_stage="BLOCKED" if blockers else ("EARLY_ENTRY_REVIEW" if early_strength else "WATCH")
+        first_tranche_allowed=(not blockers and early_strength)
         rows.append({"asset":sym,"as_of_utc":now.isoformat(),
           "reference_price":coin.get("reference_price"),"signal":sig,
           "proposed_max_cost_usdt":proposal,"execution_scenario":execution,
           "research_gaps":list(dict.fromkeys(research_gaps)),
+          "entry_stage":entry_stage,"first_tranche_allowed":first_tranche_allowed,
+          "confirmation_role":"ADD_POSITION_ONLY" if first_tranche_allowed else "NONE",
           "blockers":list(dict.fromkeys(blockers)),
           "capital_review_eligible":not blockers,
           "trade_action":"USER_REVIEW_REQUIRED" if not blockers else "NONE"})
