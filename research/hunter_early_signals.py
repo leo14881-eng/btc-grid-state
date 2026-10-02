@@ -15,15 +15,26 @@ def finite(v):
         x=float(v);return x if math.isfinite(x) else None
     except (TypeError,ValueError,OverflowError):return None
 def rolling(symbols,window):
+    """Derive 1h/4h return from Binance spot klines.
+
+    The rolling-window ticker endpoint has deployment-specific parameter limits;
+    isolate per-symbol failures so one malformed/unavailable market never kills
+    the full discovery generation.
+    """
+    interval="1h"
+    bars=2 if window=="1h" else 5
     out={}
-    for i in range(0,len(symbols),BATCH):
-        batch=symbols[i:i+BATCH]
-        q=urllib.parse.urlencode({"symbols":json.dumps(batch,separators=(",",":")),"windowSize":window})
-        rows=get(BN+"/api/v3/ticker?"+q)
-        if isinstance(rows,dict):rows=[rows]
-        for r in rows:
-            p=finite(r.get("lastPrice"));o=finite(r.get("openPrice"));v=finite(r.get("quoteVolume"))
-            if p and o and o>0:out[r["symbol"]]={"return_pct":(p/o-1)*100,"quote_volume":v}
+    for sym in symbols:
+        try:
+            q=urllib.parse.urlencode({"symbol":sym,"interval":interval,"limit":bars})
+            rows=get(BN+"/api/v3/klines?"+q)
+            if not isinstance(rows,list) or len(rows)<bars:continue
+            start=finite(rows[0][1]);last=finite(rows[-1][4])
+            vol=sum(finite(x[7]) or 0 for x in rows)
+            if start and last and start>0:
+                out[sym]={"return_pct":(last/start-1)*100,"quote_volume":vol}
+        except Exception:
+            continue
     return out
 def score_row(sym,base,r1,r4,btc1,btc4):
     a=r1.get(sym);b=r4.get(sym)
