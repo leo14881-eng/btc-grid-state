@@ -41,14 +41,14 @@ def main():
     for sym,sig in early_by.items():
         blockers=[]
         research_gaps=[]
-        f=fact_by.get(sym) or {}
+        f=fact_by.get(sym) or {}\n        supply_fact=supply_by.get(sym) or {}
         coin=(scan.get("coins") or {}).get(sym) or {}
         snap=(liq.get("snapshots") or {}).get(sym) or {}
         # Binance pair is the executable exchange identity; project/contract
         # identity is still mandatory before capital review.
         if not f.get("contract_verified"): blockers.append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED")
         if not f.get("forward_supply_verified"): research_gaps.append("FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE")
-        if not f.get("tactical_supply_risk_verified"): research_gaps.append("TACTICAL_SUPPLY_RESEARCH_INCOMPLETE")
+        if not (f.get("tactical_supply_risk_verified") or supply_fact.get("tactical_supply_risk_verified")): research_gaps.append("TACTICAL_SUPPLY_RESEARCH_INCOMPLETE")
         try:
             fact_age=(now-parse(f.get("verified_at_utc"))).total_seconds()/3600
             if fact_age<0 or fact_age>336: blockers.append("VERIFIED_FACTS_STALE")
