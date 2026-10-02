@@ -35,7 +35,11 @@ def rolling(symbols,window):
                 out[sym]={"return_pct":(last/start-1)*100,"quote_volume":vol}
         except Exception:
             continue
-    if "BTCUSDT" not in out:\n        raise RuntimeError("BTC benchmark kline unavailable")\n    return out\ndef score_row(sym,base,r1,r4,btc1,btc4):
+    if "BTCUSDT" not in out:
+        raise RuntimeError("BTC benchmark kline unavailable")
+    return out
+
+def score_row(sym,base,r1,r4,btc1,btc4):
     a=r1.get(sym);b=r4.get(sym)
     if not a or not b or not btc1 or not btc4:return None
     rel1=a["return_pct"]-btc1["return_pct"];rel4=b["return_pct"]-btc4["return_pct"]
