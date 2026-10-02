@@ -40,14 +40,15 @@ def main():
     rows=[]
     for sym,sig in early_by.items():
         blockers=[]
+        research_gaps=[]
         f=fact_by.get(sym) or {}
         coin=(scan.get("coins") or {}).get(sym) or {}
         snap=(liq.get("snapshots") or {}).get(sym) or {}
         # Binance pair is the executable exchange identity; project/contract
         # identity is still mandatory before capital review.
         if not f.get("contract_verified"): blockers.append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED")
-        if not f.get("forward_supply_verified"): blockers.append("FORWARD_SUPPLY_UNLOCK_RISK_UNVERIFIED")
-        if not f.get("tactical_supply_risk_verified"): blockers.append("TACTICAL_SUPPLY_RISK_UNVERIFIED")
+        if not f.get("forward_supply_verified"): research_gaps.append("FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE")
+        if not f.get("tactical_supply_risk_verified"): research_gaps.append("TACTICAL_SUPPLY_RESEARCH_INCOMPLETE")
         try:
             fact_age=(now-parse(f.get("verified_at_utc"))).total_seconds()/3600
             if fact_age<0 or fact_age>336: blockers.append("VERIFIED_FACTS_STALE")
@@ -65,7 +66,7 @@ def main():
         rel1=finite(sig.get("btc_relative_1h_pct")); rel4=finite(sig.get("btc_relative_4h_pct"))
         accel=finite(sig.get("relative_acceleration_pct"))
         if rel1 is None or rel4 is None or accel is None: blockers.append("BTC_RELATIVE_SIGNAL_MISSING")
-        elif sum((rel1>=0.8,rel4>=1.5,accel>=0.5))<2: blockers.append("BTC_RELATIVE_SIGNAL_WEAK")
+        elif sum((rel1>=0.8,rel4>=1.5,accel>=0.5))<2: research_gaps.append("BTC_RELATIVE_CONFIRMATION_PENDING")
         proposal=min(4000.0,float(f.get("tactical_max_new_cost_usdt") or 3000.0))
         known_open=finite(f.get("portfolio_open_cost_usdt"))
         known_pending=finite(f.get("portfolio_pending_reservations_usdt"))
@@ -77,6 +78,7 @@ def main():
         rows.append({"asset":sym,"as_of_utc":now.isoformat(),
           "reference_price":coin.get("reference_price"),"signal":sig,
           "proposed_max_cost_usdt":proposal,"execution_scenario":execution,
+          "research_gaps":list(dict.fromkeys(research_gaps)),
           "blockers":list(dict.fromkeys(blockers)),
           "capital_review_eligible":not blockers,
           "trade_action":"USER_REVIEW_REQUIRED" if not blockers else "NONE"})
@@ -87,8 +89,7 @@ def main():
       "alt_pool_cap_usdt":MAX_ALT_POOL,
       "capital_review_eligible":[x["asset"] for x in rows if x["capital_review_eligible"]],
       "candidates":rows[:40]}
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"
-")
+    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\\n")
     print(json.dumps({"reviewed":len(rows),"eligible":report["capital_review_eligible"],
       "top_blockers":{x["asset"]:x["blockers"] for x in rows[:10]}},ensure_ascii=False))
 if __name__=="__main__":main()
