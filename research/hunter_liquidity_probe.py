@@ -121,8 +121,7 @@ def live_fetch(url):
 def main():
     scan=read(SCAN);dossiers=read(DOSSIERS);early=read(EARLY)
     report=build(scan,dossiers,live_fetch,dt.datetime.now(dt.timezone.utc),early)
-    OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"
-")
+    OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False))
     print(json.dumps({k:report[k] for k in ("as_of_utc","requested_count","successful_count","failures")},ensure_ascii=False))
     # Public API geo-blocks are explicit degradation, not fabricated successes.
     return 0
