@@ -67,6 +67,23 @@ def update_candidate_ledger(review,scan,now,btc):
     """Persistent forward-only discovery ledger. No real-capital authority."""
     d=load(LEDGER,{"schema":"hunter_shadow_candidate_ledger_v1","mode":"SIMULATION_ONLY_NO_REAL_ORDERS","candidates":[]})
     rows=d.setdefault("candidates",[])
+    # Repair legacy duplicate-per-generation rows: keep the true earliest discovery per asset.
+    earliest={}
+    for x in rows:
+        a=x.get("asset")
+        if not a:continue
+        prev=earliest.get(a)
+        if prev is None or str(x.get("first_discovered_at_utc",""))<str(prev.get("first_discovered_at_utc","")):
+            if prev is not None:
+                x["marks"]=(prev.get("marks") or [])+(x.get("marks") or [])
+                x["mfe_pct"]=max(float(prev.get("mfe_pct",0)),float(x.get("mfe_pct",0)))
+                x["mae_pct"]=min(float(prev.get("mae_pct",0)),float(x.get("mae_pct",0)))
+            earliest[a]=x
+        elif prev is not None:
+            prev["marks"]=(prev.get("marks") or [])+(x.get("marks") or [])
+            prev["mfe_pct"]=max(float(prev.get("mfe_pct",0)),float(x.get("mfe_pct",0)))
+            prev["mae_pct"]=min(float(prev.get("mae_pct",0)),float(x.get("mae_pct",0)))
+    rows=list(earliest.values()); d["candidates"]=rows
     by_key={x.get("asset"):x for x in rows if x.get("asset")}
     current_assets=set()
     for cand in review.get("candidates") or []:
