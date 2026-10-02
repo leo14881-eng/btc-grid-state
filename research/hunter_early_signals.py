@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Hunter v3 early-signal funnel: Binance-only, research-only, never trades."""
-import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
+import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request\nfrom concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 OUT=ROOT/"hunter-early-signals.json"
@@ -15,28 +15,26 @@ def finite(v):
         x=float(v);return x if math.isfinite(x) else None
     except (TypeError,ValueError,OverflowError):return None
 def rolling(symbols,window):
-    """Derive 1h/4h return from Binance spot klines.
-
-    The rolling-window ticker endpoint has deployment-specific parameter limits;
-    isolate per-symbol failures so one malformed/unavailable market never kills
-    the full discovery generation.
-    """
-    interval="1h"
-    bars=2 if window=="1h" else 5
+    """Derive 1h/4h return from Binance spot klines with bounded concurrency."""
+    interval="1h";bars=2 if window=="1h" else 5
+    def one(sym):
+        q=urllib.parse.urlencode({"symbol":sym,"interval":interval,"limit":bars})
+        rows=get(BN+"/api/v3/klines?"+q,8)
+        if not isinstance(rows,list) or len(rows)<bars:return None
+        start=finite(rows[0][1]);last=finite(rows[-1][4])
+        if not start or not last or start<=0:return None
+        return sym,{"return_pct":(last/start-1)*100,
+                   "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
     out={}
-    for sym in symbols:
-        try:
-            q=urllib.parse.urlencode({"symbol":sym,"interval":interval,"limit":bars})
-            rows=get(BN+"/api/v3/klines?"+q)
-            if not isinstance(rows,list) or len(rows)<bars:continue
-            start=finite(rows[0][1]);last=finite(rows[-1][4])
-            vol=sum(finite(x[7]) or 0 for x in rows)
-            if start and last and start>0:
-                out[sym]={"return_pct":(last/start-1)*100,"quote_volume":vol}
-        except Exception:
-            continue
-    if "BTCUSDT" not in out:
-        raise RuntimeError("BTC benchmark kline unavailable")
+    with ThreadPoolExecutor(max_workers=24) as ex:
+        futs={ex.submit(one,s):s for s in symbols}
+        for fut in as_completed(futs):
+            try:
+                row=fut.result()
+                if row:out[row[0]]=row[1]
+            except Exception:
+                continue
+    if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
     return out
 
 def score_row(sym,base,r1,r4,btc1,btc4):
