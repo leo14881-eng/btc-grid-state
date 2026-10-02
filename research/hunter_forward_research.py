@@ -257,8 +257,7 @@ def main():
     errors={}
     cached=read(CACHE,{})
     market=compact_market(enrichment(now,cached,errors),scan.get("coins") or {})
-    CACHE.write_text(json.dumps(market,ensure_ascii=False,indent=2)+"
-")
+    CACHE.write_text(json.dumps(market,ensure_ascii=False,indent=2)+"\\n")
     early=read(EARLY,{})
     if early.get("scan_generation_id")!=scan.get("generation_id"):
         raise SystemExit("Fatal: stale/mixed-generation early signals")
@@ -267,8 +266,7 @@ def main():
     report["enrichment_errors"]=errors
     report["market_enrichment_as_of_utc"]=market.get("as_of_utc")
     report["market_enrichment_source_times"]={x:market.get(x+"_as_of_utc") for x in ("coingecko","defillama")}
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"
-")
+    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\\n")
     print(json.dumps({k:report[k] for k in ("as_of_utc","universe_size","universe_coverage_status",
         "lightweight_universe_review_count","deep_research_this_cycle","deep_research_total_cached",
         "triggered_total","capital_ready","enrichment_errors")},ensure_ascii=False))
