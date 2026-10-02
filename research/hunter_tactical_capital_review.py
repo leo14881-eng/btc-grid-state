@@ -89,7 +89,7 @@ def main():
       "alt_pool_cap_usdt":MAX_ALT_POOL,
       "capital_review_eligible":[x["asset"] for x in rows if x["capital_review_eligible"]],
       "candidates":rows[:40]}
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\\n")
+    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2))
     print(json.dumps({"reviewed":len(rows),"eligible":report["capital_review_eligible"],
       "top_blockers":{x["asset"]:x["blockers"] for x in rows[:10]}},ensure_ascii=False))
 if __name__=="__main__":main()
