@@ -11,7 +11,7 @@ ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 EARLY=ROOT/"hunter-early-signals.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"
-FACTS=pathlib.Path("research/hunter-verified-facts.json")
+FACTS=pathlib.Path("research/hunter-verified-facts.json")\nSUPPLY=ROOT/"hunter-tactical-supply-risk.json"
 OUT=ROOT/"hunter-tactical-capital-review.json"
 MAX_ALT_POOL=20000.0
 
@@ -28,7 +28,7 @@ def finite(v):
 
 def main():
     now=dt.datetime.now(dt.timezone.utc)
-    scan,early,liq,facts=read(SCAN),read(EARLY),read(LIQ),read(FACTS)
+    scan,early,liq,facts=read(SCAN),read(EARLY),read(LIQ),read(FACTS)\n    supply=read(SUPPLY)\n    supply_by=supply.get("assets") or {}
     if not scan.get("binance_complete"): raise SystemExit("INCOMPLETE_BINANCE_SCAN")
     if early.get("scan_generation_id")!=scan.get("generation_id"): raise SystemExit("EARLY_GENERATION_MISMATCH")
     if liq.get("scan_as_of_utc")!=scan.get("as_of_utc"): raise SystemExit("LIQUIDITY_GENERATION_MISMATCH")
