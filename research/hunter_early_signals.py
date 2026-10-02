@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Hunter v3 early-signal funnel: Binance-only, research-only, never trades."""
-import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request\nfrom concurrent.futures import ThreadPoolExecutor,as_completed
+import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
+from concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 OUT=ROOT/"hunter-early-signals.json"
