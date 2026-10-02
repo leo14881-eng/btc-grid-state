@@ -21,6 +21,7 @@ except ModuleNotFoundError as exc:
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 DOSSIERS=ROOT/"hunter-candidate-dossiers.json"
+EARLY=ROOT/"hunter-early-signals.json"
 OUT=ROOT/"hunter-liquidity-probe.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 PER_LANE=6
@@ -63,10 +64,12 @@ def measure(book,now):
             "partial_book":True,
             "capital_authority":"NONE__MARKET_EVIDENCE_ONLY"}
 
-def targets(dossiers,scan):
+def targets(dossiers,scan,early=None):
     coins=scan.get("coins") or {}
     selected=[];seen=set()
+    early_names=[x.get("base") for x in ((early or {}).get("early") or []) if x.get("base")]
     for lane,names,quota in (
+        ("capital_early_signals",early_names,MAX_BOOKS),
         ("reviewed_watchlist",dossiers.get("reviewed_watchlist") or [],6),
         ("early_entry_watchlist",dossiers.get("early_entry_watchlist") or [],PER_LANE),
         ("continuation_watchlist",dossiers.get("continuation_watchlist") or [],PER_LANE),
@@ -82,14 +85,14 @@ def targets(dossiers,scan):
             seen.add(sym);n+=1
     return selected
 
-def build(scan,dossiers,fetch,now):
+def build(scan,dossiers,fetch,now,early=None):
     if dossiers.get("market_universe_size")!=len(scan.get("coins") or {}):
         raise ValueError("UNIVERSE_MISMATCH")
     if dossiers.get("dossiers") is None:raise ValueError("MISSING_DOSSIERS")
     if (now-dt.datetime.fromisoformat(scan["as_of_utc"])).total_seconds()>7200:
         raise ValueError("STALE_SCAN")
     records={};failures={}
-    for sym,pair,lane in targets(dossiers,scan):
+    for sym,pair,lane in targets(dossiers,scan,early):
         url=BN+"/api/v3/depth?"+urllib.parse.urlencode({"symbol":pair,"limit":100})
         try:
             book=fetch(url)
@@ -106,7 +109,7 @@ def build(scan,dossiers,fetch,now):
             failures[sym]=type(exc).__name__+": "+str(exc)[:160]
     return {"schema":"hunter_liquidity_probe_v1","as_of_utc":now.isoformat(),
             "scan_as_of_utc":scan["as_of_utc"],
-            "requested_count":len(targets(dossiers,scan)),
+            "requested_count":len(targets(dossiers,scan,early)),
             "successful_count":len(records),"failures":failures,
             "snapshots":records,"capital_authority":"NONE__OFFICIAL_FACTS_AND_PORTFOLIO_GATES_SEPARATE"}
 
@@ -116,9 +119,10 @@ def live_fetch(url):
         return json.load(response)
 
 def main():
-    scan=read(SCAN);dossiers=read(DOSSIERS)
-    report=build(scan,dossiers,live_fetch,dt.datetime.now(dt.timezone.utc))
-    OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n")
+    scan=read(SCAN);dossiers=read(DOSSIERS);early=read(EARLY)
+    report=build(scan,dossiers,live_fetch,dt.datetime.now(dt.timezone.utc),early)
+    OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"
+")
     print(json.dumps({k:report[k] for k in ("as_of_utc","requested_count","successful_count","failures")},ensure_ascii=False))
     # Public API geo-blocks are explicit degradation, not fabricated successes.
     return 0
