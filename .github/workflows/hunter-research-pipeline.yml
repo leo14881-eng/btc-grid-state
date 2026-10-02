@@ -35,6 +35,8 @@ jobs:
               print('id='+d['generation_id'],file=f)
           print('RESEARCH_INPUT_GENERATION',d['generation_id'])
           PY
+      - name: Hunter v3 early BTC-relative funnel
+        run: python research/hunter_early_signals.py
       - name: Forward-upside research
         run: python research/hunter_forward_research.py
       - name: Identity audit
@@ -81,6 +83,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           for file in \
             research/results/hunter-forward-research.json \
+            research/results/hunter-early-signals.json \
             research/results/hunter-market-enrichment.json \
             research/results/hunter-identity-audit.json \
             research/results/hunter-forward-audit.json \
