@@ -125,7 +125,9 @@ jobs:
               git show origin/main:research/results/hunter-forward-research.json > /tmp/forward.json
               git show origin/main:research/results/hunter-health-and-queue.json > /tmp/health.json
               git show origin/main:research/results/hunter-research-completion.json > /tmp/completion.json
-              python -c "import json,os; s=json.load(open('/tmp/scan.json')); r=json.load(open('/tmp/forward.json')); h=json.load(open('/tmp/health.json')); assert s['generation_id']==os.environ['EXPECTED']; assert r['universe_scan_as_of_utc']==s['as_of_utc']; assert h['scan_as_of_utc']==s['as_of_utc']; print('PERSISTENCE_READBACK_VERIFIED',s['generation_id'])"
+              git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
+              git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
+              python -c "import json,os; sh=json.load(open('/tmp/shadow.json')); ss=json.load(open('/tmp/shadow-summary.json')); assert sh.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert ss.get('schema')=='hunter_shadow_summary_v1'; assert sh.get('updated_at_utc'); assert any(p.get('scan_generation_id')==os.environ['EXPECTED'] for p in sh.get('open_positions',[])+sh.get('closed_positions',[])) or len(sh.get('open_positions',[])+sh.get('closed_positions',[]))==0; print('PERSISTENCE_READBACK_VERIFIED_SHADOW',sh.get('updated_at_utc'),len(sh.get('open_positions',[])),len(sh.get('closed_positions',[])))"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
