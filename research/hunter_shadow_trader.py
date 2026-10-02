@@ -6,6 +6,7 @@ SCAN=ROOT/"hunter-cex-universe-run.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json"
 STATE=ROOT/"hunter-shadow-portfolio.json"
 SUMMARY=ROOT/"hunter-shadow-summary.json"
+RULES=ROOT/"hunter-shadow-rules.json"
 FEE_BPS=10.0
 MAX_OPEN=3
 MAX_HOLD_HOURS=24.0
@@ -28,7 +29,14 @@ def net_return(entry,exitp,buy_slip_bps=0,exit_slip_bps=0):
     buy=entry*(1+(buy_slip_bps+FEE_BPS)/10000)
     sell=exitp*(1-(exit_slip_bps+FEE_BPS)/10000)
     return sell/buy-1
-def choose(review,scan,open_assets):
+def active_rules():
+    d=load(RULES,{})
+    return d.get("active_version","shadow-v1"),d.get("rules") or {}
+def choose(review,scan,open_assets,rules=None):
+    rules=rules or {}
+    min_score=float(rules.get("min_score",8)); min_ind=int(rules.get("min_independent_signals",2))
+    min_r1=float(rules.get("min_btc_relative_1h_pct",.8)); min_r4=float(rules.get("min_btc_relative_4h_pct",1.5))
+    max_ch=float(rules.get("max_change_24h_pct",20)); max_slip=float(rules.get("max_buy_slippage_bps",75))
     out=[]
     for c in review.get("candidates") or []:
         sym=c.get("asset"); sig=c.get("signal") or {}; p=price(scan,sym)
@@ -37,11 +45,11 @@ def choose(review,scan,open_assets):
         ch=finite(((scan.get("coins") or {}).get(sym) or {}).get("change_24h_pct"))
         independent=int(sig.get("independent_signal_count") or 0)
         # Shadow lane intentionally evaluates signals even when fundamental/capital gates block live money.
-        if score<8 or independent<2 or r1 is None or r4 is None or (r1<0.8 and r4<1.5):continue
-        if ch is not None and ch>20:continue # anti-chase
+        if score<min_score or independent<min_ind or r1 is None or r4 is None or (r1<min_r1 and r4<min_r4):continue
+        if ch is not None and ch>max_ch:continue # anti-chase
         ex=c.get("execution_scenario") or {}
         slip=finite(ex.get("buy_slippage_bps")) or 0
-        if slip>75:continue
+        if slip>max_slip:continue
         out.append((score,sym,c,p,slip))
     out.sort(reverse=True,key=lambda x:x[0])
     return out
@@ -61,7 +69,7 @@ def build_summary(state,now):
                 "invalidation_pct":INVALIDATION_PCT,"max_hold_hours":MAX_HOLD_HOURS,"max_open":MAX_OPEN},
       "capital_authority":"NONE_SHADOW_ONLY"}
 def main():
-    now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW)
+    now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW);rule_version,rules=active_rules()
     if not scan.get("binance_complete") or review.get("scan_generation_id")!=scan.get("generation_id"):
         raise SystemExit("SHADOW_INPUT_GENERATION_MISMATCH")
     state=load(STATE,{"schema":"hunter_shadow_portfolio_v1","created_at_utc":now.isoformat(),"open_positions":[],"closed_positions":[],"events":[]})
@@ -91,11 +99,11 @@ def main():
         else:still.append(pos)
     state["open_positions"]=still
     slots=max(0,MAX_OPEN-len(still));open_assets={x["asset"] for x in still}
-    for score,sym,c,p,slip in choose(review,scan,open_assets)[:slots]:
+    for score,sym,c,p,slip in choose(review,scan,open_assets,rules)[:slots]:
         pid="SH-"+now.strftime("%Y%m%dT%H%M%S")+"-"+sym+"-"+uuid.uuid4().hex[:6]
         pos={"shadow_id":pid,"asset":sym,"opened_at_utc":now.isoformat(),"scan_generation_id":scan["generation_id"],
           "entry_reference_price":p,"btc_entry_price":btc,"notional_usdt":NOTIONAL,"buy_slippage_bps":round(slip,3),
-          "fee_bps_each_side":FEE_BPS,"signal_score":score,"signal_snapshot":c.get("signal"),"stage":(c.get("signal") or {}).get("stage"),
+          "fee_bps_each_side":FEE_BPS,"shadow_rule_version":rule_version,"shadow_rule_snapshot":rules,"signal_score":score,"signal_snapshot":c.get("signal"),"stage":(c.get("signal") or {}).get("stage"),
           "live_capital_blockers":c.get("blockers") or [],"mfe_pct":0.0,"mae_pct":0.0,"last_price":p,"last_marked_at_utc":now.isoformat(),
           "exit_plan":{"target_pct":TARGET_PCT,"invalidation_pct":INVALIDATION_PCT,"max_hold_hours":MAX_HOLD_HOURS},
           "capital_authority":"NONE_SHADOW_ONLY"}
