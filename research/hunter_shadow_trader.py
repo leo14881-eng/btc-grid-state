@@ -100,7 +100,7 @@ def main():
           "exit_plan":{"target_pct":TARGET_PCT,"invalidation_pct":INVALIDATION_PCT,"max_hold_hours":MAX_HOLD_HOURS},
           "capital_authority":"NONE_SHADOW_ONLY"}
         state["open_positions"].append(pos);state["events"].append({"type":"SHADOW_BUY","at":now.isoformat(),"asset":sym,"shadow_id":pid,"price":p})
-    state["updated_at_utc"]=now.isoformat();state["mode"]="SIMULATION_ONLY_NO_REAL_ORDERS"
+    state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["mode"]="SIMULATION_ONLY_NO_REAL_ORDERS"
     summary=build_summary(state,now)
     STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({"shadow_open":[x["asset"] for x in state["open_positions"]],"closed_n":len(state["closed_positions"]),"summary":summary},ensure_ascii=False))
