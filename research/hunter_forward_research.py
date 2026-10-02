@@ -125,7 +125,8 @@ def select_rotation(coins,previous,early_symbols=None):
     # overflow remains visible, never silently dropped.
     triggered.sort(key=lambda s:(-abs(finite(coins[s].get("change_since_previous_scan_pct")) or 0),
                                  -abs(finite(coins[s].get("change_24h_pct")) or 0),s))
-    # v3: EARLY BTC-relative signals jump ahead of late 24h repricing triggers.\n    chosen=list(dict.fromkeys(early_symbols[:TRIGGER_LIMIT]+triggered[:TRIGGER_LIMIT]+rotation))
+    # v3: EARLY BTC-relative signals jump ahead of late 24h repricing triggers.
+    chosen=list(dict.fromkeys(early_symbols[:TRIGGER_LIMIT]+triggered[:TRIGGER_LIMIT]+rotation))
     return chosen,(cursor+n)%len(symbols),triggered
 
 def candle_features(candles,turnover):
@@ -235,7 +236,8 @@ def build_report(scan,previous,market,now,get_candles=True,early_symbols=None):
             "universe_size":len(coins),"lightweight_universe_review_count":len(coins),
             "deep_research_this_cycle":current_count,
             "deep_research_total_cached":len(results),
-            "rotation_cursor":cursor,"rotation_batch":chosen,\n            "early_priority_symbols":list(early_symbols or []),
+            "rotation_cursor":cursor,"rotation_batch":chosen,
+            "early_priority_symbols":list(early_symbols or []),
             "triggered_total":len(triggered),"triggered_researched":triggered[:TRIGGER_LIMIT],
             "trigger_backlog":triggered[TRIGGER_LIMIT:],
             "coingecko_unique_symbols":len(cg),"coingecko_ambiguous_symbols":cg_collision,
@@ -255,12 +257,18 @@ def main():
     errors={}
     cached=read(CACHE,{})
     market=compact_market(enrichment(now,cached,errors),scan.get("coins") or {})
-    CACHE.write_text(json.dumps(market,ensure_ascii=False,indent=2)+"\n")
-    early=read(EARLY,{})\n    if early.get("scan_generation_id")!=scan.get("generation_id"):\n        raise SystemExit("Fatal: stale/mixed-generation early signals")\n    early_symbols=[x.get("base") for x in early.get("early",[]) if x.get("base")]\n    report=build_report(scan,previous,market,now,early_symbols=early_symbols)
+    CACHE.write_text(json.dumps(market,ensure_ascii=False,indent=2)+"
+")
+    early=read(EARLY,{})
+    if early.get("scan_generation_id")!=scan.get("generation_id"):
+        raise SystemExit("Fatal: stale/mixed-generation early signals")
+    early_symbols=[x.get("base") for x in early.get("early",[]) if x.get("base")]
+    report=build_report(scan,previous,market,now,early_symbols=early_symbols)
     report["enrichment_errors"]=errors
     report["market_enrichment_as_of_utc"]=market.get("as_of_utc")
     report["market_enrichment_source_times"]={x:market.get(x+"_as_of_utc") for x in ("coingecko","defillama")}
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"
+")
     print(json.dumps({k:report[k] for k in ("as_of_utc","universe_size","universe_coverage_status",
         "lightweight_universe_review_count","deep_research_this_cycle","deep_research_total_cached",
         "triggered_total","capital_ready","enrichment_errors")},ensure_ascii=False))
