@@ -26,7 +26,7 @@ def rolling(symbols,window):
         return sym,{"return_pct":(last/start-1)*100,
                    "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
     out={}
-    with ThreadPoolExecutor(max_workers=24) as ex:
+    with ThreadPoolExecutor(max_workers=64) as ex:
         futs={ex.submit(one,s):s for s in symbols}
         for fut in as_completed(futs):
             try:
