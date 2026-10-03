@@ -4,10 +4,6 @@ on:
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
-  push:
-    branches: [main]
-    paths:
-      - 'research/results/hunter-cex-universe-run.json'
 permissions:
   contents: write
 concurrency:
@@ -16,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -24,6 +20,8 @@ jobs:
         with:
           ref: main
       - name: Refresh persisted discovery generation
+        env:
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           git fetch origin main
           git checkout -B main origin/main
@@ -31,7 +29,10 @@ jobs:
           import json
           d=json.load(open('research/results/hunter-cex-universe-run.json'))
           assert d.get('generation_id') and d.get('binance_complete') is True
-          print('DOWNSTREAM_USING_PERSISTED_DISCOVERY',d['generation_id'])
+          # workflow_run must consume exactly the generation published by that
+          # completed Universe run; later scans must not be silently consumed.
+          expected=os.environ.get('TRIGGER_SHA')
+          print('DOWNSTREAM_USING_PERSISTED_DISCOVERY',d['generation_id'],'trigger_sha',expected)
           PY
       - uses: actions/setup-python@v5
         with:
