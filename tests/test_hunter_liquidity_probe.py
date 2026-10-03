@@ -42,8 +42,8 @@ class LiquidityTests(unittest.TestCase):
                  "dossiers":[{"asset":sym} for sym in symbols]}
         targets=h.targets(dossier,scan)
         self.assertEqual([x[0] for x in targets[:2]],["DOLO","2Z"])
-        self.assertEqual(len(targets),16)
-        self.assertEqual(len(set(x[0] for x in targets)),16)
+        self.assertEqual(len(targets),len(symbols))
+        self.assertEqual(len(set(x[0] for x in targets)),len(symbols))
 
     def test_failure_does_not_mask_other_assets(self):
         s={"as_of_utc":AT,"coins":{sym:{"pairs":[{"venue":"binance","pair":sym+"USDT",
