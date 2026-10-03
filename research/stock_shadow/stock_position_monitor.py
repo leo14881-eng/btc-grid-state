@@ -47,7 +47,7 @@ def nasdaq_snapshot_quotes(symbols):
         rows=((payload.get("data") or {}).get("rows") or [])
         prices={}
         for row in rows:
-            s=(row.get("symbol") or "").strip().replace(".","-")
+            s=(row.get("symbol") or "").strip().replace(".","-").replace("/","-")
             if s in wanted:
                 p=_parse_price(row.get("lastsale") or row.get("lastSalePrice"))
                 if p is not None: prices[s]=p
