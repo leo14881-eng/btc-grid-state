@@ -47,7 +47,7 @@ def nasdaq_snapshot_quotes(symbols):
         rows=((payload.get("data") or {}).get("rows") or [])
         prices={}
         for row in rows:
-            s=(row.get("symbol") or "").strip().replace(".","-").replace("/","-")
+            raw=(row.get("symbol") or "").strip()\n            s=raw.replace(".","-").replace("/","-")
             if s in wanted:
                 p=_parse_price(row.get("lastsale") or row.get("lastSalePrice"))
                 if p is not None: prices[s]=p
@@ -56,7 +56,7 @@ def nasdaq_snapshot_quotes(symbols):
         # Rare class-share aliases can be absent from the bulk snapshot. Use a bounded
         # one-symbol chart fallback only for missing holdings, never for the full book.
         for s in sorted(missing)[:3]:
-            alias=s.replace("-",".")
+            alias=s  # Yahoo uses hyphen for class shares, e.g. MOG-A
             url2=f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(alias)}?range=1d&interval=5m"
             try:
                 d=_get_json(url2); extra_requests+=1
