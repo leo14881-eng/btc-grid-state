@@ -27,6 +27,13 @@ jobs:
           cd /tmp/hunter
           python research/hunter_bybit_availability.py
           cat research/results/hunter-bybit-availability.json
+          python - <<'PY'
+          import json
+          d=json.load(open("research/results/hunter-bybit-availability.json"))
+          assert d["alpha"]["status"]=="OK", d["alpha"]
+          assert d["alpha"].get("count",0)>0, d["alpha"]
+          print("ALPHA_ACCEPTANCE", json.dumps({"status":d["alpha"]["status"],"count":d["alpha"]["count"]}))
+          PY
           cd -
           echo "=== BTCUSDT ==="
           curl -sS -D /tmp/btc.h -o /tmp/btc.b -w "HTTP=%{http_code}\n" --max-time 20 "https://bybit-api-test.qinx468.workers.dev/bybit/spot?symbol=BTCUSDT" || true
