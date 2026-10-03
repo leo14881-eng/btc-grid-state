@@ -35,6 +35,12 @@ def capital_available(state,amount):
 def load(p,d=None):
  try:return json.loads(p.read_text())
  except (OSError,ValueError):return {} if d is None else d
+def atomic_json_write(p,obj):
+ # Never expose a partially-written portfolio/summary to a concurrent reader.
+ tmp=p.with_suffix(p.suffix+".tmp")
+ tmp.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+"\n")
+ json.loads(tmp.read_text())
+ tmp.replace(p)
 def finite(x):
  try:
   v=float(x);return v if math.isfinite(v) else None
@@ -228,7 +234,7 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
   "status":"OVER_FILTERING" if over else "NORMAL",
   "optimizer_action":"RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST" if over else "NONE",
   "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
- GUARD.write_text(json.dumps(guard,ensure_ascii=False,indent=2)+"\n");return guard
+ atomic_json_write(GUARD,guard);return guard
 def main():
  if SHADOW_FREEZE:
   print(json.dumps({"status":"SHADOW_STRATEGY_FREEZE","strategy":STRATEGY_ID,"writes":0,"capital_pool_usdt":CAPITAL_POOL_USDT}))
@@ -319,6 +325,6 @@ def main():
    "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":("AFTER_RESEARCH_DISCOVERY_ADMISSION" if ENTRY_MODE=="DISCOVERY" else "ONLY_AFTER_FULL_EXECUTABLE_DECISION_GATE"),"bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard["status"]}},
   "capital_authority":"NONE_SHADOW_ONLY"}
- STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
+ atomic_json_write(STATE,state);atomic_json_write(SUMMARY,summary)
  print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(closed),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
 if __name__=="__main__":main()
