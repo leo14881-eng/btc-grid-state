@@ -122,3 +122,9 @@ def test_v2_add_requires_state_transition():
     src=inspect.getsource(ss.main)
     assert 'previous_state!="HEALTHY_PULLBACK"' in src
     assert 'pullback <= -3*n' not in src
+
+def test_fresh_buy_cannot_add_in_same_run():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert "newly_opened=set()" in src
+    assert "s not in newly_opened" in src
