@@ -6,7 +6,7 @@ class SharedShadowEngineTests(unittest.TestCase):
  def test_v1_uses_exact_v2_engine(self):
   self.assertIs(v1.engine,core)
  def test_v1_only_removes_capital_pool_constraint(self):
-  self.assertIsNone(v1.engine.CAPITAL_POOL_USDT)
+  self.assertEqual(v1.engine.CAPITAL_POOL_USDT,20000.)\n  v1.configure_v1();self.assertIsNone(v1.engine.CAPITAL_POOL_USDT)\n  v1.engine.CAPITAL_POOL_USDT=20000.
  def test_shared_entry_gate_requires_trade_quality(self):
   c={"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
      "execution_scenario":{"buy_slippage_bps":10,"estimated_rr":2},"blockers":[]}
