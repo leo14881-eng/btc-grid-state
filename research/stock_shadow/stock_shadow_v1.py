@@ -9,6 +9,8 @@ STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summ
 NOTIONAL=1000.0; MAX_TRANCHES=5
 MIN_PRICE=2.0; MIN_DOLLAR_VOLUME=10_000_000.0; MIN_SCORE=68.0
 MAX_5D_RETURN=18.0; MAX_20D_RETURN=45.0; MAX_SMA20_EXTENSION=18.0; MIN_20D_RETURN=-8.0
+PARABOLIC_5D_RETURN=35.0; PARABOLIC_20D_RETURN=80.0; PARABOLIC_SMA20_EXTENSION=30.0
+EARLY_MIN_SCORE=62.0; EARLY_MAX_20D_RETURN=18.0; EARLY_MAX_SMA20_EXTENSION=8.0
 FEE_RATE=0.002          # conservative xStock spot-side research assumption; stored explicitly
 ARM_NET_PCT=3.0
 GIVEBACK_PCT=5.0
@@ -85,6 +87,8 @@ def _stock_snapshot(symbol):
     q=r["indicators"]["quote"][0]
     closes=[float(x) if x is not None else None for x in q["close"]]
     volumes=[float(x or 0) for x in q["volume"]]
+    highs=[float(x) if x is not None else None for x in q.get("high",[])]
+    lows=[float(x) if x is not None else None for x in q.get("low",[])]
     valid=[(p,v) for p,v in zip(closes,volumes) if p is not None and p>0]
     if len(valid)<22: raise ValueError("insufficient_history")
     prices=[x[0] for x in valid]; vols=[x[1] for x in valid]
@@ -96,6 +100,7 @@ def _stock_snapshot(symbol):
     vol20=(sum(((prices[i]/prices[i-1]-1)*100)**2 for i in range(len(prices)-19,len(prices)))/19)**0.5
     return {"base":symbol,"price":price,"ret5":ret5,"ret20":ret20,"sma20":sma20,
             "avg_dollar_volume20":avg_dollar_volume,"daily_volatility20":vol20,
+            "volume_ratio20":volume_ratio,"high20":high20,"low20":low20,"range_position20":range_pos20,
             "status":"OBSERVED","source":"FREE_PUBLIC_CHART_1D","observed_at":now()}
 
 def score_candidate(m, spy=None, qqq=None):
@@ -119,7 +124,7 @@ def score_candidate(m, spy=None, qqq=None):
     score += max(0.0,min(25.0,12.5+rel*0.8))
     # Price vs SMA20 structure, 0..10.
     dist=(price/m["sma20"]-1)*100
-    if dist > MAX_SMA20_EXTENSION: rejects.append("TOO_FAR_ABOVE_SMA20")
+    if dist > PARABOLIC_SMA20_EXTENSION: rejects.append("PARABOLIC_SMA20_EXTENSION")
     score += max(0.0,min(10.0,7.0+dist*0.35))
     # Volatility quality, 0..10: enough movement, but penalize extreme noise.
     v=m["daily_volatility20"]
@@ -131,9 +136,32 @@ def score_candidate(m, spy=None, qqq=None):
     return round(score,2), reasons, rejects, {"relative20":round(rel,4),"distance_sma20_pct":round(dist,4)}
 
 def entry_decision(m, spy=None, qqq=None):
+    """One engine, multiple entry structures: early anomaly + right-side trend + healthy pullback."""
     score,reasons,rejects,metrics=score_candidate(m,spy,qqq)
-    ready=(not rejects and score>=MIN_SCORE and m["ret5"]>-3.0 and m["ret5"]<=MAX_5D_RETURN)
-    structure="MOMENTUM_TREND" if ready and m["ret5"]>=0 else ("PULLBACK_IN_TREND" if ready else "NONE")
+    r5=m["ret5"]; r20=m["ret20"]; price=m["price"]; sma=m["sma20"]
+    dist=(price/sma-1)*100
+    vr=m.get("volume_ratio20",1.0); rp=m.get("range_position20",0.5)
+    spy20=spy["ret20"] if spy else 0.0; qqq20=qqq["ret20"] if qqq else 0.0
+    rel=((r20-spy20)+(r20-qqq20))/2
+    metrics.update({"volume_ratio20":round(vr,4),"range_position20":round(rp,4)})
+    structure="NONE"
+    # Left-side / early anomaly: not extended, improving relative strength, abnormal participation,
+    # and already stabilised around/above trend. It does NOT require a breakout.
+    early=(not rejects and score>=EARLY_MIN_SCORE and -4.0<=r5<=8.0 and
+           -3.0<=r20<=EARLY_MAX_20D_RETURN and -3.0<=dist<=EARLY_MAX_SMA20_EXTENSION and
+           vr>=1.35 and rel>=0 and rp>=0.45)
+    # Right-side trend: confirmed strength, but still within a non-parabolic chase envelope.
+    momentum=(not rejects and score>=MIN_SCORE and 0<=r5<=MAX_5D_RETURN and
+              r20<=MAX_20D_RETURN and dist<=MAX_SMA20_EXTENSION)
+    # Healthy pullback inside an established trend.
+    pullback=(not rejects and score>=MIN_SCORE and -3.0<r5<0 and r20>0 and
+              -3.0<=dist<=12.0 and rel>0)
+    if early: structure="EARLY_ACCUMULATION"
+    elif pullback: structure="PULLBACK_IN_TREND"
+    elif momentum: structure="MOMENTUM_TREND"
+    ready=structure!="NONE"
+    if early: reasons.append("EARLY_VOLUME_ANOMALY")
+    if ready and structure!="EARLY_ACCUMULATION" and r5>MAX_5D_RETURN*0.75: reasons.append("LATE_STAGE_CAUTION")
     return {"ready":ready,"score":score,"reasons":reasons,"rejects":rejects,"metrics":metrics,"entry_structure":structure}
 
 def stock_universe():
@@ -207,7 +235,7 @@ def main():
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"SELECTIVE_ENTRY_V1","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
