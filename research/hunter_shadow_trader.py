@@ -9,11 +9,16 @@ SUMMARY=ROOT/"hunter-shadow-summary.json"
 RULES=ROOT/"hunter-shadow-rules.json"
 LEDGER=ROOT/"hunter-shadow-candidate-ledger.json"
 FEE_BPS=10.0
-MAX_OPEN=3
+MAX_OPEN=50
 MAX_HOLD_HOURS=24.0
 TARGET_PCT=8.0
 INVALIDATION_PCT=-6.0
 NOTIONAL=1000.0
+ADD_DRAWDOWNS=(-4.0,-8.0)
+MAX_TRANCHES=3
+PROFIT_ARM_NET_PCT=2.0
+PROFIT_GIVEBACK_PCT=2.0
+PROFIT_FLOOR_NET_PCT=0.35
 
 def load(p,d=None):
     try:return json.loads(p.read_text())
@@ -34,26 +39,45 @@ def active_rules():
     d=load(RULES,{})
     return d.get("active_version","shadow-v1"),d.get("rules") or {}
 def choose(review,scan,open_assets,rules=None):
-    rules=rules or {}
-    min_score=float(rules.get("min_score",8)); min_ind=int(rules.get("min_independent_signals",2))
-    min_r1=float(rules.get("min_btc_relative_1h_pct",.8)); min_r4=float(rules.get("min_btc_relative_4h_pct",1.5))
-    max_ch=float(rules.get("max_change_24h_pct",20)); max_slip=float(rules.get("max_buy_slippage_bps",75))
+    """V1 learning lane: buy every observable candidate that is priceable.
+
+    Live-capital blockers, score thresholds and anti-chase rules intentionally do not
+    block this simulation lane. The point is to generate forward evidence.
+    """
     out=[]
     for c in review.get("candidates") or []:
         sym=c.get("asset"); sig=c.get("signal") or {}; p=price(scan,sym)
         if not sym or sym in open_assets or not p:continue
-        score=finite(sig.get("score")) or 0; r1=finite(sig.get("btc_relative_1h_pct")); r4=finite(sig.get("btc_relative_4h_pct"))
-        ch=finite(((scan.get("coins") or {}).get(sym) or {}).get("change_24h_pct"))
-        independent=int(sig.get("independent_signal_count") or 0)
-        # Shadow lane intentionally evaluates signals even when fundamental/capital gates block live money.
-        if score<min_score or independent<min_ind or r1 is None or r4 is None or (r1<min_r1 and r4<min_r4):continue
-        if ch is not None and ch>max_ch:continue # anti-chase
         ex=c.get("execution_scenario") or {}
-        slip=finite(ex.get("buy_slippage_bps")) or 0
-        if slip>max_slip:continue
+        slip=finite(ex.get("buy_slippage_bps")) or 0.0
+        score=finite(sig.get("score")) or 0.0
         out.append((score,sym,c,p,slip))
     out.sort(reverse=True,key=lambda x:x[0])
     return out
+
+def position_notional(pos):
+    return sum(float(t.get("notional_usdt",0)) for t in pos.get("tranches",[])) or float(pos.get("notional_usdt",NOTIONAL))
+def weighted_entry(pos):
+    ts=pos.get("tranches") or [{"price":pos["entry_reference_price"],"notional_usdt":pos.get("notional_usdt",NOTIONAL)}]
+    n=sum(float(t["notional_usdt"]) for t in ts)
+    return sum(float(t["price"])*float(t["notional_usdt"]) for t in ts)/n
+def position_net_return(pos,exitp):
+    ts=pos.get("tranches") or [{"price":pos["entry_reference_price"],"notional_usdt":pos.get("notional_usdt",NOTIONAL),"buy_slippage_bps":pos.get("buy_slippage_bps",0)}]
+    n=sum(float(t["notional_usdt"]) for t in ts)
+    qty=sum(float(t["notional_usdt"])/(float(t["price"])*(1+(float(t.get("buy_slippage_bps",0))+FEE_BPS)/10000)) for t in ts)
+    return qty*exitp*(1-FEE_BPS/10000)/n-1
+def add_tranche(pos,p,now,reason):
+    i=len(pos.setdefault("tranches",[]))
+    pos["tranches"].append({"tranche":i+1,"at":now.isoformat(),"price":p,"notional_usdt":NOTIONAL,
+      "buy_slippage_bps":0.0,"reason":reason})
+def profit_exit(pos,p):
+    nr=position_net_return(pos,p)*100
+    mfe=float(pos.get("mfe_net_pct",0))
+    armed=mfe>=PROFIT_ARM_NET_PCT
+    giveback=max(0.0,mfe-nr)
+    exit_now=armed and nr>0 and (giveback>=PROFIT_GIVEBACK_PCT or nr<=PROFIT_FLOOR_NET_PCT)
+    return exit_now,nr,mfe,giveback
+
 def archetype(sig,coin):
     stage=str(sig.get("stage") or "").upper()
     r1=finite(sig.get("btc_relative_1h_pct")); r4=finite(sig.get("btc_relative_4h_pct"))
@@ -152,27 +176,38 @@ def main():
     state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[])
     btc=price(scan,"BTC")
     if not btc:raise SystemExit("BTC_PRICE_MISSING")
-    ledger=update_candidate_ledger(review,scan,now,btc)
+    update_candidate_ledger(review,scan,now,btc)
     still=[]
     for pos in state["open_positions"]:
         p=price(scan,pos["asset"])
-        if not p: still.append(pos);continue
-        raw=(p/pos["entry_reference_price"]-1)*100
-        pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4)
+        if not p:still.append(pos);continue
+        # Migrate legacy one-shot positions to tranche accounting without rewriting history.
+        if not pos.get("tranches"):
+            pos["tranches"]=[{"tranche":1,"at":pos["opened_at_utc"],"price":pos["entry_reference_price"],
+              "notional_usdt":pos.get("notional_usdt",NOTIONAL),"buy_slippage_bps":pos.get("buy_slippage_bps",0),"reason":"LEGACY_INITIAL"}]
+        avg=weighted_entry(pos);raw=(p/avg-1)*100;nr=position_net_return(pos,p)*100
+        pos["weighted_entry_price"]=round(avg,12);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4)
+        pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);pos["mfe_net_pct"]=round(max(pos.get("mfe_net_pct",0),nr),4)
         pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat()
-        hours=(now-parse(pos["opened_at_utc"])).total_seconds()/3600
-        reason=None
-        if raw>=TARGET_PCT:reason="TARGET"
-        elif raw<=INVALIDATION_PCT:reason="INVALIDATION"
-        elif hours>=MAX_HOLD_HOURS:reason="TIME_EXIT"
-        if reason:
-            nr=net_return(pos["entry_reference_price"],p,pos.get("buy_slippage_bps",0),0)
-            br=btc/pos["btc_entry_price"]-1
-            pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":reason,
-              "holding_hours":round(hours,2),"net_return_pct":round(nr*100,4),
-              "net_pnl_usdt":round(NOTIONAL*nr,2),"btc_return_pct":round(br*100,4),
-              "btc_relative_return_pct":round((nr-br)*100,4)})
-            state["closed_positions"].append(pos);state["events"].append({"type":"SHADOW_SELL","at":now.isoformat(),"asset":pos["asset"],"reason":reason,"net_pnl_usdt":pos["net_pnl_usdt"]})
+        # V1 explicitly studies averaging down: add at -4% and -8% from first tranche.
+        if len(pos["tranches"])<MAX_TRANCHES:
+            first=float(pos["tranches"][0]["price"]);dd=(p/first-1)*100;threshold=ADD_DRAWDOWNS[len(pos["tranches"])-1]
+            if dd<=threshold:
+                add_tranche(pos,p,now,"V1_AVERAGE_DOWN_"+str(threshold))
+                state["events"].append({"type":"SHADOW_ADD","at":now.isoformat(),"asset":pos["asset"],"price":p,"drawdown_from_first_pct":round(dd,4)})
+                avg=weighted_entry(pos);nr=position_net_return(pos,p)*100;pos["weighted_entry_price"]=round(avg,12)
+        exit_now,nr,mfe_net,giveback=profit_exit(pos,p)
+        if exit_now:
+            br=btc/pos["btc_entry_price"]-1;n=position_notional(pos);pnl=n*nr/100
+            pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"PROFIT_GIVEBACK",
+              "holding_hours":round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2),
+              "net_return_pct":round(nr,4),"net_pnl_usdt":round(pnl,2),"total_notional_usdt":n,
+              "btc_return_pct":round(br*100,4),"btc_relative_return_pct":round(nr-br*100,4),
+              "profit_exit":{"mfe_net_pct":round(mfe_net,4),"giveback_pct":round(giveback,4)}})
+            state["closed_positions"].append(pos)
+            state["events"].append({"type":"SHADOW_SELL","at":now.isoformat(),"asset":pos["asset"],"reason":"PROFIT_GIVEBACK",
+              "net_pnl_usdt":round(pnl,2),"mfe_net_pct":round(mfe_net,4),"giveback_pct":round(giveback,4),
+              "USER_ALERT_REQUIRED":True})
         else:still.append(pos)
     state["open_positions"]=still
     slots=max(0,MAX_OPEN-len(still));open_assets={x["asset"] for x in still}
@@ -180,15 +215,27 @@ def main():
         pid="SH-"+now.strftime("%Y%m%dT%H%M%S")+"-"+sym+"-"+uuid.uuid4().hex[:6]
         pos={"shadow_id":pid,"asset":sym,"opened_at_utc":now.isoformat(),"scan_generation_id":scan["generation_id"],
           "entry_reference_price":p,"btc_entry_price":btc,"notional_usdt":NOTIONAL,"buy_slippage_bps":round(slip,3),
-          "fee_bps_each_side":FEE_BPS,"shadow_rule_version":rule_version,"shadow_rule_snapshot":rules,"signal_score":score,"signal_snapshot":c.get("signal"),"stage":(c.get("signal") or {}).get("stage"),
-          "live_capital_blockers":c.get("blockers") or [],"mfe_pct":0.0,"mae_pct":0.0,"last_price":p,"last_marked_at_utc":now.isoformat(),
-          "exit_plan":{"target_pct":TARGET_PCT,"invalidation_pct":INVALIDATION_PCT,"max_hold_hours":MAX_HOLD_HOURS},
+          "tranches":[{"tranche":1,"at":now.isoformat(),"price":p,"notional_usdt":NOTIONAL,"buy_slippage_bps":round(slip,3),"reason":"OBSERVATION_ENTRY"}],
+          "fee_bps_each_side":FEE_BPS,"shadow_rule_version":"V1_BROAD_LEARNING","signal_score":score,
+          "signal_snapshot":c.get("signal"),"stage":(c.get("signal") or {}).get("stage"),
+          "entry_conditions":{"change_24h_pct":((scan.get("coins") or {}).get(sym) or {}).get("change_24h_pct"),
+             "live_capital_blockers":c.get("blockers") or [],"execution_scenario":c.get("execution_scenario")},
+          "mfe_pct":0.0,"mae_pct":0.0,"mfe_net_pct":0.0,"last_price":p,"last_marked_at_utc":now.isoformat(),
+          "exit_plan":{"profit_arm_net_pct":PROFIT_ARM_NET_PCT,"profit_giveback_pct":PROFIT_GIVEBACK_PCT,
+             "profit_floor_net_pct":PROFIT_FLOOR_NET_PCT,"loss_exit":False,"average_down_drawdowns_pct":list(ADD_DRAWDOWNS)},
           "capital_authority":"NONE_SHADOW_ONLY"}
-        state["open_positions"].append(pos);state["events"].append({"type":"SHADOW_BUY","at":now.isoformat(),"asset":sym,"shadow_id":pid,"price":p})
+        state["open_positions"].append(pos);open_assets.add(sym)
+        state["events"].append({"type":"SHADOW_BUY","at":now.isoformat(),"asset":sym,"shadow_id":pid,"price":p,
+          "entry_conditions":pos["entry_conditions"]})
     state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["mode"]="SIMULATION_ONLY_NO_REAL_ORDERS"
     summary=build_summary(state,now)
+    summary["policy"].update({"broad_observation_entry":True,"average_down_drawdowns_pct":list(ADD_DRAWDOWNS),
+      "max_tranches":MAX_TRANCHES,"profit_arm_net_pct":PROFIT_ARM_NET_PCT,"profit_giveback_pct":PROFIT_GIVEBACK_PCT,
+      "profit_floor_net_pct":PROFIT_FLOOR_NET_PCT,"loss_exit":False,"sell_alert_required":True})
     STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
-    print(json.dumps({"shadow_open":[x["asset"] for x in state["open_positions"]],"closed_n":len(state["closed_positions"]),"summary":summary},ensure_ascii=False))
+    print(json.dumps({"shadow_open":[x["asset"] for x in state["open_positions"]],"closed_n":len(state["closed_positions"]),
+      "profit_giveback_sells":[e for e in state["events"][-100:] if e.get("type")=="SHADOW_SELL" and e.get("reason")=="PROFIT_GIVEBACK"],"summary":summary},ensure_ascii=False))
+
 if __name__=="__main__":main()
 
 # shadow-v2 parallel validation trigger
