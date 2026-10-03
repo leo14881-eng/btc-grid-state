@@ -1,341 +1,340 @@
-# Stock Shadow — V3 SSOT
+# 股票影子系统（Stock Shadow）— V3 唯一策略说明
 
-> **Status:** active paper-trading research system  
-> **Strategy version:** `HYBRID_ENTRY_V1_POSITION_STATE_V3`  
-> **Scope:** US-listed common stocks only  
-> **Execution:** simulation only; never places real orders  
-> **Source of truth:** this document describes the current Stock Shadow strategy and lifecycle implemented on `main`.
+> **状态：** 正在运行的股票影子模拟交易研究系统  
+> **策略版本：** `HYBRID_ENTRY_V1_POSITION_STATE_V3`  
+> **范围：** 仅美国上市普通股  
+> **执行方式：** 仅模拟交易，绝不提交真实订单  
+> **唯一策略说明（SSOT）：** 本文档记录 `main` 分支当前实际执行的股票影子策略与完整交易生命周期。
 
-## 1. Purpose and isolation
+## 1. 系统目的与隔离原则
 
-Stock Shadow is an independent US-stock shadow trading system designed to create a large, auditable BUY / ADD / SELL sample set for forward validation.
+Stock Shadow 是独立的美国股票影子交易系统，目标是持续产生数量足够、可审计的 BUY（买入）/ ADD（加仓）/ SELL（卖出）样本，用于后续前向验证和复盘。
 
-It is isolated from all non-stock systems. Stock Shadow code, tests, workflows, and persistent state are limited to:
+它与其他非股票系统严格隔离。Stock Shadow 的代码、测试、工作流和持久化状态限定在：
 
 - `research/stock_shadow/**`
 - `research/results/stock-shadow/**`
 - `tests/test_stock_shadow.py`
 - `.github/workflows/stock-shadow*.yml`
 
-It does not place real orders. There is no portfolio-wide cap on the number of open shadow positions.
+系统不会提交真实订单。股票影子持仓总数量目前不设置全局上限。
 
-## 2. Persistent records
+## 2. 持久化记录
 
-All persistent outputs live under `research/results/stock-shadow/`.
+所有长期保存的运行结果位于 `research/results/stock-shadow/`。
 
-- `portfolio-v1.json` — current open positions, tranches, weighted average price, latest price, net PnL / return, MFE / MAE, position state, recovery-add evidence, profit-protection state, and closed-position records.
-- `trades-v1.json` — append-only logical trade-event ledger for formal BUY / ADD / SELL events.
-- `summary-v1.json` — latest market scan and aggregate system statistics.
-- `position-monitor-v1.json` — latest five-minute position-monitor health/result state.
+- `portfolio-v1.json`：当前持仓、每笔加仓批次、加权平均成本、最新价格、净盈亏/净收益率、MFE/MAE、持仓状态、恢复加仓证据、利润保护状态，以及已平仓记录。
+- `trades-v1.json`：正式 BUY / ADD / SELL 交易事件账本。
+- `summary-v1.json`：最近一次全市场扫描结果和系统汇总统计。
+- `position-monitor-v1.json`：最近一次 5 分钟持仓监控的健康状态和运行结果。
 
-Profitability is evaluated on a **net-after-simulated-fees** basis. The primary return fields are `net_return_pct` and `realized_net_return_pct`, not gross price return.
+盈利统一按照**扣除模拟手续费后的净收益**计算。主要收益字段是 `net_return_pct` 和 `realized_net_return_pct`，而不是股票价格的毛涨跌幅。
 
-## 3. Universe and market data
+## 3. 股票池与市场数据
 
-The hourly manager discovers US-listed common stocks from Nasdaq Trader symbol directories:
+每小时主引擎通过 Nasdaq Trader 的证券目录发现美国上市普通股，包括 Nasdaq、NYSE、NYSE American 等美国交易所股票。
 
-- Nasdaq-listed securities
-- Other US exchange listings
+排除 ETF、测试证券、权证、单位证券、权利证券、优先股以及明显的存托类证券。
 
-It excludes ETFs, test issues, warrants, units, rights, preferred shares, and obvious depositary-like securities.
+日线市场快照目前使用免费公开行情数据，并计算：
 
-Daily market snapshots currently come from free public chart data and derive:
-
-- current daily close
-- 5-day return
-- 20-day return
+- 当前日线收盘价
+- 5 日收益率
+- 20 日收益率
 - SMA20
-- 20-day average dollar volume
-- 20-day daily volatility
-- latest-volume / average-volume ratio
-- 20-day high / low
-- 20-day range position
+- 20 日平均成交额
+- 20 日日波动率
+- 当前成交量 / 20 日平均成交量
+- 20 日最高价和最低价
+- 当前价格在 20 日区间的位置
 
-SPY and QQQ are used as broad-market relative-strength benchmarks.
+SPY 和 QQQ 用作大盘相对强弱基准。
 
-### Known market-data limitation
+### 当前市场数据限制
 
-Exact bid/ask spread and execution slippage are not currently available in the full-market scan path. Sector-relative ETF mapping is also not implemented yet.
+全市场扫描目前没有精确的买一/卖一价差（bid/ask spread）和真实滑点数据；行业/板块 ETF 相对强弱映射目前也尚未实现。
 
-## 4. Tradeability gates
+## 4. 可交易性门槛
 
-Current constants:
+当前主要参数：
 
-| Rule | Value |
+| 规则 | 当前值 |
 |---|---:|
-| Standard shadow tranche | 1,000 |
-| Maximum tranches per position | 5 |
-| Low-price reference | $2 |
-| Minimum average dollar volume | $10M |
-| Minimum avg dollar volume for price < $2 | $25M |
-| Normal minimum score | 68 |
-| Early-entry minimum score | 62 |
-| Maximum normal 5D return | 18% |
-| Maximum normal 20D return | 45% |
-| Maximum normal SMA20 extension | 18% |
-| Minimum 20D return | -8% |
-| Parabolic 5D reject | >35% |
-| Parabolic 20D reject | >80% |
-| Parabolic SMA20 extension reject | >30% |
+| 标准单次模拟买入金额 | 1,000 |
+| 单只股票最多批次 | 5 |
+| 低价股参考价格 | $2 |
+| 普通最低 20 日平均成交额 | $10M |
+| 股价低于 $2 时最低平均成交额 | $25M |
+| 普通入场最低评分 | 68 |
+| 提前入场最低评分 | 62 |
+| 普通最大 5 日涨幅 | 18% |
+| 普通最大 20 日涨幅 | 45% |
+| 普通最大 SMA20 乖离 | 18% |
+| 最低 20 日收益率 | -8% |
+| 5 日抛物线式上涨拒绝 | >35% |
+| 20 日抛物线式上涨拒绝 | >80% |
+| SMA20 极端乖离拒绝 | >30% |
 
-A stock is **not rejected solely because its price is below $2**. Low-priced names must instead satisfy the stronger liquidity requirement.
+股票**不会仅仅因为价格低于 $2 就被拒绝**。低价股票需要满足更高的成交额要求。
 
-## 5. Candidate scoring
+## 5. 候选股票评分
 
-Candidate score combines a small number of interpretable dimensions:
+候选评分只使用少量、可解释的维度：
 
-- liquidity: up to 15
-- 20-day trend: up to 20
-- 5-day momentum: up to 20
-- relative strength versus SPY / QQQ: up to 25
-- price structure versus SMA20: up to 10
-- volatility quality: up to 10
+- 流动性：最高 15 分
+- 20 日趋势：最高 20 分
+- 5 日动量：最高 20 分
+- 相对 SPY / QQQ 的强弱：最高 25 分
+- 相对 SMA20 的价格结构：最高 10 分
+- 波动质量：最高 10 分
 
-The system can reject candidates for insufficient liquidity, weak trend, excessive extension, parabolic moves, or being materially below trend.
+如果流动性不足、趋势过弱、价格过度延伸、出现抛物线式上涨，或者明显跌破趋势，系统可以直接拒绝候选。
 
-## 6. BUY — three entry structures
+## 6. BUY（买入）— 三种入场结构
 
-A formal BUY is created only when one of the following entry structures is ready.
+只有满足以下至少一种结构时，系统才生成正式 BUY。
 
-### EARLY_ACCUMULATION
+### EARLY_ACCUMULATION（提前吸筹/早期异动）
 
-Designed to detect an earlier accumulation / participation anomaly without requiring a breakout.
+目标是在不等待正式突破的情况下发现更早期的资金参与或吸筹迹象。
 
-Requires, among other gates:
+主要要求：
 
-- score >= 62
-- 5D return between -4% and +8%
-- 20D return between -3% and +18%
-- SMA20 distance between -3% and +8%
-- volume ratio >= 1.35
-- non-negative relative strength versus SPY / QQQ
-- 20D range position >= 0.45
+- 评分 >= 62
+- 5 日收益率位于 -4% 至 +8%
+- 20 日收益率位于 -3% 至 +18%
+- 相对 SMA20 距离位于 -3% 至 +8%
+- 成交量比 >= 1.35
+- 相对 SPY / QQQ 强弱不为负
+- 20 日价格区间位置 >= 0.45
 
-### PULLBACK_IN_TREND
+### PULLBACK_IN_TREND（趋势内健康回调）
 
-Designed for a controlled pullback inside an established trend.
+目标是在已经建立的上涨趋势中寻找受控回调。
 
-Requires, among other gates:
+主要要求：
 
-- score >= 68
-- 5D return between -3% and 0%
-- positive 20D return
-- SMA20 distance between -3% and +12%
-- positive relative strength versus SPY / QQQ
+- 评分 >= 68
+- 5 日收益率位于 -3% 至 0%
+- 20 日收益率 > 0
+- 相对 SMA20 距离位于 -3% 至 +12%
+- 相对 SPY / QQQ 强弱 > 0
 
-### MOMENTUM_TREND
+### MOMENTUM_TREND（动量趋势）
 
-Designed for confirmed right-side strength without accepting a parabolic chase.
+目标是参与已经确认的右侧强势趋势，同时避免追入极端加速阶段。
 
-Requires, among other gates:
+主要要求：
 
-- score >= 68
-- 5D return between 0% and +18%
-- 20D return <= 45%
-- SMA20 extension <= 18%
+- 评分 >= 68
+- 5 日收益率位于 0% 至 +18%
+- 20 日收益率 <= 45%
+- SMA20 向上乖离 <= 18%
 
-Entry precedence is:
+入场结构判断优先级：
 
 `EARLY_ACCUMULATION -> PULLBACK_IN_TREND -> MOMENTUM_TREND`
 
-A new BUY cannot also ADD during the same manager run.
+刚刚新 BUY 的股票，在同一次主引擎运行中不能立即再次 ADD。
 
-## 7. Position State
+## 7. 持仓状态（Position State）
 
-The position-state engine deliberately uses a small number of decision states to reduce overfitting:
+持仓状态引擎刻意只保留少量决策状态，降低过拟合风险：
 
-- `STRONG`
-- `HEALTHY_PULLBACK`
-- `UNCERTAIN`
-- `BROKEN`
+- `STRONG`：强势
+- `HEALTHY_PULLBACK`：健康回调
+- `UNCERTAIN`：不确定
+- `BROKEN`：结构破坏
 
-It evaluates:
+主要判断四类证据：
 
-1. broad-market relative performance versus SPY / QQQ
-2. trend structure versus SMA20
-3. 20-day relative strength
-4. short-term selling pressure as recorded evidence
+1. 相对 SPY / QQQ 的大盘相对表现
+2. 相对 SMA20 的趋势结构
+3. 20 日相对强弱
+4. 短期价格和成交量形成的卖压证据
 
-Current structural definitions include:
+当前关键定义：
 
-- `trend_broken`: SMA20 distance < -6% **and** 20D return < 0
-- `relative_weak`: 20D relative performance versus SPY / QQQ < -5%
-- `BROKEN`: requires **both** trend structure break and relative weakness
+- `trend_broken`：相对 SMA20 距离 < -6%，并且 20 日收益率 < 0
+- `relative_weak`：相对 SPY / QQQ 的 20 日表现 < -5%
+- `BROKEN`：必须同时出现**趋势结构破坏 + 相对弱势**
 
-Therefore, a broad-market decline by itself does not automatically cause a structural SELL. A stock falling with the market can remain a healthy pullback or uncertain state.
+因此，大盘整体下跌本身不会自动触发结构性 SELL。股票如果只是跟随市场正常下跌，可以仍然属于健康回调或不确定状态。
 
-Sector-relative status is currently recorded as `UNAVAILABLE_V2_BASELINE`; sector mapping is not yet active.
+行业/板块相对状态目前记录为 `UNAVAILABLE_V2_BASELINE`，说明板块映射尚未正式启用。
 
-## 8. ADD — V3 recovery logic
+## 8. ADD（加仓）— V3 回调恢复逻辑
 
-V3 explicitly rejects the old idea of mechanically adding simply because price fell.
+V3 明确取消“股票只要跌了就机械加仓”的方式。
 
-The system first tracks the position's swing high. A drawdown greater than 1% from that swing high marks that a real pullback has occurred and begins tracking a pullback low.
+系统首先记录持仓后的阶段高点（swing high）。如果价格从阶段高点回撤超过 1%，才认为发生了一次真实回调，并开始记录该次回调最低价。
 
-An ADD becomes eligible only when all of the following are true:
+只有同时满足以下条件才允许 ADD：
 
-- a real pullback was previously observed
-- current Position State is not `BROKEN`
-- price has recovered above the tracked pullback low
-- market-relative strength is improving versus the previous position-state observation
-- the stock still passes a valid entry decision
-- fewer than 5 tranches are already open
-- the position was not newly opened in the same run
+- 之前已经发生真实回调
+- 当前持仓状态不是 `BROKEN`
+- 当前价格已经从回调低点向上恢复
+- 相对大盘强弱相比上一次持仓状态观察正在改善
+- 股票当前仍然满足有效入场条件
+- 当前持仓批次少于 5
+- 不是本次运行刚刚新 BUY 的股票
 
-Formal ADD reason:
+正式 ADD 原因：
 
 `PULLBACK_RECOVERY_ADD_V3`
 
-After an ADD, the pullback marker is reset. Continued decline alone never creates another ADD.
+完成 ADD 后，本次回调标记会被重置。价格继续下跌本身绝不会自动产生下一次 ADD。
 
-## 9. SELL — V3 exit engine
+## 9. SELL（卖出）— V3 退出引擎
 
-V3 has two independent full-position exit paths.
+V3 有两条互相独立的整仓退出路径。
 
-### A. Net-profit giveback protection
+### A. 净利润回吐保护
 
-Simulated fee rate is currently `0.2%` per side.
+当前模拟手续费为单边 `0.2%`。
 
-Profit protection arms after the position reaches at least **+1.0% MFE net of simulated fees**.
+持仓扣除模拟手续费后的 MFE 达到至少 **+1.0%** 后，利润保护开始生效。
 
-The current positive-net-profit floor is based on maximum net profit achieved:
+当前动态净利润保护规则：
 
-| MFE net profit | Allowed giveback | Protected floor |
+| 最大净浮盈 MFE | 允许回吐比例 | 大约保留的最大利润 |
 |---|---:|---:|
-| 1% to <8% | 50% of MFE | retain about 50% |
-| 8% to <15% | 35% of MFE | retain about 65% |
-| 15% to <30% | 25% of MFE | retain about 75% |
-| >=30% | 20% of MFE | retain about 80% |
+| 1% 至 <8% | 50% | 约 50% |
+| 8% 至 <15% | 35% | 约 65% |
+| 15% 至 <30% | 25% | 约 75% |
+| >=30% | 20% | 约 80% |
 
-Minimum protected positive net floor: **+0.10%**.
+最低正净利润保护线为 **+0.10%**。
 
-When current net return is still positive but falls to or below the active floor, the hourly manager performs a full shadow SELL with reason:
+如果当前净收益仍为正，但已经回落到动态保护线或以下，每小时主引擎执行整仓模拟 SELL：
 
 `NET_PROFIT_GIVEBACK_V3`
 
-This implements the rule that Stock Shadow is not a long-term holding system: meaningful profit should not be allowed to round-trip back to zero before exit.
+这条规则体现股票影子系统当前“不做长线死拿”的原则：已经取得明显净利润后，不应该必须等利润全部回吐到零附近才退出。
 
-### B. Structural break
+### B. 结构破坏退出
 
-If profit protection has not already caused an exit and Position State becomes `BROKEN`, the hourly manager performs a full shadow SELL with reason:
+如果利润保护尚未触发，但持仓状态已经变成 `BROKEN`，每小时主引擎执行整仓模拟 SELL：
 
 `STRUCTURE_BROKEN_V3`
 
-Profit-protection SELL has precedence over structural-break SELL when both conditions apply.
+如果两个条件同时满足，利润保护 SELL 优先。
 
-## 10. Fees and realized performance
+## 10. 手续费与已实现收益
 
-Every lifecycle is evaluated after simulated transaction costs.
+所有交易生命周期统一按扣除模拟交易成本后的结果评估。
 
-Current fee assumption:
+当前手续费假设：
 
-`FEE_RATE = 0.002` per side.
+`FEE_RATE = 0.002`（单边 0.2%）。
 
-For positions containing multiple ADD tranches, final performance uses the entire position:
+如果一个持仓包含多次 ADD，最终收益按照整个持仓统一计算：
 
-- total invested notional
-- all tranche quantities and prices
-- buy-side simulated fees
-- final sale proceeds
-- sell-side simulated fees
-- final net PnL
-- final net return percentage
+- 总投入金额
+- 所有买入批次的数量和价格
+- 买入侧模拟手续费
+- 最终卖出收入
+- 卖出侧模拟手续费
+- 最终净利润
+- 最终净收益率
 
-Closed samples record:
+已平仓样本记录：
 
-- `realized_net_pnl_usdt`
-- `realized_net_return_pct`
-- `gross_price_return_pct`
-- `estimated_total_fees_usdt`
-- `profit_giveback_pct_points`
-- `exit_reason`
-- post-exit review due days: 1 / 3 / 5 / 10
+- `realized_net_pnl_usdt`：已实现净利润
+- `realized_net_return_pct`：已实现净收益率
+- `gross_price_return_pct`：未扣费价格收益率
+- `estimated_total_fees_usdt`：预计总手续费
+- `profit_giveback_pct_points`：利润回吐百分点
+- `exit_reason`：退出原因
+- 平仓后第 1 / 3 / 5 / 10 天跟踪计划
 
-A positive gross stock-price move is **not** classified as a win if simulated fees make realized net PnL non-positive.
+即使股票卖出价格高于平均买入价格，只要模拟手续费使最终净利润 <= 0，也不能把该样本统计为盈利交易。
 
-## 11. Hourly manager
+## 11. 每小时主引擎
 
-Workflow:
+工作流：
 
 `.github/workflows/stock-shadow.yml`
 
-Scheduled at minute 23 of every hour.
+每小时第 23 分钟调度一次。
 
-The workflow:
+执行流程：
 
-1. runs isolated Stock Shadow tests
-2. refreshes benchmark data
-3. checks SEC public-data health
-4. runs the full Stock Shadow manager
-5. runs winner / loser review
-6. enforces the Stock Shadow result-path isolation guard
-7. persists only Stock Shadow result state
+1. 执行独立 Stock Shadow 测试
+2. 更新市场基准数据
+3. 检查 SEC 公共数据健康状态
+4. 运行完整股票影子主引擎
+5. 运行盈利/亏损样本复盘
+6. 执行 Stock Shadow 文件隔离检查
+7. 只持久化 Stock Shadow 自己的结果
 
-The workflow uses `stock-shadow-main` concurrency with `cancel-in-progress: false`.
+工作流使用 `stock-shadow-main` 并发组，并设置 `cancel-in-progress: false`。
 
-## 12. Five-minute position monitor
+## 12. 5 分钟持仓监控
 
-Workflow:
+工作流：
 
 `.github/workflows/stock-shadow-position-monitor.yml`
 
-Scheduled every five minutes on weekdays. The monitor:
+工作日每 5 分钟调度一次。
 
-- reads only already-open positions
-- does not discover new stocks
-- cannot BUY
-- cannot ADD
-- refreshes held-symbol prices
-- updates weighted average, current net PnL / return, MFE, and MAE
-- writes monitor health under the Stock Shadow result directory
+该监控器：
 
-Its primary quote path is the Nasdaq public bulk stock snapshot, with a tightly bounded fallback for rare missing held symbols.
+- 只读取已经存在的股票持仓
+- 不发现新股票
+- 不能 BUY
+- 不能 ADD
+- 刷新持仓股票价格
+- 更新加权平均成本、当前净盈亏/收益率、MFE 和 MAE
+- 把健康状态写入 Stock Shadow 结果目录
 
-### Important V3 consistency gap
+主要报价来源是 Nasdaq 公共批量股票快照；对于极少数批量快照缺失的持仓股票，允许有限次数的单股票备用查询。
 
-The five-minute monitor is **not yet fully aligned with the hourly V3 exit engine**.
+### 重要：当前 V3 一致性缺口
 
-At present it can calculate/update a profit-protection signal, but it does **not** execute a full shadow SELL from profit giveback alone. Structural exits also remain the responsibility of the full hourly position-state manager.
+5 分钟监控目前**还没有完全与每小时 V3 退出引擎对齐**。
 
-Therefore:
+目前它可以计算和更新利润保护信号，但不会仅仅因为利润回吐信号而执行整仓模拟 SELL。结构性退出同样由完整的每小时持仓状态引擎负责。
 
-- hourly manager: V3 BUY / ADD / actual profit-giveback SELL / structural SELL
-- five-minute monitor: position-only quote/MFE/MAE/profit-signal monitoring; no BUY, ADD, or SELL
+因此当前真实能力是：
 
-This limitation must not be described as if intraday five-minute V3 exits are already active.
+- 每小时主引擎：V3 BUY / ADD / 实际利润回吐 SELL / 结构破坏 SELL
+- 5 分钟监控：只做持仓报价、MFE/MAE、利润保护信号监控；不执行 BUY / ADD / SELL
 
-## 13. Validation policy
+在 5 分钟 V3 退出真正实现以前，不能把它描述成已经具有完整的盘中 V3 卖出能力。
 
-Core BUY / ADD / SELL rules should be frozen during forward validation unless a clear implementation or structural defect is found.
+## 13. 验证与冻结原则
 
-The purpose of freezing is not to stop trading. It is to prevent repeatedly tuning the same parameters against the same sample set and creating overfit results.
+在前向验证期间，BUY / ADD / SELL 核心规则原则上保持冻结，除非发现明确的实现错误或结构性缺陷。
 
-The system should accumulate real forward shadow samples and compare winner / loser cohorts before evidence-based parameter changes.
+冻结并不代表停止交易，而是避免使用同一批样本不断调参数，从而产生过拟合。
 
-Key evaluation fields include:
+系统应该持续积累真实的前向模拟交易样本，在有足够已平仓样本后比较盈利组和亏损组，再基于证据调整参数。
 
-- formal BUY / ADD / SELL counts
-- realized net PnL after simulated fees
-- realized net return percentage
+重点评价字段包括：
+
+- 正式 BUY / ADD / SELL 数量
+- 扣除模拟手续费后的已实现净利润
+- 已实现净收益率
 - MFE / MAE
-- entry structure
-- exit reason
-- post-exit forward behavior
+- 入场结构
+- 退出原因
+- 平仓后的后续价格表现
 
-## 14. Known limitations / next validation items
+## 14. 当前已知限制与下一步验证事项
 
-1. Sector-relative mapping is not implemented.
-2. Exact bid/ask spread and realistic slippage are not implemented in the full-market path.
-3. Five-minute monitor is not yet aligned with V3 actual SELL semantics.
-4. Post-exit +1D / +3D / +5D / +10D due-day metadata exists, but complete forward tracking must be verified before treating it as operational.
-5. There is no partial scale-out; current exits close the full shadow position.
-6. Full-market discovery makes many individual free daily-chart requests and can return partial market data for some symbols.
-7. Extended-hours monitoring is not active.
-8. Strategy profitability is not considered proven until a meaningful number of closed forward samples exists.
-9. Current state and giveback thresholds are intentionally simple heuristics and must be validated rather than repeatedly optimized in-sample.
+1. 尚未实现行业/板块相对强弱映射。
+2. 全市场扫描尚未加入精确 bid/ask spread 和真实滑点。
+3. 5 分钟监控尚未与 V3 实际 SELL 规则完全对齐。
+4. 已记录平仓后 +1D / +3D / +5D / +10D 跟踪计划，但完整自动跟踪能力仍需要验收后才能视为正式可用。
+5. 当前没有分批减仓；SELL 会关闭整个模拟持仓。
+6. 全市场扫描需要大量免费日线行情请求，少数股票可能出现数据缺失，从而使市场数据状态为 PARTIAL。
+7. 当前没有盘前/盘后扩展时段监控。
+8. 在积累足够数量的前向已平仓样本之前，不能认为策略盈利能力已经得到证明。
+9. 当前状态阈值和利润回吐参数属于刻意保持简单的启发式规则，应通过前向样本验证，而不是持续进行样本内优化。
 
-## 15. Design principle
+## 15. 设计原则
 
-**Data may be complex; trading decisions should remain simple and explainable.**
+**数据可以复杂，交易决策必须尽量简单、可解释。**
 
-A decline is not automatically a stop. A rally is not automatically a chase. A healthy pullback can become an ADD opportunity only after observable recovery, while a true structural break requires independent confirmation. SELL logic protects already-earned net profit and exits genuinely broken structures.
+下跌不等于立即止损，上涨也不等于立即追涨。健康回调只有在出现可观察的恢复后才能成为 ADD 机会；真正的结构破坏需要多项独立证据确认。SELL 一方面保护已经获得的净利润，另一方面负责退出真正失效的持仓结构。
