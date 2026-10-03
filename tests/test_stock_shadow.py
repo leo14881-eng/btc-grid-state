@@ -34,9 +34,30 @@ def _m(price=50,dv=50_000_000,r5=4,r20=12,sma20=48,vol=2.5,volume_ratio=1.0,rang
     return {"price":price,"avg_dollar_volume20":dv,"ret5":r5,"ret20":r20,"sma20":sma20,"daily_volatility20":vol,
             "volume_ratio20":volume_ratio,"range_position20":range_pos}
 
-def test_selector_rejects_penny_and_illiquid_noise():
-    assert "PRICE_TOO_LOW" in ss.entry_decision(_m(price=0.5))["rejects"]
+def test_low_price_is_not_rejected_by_price_alone():
+    d=ss.entry_decision(_m(price=1.5,dv=100_000_000,r5=2,r20=7,sma20=1.45,vol=2.0,volume_ratio=1.8,range_pos=0.62))
+    assert "PRICE_TOO_LOW" not in d["rejects"]
+    assert "LOW_PRICE_INSUFFICIENT_LIQUIDITY" not in d["rejects"]
+
+def test_low_price_requires_stronger_tradeability():
+    assert "LOW_PRICE_INSUFFICIENT_LIQUIDITY" in ss.entry_decision(_m(price=1.5,dv=12_000_000))["rejects"]
     assert "LOW_DOLLAR_VOLUME" in ss.entry_decision(_m(dv=500_000))["rejects"]
+
+def test_position_state_does_not_break_on_market_like_pullback():
+    spy=_m(r20=-8); qqq=_m(r20=-9)
+    m=_m(price=45,r5=-4,r20=-7,sma20=48,volume_ratio=1.1)
+    assert ss.position_state_v2(m,spy,qqq)["state"] != "BROKEN"
+
+def test_position_state_requires_structure_and_relative_weakness_to_break():
+    spy=_m(r20=4); qqq=_m(r20=5)
+    m=_m(price=40,r5=-8,r20=-12,sma20=48,volume_ratio=2.0)
+    d=ss.position_state_v2(m,spy,qqq)
+    assert d["trend_broken"] and d["relative_weak"] and d["state"]=="BROKEN"
+
+def test_healthy_pullback_is_add_eligible_state():
+    spy=_m(r20=3); qqq=_m(r20=4)
+    m=_m(price=49,r5=-2,r20=8,sma20=50,volume_ratio=1.0)
+    assert ss.position_state_v2(m,spy,qqq)["state"]=="HEALTHY_PULLBACK"
 
 def test_selector_rejects_only_parabolic_chase():
     assert "PARABOLIC_5D" in ss.entry_decision(_m(r5=40,r20=70))["rejects"]
@@ -88,3 +109,10 @@ def test_position_monitor_market_hours_gate():
     from datetime import datetime, timezone
     assert m.market_open(datetime(2026,10,5,14,0,tzinfo=timezone.utc)) is True
     assert m.market_open(datetime(2026,10,4,14,0,tzinfo=timezone.utc)) is False
+
+def test_monitor_has_no_giveback_only_sell_path():
+    m=_load_position_monitor()
+    import inspect
+    src=inspect.getsource(m.main)
+    assert "PROFIT_GIVEBACK_POSITION_MONITOR" not in src
+    assert "profit_protection_signal" in src
