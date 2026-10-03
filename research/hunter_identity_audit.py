@@ -95,20 +95,37 @@ def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry):
             meta["error"]=type(exc).__name__+":"+str(exc)[:120]
             if not rows: raise
             meta["cache_used"]=True
-    # Preserve the market-enrichment project-ID selection and enrich those IDs
-    # from the bulk registry. Global ticker duplication must not by itself turn a
-    # known Binance/CoinGecko project mapping into a collision.
+    # Build identity coverage from the ALL-active CoinGecko registry, not only
+    # the market-cap paginated /coins/markets subset.  /coins/markets remains
+    # useful for market/supply observations, but must never define the identity
+    # universe.  Only unique ticker matches are auto-added; collisions remain
+    # fail-closed for contract/project disambiguation.
     bulk_by_id={str(x.get("id")):x for x in rows if isinstance(x,dict) and x.get("id")}
-    leads=[]
+    bulk_by_symbol,bulk_collisions=source_candidates(rows)
+    leads=[]; seen=set()
     for lead in market.get("coingecko") or []:
         if not isinstance(lead,dict): continue
-        item=dict(lead); reg=bulk_by_id.get(str(item.get("id")))
-        if reg and str(reg.get("symbol") or "").upper()==str(item.get("symbol") or "").upper():
+        item=dict(lead); sym=str(item.get("symbol") or "").upper()
+        reg=bulk_by_id.get(str(item.get("id")))
+        if reg and str(reg.get("symbol") or "").upper()==sym:
             item["platforms"]=reg.get("platforms") or {}
             item["contract_as_of_utc"]=cache.get("_bulk_as_of_utc") or now.isoformat()
             item["source_url"]=reg.get("source_url")
-        leads.append(item)
-    meta["registry_rows"]=len(rows); meta["matched_market_leads"]=sum(1 for x in leads if x.get("contract_as_of_utc"))
+        leads.append(item); seen.add(sym)
+    # Add unique registry-only identities for Binance symbols absent from the
+    # paginated market feed.  Deliberately do not copy market-cap/supply fields:
+    # this stage establishes identity only.
+    for sym,reg in bulk_by_symbol.items():
+        if sym in seen: continue
+        leads.append({"id":reg.get("id"),"symbol":sym,"name":reg.get("name"),
+                      "platforms":reg.get("platforms") or {},
+                      "contract_as_of_utc":cache.get("_bulk_as_of_utc") or now.isoformat(),
+                      "source_url":reg.get("source_url"),
+                      "identity_source":"COINGECKO_ALL_ACTIVE_REGISTRY"})
+    meta["registry_rows"]=len(rows)
+    meta["registry_symbol_collisions"]=len(bulk_collisions)
+    meta["matched_market_leads"]=sum(1 for x in leads if x.get("contract_as_of_utc"))
+    meta["registry_only_identity_leads"]=sum(1 for x in leads if x.get("identity_source")=="COINGECKO_ALL_ACTIVE_REGISTRY")
     return dict(market,coingecko=leads),cache,meta
 
 def fetch_contract_platforms(coin_id):
