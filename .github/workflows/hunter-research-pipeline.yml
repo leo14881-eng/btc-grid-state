@@ -154,7 +154,19 @@ jobs:
               git show origin/main:research/results/hunter-research-completion.json > /tmp/completion.json
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
-              python -c "import json,os; sh=json.load(open('/tmp/shadow.json')); ss=json.load(open('/tmp/shadow-summary.json')); assert sh.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert ss.get('schema')=='hunter_shadow_summary_v1'; assert sh.get('updated_at_utc'); assert sh.get('last_cycle_generation_id')==os.environ['EXPECTED']; print('PERSISTENCE_READBACK_VERIFIED_SHADOW',sh.get('updated_at_utc'),len(sh.get('open_positions',[])),len(sh.get('closed_positions',[])))"
+              git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
+              python - <<'PY'
+              import json
+              v1=json.load(open('/tmp/shadow.json')); v2=json.load(open('/tmp/shadow-v2.json'))
+              for name,d in (('V1',v1),('V2',v2)):
+                  assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS', (name,d.get('mode'))
+                  assert d.get('reset_reason')=='USER_REQUESTED_PRE_OPTIMIZATION_RESET', (name,d.get('reset_reason'))
+                  assert not d.get('open_positions'), (name,'open_positions')
+                  assert not d.get('closed_positions'), (name,'closed_positions')
+                  assert not d.get('events'), (name,'events')
+                  if name=='V2': assert not d.get('decisions'), (name,'decisions')
+              print('PERSISTENCE_READBACK_VERIFIED_SHADOW_FREEZE V1=0 V2=0')
+              PY
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
