@@ -1,6 +1,13 @@
 name: Hunter Potential Research Pipeline
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/hunter_*.py'
+      - 'tests/test_hunter*.py'
+      - 'research/hunter-capital-state.json'
+      - '.github/workflows/hunter-change-full-validation.yml'
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
@@ -11,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
