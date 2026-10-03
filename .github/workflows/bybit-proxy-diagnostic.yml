@@ -13,7 +13,7 @@ jobs:
       - name: Test Worker debug and Bybit proxy
         run: |
           set -o pipefail
-          echo "=== DEBUG ==="
+          echo "=== DEBUG POST-PLACEMENT ==="
           curl -sS -D /tmp/debug.h -o /tmp/debug.b -w "HTTP=%{http_code}\n" --max-time 20 "https://bybit-api-test.qinx468.workers.dev/debug" || true
           cat /tmp/debug.h || true
           cat /tmp/debug.b || true
