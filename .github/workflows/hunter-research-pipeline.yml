@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'research/hunter_shadow_trader_v2.py'
+      - 'research/hunter_early_signals.py'
       - 'tests/test_hunter_shadow_trader_v2.py'
       - '.github/workflows/hunter-research-pipeline.yml'
   workflow_run:
@@ -41,7 +42,7 @@ jobs:
               print('id='+d['generation_id'],file=f)
           print('RESEARCH_INPUT_GENERATION',d['generation_id'])
           PY
-      - name: Hunter v3 early BTC-relative funnel
+      - name: Hunter v4 PRE_MOVE multi-factor funnel
         run: python research/hunter_early_signals.py
       - name: Forward-upside research
         run: python research/hunter_forward_research.py
