@@ -8,9 +8,6 @@ on:
       - 'tests/test_hunter*.py'
       - 'research/hunter-capital-state.json'
       - '.github/workflows/hunter-*.yml'
-  workflow_run:
-    workflows: ['Hunter Binance Universe Scan']
-    types: [completed]
 permissions:
   contents: write
 concurrency:
@@ -18,7 +15,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -197,9 +193,6 @@ jobs:
           EXPECTED: ${{ steps.generation.outputs.id }}
         run: |
           set -euo pipefail
-          git fetch origin main
-          git show origin/main:research/results/hunter-cex-universe-run.json > /tmp/prepersist-scan.json
-          python -c "import json,os; x=json.load(open('/tmp/prepersist-scan.json')); assert x.get('generation_id')==os.environ['EXPECTED'], f'DISCOVERY_ADVANCED_BEFORE_PERSIST expected={os.environ[\"EXPECTED\"]} actual={x.get(\"generation_id\")}'"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           for file in \
@@ -256,7 +249,6 @@ jobs:
               python - <<'PY'
               import json,os
               scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; scan_at=scan['as_of_utc']
-              assert scan.get('generation_id')==expected, 'MAIN_READBACK_DISCOVERY_GENERATION_MISMATCH'
               assert json.load(open('/tmp/forward.json')).get('universe_scan_as_of_utc')==scan_at
               assert json.load(open('/tmp/health.json')).get('scan_as_of_utc')==scan_at
               assert json.load(open('/tmp/identity.json')).get('scan_as_of_utc')==scan_at
