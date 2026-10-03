@@ -3,7 +3,7 @@
 Spot uses the public V5 endpoint. Alpha uses the official authenticated Alpha token-list endpoint when credentials exist.
 Failure is UNKNOWN, never NOT_LISTED.
 """
-import datetime as dt, hashlib, hmac, json, os, pathlib, time, urllib.parse, urllib.request
+import datetime as dt, hashlib, hmac, json, os, pathlib, time, urllib.error, urllib.parse, urllib.request
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json"
@@ -14,8 +14,15 @@ SECRET=os.getenv("BYBIT_ALPHA_API_SECRET","")
 RECV="5000"
 
 def request(url, data=None, headers=None):
-    req=urllib.request.Request(url,data=data,headers={"User-Agent":"hunter-bybit-enrichment/1.0","Accept":"application/json",**(headers or {})})
-    with urllib.request.urlopen(req,timeout=15) as r:return json.load(r)
+    # Use a normal browser-like UA for public edge endpoints. Some CDN/WAF layers
+    # reject urllib/bot-like clients even though the endpoint itself is public.
+    base={"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153.0 Safari/537.36","Accept":"application/json,text/plain,*/*"}
+    req=urllib.request.Request(url,data=data,headers={**base,**(headers or {})})
+    try:
+        with urllib.request.urlopen(req,timeout=15) as r:return json.load(r)
+    except urllib.error.HTTPError as e:
+        body=e.read(500).decode("utf-8","ignore").replace("\n"," ")
+        raise RuntimeError(f"HTTP_{e.code} url={url} body={body[:240]}") from e
 
 def spot():
     rows=[]; cursor=""
