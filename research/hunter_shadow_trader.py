@@ -16,6 +16,7 @@ def configure_v1():
     engine.SUMMARY=root/"hunter-shadow-summary.json"
     engine.GUARD=root/"hunter-shadow-v1-overfilter-guard.json"
     engine.CAPITAL_POOL_USDT=None
+    engine.ENTRY_MODE="DISCOVERY"
     engine.STRATEGY_ID="SHARED_DECISION_ENGINE_V1_BROAD_NET"
     engine.ID_PREFIX="SHV1"
     engine.EVENT_PREFIX="SHADOW_V1"
