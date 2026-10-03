@@ -5,7 +5,7 @@ ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
 STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"; GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"; BYBIT=ROOT/"hunter-bybit-availability.json"
-FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(24.,48.,72.); DISCOVERY_MIN_SCORE=6.; DISCOVERY_MIN_INDEPENDENT=2
+FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(1.,6.,24.,48.,72.); DISCOVERY_MIN_SCORE=6.; DISCOVERY_MIN_INDEPENDENT=2
 MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
 PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
 MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
@@ -274,9 +274,11 @@ def main():
   a=c.get("asset")
   if not a or a in open_assets:continue
   broad,broad_reasons=discovery_decision(c);p=price(scan,a);act,reasons,e=decision(c,scan,liq,supply,"ENTRY")
-  if broad!="BUY" or not p:
-   reasons=broad_reasons if broad!="BUY" else ["CURRENT_PRICE_MISSING"]
-   dummy={"asset":a,"tranches":[]};record(state,dummy,"REJECT",now,reasons,e,p);continue
+  if broad!="BUY" or not p or act!="BUY":
+   if broad!="BUY": reject_reasons=broad_reasons
+   elif not p: reject_reasons=["CURRENT_PRICE_MISSING"]
+   else: reject_reasons=reasons
+   dummy={"asset":a,"tranches":[]};record(state,dummy,"REJECT",now,reject_reasons,e,p);continue
   pos={"shadow_id":ID_PREFIX+"-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
@@ -292,10 +294,10 @@ def main():
   "strategy":STRATEGY_ID,"open_positions":len(state["open_positions"]),"closed_positions":len(closed),
   "net_pnl_usdt":round(sum(x["net_pnl_usdt"] for x in closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":False,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),
-   "entry_full_execution_validation_is_label_only":True,"add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
+   "entry_requires_full_execution_validation":True,"add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
-   "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":"IMMEDIATE_MARKET_REFERENCE_ON_BROAD_DISCOVERY_GATE","bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
+   "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":"ONLY_AFTER_SHARED_FULL_DECISION_GATE","bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard["status"]}},
   "capital_authority":"NONE_SHADOW_ONLY"}
  STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
