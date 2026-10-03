@@ -18,6 +18,9 @@ def configure_v1():
     engine.GUARD=root/"hunter-shadow-v1-overfilter-guard.json"
     engine.CAPITAL_POOL_USDT=None
     engine.ENTRY_MODE="DISCOVERY"
+    # V1 admission is defined by EARLY membership itself (>=2 independent signals).
+    # Do not re-apply the legacy score>=6 gate; V2 keeps its strict score/evidence gates.
+    engine.DISCOVERY_MIN_SCORE=0.
     engine.STRATEGY_ID="SHARED_DECISION_ENGINE_V1_BROAD_NET"
     engine.ID_PREFIX="SHV1"
     engine.EVENT_PREFIX="SHADOW_V1"
