@@ -19,6 +19,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: Refresh persisted discovery generation
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          python - <<'PY'
+          import json
+          d=json.load(open('research/results/hunter-cex-universe-run.json'))
+          assert d.get('generation_id') and d.get('binance_complete') is True
+          print('DOWNSTREAM_USING_PERSISTED_DISCOVERY',d['generation_id'])
+          PY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
