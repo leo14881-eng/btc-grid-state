@@ -44,7 +44,7 @@ jobs:
           assert d.get("retMsg")=="OK", d
           assert row and row.get("status")=="Trading", row
           print(json.dumps({"endpoint":"/bybit/spot?symbol=BTCUSDT","http_status":status,"retCode":d.get("retCode"),"retMsg":d.get("retMsg"),"symbol":"BTCUSDT","business_status":row.get("status")}))
-          persisted=json.load(open("research/results/hunter-bybit-availability.json"))
+          persisted=json.load(open("/tmp/hunter/research/results/hunter-bybit-availability.json"))
           assert persisted["spot"]["status"].startswith("OK_"), persisted["spot"]
           assert persisted["spot"].get("error_reason") is None, persisted["spot"]
           print("PERSISTED_SPOT",json.dumps(persisted["spot"]))
