@@ -243,24 +243,7 @@ jobs:
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
-              python - <<'PY'
-import json,os
-              scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; scan_at=scan['as_of_utc']
-              assert json.load(open('/tmp/forward.json')).get('universe_scan_as_of_utc')==scan_at
-              assert json.load(open('/tmp/health.json')).get('scan_as_of_utc')==scan_at
-              assert json.load(open('/tmp/identity.json')).get('scan_as_of_utc')==scan_at
-              assert json.load(open('/tmp/liquidity.json')).get('scan_as_of_utc')==scan_at
-              assert json.load(open('/tmp/supply.json')).get('scan_as_of_utc')==scan_at
-              review=json.load(open('/tmp/review.json')); assert review.get('scan_generation_id')==expected
-              assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}
-              a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json'))
-              assert a.get('open_positions') or a.get('events'), 'V1_SHADOW_EXPECTED_ACTIVE'
-              assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
-              assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or [])
-              used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or [])
-              assert used<=20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'
-print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))
-PY
+              python -c "import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
