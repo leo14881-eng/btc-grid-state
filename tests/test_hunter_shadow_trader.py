@@ -7,6 +7,7 @@ class SharedShadowEngineTests(unittest.TestCase):
  def tearDown(self):
   core.CAPITAL_POOL_USDT=20000.
   core.ENTRY_MODE="EXECUTABLE"
+  core.DISCOVERY_MIN_SCORE=6.
 
  def test_v1_uses_shared_management_engine(self):
   self.assertIs(v1.engine,core)
@@ -16,6 +17,17 @@ class SharedShadowEngineTests(unittest.TestCase):
   self.assertEqual(core.ENTRY_MODE,"DISCOVERY")
   self.assertIsNone(core.CAPITAL_POOL_USDT)
   self.assertTrue(core.entry_allowed("DISCOVERY","BUY",1.0,"REJECT"))
+
+ def test_v1_early_membership_does_not_reapply_score_six_gate(self):
+  v1.configure_v1()
+  c={"asset":"LOW","signal":{"score":1.25,"independent_signal_count":2},"blockers":["OFFICIAL_ASSET_IDENTITY_UNVERIFIED"]}
+  self.assertEqual(core.DISCOVERY_MIN_SCORE,0.)
+  self.assertEqual(core.discovery_decision(c)[0],"BUY")
+
+ def test_v1_still_rejects_explicit_identity_mismatch(self):
+  v1.configure_v1()
+  c={"asset":"BAD","signal":{"score":1.25,"independent_signal_count":2},"blockers":["OFFICIAL_ASSET_IDENTITY_MISMATCH"]}
+  self.assertEqual(core.discovery_decision(c)[0],"REJECT")
 
  def test_v2_requires_executable_buy(self):
   self.assertFalse(core.entry_allowed("EXECUTABLE","BUY",1.0,"REJECT"))
