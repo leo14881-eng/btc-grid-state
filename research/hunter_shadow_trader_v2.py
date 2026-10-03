@@ -122,6 +122,38 @@ def raw_return(pos,p):return (p/weighted_entry(pos)-1)*100
 def net_pnl(pos,p):
  qty=sum(t["notional_usdt"]/(t["price"]*(1+(t.get("buy_slippage_bps",0)+FEE_BPS)/10000)) for t in pos["tranches"])
  return qty*p*(1-FEE_BPS/10000)-total_notional(pos)
+def scenario_returns(pos,p):
+ out={}
+ for n in range(1,len(pos.get("tranches",[]))+1):
+  q={**pos,"tranches":pos["tranches"][:n]}
+  notion=total_notional(q); pnl=net_pnl(q,p)
+  out[f"{n}_tranche"]={"notional_usdt":notion,"weighted_entry_price":weighted_entry(q),"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4)}
+ return out
+
+def exit_analysis(pos,p,reason):
+ scenarios=scenario_returns(pos,p); final=scenarios.get(f"{len(pos.get('tranches',[]))}_tranche",{})
+ net=final.get("net_return_pct",0)
+ if net>=0:failure=None
+ elif reason=="THESIS_INVALIDATION":failure="THESIS_OR_SELECTION_FAILURE"
+ elif reason=="PROFIT_PROTECTION":failure="PROFIT_GIVEBACK_FAILURE"
+ else:failure="EXIT_OR_SELECTION_REVIEW"
+ return {"tranche_scenarios_at_exit":scenarios,"failure_attribution":failure,
+  "post_exit_tracking":{"hours":list(REVIEW_HOURS),"max_rebound_from_exit_pct":0.,"potential_premature_exit":False,"marks":[]}}
+
+def update_post_exit(pos,p,now):
+ t=pos.get("post_exit_tracking")
+ if not t or not pos.get("closed_at_utc") or not p:return
+ hours=(now-parse(pos["closed_at_utc"])).total_seconds()/3600
+ if hours<0 or hours>max(REVIEW_HOURS):return
+ rebound=(p/(finite(pos.get("exit_reference_price")) or p)-1)*100
+ t["max_rebound_from_exit_pct"]=round(max(finite(t.get("max_rebound_from_exit_pct")) or 0,rebound),4)
+ t["potential_premature_exit"]=bool(t["max_rebound_from_exit_pct"]>=8)
+ # Keep bounded forward marks near the requested review horizons.
+ for target in REVIEW_HOURS:
+  key=f"{int(target)}h"
+  if hours>=target and not any(x.get("horizon")==key for x in t["marks"]):
+   t["marks"].append({"horizon":key,"observed_hours":round(hours,2),"price":p,"rebound_from_exit_pct":round(rebound,4)})
+
 def profit_protection(pos,p):
  raw=raw_return(pos,p); mfe=finite(pos.get("mfe_pct")) or 0.
  armed=mfe>=PROTECT_ARM_PCT
@@ -177,6 +209,7 @@ def main():
  cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state=load(STATE,{"schema":"hunter_shadow_v2_portfolio_v2","mode":"SIMULATION_ONLY_NO_REAL_ORDERS","open_positions":[],"closed_positions":[],"events":[],"decisions":[]})
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
+ for old in state["closed_positions"]:update_post_exit(old,price(scan,old.get("asset")),now)
  still=[]
  for pos in state["open_positions"]:
   p=price(scan,pos["asset"])
@@ -193,7 +226,7 @@ def main():
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"THESIS_INVALIDATION",
     "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
     "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
-   record(state,pos,"EXIT",now,reasons,e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
+   pos.update(exit_analysis(pos,p,pos["exit_reason"]));record(state,pos,"EXIT",now,reasons,e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   else:record(state,pos,"HOLD",now,reasons,e,p)
   protection=profit_protection(pos,p)
   if protection["exit"]:
@@ -202,7 +235,7 @@ def main():
     "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
     "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4),
     "profit_protection":protection})
-   record(state,pos,"EXIT",now,["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
+   pos.update(exit_analysis(pos,p,pos["exit_reason"]));record(state,pos,"EXIT",now,["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   if raw>=TARGET:
    r1=e.get("btc_rel_1h"); r4=e.get("btc_rel_4h"); accel=e.get("rel_accel")
    runner=act!="REJECT" and r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
@@ -213,7 +246,7 @@ def main():
     pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"PROFIT_REVIEW_MOMENTUM_FADED",
      "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
      "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
-    record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
+    pos.update(exit_analysis(pos,p,pos["exit_reason"]));record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
  state["open_positions"]=still;open_assets={x["asset"] for x in still};buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
@@ -240,7 +273,7 @@ def main():
    "entry_full_execution_validation_is_label_only":True,"add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
-   "three_tranche_adds_are_conditional_not_mechanical":True,"max_open":None,"discovery_sample_cap":None,"first_tranche":"IMMEDIATE_MARKET_REFERENCE_ON_BROAD_DISCOVERY_GATE","bybit_channel_is_label_not_discovery_gate":True,
+   "three_tranche_adds_are_conditional_not_mechanical":True,"max_open":None,"discovery_sample_cap":None,"first_tranche":"IMMEDIATE_MARKET_REFERENCE_ON_BROAD_DISCOVERY_GATE","bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard["status"]}},
   "capital_authority":"NONE_SHADOW_ONLY"}
  STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
