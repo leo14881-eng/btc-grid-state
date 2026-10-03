@@ -8,6 +8,7 @@ STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-sum
 FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(24.,48.,72.); MAX_OPEN=3
 MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
 PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
+MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
 
 def load(p,d=None):
  try:return json.loads(p.read_text())
@@ -34,8 +35,16 @@ def evidence(c,liq,supply):
   "buy_slippage_bps":finite(ex.get("buy_slippage_bps")),"estimated_rr":finite(ex.get("estimated_rr")),
   "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),
   "blockers":hard_blockers(c)}
+def discovery_anchor(c):
+ for k in ("first_discovery_price","first_price","discovery_price"):
+  v=finite((c or {}).get(k))
+  if v:return v
+ return None
 def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
- if not c:return "EXIT" if kind!="ENTRY" else "REJECT",["CANDIDATE_EVIDENCE_MISSING"],{}
+ if not c:
+  # Dropping out of the current shortlist is not itself a thesis failure.
+  # Existing shadow positions wait for fresh evidence instead of being force-sold.
+  return ("HOLD" if kind!="ENTRY" else "REJECT"),["CANDIDATE_EVIDENCE_MISSING_REVIEW_ONLY"],{}
  e=evidence(c,liq,supply); reasons=[]
  if e["score"] is None or e["score"]<8:reasons.append("SCORE_WEAK")
  if e["independent"]<2:reasons.append("INSUFFICIENT_INDEPENDENT_SIGNALS")
@@ -50,10 +59,24 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
  if not e["supply_verified"]:reasons.append("SUPPLY_RISK_UNVERIFIED")
  if e["blockers"]:reasons+=["BLOCKER:"+x for x in e["blockers"]]
  ch=finite(((scan.get("coins") or {}).get(e["asset"]) or {}).get("change_24h_pct"))
- if kind=="ENTRY" and ch is not None and ch>20:reasons.append("ANTI_CHASE_24H")
+ if kind=="ENTRY":
+  if ch is not None and ch>MAX_CHASE_24H_PCT:
+   # A strong right-side continuation is allowed only when the higher entry price
+   # is compensated by materially stronger evidence and remaining reward/risk.
+   chase_ok=(e["estimated_rr"] is not None and e["estimated_rr"]>=MIN_CHASE_RR and
+             e["btc_rel_1h"] is not None and e["btc_rel_1h"]>=MIN_CHASE_REL_1H and
+             e["btc_rel_4h"] is not None and e["btc_rel_4h"]>=MIN_CHASE_REL_4H and
+             e["rel_accel"] is not None and e["rel_accel"]>0)
+   if not chase_ok:reasons.append("CHASE_NOT_COMPENSATED_BY_EDGE")
+  anchor=discovery_anchor(c)
+  cur=p if p is not None else finite(((scan.get("coins") or {}).get(e["asset"]) or {}).get("reference_price"))
+  if anchor and cur:
+   chase_from_discovery=(cur/anchor-1)*100
+   if chase_from_discovery>MAX_CHASE_FROM_DISCOVERY_PCT and (e["estimated_rr"] is None or e["estimated_rr"]<MIN_CHASE_RR):
+    reasons.append("TOO_FAR_ABOVE_DISCOVERY_FOR_REMAINING_RR")
  if kind!="ENTRY" and e["btc_rel_1h"] is not None and e["btc_rel_4h"] is not None and e["btc_rel_1h"]<-2 and e["btc_rel_4h"]<-3:
   reasons.append("SEVERE_BTC_RELATIVE_BREAK")
- if reasons:return ("EXIT" if kind!="ENTRY" and ("CANDIDATE_EVIDENCE_MISSING" in reasons or "SEVERE_BTC_RELATIVE_BREAK" in reasons) else "REJECT"),reasons,e
+ if reasons:return ("EXIT" if kind!="ENTRY" and "SEVERE_BTC_RELATIVE_BREAK" in reasons else "REJECT"),reasons,e
  if kind=="ADD":
   if pos is None or p is None:return "REJECT",["ADD_CONTEXT_MISSING"],e
   first=pos["tranches"][0]["price"]; dd=(p/first-1)*100; need=(-4.,-8.)[len(pos["tranches"])-1]
