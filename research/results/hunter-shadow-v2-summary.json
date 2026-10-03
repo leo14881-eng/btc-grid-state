@@ -1,6 +1,6 @@
 {
   "schema": "hunter_shadow_v2_summary_v2",
-  "as_of_utc": "2026-10-03T10:59:10.646569+00:00",
+  "as_of_utc": "2026-10-03T11:11:56.734508+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
   "open_positions": 0,
@@ -35,7 +35,13 @@
       "min_protected_net_pct": 0.35
     },
     "three_tranche_adds_are_conditional_not_mechanical": true,
-    "max_open": 3
+    "max_open": 3,
+    "overfilter_guard": {
+      "zero_buy_cycles": 3,
+      "missed_move_pct": 8.0,
+      "min_safe_misses": 2,
+      "status": "NORMAL"
+    }
   },
   "capital_authority": "NONE_SHADOW_ONLY"
 }
