@@ -6,6 +6,7 @@ Failure is UNKNOWN, never NOT_LISTED.
 import datetime as dt, hashlib, hmac, json, os, pathlib, time, urllib.parse, urllib.request
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
+REVIEW=ROOT/"hunter-tactical-capital-review.json"
 HOST=os.getenv("HUNTER_BYBIT_API","https://api.bybit.com")
 KEY=os.getenv("BYBIT_ALPHA_API_KEY","")
 SECRET=os.getenv("BYBIT_ALPHA_API_SECRET","")
@@ -27,6 +28,24 @@ def spot():
         if not cursor:break
     return sorted({str(x.get("baseCoin","")).upper() for x in rows if x.get("quoteCoin")=="USDT" and x.get("status")=="Trading" and x.get("baseCoin")})
 
+def spot_official_pages():
+    """Candidate-scoped fallback when V5 is region-blocked. Uses only official Bybit spot pages."""
+    try: review=json.loads(REVIEW.read_text())
+    except Exception: review={}
+    assets={str(x.get("asset","")).upper() for x in review.get("candidates") or [] if x.get("asset")}
+    assets.add("ALPHA")  # regression probe requested for channel validation
+    ok=[]
+    for a in sorted(assets):
+        url="https://www.bybit.com/en/trade/spot/"+urllib.parse.quote(a)+"/USDT"
+        try:
+            req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 hunter-bybit-enrichment","Accept":"text/html"})
+            with urllib.request.urlopen(req,timeout=12) as r:
+                body=r.read(600000).decode("utf-8","ignore").upper()
+            if (a+"/USDT") in body:ok.append(a)
+        except Exception:continue
+    if not ok:raise RuntimeError("OFFICIAL_SPOT_PAGE_FALLBACK_EMPTY")
+    return ok
+
 def alpha():
     if not KEY or not SECRET:return None,"CREDENTIALS_NOT_CONFIGURED"
     ts=str(int(time.time()*1000)); body=json.dumps({"tokenTag":0},separators=(",",":"))
@@ -41,7 +60,11 @@ def main():
     out={"schema":"hunter_bybit_availability_v1","as_of_utc":now,"source":"BYBIT_OFFICIAL_V5","spot":{"status":"UNKNOWN","symbols":[],"error":None},"alpha":{"status":"UNKNOWN","symbols":[],"error":None}}
     try:
         xs=spot();out["spot"].update({"status":"OK","symbols":xs,"count":len(xs)})
-    except Exception as e:out["spot"]["error"]=type(e).__name__+":"+str(e)[:160]
+    except Exception as e:
+        api_error=type(e).__name__+":"+str(e)[:160]
+        try:
+            xs=spot_official_pages();out["spot"].update({"status":"OK_CANDIDATE_SCOPED_OFFICIAL_PAGE_FALLBACK","symbols":xs,"count":len(xs),"scope":"CURRENT_CANDIDATES_PLUS_ALPHA_REGRESSION_PROBE","api_error":api_error})
+        except Exception as e2:out["spot"]["error"]=api_error+"; FALLBACK="+type(e2).__name__+":"+str(e2)[:120]
     try:
         xs,why=alpha()
         if xs is None:out["alpha"]["error"]=why
