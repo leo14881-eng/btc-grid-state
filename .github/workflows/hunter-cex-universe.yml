@@ -35,6 +35,8 @@ jobs:
       - name: Validate discovery only
         run: python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v
       - name: Scan Binance USDT spot universe
+        env:
+          HUNTER_SOURCE_HEAD_SHA: ${{ github.sha }}
         run: python research/hunter_cex_scan.py
       - name: Validate publishable discovery generation
         run: |
