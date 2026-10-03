@@ -1,7 +1,7 @@
 {
-  "version": "1.8",
+  "version": "1.9",
   "status": "ACTIVE",
-  "updated_at": "2026-09-28",
+  "updated_at": "2026-10-03",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
     "btc_core_base_pct": 45,
@@ -95,7 +95,7 @@
   },
   "btc_cycle_policy": {
     "principle": "ACCUMULATE_IN_BEAR_MARKET_DISTRIBUTE_IN_BULL_MARKET",
-    "ordinary_short_term_trading": false,
+    "ordinary_short_term_trading": true,
     "permanent_floor_target_btc": 0.5,
     "never_fully_exit_btc": true,
     "while_total_btc_below_floor": "Ordinary cycle distribution must not reduce BTC holdings; priority is staged bear-market accumulation toward 0.5 BTC.",
@@ -104,7 +104,9 @@
     "buy_regime": "Bear-market staged accumulation with dry-powder preservation and existing accumulation/risk gates.",
     "future_ordinary_btc_buys": "Increase total BTC and first build the permanent 0.5 BTC floor; BTC above the floor becomes cycle position.",
     "historical_cost_basis": "UNKNOWN_RECONSTRUCTION_PENDING",
-    "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward."
+    "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward.",
+    "status": "SUPERSEDED_FOR_CURRENT_EXECUTION_BY_2026_10_03_CURRENT_CAPITAL_ARCHITECTURE",
+    "current_rule": "CORE_PLUS_SWING; core governed by valuation/drawdown; swing eligible on positive expected net USDT after fees/slippage; user executes."
   },
   "execution_state": {
     "last_confirmed_execution": "BTC-BUY-ORDER-86442752",
@@ -308,5 +310,47 @@
     "existing_btc_swing_classification": "TWO_CONFIRMED_ORDERS_UNASSIGNED_PENDING_USER_CONFIRMATION",
     "no_double_counting": true,
     "crisis_reserve_separate_usd": 50000
-  }
+  },
+  "current_capital_architecture": {
+    "status": "USER_CONFIRMED_CURRENT_OVERRIDE",
+    "main_investment_cap_usdt": 200000,
+    "btc_unified_pool_usdt": 160000,
+    "btc_unified_pool_components": [
+      "CORE_BTC",
+      "SWING_BTC",
+      "STANDBY_USDT"
+    ],
+    "btc_internal_split": "DYNAMIC_NO_FIXED_120K_40K",
+    "hunter_alt_pool_usdt": 20000,
+    "hunter_existing_axs_usdt_approx": 6000,
+    "hunter_live_new_position_status": "PAUSED_UNTIL_AXS_NET_PROFIT_EXIT_AND_HUNTER_PROFIT_EVIDENCE",
+    "extreme_crash_reserve_usdt": 20000,
+    "extreme_crash_scope": "FLASH_CRASH_SYSTEMIC_LIQUIDITY_SHOCK_SEVERE_MISPRICING_ONLY",
+    "btc_grid_usdt": 14000,
+    "btc_grid_in_main_investment_cap": false,
+    "crisis_living_reserve_usd": 50000,
+    "crisis_living_reserve_in_investment_nav": false,
+    "deprecated_capital_models": [
+      "A_B_C_D_E",
+      "10K_DAILY_PLUS_20K_LARGE_SWING",
+      "FIXED_120K_CORE_PLUS_40K_SWING",
+      "45_35_15_PORTFOLIO_WEIGHT_AS_CURRENT_CONTROL"
+    ],
+    "execution_authority": "USER_ONLY"
+  },
+  "current_kpi_policy": {
+    "btc_swing_primary_kpi": "REALIZED_NET_USDT_PROFIT_AFTER_FEES_AND_REASONABLE_SLIPPAGE",
+    "minimum_profit_amount_usdt": null,
+    "minimum_profit_pct": null,
+    "eligibility": "POSITIVE_EXPECTED_NET_USDT_AFTER_FEES_SLIPPAGE_AND_EXECUTABLE_LIQUIDITY",
+    "btc_quantity_change": "DIAGNOSTIC_ONLY",
+    "btc_buy_hold_relative_return": "DIAGNOSTIC_ONLY",
+    "management_target": {
+      "start_main_investment_usdt": 200000,
+      "target_main_investment_usdt": 600000,
+      "target_date": "2028-03",
+      "guaranteed": false
+    }
+  },
+  "architecture_status": "SUPERSEDED_BY_CURRENT_CAPITAL_ARCHITECTURE_2026_10_03"
 }
