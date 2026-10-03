@@ -1,0 +1,72 @@
+name: Hunter Change Full Validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'research/hunter_*.py'
+      - 'tests/test_hunter*.py'
+      - 'research/hunter-capital-state.json'
+      - '.github/workflows/hunter-*.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hunter-change-full-validation
+  cancel-in-progress: true
+jobs:
+  validate-change:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile all Hunter Python
+        run: python -m compileall -q research tests
+      - name: Run complete Hunter regression suite
+        run: python -m unittest discover -s tests -p 'test_hunter*.py' -v
+      - name: Validate persisted Hunter state contract
+        run: |
+          python - <<'PY'
+          import json,pathlib
+          R=pathlib.Path('research/results')
+          required=[
+            'hunter-cex-universe-run.json','hunter-early-signals.json',
+            'hunter-identity-audit.json','hunter-liquidity-probe.json',
+            'hunter-tactical-capital-review.json','hunter-shadow-portfolio.json',
+            'hunter-shadow-summary.json','hunter-shadow-v2-portfolio.json',
+            'hunter-shadow-v2-summary.json','hunter-bybit-availability.json']
+          data={}
+          for n in required:
+            p=R/n
+            assert p.exists() and p.stat().st_size>2, f'EMPTY_OR_MISSING_RESULT {n}'
+            data[n]=json.load(open(p))
+          scan=data['hunter-cex-universe-run.json']
+          early=data['hunter-early-signals.json']
+          ident=data['hunter-identity-audit.json']
+          review=data['hunter-tactical-capital-review.json']
+          assert scan.get('binance_complete') is True
+          assert early.get('scan_generation_id')==scan.get('generation_id'),'EARLY_GENERATION_MISMATCH'
+          assert ident.get('scan_as_of_utc')==scan.get('as_of_utc'),'IDENTITY_GENERATION_MISMATCH'
+          assert review.get('scan_generation_id')==scan.get('generation_id'),'CAPITAL_REVIEW_GENERATION_MISMATCH'
+          for lane in ('','-v2'):
+            st=data[f'hunter-shadow{lane}-portfolio.json']; sm=data[f'hunter-shadow{lane}-summary.json']
+            opens=st.get('open_positions') or []; closed=st.get('closed_positions') or []
+            assets=[x.get('asset') for x in opens if x.get('asset')]
+            assert len(assets)==len(set(assets)),f'DUPLICATE_OPEN_ASSET lane={lane}'
+            assert int(sm.get('open_positions') or 0)==len(opens),f'SUMMARY_OPEN_MISMATCH lane={lane}'
+            assert int(sm.get('closed_positions') or 0)==len(closed),f'SUMMARY_CLOSED_MISMATCH lane={lane}'
+            assert st.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
+          v2=data['hunter-shadow-v2-portfolio.json']
+          used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in v2.get('open_positions') or [])
+          assert used<=20000.000001,f'V2_CAPITAL_POOL_EXCEEDED {used}'
+          assert all(x.get('trade_action') in ('BUY','WAIT','REJECT','SYSTEM_BLOCKED') for x in review.get('candidates') or []),'V2_ACTION_TAXONOMY_INVALID'
+          print('HUNTER_PERSISTED_STATE_CONTRACT_OK',scan.get('generation_id'),'v1_open',len(data['hunter-shadow-portfolio.json'].get('open_positions') or []),'v2_open',len(v2.get('open_positions') or []),'v2_used',round(used,2))
+          PY
+      - name: Require full live pipeline after code change
+        run: |
+          echo 'STATIC_AND_STATE_REGRESSION_OK'
+          echo 'The Hunter Potential Research Pipeline is the authoritative live-data end-to-end acceptance run.'
