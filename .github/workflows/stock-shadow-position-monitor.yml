@@ -1,0 +1,54 @@
+name: Stock Shadow Position Monitor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/stock_shadow/stock_position_monitor.py'
+      - 'tests/test_stock_shadow.py'
+      - '.github/workflows/stock-shadow-position-monitor.yml'
+  schedule:
+    - cron: '2/5 * * * 1-5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stock-shadow-main
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Test isolated Stock Shadow
+        run: python -m pytest -q tests/test_stock_shadow.py
+      - name: Position-only 5m monitor
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            python research/stock_shadow/stock_position_monitor.py
+          else
+            python research/stock_shadow/stock_position_monitor.py --force
+          fi
+      - name: Isolation guard
+        run: |
+          git diff --name-only | grep -Ev '^research/results/stock-shadow/' && { echo "Isolation violation"; exit 1; } || true
+      - name: Persist Stock Shadow position state only
+        run: |
+          git config user.name "stock-shadow-bot"
+          git config user.email "stock-shadow-bot@users.noreply.github.com"
+          git add research/results/stock-shadow/
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "data: update stock shadow position monitor"
+          git pull --rebase origin main
+          git push origin HEAD:main
