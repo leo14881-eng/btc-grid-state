@@ -15,7 +15,7 @@ permissions:
   contents: write
 concurrency:
   group: hunter-research-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   research:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
