@@ -199,12 +199,12 @@ jobs:
           assert s['generation_id']==expected
           checks={
             'early': json.load(open('research/results/hunter-early-signals.json')).get('scan_generation_id')==expected,
-            'forward': json.load(open('research/results/hunter-forward-research.json')).get('universe_scan_as_of_utc')==scan_at,
-            'identity': json.load(open('research/results/hunter-identity-audit.json')).get('scan_as_of_utc')==scan_at,
-            'liquidity': json.load(open('research/results/hunter-liquidity-probe.json')).get('scan_as_of_utc')==scan_at,
-            'supply': json.load(open('research/results/hunter-tactical-supply-risk.json')).get('scan_as_of_utc')==scan_at,
+            'forward': json.load(open('research/results/hunter-forward-research.json')).get('scan_generation_id')==expected,
+            'identity': json.load(open('research/results/hunter-identity-audit.json')).get('scan_generation_id')==expected,
+            'liquidity': json.load(open('research/results/hunter-liquidity-probe.json')).get('scan_generation_id')==expected,
+            'supply': json.load(open('research/results/hunter-tactical-supply-risk.json')).get('scan_generation_id')==expected,
             'capital_review': json.load(open('research/results/hunter-tactical-capital-review.json')).get('scan_generation_id')==expected,
-            'health': json.load(open('research/results/hunter-health-and-queue.json')).get('scan_as_of_utc')==scan_at,
+            'health': json.load(open('research/results/hunter-health-and-queue.json')).get('scan_generation_id')==expected,
           }
           bad=[k for k,v in checks.items() if not v]
           assert not bad, f'MIXED_GENERATION_STAGES {bad}'
