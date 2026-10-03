@@ -18,6 +18,12 @@ jobs:
           cat /tmp/debug.h || true
           cat /tmp/debug.b || true
           echo
+          echo "=== HUNTER AVAILABILITY ==="
+          git clone -q --depth 1 "https://github.com/leo14881-eng/btc-grid-state.git" /tmp/hunter
+          cd /tmp/hunter
+          python research/hunter_bybit_availability.py
+          cat research/results/hunter-bybit-availability.json
+          cd -
           echo "=== BTCUSDT ==="
           curl -sS -D /tmp/btc.h -o /tmp/btc.b -w "HTTP=%{http_code}\n" --max-time 20 "https://bybit-api-test.qinx468.workers.dev/bybit/spot?symbol=BTCUSDT" || true
           cat /tmp/btc.h || true
