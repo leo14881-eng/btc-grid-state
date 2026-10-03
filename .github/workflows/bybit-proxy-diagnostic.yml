@@ -9,6 +9,9 @@ on:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
+    env:
+      BYBIT_ALPHA_API_KEY: ${{ secrets.BYBIT_ALPHA_API_KEY }}
+      BYBIT_ALPHA_API_SECRET: ${{ secrets.BYBIT_ALPHA_API_SECRET }}
     steps:
       - name: Test Worker debug and Bybit proxy
         run: |
