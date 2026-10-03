@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Hunter V1 broad-net shadow lane.
 
-V1 and V2 execute the same decision engine. V1 changes only portfolio constraints:
-unlimited simulated capital and no cross-asset capital competition.
+V1 samples every EARLY candidate (>=2 independent early signals) directly from
+hunter-early-signals.json. It deliberately bypasses V2 capital-review gates.
+V2 remains the strict executable/capital lane.
 """
-import pathlib
+import json,pathlib
 try:
     from research import hunter_shadow_trader_v2 as engine
 except ImportError:
@@ -21,8 +22,36 @@ def configure_v1():
     engine.ID_PREFIX="SHV1"
     engine.EVENT_PREFIX="SHADOW_V1"
 
+def load_early_into_review():
+    root=pathlib.Path("research/results")
+    early=json.loads((root/"hunter-early-signals.json").read_text())
+    review_path=root/"hunter-tactical-capital-review.json"
+    review=json.loads(review_path.read_text())
+    by={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
+    candidates=[]
+    for s in early.get("early") or []:
+        a=s.get("base")
+        if not a: continue
+        c=dict(by.get(a) or {})
+        c["asset"]=a
+        c["signal"]=s
+        # V1 samples research signals; missing V2 evidence is retained as metadata,
+        # never converted into a V1 admission blocker.
+        c.setdefault("blockers",[])
+        candidates.append(c)
+    review["candidates"]=candidates
+    review["v1_source"]="hunter-early-signals.json"
+    review["v1_early_count"]=len(candidates)
+    return review_path,review
+
 def main():
     configure_v1()
+    path,review=load_early_into_review()
+    original=engine.load
+    def v1_load(p,default=None):
+        if p==engine.REVIEW:return review
+        return original(p,default)
+    engine.load=v1_load
     engine.main()
 
 if __name__=="__main__":
