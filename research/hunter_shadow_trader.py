@@ -9,12 +9,11 @@ SUMMARY=ROOT/"hunter-shadow-summary.json"
 RULES=ROOT/"hunter-shadow-rules.json"
 LEDGER=ROOT/"hunter-shadow-candidate-ledger.json"
 FEE_BPS=10.0
-MAX_OPEN=50
-MAX_HOLD_HOURS=24.0
+MAX_OPEN=None
+MAX_HOLD_HOURS=None
 TARGET_PCT=8.0
-INVALIDATION_PCT=-6.0
+INVALIDATION_PCT=None
 NOTIONAL=1000.0
-ADD_DRAWDOWNS=(-4.0,-8.0)
 MAX_TRANCHES=3
 PROFIT_ARM_NET_PCT=2.0
 PROFIT_GIVEBACK_PCT=2.0
@@ -48,6 +47,7 @@ def choose(review,scan,open_assets,rules=None):
     for c in review.get("candidates") or []:
         sym=c.get("asset"); sig=c.get("signal") or {}; p=price(scan,sym)
         if not sym or sym in open_assets or not p:continue
+        if score < 6 or int(sig.get("independent_signal_count") or 0) < 2:continue
         ex=c.get("execution_scenario") or {}
         slip=finite(ex.get("buy_slippage_bps")) or 0.0
         score=finite(sig.get("score")) or 0.0
@@ -189,14 +189,7 @@ def main():
         pos["weighted_entry_price"]=round(avg,12);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4)
         pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);pos["mfe_net_pct"]=round(max(pos.get("mfe_net_pct",0),nr),4)
         pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat()
-        # V1 explicitly studies averaging down: add at -4% and -8% from first tranche.
-        if len(pos["tranches"])<MAX_TRANCHES:
-            first=float(pos["tranches"][0]["price"]);dd=(p/first-1)*100;threshold=ADD_DRAWDOWNS[len(pos["tranches"])-1]
-            if dd<=threshold:
-                add_tranche(pos,p,now,"V1_AVERAGE_DOWN_"+str(threshold))
-                state["events"].append({"type":"SHADOW_ADD","at":now.isoformat(),"asset":pos["asset"],"price":p,"drawdown_from_first_pct":round(dd,4)})
-                avg=weighted_entry(pos);nr=position_net_return(pos,p)*100;pos["weighted_entry_price"]=round(avg,12)
-        exit_now,nr,mfe_net,giveback=profit_exit(pos,p)
+        # V1 no longer mechanically averages down. ADD is disabled until the shared V2 revalidation path is wired and accepted.\n        exit_now,nr,mfe_net,giveback=profit_exit(pos,p)
         if exit_now:
             br=btc/pos["btc_entry_price"]-1;n=position_notional(pos);pnl=n*nr/100
             pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"PROFIT_GIVEBACK",
@@ -210,8 +203,8 @@ def main():
               "USER_ALERT_REQUIRED":True})
         else:still.append(pos)
     state["open_positions"]=still
-    slots=max(0,MAX_OPEN-len(still));open_assets={x["asset"] for x in still}
-    for score,sym,c,p,slip in choose(review,scan,open_assets,rules)[:slots]:
+    slots=None;open_assets={x["asset"] for x in still}
+    for score,sym,c,p,slip in choose(review,scan,open_assets,rules):
         pid="SH-"+now.strftime("%Y%m%dT%H%M%S")+"-"+sym+"-"+uuid.uuid4().hex[:6]
         pos={"shadow_id":pid,"asset":sym,"opened_at_utc":now.isoformat(),"scan_generation_id":scan["generation_id"],
           "entry_reference_price":p,"btc_entry_price":btc,"notional_usdt":NOTIONAL,"buy_slippage_bps":round(slip,3),
@@ -222,7 +215,7 @@ def main():
              "live_capital_blockers":c.get("blockers") or [],"execution_scenario":c.get("execution_scenario")},
           "mfe_pct":0.0,"mae_pct":0.0,"mfe_net_pct":0.0,"last_price":p,"last_marked_at_utc":now.isoformat(),
           "exit_plan":{"profit_arm_net_pct":PROFIT_ARM_NET_PCT,"profit_giveback_pct":PROFIT_GIVEBACK_PCT,
-             "profit_floor_net_pct":PROFIT_FLOOR_NET_PCT,"loss_exit":False,"average_down_drawdowns_pct":list(ADD_DRAWDOWNS)},
+             "profit_floor_net_pct":PROFIT_FLOOR_NET_PCT,"loss_exit":False,"average_down_drawdowns_pct":[]},
           "capital_authority":"NONE_SHADOW_ONLY"}
         state["open_positions"].append(pos);open_assets.add(sym)
         state["events"].append({"type":"SHADOW_BUY","at":now.isoformat(),"asset":sym,"shadow_id":pid,"price":p,
