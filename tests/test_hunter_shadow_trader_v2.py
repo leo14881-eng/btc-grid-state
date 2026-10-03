@@ -1,5 +1,5 @@
 import unittest
-from research.hunter_shadow_trader_v2 import decision,discovery_decision,bybit_channel,market_shock,weighted_entry,add,profit_protection,REVIEW_HOURS
+from research.hunter_shadow_trader_v2 import decision,discovery_decision,bybit_channel,market_shock,weighted_entry,add,profit_protection,scenario_returns,REVIEW_HOURS
 class V2CapitalDecisionTests(unittest.TestCase):
  def base(self):
   c={"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
@@ -36,6 +36,10 @@ class V2CapitalDecisionTests(unittest.TestCase):
   p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":7.0}
   self.assertTrue(profit_protection(p,104)["exit"])
  def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(24.,48.,72.))
+ def test_tranche_counterfactuals_compare_one_vs_two(self):
+  p={"tranches":[{"price":100,"notional_usdt":1000,"buy_slippage_bps":0},{"price":90,"notional_usdt":1000,"buy_slippage_bps":0}]}
+  x=scenario_returns(p,96);self.assertIn("1_tranche",x);self.assertIn("2_tranche",x)
+  self.assertGreater(x["2_tranche"]["net_return_pct"],x["1_tranche"]["net_return_pct"])
  def test_strong_profitable_signal_remains_valid(self):
   c,s,l,u=self.base();self.assertEqual(decision(c,s,l,u,"HOLD")[0],"HOLD")
  def test_right_side_chase_requires_extra_edge(self):
