@@ -17,3 +17,14 @@ def test_profit_protection_is_profit_only():
     p={"tranches":[{"price":100.0,"notional":1000.0}]}
     assert ss.net_pct(p,90.0) < 0
     assert ss.ARM_NET_PCT > ss.PROFIT_FLOOR_NET_PCT
+
+
+def test_security_type_filter_excludes_non_common_instruments():
+    assert ss._plain_common_stock("Example Corporation Common Stock")
+    assert not ss._plain_common_stock("Example ETF")
+    assert not ss._plain_common_stock("Example Warrant")
+    assert not ss._plain_common_stock("Example Preferred Stock")
+
+def test_full_market_discovery_has_no_fixed_61_symbol_constant():
+    assert not hasattr(ss, "STOCK_SYMBOLS")
+    assert ss.MAX_MARKET_WORKERS >= 8
