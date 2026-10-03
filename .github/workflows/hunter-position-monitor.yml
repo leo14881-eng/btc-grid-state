@@ -1,0 +1,54 @@
+name: Hunter 5m Position Monitor
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: hunter-shadow-state
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Refresh authoritative shadow state
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+      - name: Fast batch monitor V1 and V2 open positions
+        run: python research/hunter_position_monitor.py
+      - name: Validate state
+        run: |
+          python - <<'PY'
+          import json
+          for p in ['research/results/hunter-shadow-portfolio.json','research/results/hunter-shadow-v2-portfolio.json']:
+              d=json.load(open(p)); names=[x.get('asset') for x in d.get('open_positions') or []]
+              assert len(names)==len(set(names)), f'DUPLICATE_OPEN {p}'
+              assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
+          m=json.load(open('research/results/hunter-position-monitor.json'))
+          assert m.get('batch_endpoint')=='/api/v3/ticker/24hr' or m.get('status')=='NO_OPEN_POSITIONS'
+          print('FAST_POSITION_MONITOR_OK')
+          PY
+      - name: Persist monitored shadow state
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json research/results/hunter-position-monitor.json
+          if git diff --cached --quiet; then echo NO_POSITION_STATE_CHANGE; exit 0; fi
+          git commit -m 'state: five-minute Hunter position monitor'
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort || true
+            sleep $((attempt*2))
+          done
+          exit 1
