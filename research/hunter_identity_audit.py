@@ -79,8 +79,12 @@ def enrich_contracts(market,registry,cache,now,fetch=fetch_contract_platforms,li
     assets=registry.get("assets") or {}
     cache=dict(cache or {})
     results={};failures={};fetched=0;retry_after=None
-    for sym,fact in assets.items():
-        if not fact.get("contract_verified") or sym in collisions:continue
+    # New symbols must not require a pre-populated manual registry.
+    # Market enrichment supplies leads; verified facts tighten the mapping.
+    symbols=sorted(set(by)|set(assets))
+    for sym in symbols:
+        if sym in collisions:continue
+        fact=assets.get(sym) or {}
         ident=fact.get("identity") or {}
         row=by.get(sym)
         declared_id=ident.get("coingecko_id")
