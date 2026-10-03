@@ -32,41 +32,38 @@ def net_pct(p,price):
 def _get_json(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-position-monitor","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=20) as r: return json.load(r)
-def parse_spark(payload):
-    out={}
-    spark=payload.get("spark",{}).get("result") or []
-    for row in spark:
-        symbol=row.get("symbol"); responses=row.get("response") or []
-        if not symbol or not responses: continue
-        meta=responses[0].get("meta") or {}
-        price=meta.get("regularMarketPrice")
-        if price is None:
-            closes=(responses[0].get("indicators",{}).get("quote") or [{}])[0].get("close") or []
-            vals=[x for x in closes if x is not None]; price=vals[-1] if vals else None
-        if price is not None and float(price)>0: out[symbol]=float(price)
-    return out
-def batch_quotes(symbols):
-    prices={}; errors=[]; requests=0
-    for i in range(0,len(symbols),BATCH_SIZE):
-        if requests>=MAX_BATCHES: break
-        batch=symbols[i:i+BATCH_SIZE]
-        url="https://query1.finance.yahoo.com/v7/finance/spark?"+urllib.parse.urlencode({"symbols":",".join(batch),"range":"1d","interval":"5m"})
-        try:
-            prices.update(parse_spark(_get_json(url))); requests+=1
-        except urllib.error.HTTPError as e:
-            requests+=1; errors.append({"batch":i//BATCH_SIZE,"reason":f"HTTP_{e.code}"})
-            if e.code in (403,429): break
-        except Exception as e:
-            requests+=1; errors.append({"batch":i//BATCH_SIZE,"reason":type(e).__name__})
-        if i+BATCH_SIZE<len(symbols): time.sleep(0.35)
-    return prices,errors,requests
+def _parse_price(v):
+    try:
+        x=float(str(v).replace("$","").replace(",","").strip()); return x if x>0 else None
+    except Exception: return None
+
+def nasdaq_snapshot_quotes(symbols):
+    """One lightweight public US-stock snapshot; match only held symbols locally."""
+    wanted=set(symbols)
+    url="https://api.nasdaq.com/api/screener/stocks?"+urllib.parse.urlencode({"tableonly":"true","limit":"10000","offset":"0","download":"true"})
+    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36","Accept":"application/json, text/plain, */*","Referer":"https://www.nasdaq.com/market-activity/stocks/screener","Origin":"https://www.nasdaq.com"})
+    try:
+        with urllib.request.urlopen(req,timeout=30) as r: payload=json.load(r)
+        rows=((payload.get("data") or {}).get("rows") or [])
+        prices={}
+        for row in rows:
+            s=(row.get("symbol") or "").strip().replace(".","-")
+            if s in wanted:
+                p=_parse_price(row.get("lastsale") or row.get("lastSalePrice"))
+                if p is not None: prices[s]=p
+        return prices,[],1
+    except urllib.error.HTTPError as e:
+        return {},[{"batch":0,"reason":f"HTTP_{e.code}"}],1
+    except Exception as e:
+        return {},[{"batch":0,"reason":type(e).__name__}],1
+
 def main(force=False):
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
     positions=state.get("positions",{}); symbols=sorted(positions)
     if not force and not market_open():
-        save(HEALTH,{"updated_at":now(),"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"YAHOO_SPARK_BATCH_5M","buy_capability":False})
+        save(HEALTH,{"updated_at":now(),"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"NASDAQ_PUBLIC_BULK_SNAPSHOT","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
-    prices,errors,requests=batch_quotes(symbols)
+    prices,errors,requests=nasdaq_snapshot_quotes(symbols)
     sells=0; updated=0
     for s in list(symbols):
         price=prices.get(s)
