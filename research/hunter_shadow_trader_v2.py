@@ -5,7 +5,7 @@ ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"
 FEE_BPS=10.0; TRANCHES=(1000.0,1000.0,1000.0); ADD_DD=(-4.0,-8.0)
-TARGET=8.0; MAX_HOURS=48.0; MAX_OPEN=3
+TARGET=8.0; REVIEW_HOURS=(24.0,48.0,72.0); MAX_OPEN=3
 
 def load(p,d=None):
     try:return json.loads(p.read_text())
@@ -54,7 +54,7 @@ def build_summary(state,now):
       "closed_positions":len(closed),"wins":sum(x["net_pnl_usdt"]>0 for x in closed),"losses":sum(x["net_pnl_usdt"]<=0 for x in closed),
       "net_pnl_usdt":round(sum(x["net_pnl_usdt"] for x in closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
       "policy":{"tranches_usdt":list(TRANCHES),"add_drawdowns_from_first_entry_pct":list(ADD_DD),"price_only_stop_loss":False,
-        "target_from_weighted_average_pct":TARGET,"max_hold_hours":MAX_HOURS,"max_open":MAX_OPEN},
+        "target_from_weighted_average_pct":TARGET,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),"max_open":MAX_OPEN},
       "capital_authority":"NONE_SHADOW_ONLY"}
 def main():
     now=dt.datetime.now(dt.timezone.utc); scan=load(SCAN); review=load(REVIEW)
@@ -76,10 +76,9 @@ def main():
             add_tranche(pos,p,c,now); state["events"].append({"type":"SHADOW_V2_ADD","at":now.isoformat(),"asset":pos["asset"],
               "tranche":len(pos["tranches"]),"price":p,"weighted_entry":round(weighted_entry(pos),10)})
             raw=raw_return(pos,p)
-        hours=(now-parse(pos["opened_at_utc"])).total_seconds()/3600; reason=None
+        hours=(now-parse(pos["opened_at_utc"])).total_seconds()/3600; pos["holding_hours"]=round(hours,2); pos["time_review_due"]=next((h for h in REVIEW_HOURS if hours>=h and h not in pos.get("completed_time_reviews",[])),None); reason=None
         if not thesis_alive(c):reason="THESIS_INVALIDATION"
         elif raw>=TARGET:reason="TARGET_FROM_WEIGHTED_AVG"
-        elif hours>=MAX_HOURS:reason="TIME_EXIT"
         if reason:
             pnl=net_pnl(pos,p); notion=total_notional(pos); br=(btc/pos["btc_entry_price"]-1)*100
             pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":reason,"holding_hours":round(hours,2),
