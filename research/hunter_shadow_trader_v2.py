@@ -4,11 +4,12 @@ import datetime as dt,json,math,pathlib,uuid
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
-STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"
+STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"; GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"
 FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(24.,48.,72.); MAX_OPEN=3
 MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
 PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
 MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
+OVERFILTER_ZERO_BUY_CYCLES=3; OVERFILTER_LOOKBACK=12; OVERFILTER_MISSED_MOVE_PCT=8.; OVERFILTER_MIN_SAFE_MISSES=2
 
 def load(p,d=None):
  try:return json.loads(p.read_text())
@@ -106,6 +107,31 @@ def record(state,pos,action,now,reasons,e,p):
 def add(pos,p,e,now):
  i=len(pos["tranches"]);pos["tranches"].append({"tranche":i+1,"at":now.isoformat(),"price":p,"notional_usdt":TRANCHES[i],
   "buy_slippage_bps":e.get("buy_slippage_bps") or 0,"reason":"INITIAL" if i==0 else "LOWER_PRICE_FULL_REVALIDATION"})
+def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
+ guard=load(GUARD,{"schema":"hunter_shadow_v2_overfilter_guard_v1","cycles":[],"status":"NORMAL"})
+ safe_misses=[]
+ for c in review.get("candidates") or []:
+  a=c.get("asset"); p=price(scan,a)
+  if not a or not p:continue
+  act,reasons,e=decision(c,scan,liq,supply,"ENTRY",p=p)
+  # Candidate passed hard market-safety evidence but was rejected by strategy selectivity.
+  hard=[r for r in reasons if r.startswith("BLOCKER:") or r in ("SPREAD_UNACCEPTABLE","DEPTH_INSUFFICIENT","SLIPPAGE_UNACCEPTABLE","SUPPLY_RISK_UNVERIFIED")]
+  ch=finite(((scan.get("coins") or {}).get(a) or {}).get("change_24h_pct"))
+  if act!="BUY" and not hard and ch is not None and ch>=OVERFILTER_MISSED_MOVE_PCT:
+   safe_misses.append({"asset":a,"change_24h_pct":ch,"reasons":reasons,"estimated_rr":e.get("estimated_rr")})
+ cycles=guard.get("cycles",[]);cycles.append({"at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),"buys":buy_count,"safe_misses":safe_misses})
+ cycles=cycles[-OVERFILTER_LOOKBACK:];guard["cycles"]=cycles
+ zero=0
+ for x in reversed(cycles):
+  if x.get("buys",0)==0:zero+=1
+  else:break
+ recent_misses={m["asset"] for x in cycles[-OVERFILTER_ZERO_BUY_CYCLES:] for m in x.get("safe_misses",[])}
+ over=zero>=OVERFILTER_ZERO_BUY_CYCLES and len(recent_misses)>=OVERFILTER_MIN_SAFE_MISSES
+ guard.update({"as_of_utc":now.isoformat(),"consecutive_zero_buy_cycles":zero,"recent_safe_missed_assets":sorted(recent_misses),
+  "status":"OVER_FILTERING" if over else "NORMAL",
+  "optimizer_action":"RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST" if over else "NONE",
+  "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
+ GUARD.write_text(json.dumps(guard,ensure_ascii=False,indent=2)+"\n");return guard
 def main():
  now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW);liq=load(LIQ);supply=load(SUPPLY)
  if not scan.get("binance_complete") or review.get("scan_generation_id")!=scan.get("generation_id"):raise SystemExit("V2_INPUT_GENERATION_MISMATCH")
@@ -149,7 +175,7 @@ def main():
      "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
     record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);state["closed_positions"].append(pos);continue
   still.append(pos)
- state["open_positions"]=still;open_assets={x["asset"] for x in still};slots=max(0,MAX_OPEN-len(still))
+ state["open_positions"]=still;open_assets={x["asset"] for x in still};slots=max(0,MAX_OPEN-len(still));buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
  for c in ranked:
   if slots<=0:break
@@ -161,8 +187,9 @@ def main():
   pos={"shadow_id":"SHV2-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY"}
-  add(pos,p,e,now);record(state,pos,"BUY",now,reasons,e,p);state["open_positions"].append(pos);open_assets.add(a);slots-=1
- state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2"
+  add(pos,p,e,now);record(state,pos,"BUY",now,reasons,e,p);state["open_positions"].append(pos);open_assets.add(a);slots-=1;buy_count+=1
+ guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
+ state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
  closed=state["closed_positions"];gp=sum(max(0,x["net_pnl_usdt"]) for x in closed);gl=-sum(min(0,x["net_pnl_usdt"]) for x in closed)
  summary={"schema":"hunter_shadow_v2_summary_v2","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy":"CAPITAL_DECISION_ENGINE_V2","open_positions":len(state["open_positions"]),"closed_positions":len(closed),
@@ -171,7 +198,8 @@ def main():
    "entry_and_add_require_full_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
-   "three_tranche_adds_are_conditional_not_mechanical":True,"max_open":MAX_OPEN},
+   "three_tranche_adds_are_conditional_not_mechanical":True,"max_open":MAX_OPEN,
+   "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard["status"]}},
   "capital_authority":"NONE_SHADOW_ONLY"}
  STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
  print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(closed),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
