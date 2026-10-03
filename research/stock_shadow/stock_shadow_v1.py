@@ -98,6 +98,13 @@ def _stock_snapshot(symbol):
     sma20=sum(prices[-20:])/20
     avg_dollar_volume=sum(p*v for p,v in zip(prices[-20:],vols[-20:]))/20
     vol20=(sum(((prices[i]/prices[i-1]-1)*100)**2 for i in range(len(prices)-19,len(prices)))/19)**0.5
+    avg_volume20=sum(vols[-20:])/20
+    volume_ratio=(vols[-1]/avg_volume20) if avg_volume20 else 0.0
+    recent_highs=[x for x in highs[-20:] if x is not None]
+    recent_lows=[x for x in lows[-20:] if x is not None]
+    high20=max(recent_highs) if recent_highs else max(prices[-20:])
+    low20=min(recent_lows) if recent_lows else min(prices[-20:])
+    range_pos20=((price-low20)/(high20-low20)) if high20>low20 else 0.5
     return {"base":symbol,"price":price,"ret5":ret5,"ret20":ret20,"sma20":sma20,
             "avg_dollar_volume20":avg_dollar_volume,"daily_volatility20":vol20,
             "volume_ratio20":volume_ratio,"high20":high20,"low20":low20,"range_position20":range_pos20,
@@ -108,8 +115,8 @@ def score_candidate(m, spy=None, qqq=None):
     price=m["price"]; dv=m["avg_dollar_volume20"]; r5=m["ret5"]; r20=m["ret20"]
     if price < MIN_PRICE: rejects.append("PRICE_TOO_LOW")
     if dv < MIN_DOLLAR_VOLUME: rejects.append("LOW_DOLLAR_VOLUME")
-    if r5 > MAX_5D_RETURN: rejects.append("OVEREXTENDED_5D")
-    if r20 > MAX_20D_RETURN: rejects.append("OVEREXTENDED_20D")
+    if r5 > PARABOLIC_5D_RETURN: rejects.append("PARABOLIC_5D")
+    if r20 > PARABOLIC_20D_RETURN: rejects.append("PARABOLIC_20D")
     if r20 < MIN_20D_RETURN: rejects.append("WEAK_20D_TREND")
     if price < m["sma20"]*0.94: rejects.append("BELOW_TREND")
     score=0.0
