@@ -5,12 +5,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 OUT=Path("research/results/stock-shadow/sec-status.json")
 def main():
-    url="https://www.sec.gov/files/company_tickers.json"
-    req=urllib.request.Request(url,headers={"User-Agent":"stock-shadow research contact github.com/leo14881-eng"})
+    urls=["https://www.sec.gov/files/company_tickers.json","https://data.sec.gov/submissions/CIK0000320193.json"]
+    headers={"User-Agent":"stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com","Accept-Encoding":"gzip, deflate","Host":"www.sec.gov"}
     o={"updated_at":datetime.now(timezone.utc).isoformat(),"source":"SEC_EDGAR","ok":False}
-    try:
-        with urllib.request.urlopen(req,timeout=20) as r: d=json.load(r)
-        o.update({"ok":True,"company_index_count":len(d)})
-    except Exception as e: o["error"]=type(e).__name__
+    errors=[]
+    for url in urls:
+        try:
+            h=dict(headers)
+            if "data.sec.gov" in url: h["Host"]="data.sec.gov"
+            req=urllib.request.Request(url,headers=h)
+            with urllib.request.urlopen(req,timeout=20) as r: d=json.load(r)
+            o.update({"ok":True,"endpoint":url,"records":len(d)})
+            break
+        except Exception as e: errors.append(type(e).__name__)
+    if not o["ok"]: o["error"]="|".join(errors) or "UNKNOWN"
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(o,indent=2)+"\n"); print(json.dumps(o))
 if __name__=="__main__": main()
