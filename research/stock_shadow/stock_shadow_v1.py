@@ -69,7 +69,7 @@ def discover_us_common_stocks():
             row=dict(zip(header,line.split("|")))
             symbol=(row.get("ACT Symbol") or row.get("NASDAQ Symbol") or "").strip()
             name=row.get("Security Name","").strip()
-            if symbol and row.get("Test Issue")=="N" and row.get("ETF")=="N" and _plain_common_stock(name):
+            if symbol and "$" not in symbol and row.get("Test Issue")=="N" and row.get("ETF")=="N" and _plain_common_stock(name):
                 symbols.add(symbol)
     except Exception as e:
         source_errors.append({"source":"OTHER_LISTED","error":type(e).__name__})
