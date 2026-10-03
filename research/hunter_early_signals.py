@@ -75,9 +75,13 @@ def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
     if not a or not b or not btc1 or not btc4:return None
     rel1=a["return_pct"]-btc1["return_pct"];rel4=b["return_pct"]-btc4["return_pct"]
     accel=rel1-rel4/4.0
-    # Early attention, not a buy signal: reward relative strength and acceleration.
-    score=max(0,rel1)*2+max(0,rel4)+max(0,accel)*1.5
-    independent=sum((rel1>=0.8,rel4>=1.5,accel>=0.5))
+    m=microdata.get(sym,{}) if microdata else {}
+    va=finite(m.get("volume_acceleration")) or 0.; comp=finite(m.get("compression_ratio")) or 0.
+    m15=finite(m.get("return_15m_pct")) or 0.; rp=finite(m.get("range_position")) or .5
+    pre_volume=va>=1.35; pre_compression=comp>=1.20; pre_turn=(m15>=0 and rel1>=0.25)
+    # Early attention only: bounded micro evidence supplements, never replaces, BTC-relative evidence.
+    score=max(0,rel1)*2+max(0,rel4)+max(0,accel)*1.5 + min(max(va-1,0),2)*.5 + min(max(comp-1,0),2)*.35
+    independent=sum((rel1>=0.8,rel4>=1.5,accel>=0.5,pre_volume,pre_compression,pre_turn))
     stage="EARLY" if independent>=2 else "WATCH"
     return {"base":base,"pair":sym,"stage":stage,"score":round(score,4),
       "btc_relative_1h_pct":round(rel1,4),"btc_relative_4h_pct":round(rel4,4),
@@ -106,8 +110,8 @@ def main():
     pairs=[c["pairs"][0]["pair"] for c in (scan.get("coins") or {}).values()
            if c.get("pairs") and c["pairs"][0].get("venue")=="binance"]
     symbols=sorted(set(pairs+["BTCUSDT"]))
-    r1=rolling(symbols,"1h");r4=rolling(symbols,"4h")
-    report=build(scan,r1,r4,dt.datetime.now(dt.timezone.utc))
+    r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
+    report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc))
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]},ensure_ascii=False))
 if __name__=="__main__":main()
