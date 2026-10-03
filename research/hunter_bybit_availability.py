@@ -7,6 +7,7 @@ import datetime as dt, hashlib, hmac, json, os, pathlib, re, time, urllib.error,
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json"
+SPOT_CACHE=ROOT/"hunter-bybit-spot-cache.json"
 HOST=os.getenv("HUNTER_BYBIT_API","https://api.bybit.com")
 SPOT_PROXY=os.getenv("HUNTER_BYBIT_SPOT_PROXY","https://bybit-api-test.qinx468.workers.dev").rstrip("/")
 KEY=os.getenv("BYBIT_ALPHA_API_KEY","")
@@ -52,30 +53,39 @@ def exchange_asset(value):
     return a if re.fullmatch(r"[A-Z0-9]{1,30}",a) else None
 
 def spot_proxy_candidates():
-    """One Worker request -> official Bybit V5 full spot instrument registry."""
+    """Cache-first candidate checks. Current Worker requires a symbol; never
+    re-query fresh symbols and cap new upstream calls per cycle."""
     try: review=json.loads(REVIEW.read_text())
     except Exception: review={}
-    requested=set()
-    rejected_inputs={}
+    try: cache=json.loads(SPOT_CACHE.read_text())
+    except Exception: cache={}
+    now=dt.datetime.now(dt.timezone.utc); requested=set(); rejected_inputs={}
     for row in review.get("candidates") or []:
-        raw=row.get("asset") if isinstance(row,dict) else None
-        a=exchange_asset(raw)
+        raw=row.get("asset") if isinstance(row,dict) else None; a=exchange_asset(raw)
         if a: requested.add(a)
         elif raw: rejected_inputs[str(raw)]={"reason":"INVALID_SYMBOL","detail":"REJECTED_BEFORE_TRANSPORT"}
-    requested.update({"BTC","ETH"})
-    # Spot instruments-info returns the complete spot list; no symbol loop.
-    d=request(SPOT_PROXY+"/bybit/spot")
-    if d.get("retCode")!=0:
-        raise RuntimeError("BYBIT_PROXY_RET_"+str(d.get("retCode")))
-    rows=(d.get("result") or {}).get("list") or []
-    trading={str(x.get("baseCoin","")).upper() for x in rows
-             if x.get("quoteCoin")=="USDT" and x.get("status")=="Trading" and x.get("baseCoin")}
-    if not trading: raise RuntimeError("BYBIT_PROXY_BULK_SPOT_EMPTY")
-    ok=sorted(requested & trading)
-    failures=dict(rejected_inputs)
-    for a in sorted(requested-trading):
-        failures[a]={"reason":"INVALID_SYMBOL","detail":"NOT_TRADING_OR_NOT_LISTED"}
-    return ok,failures,len(rows)
+    requested.update({"BTC","ETH"}); ok=[]; failures=dict(rejected_inputs); network_requests=0
+    for a in sorted(requested):
+        saved=cache.get(a) or {}
+        try: age=(now-dt.datetime.fromisoformat(saved.get("as_of_utc",""))).total_seconds()/3600
+        except Exception: age=float("inf")
+        if 0 <= age <= 24:
+            if saved.get("trading"): ok.append(a)
+            else: failures[a]={"reason":"INVALID_SYMBOL","detail":"CACHED_NOT_TRADING_OR_NOT_LISTED"}
+            continue
+        if network_requests>=10:
+            failures[a]={"reason":"DEFERRED","detail":"BYBIT_NEW_SYMBOL_REQUEST_BUDGET"}; continue
+        symbol=a+"USDT"; network_requests+=1
+        try:
+            d=request(SPOT_PROXY+"/bybit/spot?"+urllib.parse.urlencode({"symbol":symbol}))
+            rows=(d.get("result") or {}).get("list") or []
+            trading=d.get("retCode")==0 and any(str(x.get("symbol","")).upper()==symbol and x.get("quoteCoin")=="USDT" and x.get("status")=="Trading" for x in rows)
+            cache[a]={"as_of_utc":now.isoformat(),"trading":bool(trading)}
+            if trading: ok.append(a)
+            else: failures[a]={"reason":"INVALID_SYMBOL","detail":"NOT_TRADING_OR_NOT_LISTED"}
+        except Exception as exc: failures[a]={"reason":classify_error(exc),"detail":type(exc).__name__+":"+str(exc)[:120]}
+    SPOT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\n")
+    return sorted(ok),failures,network_requests,len(cache)
 
 def spot_official_pages():
     """Candidate-scoped fallback when V5 is region-blocked. Uses only official Bybit spot pages."""
@@ -113,8 +123,8 @@ def main():
     # api.bybit.com. Avoid a guaranteed failing direct request: Worker is primary
     # transport, with official Bybit V5 as its upstream.
     try:
-        xs,symbol_failures,registry_count=spot_proxy_candidates()
-        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"symbol_failures":symbol_failures,"input_rejections":{k:v for k,v in symbol_failures.items() if v.get("detail")=="REJECTED_BEFORE_TRANSPORT"},"scope":"BULK_SPOT_REGISTRY_LOCAL_MATCH","registry_count":registry_count,"network_requests":1,"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
+        xs,symbol_failures,network_requests,cache_count=spot_proxy_candidates()
+        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"symbol_failures":symbol_failures,"input_rejections":{k:v for k,v in symbol_failures.items() if v.get("detail")=="REJECTED_BEFORE_TRANSPORT"},"scope":"CACHE_FIRST_CANDIDATE_MATCH","cache_count":cache_count,"network_requests":network_requests,"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot?symbol={SYMBOL}","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
     except Exception as e:
         proxy_error=type(e).__name__+":"+str(e)[:160]
         out["spot"].update({"status":"UNKNOWN","business_status":"UNKNOWN","error":proxy_error,"error_reason":classify_error(e),"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"})
