@@ -117,6 +117,17 @@ class IdentityAuditTests(unittest.TestCase):
         self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
         self.assertEqual(meta["registry_only_identity_leads"],1)
 
+    def test_market_lead_is_invalidated_by_full_registry_collision(self):
+        rows=[{"id":"abc-one","symbol":"ABC","name":"One","platforms":{}},
+              {"id":"abc-two","symbol":"ABC","name":"Two","platforms":{}}]
+        market={"coingecko":[{"id":"abc-one","symbol":"ABC","name":"One"}]}
+        enriched,_,_=audit.enrich_bulk_registry(
+            market,{"_bulk_as_of_utc":AT,"_bulk_rows":rows},NOW,
+            universe_symbols={"ABC"})
+        r=audit.build(scan(),enriched,{"assets":{}},NOW)
+        self.assertFalse(r["assets"]["ABC"]["capital_identity_pass"])
+        self.assertIn("COINGECKO_TICKER_COLLISION",r["assets"]["ABC"]["blockers"])
+
     def test_bulk_registry_collision_stays_fail_closed(self):
         rows=[{"id":"abc-one","symbol":"ABC","name":"One","platforms":{}},
               {"id":"abc-two","symbol":"ABC","name":"Two","platforms":{}}]
