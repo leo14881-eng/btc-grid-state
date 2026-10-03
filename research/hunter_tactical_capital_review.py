@@ -59,7 +59,12 @@ def main():
             elif any("UNAVAILABLE" in str(x) or "API_" in str(x) or "SOURCE_" in str(x) for x in ib): blockers.append("ASSET_IDENTITY_SOURCE_UNAVAILABLE")
             else: blockers.append("ASSET_IDENTITY_NOT_CORROBORATED")
         if not f.get("forward_supply_verified"): research_gaps.append("FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE")
-        if not (f.get("tactical_supply_risk_verified") or supply_fact.get("tactical_supply_risk_verified")): research_gaps.append("TACTICAL_SUPPLY_RESEARCH_INCOMPLETE")
+        if not (f.get("tactical_supply_risk_verified") or supply_fact.get("tactical_supply_risk_verified")): research_gaps.append("SUPPLY_DATA_INCOMPLETE")
+        # V2 supply policy: incomplete tokenomics data lowers confidence but is not
+        # itself a veto. Only affirmative evidence of a material near-term unlock
+        # may block entry.
+        material_unlock=bool(f.get("material_near_term_unlock_risk") or supply_fact.get("material_near_term_unlock_risk"))
+        if material_unlock: blockers.append("MATERIAL_NEAR_TERM_UNLOCK_RISK")
         # Identity freshness belongs to Identity Audit. Per-asset fundamental
         # timestamps are only relevant when the corresponding fact is asserted.
         if f.get("forward_supply_verified") or f.get("tactical_supply_risk_verified"):
@@ -91,15 +96,12 @@ def main():
         # One authoritative first-entry decision. Downstream V2 MUST consume this
         # action instead of independently re-deciding the same entry.
         system_blockers={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","BTC_RELATIVE_SIGNAL_MISSING","ASSET_IDENTITY_SOURCE_UNAVAILABLE"}
-        supply_complete="TACTICAL_SUPPLY_RESEARCH_INCOMPLETE" not in research_gaps
         slip=finite((execution or {}).get("buy_slippage_bps")); rr=finite((execution or {}).get("estimated_rr"))
         execution_ready=bool(execution and slip is not None and slip<=75 and rr is not None and rr>=1.5)
         if any(x in system_blockers for x in blockers):
             trade_action="SYSTEM_BLOCKED"
         elif blockers:
             trade_action="REJECT"
-        elif not supply_complete:
-            trade_action="WAIT"
         elif not early_strength or not execution_ready:
             trade_action="WAIT"
         else:
