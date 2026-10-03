@@ -4,8 +4,8 @@ import datetime as dt,json,math,pathlib,uuid
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
-STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"; GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"
-FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(24.,48.,72.); MAX_OPEN=3
+STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"; GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"; BYBIT=ROOT/"hunter-bybit-availability.json"
+FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(24.,48.,72.); DISCOVERY_MIN_SCORE=6.; DISCOVERY_MIN_INDEPENDENT=2
 MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
 PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
 MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
@@ -36,6 +36,31 @@ def evidence(c,liq,supply):
   "buy_slippage_bps":finite(ex.get("buy_slippage_bps")),"estimated_rr":finite(ex.get("estimated_rr")),
   "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),
   "blockers":hard_blockers(c)}
+def bybit_channel(bybit,a):
+ spot=bybit.get("spot") or {}; alpha=bybit.get("alpha") or {}; a=str(a or "").upper()
+ spot_v=(a in set(spot.get("symbols") or [])) if spot.get("status")=="OK" else None
+ alpha_v=(a in set(alpha.get("symbols") or [])) if alpha.get("status")=="OK" else None
+ if spot_v is True:return {"channel":"BYBIT_SPOT","spot":True,"alpha":alpha_v}
+ if alpha_v is True:return {"channel":"BYBIT_ALPHA","spot":spot_v,"alpha":True}
+ if spot_v is False and alpha_v is False:return {"channel":"NOT_ON_BYBIT","spot":False,"alpha":False}
+ return {"channel":"UNKNOWN","spot":spot_v,"alpha":alpha_v}
+
+def discovery_decision(c):
+ """Broad forward-sample gate. Execution/liquidity/supply evidence is recorded, not used to erase research samples."""
+ if not c:return "REJECT",["CANDIDATE_MISSING"]
+ e=sig(c); reasons=[]
+ if (finite(e.get("score")) or 0)<DISCOVERY_MIN_SCORE:reasons.append("DISCOVERY_SCORE_WEAK")
+ if int(e.get("independent_signal_count") or 0)<DISCOVERY_MIN_INDEPENDENT:reasons.append("DISCOVERY_INDEPENDENT_SIGNALS_WEAK")
+ blockers=[x for x in hard_blockers(c) if "IDENTITY" in x or "CONTRACT" in x]
+ if blockers:reasons += ["BLOCKER:"+x for x in blockers]
+ return ("BUY" if not reasons else "REJECT"),(reasons or ["BROAD_DISCOVERY_GATE_PASS"])
+
+def market_shock(scan):
+ btc=((scan.get("coins") or {}).get("BTC") or {}); b=finite(btc.get("change_24h_pct"))
+ vals=[finite(x.get("change_24h_pct")) for x in (scan.get("coins") or {}).values()]
+ vals=[x for x in vals if x is not None]; negative=(sum(x<0 for x in vals)/len(vals)) if vals else 0
+ return bool(b is not None and b<=-2 and negative>=.60),{"btc_change_24h_pct":b,"negative_breadth":round(negative,4)}
+
 def discovery_anchor(c):
  for k in ("first_discovery_price","first_price","discovery_price"):
   v=finite((c or {}).get(k))
@@ -80,9 +105,15 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
  if reasons:return ("EXIT" if kind!="ENTRY" and "SEVERE_BTC_RELATIVE_BREAK" in reasons else "REJECT"),reasons,e
  if kind=="ADD":
   if pos is None or p is None:return "REJECT",["ADD_CONTEXT_MISSING"],e
-  first=pos["tranches"][0]["price"]; dd=(p/first-1)*100; need=(-4.,-8.)[len(pos["tranches"])-1]
-  if dd>need:return "HOLD",[f"ADD_PRICE_NOT_FAVORABLE_{need}"],e
-  return "ADD",["LOWER_PRICE","FULL_EVIDENCE_REVALIDATED","RR_ACCEPTABLE"],e
+  avg=weighted_entry(pos)
+  if p>=avg:return "HOLD",["ADD_NOT_BELOW_CURRENT_AVERAGE"],e
+  # Adds are attainable but never mechanical: better price + thesis still alive + stabilization/relative resilience.
+  if e["score"] is None or e["score"]<DISCOVERY_MIN_SCORE:return "HOLD",["ADD_THESIS_SCORE_NOT_REVALIDATED"],e
+  if e["independent"]<DISCOVERY_MIN_INDEPENDENT:return "HOLD",["ADD_THESIS_SIGNALS_NOT_REVALIDATED"],e
+  stable=((e["rel_accel"] is not None and e["rel_accel"]>=-.5) or (e["btc_rel_1h"] is not None and e["btc_rel_1h"]>=0))
+  if not stable:return "HOLD",["ADD_WAITING_FOR_STABILIZATION"],e
+  improvement=(avg-p)/avg*100
+  return "ADD",["BETTER_PRICE","THESIS_REVALIDATED","STABILIZATION_PRESENT",f"AVERAGE_COST_IMPROVEMENT_{improvement:.2f}PCT"],e
  return ("BUY" if kind=="ENTRY" else "HOLD"),["FULL_EVIDENCE_VALIDATED"],e
 def weighted_entry(pos):
  n=sum(t["notional_usdt"] for t in pos["tranches"]);return sum(t["price"]*t["notional_usdt"] for t in pos["tranches"])/n
@@ -139,7 +170,7 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
   "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
  GUARD.write_text(json.dumps(guard,ensure_ascii=False,indent=2)+"\n");return guard
 def main():
- now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW);liq=load(LIQ);supply=load(SUPPLY)
+ now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW);liq=load(LIQ);supply=load(SUPPLY);bybit=load(BYBIT,{})
  if not scan.get("binance_complete") or review.get("scan_generation_id")!=scan.get("generation_id"):raise SystemExit("V2_INPUT_GENERATION_MISMATCH")
  btc=price(scan,"BTC")
  if not btc:raise SystemExit("BTC_PRICE_MISSING")
@@ -155,6 +186,9 @@ def main():
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
   if act=="ADD":add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
   elif act=="EXIT":
+   shock,shock_e=market_shock(scan)
+   if shock:
+    record(state,pos,"HOLD",now,["MARKET_SHOCK_REVIEW","DEFER_RELATIVE_BREAK_EXIT"],{**e,**shock_e},p);pos["market_shock_review"]=shock_e;still.append(pos);continue
    pnl=net_pnl(pos,p);notion=total_notional(pos);br=(btc/pos["btc_entry_price"]-1)*100
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"THESIS_INVALIDATION",
     "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
@@ -181,19 +215,21 @@ def main():
      "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
     record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
- state["open_positions"]=still;open_assets={x["asset"] for x in still};slots=max(0,MAX_OPEN-len(still));buy_count=0
+ state["open_positions"]=still;open_assets={x["asset"] for x in still};buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
  for c in ranked:
-  if slots<=0:break
   a=c.get("asset")
   if not a or a in open_assets:continue
-  act,reasons,e=decision(c,scan,liq,supply,"ENTRY");p=price(scan,a)
-  if act!="BUY":
+  broad,broad_reasons=discovery_decision(c);p=price(scan,a);act,reasons,e=decision(c,scan,liq,supply,"ENTRY")
+  if broad!="BUY" or not p:
+   reasons=broad_reasons if broad!="BUY" else ["CURRENT_PRICE_MISSING"]
    dummy={"asset":a,"tranches":[]};record(state,dummy,"REJECT",now,reasons,e,p);continue
   pos={"shadow_id":"SHV2-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"last_price":p,
-   "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY"}
-  add(pos,p,e,now);record(state,pos,"BUY",now,reasons,e,p);trade_event(state,pos,"BUY",now,p,"INITIAL");state["open_positions"].append(pos);open_assets.add(a);slots-=1;buy_count+=1
+   "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
+   "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
+   "executable_gate":{"pass":act=="BUY","reasons":reasons,"purpose":"AB_LABEL_NOT_DISCOVERY_BLOCKER"}}
+  add(pos,p,e,now);record(state,pos,"BUY",now,broad_reasons,e,p);trade_event(state,pos,"BUY",now,p,"IMMEDIATE_DISCOVERY_ENTRY");state["open_positions"].append(pos);open_assets.add(a);buy_count+=1
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
  state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
  closed=state["closed_positions"];gp=sum(max(0,x["net_pnl_usdt"]) for x in closed);gl=-sum(min(0,x["net_pnl_usdt"]) for x in closed)
@@ -201,10 +237,10 @@ def main():
   "strategy":"CAPITAL_DECISION_ENGINE_V2","open_positions":len(state["open_positions"]),"closed_positions":len(closed),
   "net_pnl_usdt":round(sum(x["net_pnl_usdt"] for x in closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":False,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),
-   "entry_and_add_require_full_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
+   "entry_full_execution_validation_is_label_only":True,"add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
-   "three_tranche_adds_are_conditional_not_mechanical":True,"max_open":MAX_OPEN,
+   "three_tranche_adds_are_conditional_not_mechanical":True,"max_open":None,"discovery_sample_cap":None,"first_tranche":"IMMEDIATE_MARKET_REFERENCE_ON_BROAD_DISCOVERY_GATE","bybit_channel_is_label_not_discovery_gate":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard["status"]}},
   "capital_authority":"NONE_SHADOW_ONLY"}
  STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
