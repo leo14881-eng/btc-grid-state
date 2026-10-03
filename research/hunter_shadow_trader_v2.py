@@ -6,7 +6,8 @@ SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-r
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
 STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"
 FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(24.,48.,72.); MAX_OPEN=3
-MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.\nPROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
+MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
+PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
 
 def load(p,d=None):
  try:return json.loads(p.read_text())
@@ -105,6 +106,14 @@ def main():
     "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
    record(state,pos,"EXIT",now,reasons,e,p);state["closed_positions"].append(pos);continue
   else:record(state,pos,"HOLD",now,reasons,e,p)
+  protection=profit_protection(pos,p)
+  if protection["exit"]:
+   pnl=net_pnl(pos,p);notion=total_notional(pos);br=(btc/pos["btc_entry_price"]-1)*100
+   pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"PROFIT_PROTECTION",
+    "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
+    "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4),
+    "profit_protection":protection})
+   record(state,pos,"EXIT",now,["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"],e,p);state["closed_positions"].append(pos);continue
   if raw>=TARGET:
    r1=e.get("btc_rel_1h"); r4=e.get("btc_rel_4h"); accel=e.get("rel_accel")
    runner=act!="REJECT" and r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
