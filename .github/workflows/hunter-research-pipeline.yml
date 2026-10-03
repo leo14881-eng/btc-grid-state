@@ -1,13 +1,6 @@
 name: Hunter Potential Research Pipeline
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'research/hunter_*.py'
-      - 'tests/test_hunter*.py'
-      - 'research/hunter-capital-state.json'
-      - '.github/workflows/hunter-change-full-validation.yml'
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
@@ -18,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -116,7 +109,8 @@ jobs:
           opens=state.get('open_positions') or []
           actual=[x.get('asset') for x in opens if x.get('asset')]
           duplicates=sorted({a for a in actual if actual.count(a)>1})
-          entered={x.get('asset') for x in state.get('events',[]) if x.get('type')=='SHADOW_V1_BUY' and x.get('asset')}
+          entered=set(state.get('ever_entered_assets') or [])
+          entered.update(x.get('asset') for x in state.get('events',[]) if x.get('type')=='SHADOW_V1_BUY' and x.get('asset'))
           missing=sorted(expected-(set(actual)|entered))
           assert not duplicates, f'V1_DUPLICATE_OPEN_ASSETS {duplicates}'
           assert not missing, f'V1_EARLY_COVERAGE_MISSING_NEVER_ENTERED count={len(missing)} sample={missing[:20]}'
@@ -124,6 +118,7 @@ jobs:
           assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           assert state.get('events'), 'V1_EVENTS_EMPTY'
           assert len(state.get('decisions') or []) <= 1500, 'V1_DECISION_HISTORY_UNBOUNDED'
+          assert len(state.get('events') or []) <= 5000, 'V1_EVENT_HISTORY_UNBOUNDED'
           summary=json.load(open('research/results/hunter-shadow-summary.json'))
           assert int(summary.get('open_positions') or 0)==len(opens), 'V1_SUMMARY_OPEN_MISMATCH'
           assert int(summary.get('closed_positions') or 0)==len(state.get('closed_positions') or []), 'V1_SUMMARY_CLOSED_MISMATCH'
@@ -163,6 +158,9 @@ jobs:
           current_open={x.get('asset') for x in opens if x.get('scan_generation_id')==current_generation}
           assert current_open <= buyset, f'V2_ENTRY_NOT_AUTHORIZED_BY_CAPITAL_REVIEW {sorted(current_open-buyset)}'
           assert all(x.get('trade_action') in ('BUY','WAIT','REJECT','SYSTEM_BLOCKED') for x in review.get('candidates') or []), 'V2_FINAL_ACTION_MISSING'
+          assert len(state.get('decisions') or []) <= 1500, 'V2_DECISION_HISTORY_UNBOUNDED'
+          assert len(state.get('events') or []) <= 5000, 'V2_EVENT_HISTORY_UNBOUNDED'
+          assert buyset=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}, 'V2_EXECUTABLE_BUY_MISMATCH'
           print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} executable_buy={sorted(buyset)} decisions={len(state.get("decisions") or [])}')
           PY
       - name: Reject mixed-generation research
@@ -172,18 +170,29 @@ jobs:
           python - <<'PY'
           import json,os
           s=json.load(open('research/results/hunter-cex-universe-run.json'))
-          r=json.load(open('research/results/hunter-forward-research.json'))
-          h=json.load(open('research/results/hunter-health-and-queue.json'))
-          assert s['generation_id']==os.environ['EXPECTED']
-          assert r['universe_scan_as_of_utc']==s['as_of_utc']
-          assert h['scan_as_of_utc']==s['as_of_utc']
-          print('DOWNSTREAM_GENERATION_VERIFIED',os.environ['EXPECTED'])
+          expected=os.environ['EXPECTED']; scan_at=s['as_of_utc']
+          assert s['generation_id']==expected
+          checks={
+            'early': json.load(open('research/results/hunter-early-signals.json')).get('scan_generation_id')==expected,
+            'forward': json.load(open('research/results/hunter-forward-research.json')).get('universe_scan_as_of_utc')==scan_at,
+            'identity': json.load(open('research/results/hunter-identity-audit.json')).get('scan_as_of_utc')==scan_at,
+            'liquidity': json.load(open('research/results/hunter-liquidity-probe.json')).get('scan_as_of_utc')==scan_at,
+            'supply': json.load(open('research/results/hunter-tactical-supply-risk.json')).get('scan_as_of_utc')==scan_at,
+            'capital_review': json.load(open('research/results/hunter-tactical-capital-review.json')).get('scan_generation_id')==expected,
+            'health': json.load(open('research/results/hunter-health-and-queue.json')).get('scan_as_of_utc')==scan_at,
+          }
+          bad=[k for k,v in checks.items() if not v]
+          assert not bad, f'MIXED_GENERATION_STAGES {bad}'
+          print('DOWNSTREAM_GENERATION_VERIFIED',expected,sorted(checks))
           PY
       - name: Persist downstream results without touching discovery
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
         run: |
           set -euo pipefail
+          git fetch origin main
+          git show origin/main:research/results/hunter-cex-universe-run.json > /tmp/prepersist-scan.json
+          python -c "import json,os; x=json.load(open('/tmp/prepersist-scan.json')); assert x.get('generation_id')==os.environ['EXPECTED'], f'DISCOVERY_ADVANCED_BEFORE_PERSIST expected={os.environ[\"EXPECTED\"]} actual={x.get(\"generation_id\")}'"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           for file in \
@@ -230,10 +239,32 @@ jobs:
               git show origin/main:research/results/hunter-forward-research.json > /tmp/forward.json
               git show origin/main:research/results/hunter-health-and-queue.json > /tmp/health.json
               git show origin/main:research/results/hunter-research-completion.json > /tmp/completion.json
+              git show origin/main:research/results/hunter-identity-audit.json > /tmp/identity.json
+              git show origin/main:research/results/hunter-liquidity-probe.json > /tmp/liquidity.json
+              git show origin/main:research/results/hunter-tactical-supply-risk.json > /tmp/supply.json
+              git show origin/main:research/results/hunter-tactical-capital-review.json > /tmp/review.json
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
-              python -c "import json; a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert a.get('open_positions') or a.get('events'), 'V1_SHADOW_EXPECTED_ACTIVE'; assert b.get('schema')=='hunter_shadow_v2_portfolio_v2'; assert b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'; print('V1_V2_SHADOW_ACTIVE_READBACK_OK', 'v2_open='+str(len(b.get('open_positions') or [])), 'v2_used='+str(round(used,2)))"
+              python - <<'PY'
+              import json,os
+              scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; scan_at=scan['as_of_utc']
+              assert scan.get('generation_id')==expected, 'MAIN_READBACK_DISCOVERY_GENERATION_MISMATCH'
+              assert json.load(open('/tmp/forward.json')).get('universe_scan_as_of_utc')==scan_at
+              assert json.load(open('/tmp/health.json')).get('scan_as_of_utc')==scan_at
+              assert json.load(open('/tmp/identity.json')).get('scan_as_of_utc')==scan_at
+              assert json.load(open('/tmp/liquidity.json')).get('scan_as_of_utc')==scan_at
+              assert json.load(open('/tmp/supply.json')).get('scan_as_of_utc')==scan_at
+              review=json.load(open('/tmp/review.json')); assert review.get('scan_generation_id')==expected
+              assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}
+              a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json'))
+              assert a.get('open_positions') or a.get('events'), 'V1_SHADOW_EXPECTED_ACTIVE'
+              assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
+              assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or [])
+              used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or [])
+              assert used<=20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'
+              print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))
+              PY
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
