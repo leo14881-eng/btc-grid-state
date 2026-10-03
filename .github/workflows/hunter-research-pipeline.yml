@@ -28,6 +28,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Hunter change regression gate
+        run: |
+          set -euo pipefail
+          python -m compileall -q research tests
+          python -m unittest discover -s tests -p 'test_hunter*.py' -v
+          python - <<'PY'
+          import json, pathlib
+          required=[
+            'research/results/hunter-cex-universe-run.json',
+            'research/results/hunter-shadow-portfolio.json',
+            'research/results/hunter-shadow-v2-portfolio.json',
+            'research/hunter-capital-state.json',
+          ]
+          for p in required:
+              q=pathlib.Path(p)
+              assert q.exists() and q.stat().st_size>2, f'HUNTER_REQUIRED_STATE_EMPTY {p}'
+              json.loads(q.read_text())
+          cap=json.load(open('research/hunter-capital-state.json'))
+          assert float(cap.get('capital_pool_usdt') or 0)==20000.0, 'HUNTER_CAPITAL_POOL_MISMATCH'
+          print('HUNTER_CHANGE_REGRESSION_GATE_OK')
+          PY
       - name: Capture discovery generation
         id: generation
         run: |
