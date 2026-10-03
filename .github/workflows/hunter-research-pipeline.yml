@@ -4,13 +4,6 @@ on:
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
-  push:
-    branches: [main]
-    paths:
-      - 'research/hunter_*.py'
-      - 'tests/test_hunter*.py'
-      - 'research/hunter-capital-state.json'
-      - '.github/workflows/hunter-*.yml'
 permissions:
   contents: write
 concurrency:
@@ -18,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -286,5 +279,3 @@ jobs:
 # capital-decision-v2 validation
 
 # validate left-first selective-continuation v2
-
-# manual immediate validation requested 2026-10-04
