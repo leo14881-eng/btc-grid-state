@@ -56,6 +56,7 @@ def main():
         if not ident.get("capital_identity_pass"):
             ib=ident.get("blockers") or []
             if any("MISMATCH" in str(x) or "CONFLICT" in str(x) for x in ib): blockers.append("ASSET_IDENTITY_MISMATCH")
+            elif any("UNAVAILABLE" in str(x) or "API_" in str(x) or "SOURCE_" in str(x) for x in ib): blockers.append("ASSET_IDENTITY_SOURCE_UNAVAILABLE")
             else: blockers.append("ASSET_IDENTITY_NOT_CORROBORATED")
         if not f.get("forward_supply_verified"): research_gaps.append("FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE")
         if not (f.get("tactical_supply_risk_verified") or supply_fact.get("tactical_supply_risk_verified")): research_gaps.append("TACTICAL_SUPPLY_RESEARCH_INCOMPLETE")
@@ -89,7 +90,7 @@ def main():
         early_strength=(independent>=2 and ((rel1 or 0)>=0.8 or (rel4 or 0)>=1.5) and score>=8)
         # One authoritative first-entry decision. Downstream V2 MUST consume this
         # action instead of independently re-deciding the same entry.
-        system_blockers={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","BTC_RELATIVE_SIGNAL_MISSING"}
+        system_blockers={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","BTC_RELATIVE_SIGNAL_MISSING","ASSET_IDENTITY_SOURCE_UNAVAILABLE"}
         supply_complete="TACTICAL_SUPPLY_RESEARCH_INCOMPLETE" not in research_gaps
         slip=finite((execution or {}).get("buy_slippage_bps")); rr=finite((execution or {}).get("estimated_rr"))
         execution_ready=bool(execution and slip is not None and slip<=75 and rr is not None and rr>=1.5)
@@ -123,7 +124,7 @@ def main():
       "capital_review_eligible":[x["asset"] for x in rows if x["capital_review_eligible"]],
       "executable_buy":[x["asset"] for x in rows if x["trade_action"]=="BUY"],
       "decision_counts":{k:sum(x["trade_action"]==k for x in rows) for k in ("BUY","WAIT","REJECT","SYSTEM_BLOCKED")},
-      "candidates":rows[:40]}
+      "candidates":rows}
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2))
     print(json.dumps({"reviewed":len(rows),"eligible":report["capital_review_eligible"],"executable_buy":report["executable_buy"],"decision_counts":report["decision_counts"],
       "top_blockers":{x["asset"]:x["blockers"] for x in rows[:10]}},ensure_ascii=False))
