@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent Stock Shadow V1. Broad paper sampling only; never places orders."""
+"""Independent Stock Shadow V1/V2. Broad paper sampling only; never places orders."""
 import json, math, urllib.request, concurrent.futures
 from datetime import datetime, timezone
 from pathlib import Path
