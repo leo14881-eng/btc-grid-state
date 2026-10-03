@@ -190,3 +190,5 @@ def main():
     STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({"shadow_open":[x["asset"] for x in state["open_positions"]],"closed_n":len(state["closed_positions"]),"summary":summary},ensure_ascii=False))
 if __name__=="__main__":main()
+
+# shadow-v2 parallel validation trigger
