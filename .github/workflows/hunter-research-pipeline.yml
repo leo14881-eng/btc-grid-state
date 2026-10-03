@@ -95,7 +95,11 @@ jobs:
           assert len(expected)==int(early.get('early_count') or 0), 'V1_EARLY_COUNT_MISMATCH'
           assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           assert state.get('events'), 'V1_EVENTS_EMPTY'
-          print(f'V1_EARLY_COVERAGE_OK early={len(expected)} open={len(actual)} entered_history={len(entered)} legacy_open={len(set(actual)-expected)}')
+          assert len(state.get('decisions') or []) <= 1500, 'V1_DECISION_HISTORY_UNBOUNDED'
+          summary=json.load(open('research/results/hunter-shadow-summary.json'))
+          assert int(summary.get('open_positions') or 0)==len(opens), 'V1_SUMMARY_OPEN_MISMATCH'
+          assert int(summary.get('closed_positions') or 0)==len(state.get('closed_positions') or []), 'V1_SUMMARY_CLOSED_MISMATCH'
+          print(f'V1_EARLY_COVERAGE_OK early={len(expected)} open={len(actual)} entered_history={len(entered)} legacy_open={len(set(actual)-expected)} decisions={len(state.get("decisions") or [])}')
           PY
       - name: Refresh official Bybit execution channels
         env:
