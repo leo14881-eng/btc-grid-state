@@ -242,11 +242,12 @@ def main():
     candidates.sort(key=lambda x:x[2]["score"],reverse=True)
     data_status=("OK" if market and not failed_symbols else ("PARTIAL" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"))
     # Selective V1: scan the whole market, but BUY only candidates that pass every gate.
+    newly_opened=set()
     for s,m,d in candidates:
         if s not in state["positions"]:
             tr={"at":now(),"price":m["price"],"notional":NOTIONAL,"reason":"SELECTIVE_ENTRY_V1","score":d["score"],"entry_structure":d["entry_structure"],"selection_reasons":d["reasons"],"selection_metrics":d["metrics"],"snapshot":m}
             state["positions"][s]={"symbol":s,"opened_at":tr["at"],"tranches":[tr],"entry_score":d["score"],"entry_structure":d["entry_structure"],"mfe_net_pct":net_pct({"tranches":[tr]},m["price"]),"mae_net_pct":net_pct({"tranches":[tr]},m["price"])}
-            events.append({"type":"BUY","symbol":s,**tr})
+            events.append({"type":"BUY","symbol":s,**tr}); newly_opened.add(s)
     for s,p in list(state["positions"].items()):
         m=market.get(s)
         if not m: continue
@@ -260,7 +261,7 @@ def main():
         p["position_state_v2"]=ps
         mfe=p.get("mfe_net_pct",r); giveback=mfe-r
         p["profit_protection_signal"]=bool(mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT))
-        if n<MAX_TRANCHES and ps["state"]=="HEALTHY_PULLBACK" and previous_state!="HEALTHY_PULLBACK" and decision["ready"]:
+        if s not in newly_opened and n<MAX_TRANCHES and ps["state"]=="HEALTHY_PULLBACK" and previous_state!="HEALTHY_PULLBACK" and decision["ready"]:
             tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"HEALTHY_PULLBACK_ADD_V2","score":decision["score"],"position_state":ps,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
         if ps["state"]=="BROKEN":
