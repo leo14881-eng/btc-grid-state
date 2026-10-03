@@ -1,77 +1,93 @@
 #!/usr/bin/env python3
-"""Stock Shadow V1: broad-sampling xStock paper-trading ledger. No real orders."""
-import json, os, time, urllib.request
+"""Independent Stock Shadow V1. Broad paper sampling only; never places orders."""
+import json, math, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
-STATE=ROOT/"portfolio-v1.json"
-EVENTS=ROOT/"trades-v1.json"
-SUMMARY=ROOT/"summary-v1.json"
-NOTIONAL=1000.0
-MAX_TRANCHES=5
+STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
+NOTIONAL=1000.0; MAX_TRANCHES=5
+FEE_RATE=0.002          # conservative xStock spot-side research assumption; stored explicitly
+ARM_NET_PCT=3.0
+GIVEBACK_PCT=5.0
+PROFIT_FLOOR_NET_PCT=0.5
 
 def now(): return datetime.now(timezone.utc).isoformat()
-
 def get_json(url):
-    req=urllib.request.Request(url,headers={"User-Agent":"stock-shadow-v1/1.0"})
-    with urllib.request.urlopen(req,timeout=20) as r: return json.load(r)
+    req=urllib.request.Request(url,headers={"User-Agent":"stock-shadow-research/1.0"})
+    with urllib.request.urlopen(req,timeout=25) as r: return json.load(r)
+def load(p,d):
+    try: return json.loads(p.read_text()) if p.exists() else d
+    except Exception: return d
+def save(p,o):
+    p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
 
-def bybit_tickers():
-    d=get_json("https://api.bybit.com/v5/market/tickers?category=spot")
+def bybit_universe():
+    """Discover tradable spot instruments from Bybit instrument metadata, then join tickers."""
+    instruments=get_json("https://api.bybit.com/v5/market/instruments-info?category=spot&limit=1000").get("result",{}).get("list",[])
+    tickers=get_json("https://api.bybit.com/v5/market/tickers?category=spot").get("result",{}).get("list",[])
+    tm={x.get("symbol"):x for x in tickers}
     out={}
-    for x in d.get("result",{}).get("list",[]):
-        s=x.get("symbol","")
-        if s.endswith("USDT") and ("X" in s[:-4] or s[:-4] in {"MU","SNDK"}):
-            try: out[s]={"price":float(x["lastPrice"]),"change24h":float(x.get("price24hPcnt") or 0)*100}
-            except: pass
+    for x in instruments:
+        s=x.get("symbol",""); base=x.get("baseCoin",""); quote=x.get("quoteCoin","")
+        # xStocks commonly carry X suffix; preserve known unsuffixed stock tokens too.
+        looks_xstock=(base.endswith("X") or base in {"MU","SNDK"})
+        if quote!="USDT" or not looks_xstock or s not in tm: continue
+        t=tm[s]
+        try:
+            price=float(t["lastPrice"])
+            if price<=0 or not math.isfinite(price): continue
+            out[s]={"base":base,"price":price,"change24h":float(t.get("price24hPcnt") or 0)*100,
+                    "volume24h":float(t.get("turnover24h") or 0),"status":x.get("status"),
+                    "source":"BYBIT_PUBLIC","observed_at":now()}
+        except Exception: continue
     return out
 
-def load(path,default):
-    if path.exists():
-        try: return json.loads(path.read_text())
-        except: pass
-    return default
-
-def save(path,obj):
-    path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text(json.dumps(obj,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
-
 def avg(p):
-    ts=p["tranches"]; q=sum(t["notional"]/t["price"] for t in ts)
-    return sum(t["notional"] for t in ts)/q if q else 0
-
-def pnl(p,price):
-    q=sum(t["notional"]/t["price"] for t in p["tranches"])
-    cost=sum(t["notional"] for t in p["tranches"])
-    return q*price-cost
+    q=sum(t["notional"]/t["price"] for t in p["tranches"]); c=sum(t["notional"] for t in p["tranches"])
+    return c/q if q else 0
+def qty(p): return sum(t["notional"]/t["price"] for t in p["tranches"])
+def net_pnl(p,price):
+    c=sum(t["notional"] for t in p["tranches"]); proceeds=qty(p)*price
+    fees=c*FEE_RATE+proceeds*FEE_RATE
+    return proceeds-c-fees
+def net_pct(p,price):
+    c=sum(t["notional"] for t in p["tranches"])
+    return net_pnl(p,price)/c*100 if c else 0
 
 def main():
-    ROOT.mkdir(parents=True,exist_ok=True)
-    state=load(STATE,{"version":1,"simulation_only":True,"positions":{},"closed":[]})
+    state=load(STATE,{"version":2,"simulation_only":True,"positions":{},"closed":[]})
     events=load(EVENTS,[])
-    tick=bybit_tickers()
-    # Broad V1: first observation becomes a paper BUY. No MAX_OPEN.
-    for s,m in tick.items():
+    market=bybit_universe()
+    # V1 broad net: every valid discovered xStock gets a standardized first paper tranche. No MAX_OPEN.
+    for s,m in market.items():
         if s not in state["positions"]:
-            p={"symbol":s,"opened_at":now(),"tranches":[{"at":now(),"price":m["price"],"notional":NOTIONAL,"reason":"BROAD_OBSERVATION_ENTRY","snapshot":m}],"mfe_pct":0.0,"mae_pct":0.0}
-            state["positions"][s]=p
-            events.append({"type":"BUY","at":now(),"symbol":s,"price":m["price"],"notional":NOTIONAL,"reason":"BROAD_OBSERVATION_ENTRY","snapshot":m})
-    # Track every open position; add experiments at materially cheaper prices while capped per name.
+            tr={"at":now(),"price":m["price"],"notional":NOTIONAL,"reason":"BROAD_OBSERVATION_ENTRY","snapshot":m}
+            state["positions"][s]={"symbol":s,"opened_at":tr["at"],"tranches":[tr],"mfe_net_pct":net_pct({"tranches":[tr]},m["price"]),"mae_net_pct":net_pct({"tranches":[tr]},m["price"])}
+            events.append({"type":"BUY","symbol":s,**tr})
     for s,p in list(state["positions"].items()):
-        if s not in tick: continue
-        price=tick[s]["price"]; a=avg(p); ret=(price/a-1)*100 if a else 0
-        p["mfe_pct"]=max(p.get("mfe_pct",ret),ret); p["mae_pct"]=min(p.get("mae_pct",ret),ret)
-        p["last_price"]=price; p["last_at"]=now(); p["net_pnl_usdt_before_fees"]=round(pnl(p,price),6)
-        first=p["tranches"][0]["price"]
-        n=len(p["tranches"])
-        threshold=-4*n
-        if n<MAX_TRANCHES and (price/first-1)*100 <= threshold:
-            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"DIP_ADD_EXPERIMENT","snapshot":tick[s]}
+        m=market.get(s)
+        if not m: continue
+        price=m["price"]; r=net_pct(p,price)
+        p["mfe_net_pct"]=max(p.get("mfe_net_pct",r),r); p["mae_net_pct"]=min(p.get("mae_net_pct",r),r)
+        p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6)})
+        # Broad averaging experiment: fixed observations, not a claim that averaging is optimal.
+        n=len(p["tranches"]); first=p["tranches"][0]["price"]
+        if n<MAX_TRANCHES and (price/first-1)*100 <= -4*n:
+            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"DIP_ADD_EXPERIMENT","snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr})
-    state["updated_at"]=now()
+            p["avg_price"]=avg(p)
+        # Profit protection: only sells while still net profitable after an armed MFE.
+        mfe=p.get("mfe_net_pct",r); giveback=mfe-r
+        if mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT):
+            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":"PROFIT_GIVEBACK","realized_net_pnl_usdt":round(net_pnl(p,price),6),"realized_net_return_pct":round(r,6),"profit_giveback_pct_points":round(giveback,6)})
+            state["closed"].append(closed); del state["positions"][s]
+            events.append({"type":"SELL","at":closed["closed_at"],"symbol":s,"price":price,"reason":"PROFIT_GIVEBACK","net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],"mfe_net_pct":mfe,"giveback_pct_points":giveback,"USER_ALERT_REQUIRED":True})
+    wins=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)>0]; losses=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)<=0]
+    realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
+    state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"events":len(events),"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches_per_symbol":MAX_TRANCHES,"purpose":"broad forward sampling; learn winners vs losers before tightening V2"}})
-    print(json.dumps({"tickers_seen":len(tick),"open":len(state["positions"]),"events":len(events)}))
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_seen":len(market),"open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
+    print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
