@@ -78,10 +78,10 @@ def test_position_monitor_has_no_buy_or_discovery_capability():
     assert m.BATCH_SIZE >= 20
     assert m.MAX_BATCHES <= 12
 
-def test_position_monitor_parses_batched_spark_price():
+def test_position_monitor_parses_public_snapshot_price():
     m=_load_position_monitor()
-    payload={"spark":{"result":[{"symbol":"AAPL","response":[{"meta":{"regularMarketPrice":123.45}}]}]}}
-    assert m.parse_spark(payload)=={"AAPL":123.45}
+    assert m._parse_price("$123.45") == 123.45
+    assert m._parse_price("N/A") is None
 
 def test_position_monitor_market_hours_gate():
     m=_load_position_monitor()
