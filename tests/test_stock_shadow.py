@@ -30,8 +30,9 @@ def test_full_market_discovery_has_no_fixed_61_symbol_constant():
     assert ss.MAX_MARKET_WORKERS >= 8
 
 
-def _m(price=50,dv=50_000_000,r5=4,r20=12,sma20=48,vol=2.5):
-    return {"price":price,"avg_dollar_volume20":dv,"ret5":r5,"ret20":r20,"sma20":sma20,"daily_volatility20":vol}
+def _m(price=50,dv=50_000_000,r5=4,r20=12,sma20=48,vol=2.5,volume_ratio=1.0,range_pos=0.6):
+    return {"price":price,"avg_dollar_volume20":dv,"ret5":r5,"ret20":r20,"sma20":sma20,"daily_volatility20":vol,
+            "volume_ratio20":volume_ratio,"range_position20":range_pos}
 
 def test_selector_rejects_penny_and_illiquid_noise():
     assert "PRICE_TOO_LOW" in ss.entry_decision(_m(price=0.5))["rejects"]
