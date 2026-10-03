@@ -1,14 +1,6 @@
 name: Hunter Potential Research Pipeline
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'research/hunter_shadow_trader_v2.py'
-      - 'research/hunter_early_signals.py'
-      - 'research/hunter_bybit_availability.py'
-      - 'tests/test_hunter_shadow_trader_v2.py'
-      - '.github/workflows/hunter-research-pipeline.yml'
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
@@ -19,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   research:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
