@@ -25,4 +25,6 @@ class V2CapitalDecisionTests(unittest.TestCase):
   c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};e=decision(c,s,l,u,"ADD",p,96)[2]
   import datetime as dt;add(p,96,e,dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
  def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(24.,48.,72.))
+ def test_strong_profitable_signal_remains_valid(self):
+  c,s,l,u=self.base();self.assertEqual(decision(c,s,l,u,"HOLD")[0],"HOLD")
 if __name__=="__main__":unittest.main()
