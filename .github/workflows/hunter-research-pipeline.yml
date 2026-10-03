@@ -84,6 +84,18 @@ jobs:
             sleep $((attempt*2))
           done
           exit 1
+      - name: Diagnose Cloudflare Worker execution colo
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          url="https://bybit-api-test.qinx468.workers.dev/debug"
+          try:
+              with urllib.request.urlopen(url, timeout=15) as r:
+                  print("WORKER_DEBUG", r.status, r.read().decode())
+          except Exception as e:
+              print("WORKER_DEBUG_ERROR", repr(e))
+          PY
+
       - name: Refresh official Bybit execution channels
         env:
           BYBIT_ALPHA_API_KEY: ${{ secrets.BYBIT_ALPHA_API_KEY }}
