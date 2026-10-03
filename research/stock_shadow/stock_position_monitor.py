@@ -93,10 +93,10 @@ def main(force=False):
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6),"mfe_net_pct":mfe,"mae_net_pct":mae})
         updated+=1
         giveback=mfe-r
-        if mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT):
-            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":"PROFIT_GIVEBACK_POSITION_MONITOR","realized_net_pnl_usdt":round(net_pnl(p,price),6),"realized_net_return_pct":round(r,6),"profit_giveback_pct_points":round(giveback,6)})
-            state.setdefault("closed",[]).append(closed); del positions[s]; sells+=1
-            events.append({"type":"SELL","at":closed["closed_at"],"symbol":s,"price":price,"reason":closed["exit_reason"],"net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],"mfe_net_pct":mfe,"giveback_pct_points":giveback,"USER_ALERT_REQUIRED":True})
+        # V2: five-minute quotes update MFE/MAE and arm profit protection, but cannot sell on giveback alone.
+        # Structural exits are decided by the full position-state engine with market-relative evidence.
+        p["profit_protection_signal"]=bool(mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT))
+        p["profit_giveback_pct_points"]=round(giveback,6)
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
