@@ -12,9 +12,11 @@ MAX_5D_RETURN=18.0; MAX_20D_RETURN=45.0; MAX_SMA20_EXTENSION=18.0; MIN_20D_RETUR
 PARABOLIC_5D_RETURN=35.0; PARABOLIC_20D_RETURN=80.0; PARABOLIC_SMA20_EXTENSION=30.0
 EARLY_MIN_SCORE=62.0; EARLY_MAX_20D_RETURN=18.0; EARLY_MAX_SMA20_EXTENSION=8.0
 FEE_RATE=0.002          # conservative xStock spot-side research assumption; stored explicitly
-ARM_NET_PCT=3.0
-GIVEBACK_PCT=5.0
-PROFIT_FLOOR_NET_PCT=0.5
+ARM_NET_PCT=1.0
+PROFIT_FLOOR_NET_PCT=0.10
+# Swing book: once a trade has meaningful net profit, protect a positive net exit.
+# Allowed giveback shrinks as MFE grows; all values are AFTER buy/sell fees.
+PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def get_json(url):
@@ -173,6 +175,34 @@ def entry_decision(m, spy=None, qqq=None):
     return {"ready":ready,"score":score,"reasons":reasons,"rejects":rejects,"metrics":metrics,"entry_structure":structure}
 
 
+def profit_floor_net_pct(mfe):
+    """Dynamic positive net-profit floor. Returns None until protection is armed."""
+    if mfe < ARM_NET_PCT: return None
+    for threshold, giveback_fraction in PROFIT_GIVEBACK_BANDS:
+        if mfe >= threshold:
+            return max(PROFIT_FLOOR_NET_PCT, mfe*(1.0-giveback_fraction))
+    return None
+
+def recovery_add_signal(p, m, ps):
+    """ADD only after a real pullback has happened and the position is improving again."""
+    price=m["price"]
+    high=max(float(p.get("swing_high_price",price)),price)
+    p["swing_high_price"]=high
+    dd=(price/high-1.0)*100 if high else 0.0
+    if dd < -1.0:
+        low=min(float(p.get("pullback_low_price",price)),price)
+        p["pullback_low_price"]=low
+        p["pullback_seen"]=True
+    low=p.get("pullback_low_price")
+    recovery=((price/low-1.0)*100) if low else 0.0
+    prev_rel=(p.get("position_state_v2") or {}).get("market_relative20")
+    rel_improving=prev_rel is not None and ps["market_relative20"] > prev_rel
+    price_improving=bool(low and price > low)
+    eligible=bool(p.get("pullback_seen") and ps["state"]!="BROKEN" and price_improving and rel_improving)
+    return {"eligible":eligible,"drawdown_from_swing_high_pct":round(dd,4),
+            "recovery_from_pullback_low_pct":round(recovery,4),"relative_improving":rel_improving,
+            "price_improving":price_improving}
+
 def position_state_v2(m, spy=None, qqq=None):
     """Small, explainable state engine. No single indicator can mark a position BROKEN."""
     price=m["price"]; sma=m["sma20"]; r5=m["ret5"]; r20=m["ret20"]
@@ -254,25 +284,41 @@ def main():
         price=m["price"]; r=net_pct(p,price)
         p["mfe_net_pct"]=max(p.get("mfe_net_pct",r),r); p["mae_net_pct"]=min(p.get("mae_net_pct",r),r)
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6)})
-        # V2: ADD and SELL share the same position-state engine; price loss alone triggers neither.
+        # V3 lifecycle: worsening never ADDs; ADD waits for pullback + observable recovery.
         n=len(p["tranches"]); decision=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
         ps=position_state_v2(m,bench.get("SPY"),bench.get("QQQ"))
-        previous_state=(p.get("position_state_v2") or {}).get("state")
+        recovery=recovery_add_signal(p,m,ps)
+        p["recovery_add_signal"]=recovery
         p["position_state_v2"]=ps
         mfe=p.get("mfe_net_pct",r); giveback=mfe-r
-        p["profit_protection_signal"]=bool(mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT))
-        if s not in newly_opened and n<MAX_TRANCHES and ps["state"]=="HEALTHY_PULLBACK" and previous_state!="HEALTHY_PULLBACK" and decision["ready"]:
-            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"HEALTHY_PULLBACK_ADD_V2","score":decision["score"],"position_state":ps,"snapshot":m}
+        floor=profit_floor_net_pct(mfe)
+        p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
+        p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
+        if s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
+            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
-        if ps["state"]=="BROKEN":
-            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":"STRUCTURE_BROKEN_V2","realized_net_pnl_usdt":round(net_pnl(p,price),6),"realized_net_return_pct":round(r,6),"profit_giveback_pct_points":round(giveback,6),"post_exit_tracking_due_days":[1,3,5,10]})
+            p["pullback_seen"]=False; p["pullback_low_price"]=None
+        exit_reason=None
+        if p["profit_protection_signal"]:
+            exit_reason="NET_PROFIT_GIVEBACK_V3"
+        elif ps["state"]=="BROKEN":
+            exit_reason="STRUCTURE_BROKEN_V3"
+        if exit_reason:
+            final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
+            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":exit_reason,
+                "realized_net_pnl_usdt":round(final_pnl,6),"realized_net_return_pct":round(final_r,6),
+                "gross_price_return_pct":round((price/avg(p)-1)*100,6),"estimated_total_fees_usdt":round((sum(t["notional"] for t in p["tranches"])*FEE_RATE)+(qty(p)*price*FEE_RATE),6),
+                "profit_giveback_pct_points":round(giveback,6),"post_exit_tracking_due_days":[1,3,5,10]})
             state["closed"].append(closed); del state["positions"][s]
-            events.append({"type":"SELL","at":closed["closed_at"],"symbol":s,"price":price,"reason":"STRUCTURE_BROKEN_V2","net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],"position_state":ps,"USER_ALERT_REQUIRED":True})
+            events.append({"type":"SELL","at":closed["closed_at"],"symbol":s,"price":price,"reason":exit_reason,
+                "net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],
+                "gross_price_return_pct":closed["gross_price_return_pct"],"estimated_total_fees_usdt":closed["estimated_total_fees_usdt"],
+                "position_state":ps,"USER_ALERT_REQUIRED":True})
     wins=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)>0]; losses=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)<=0]
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V2","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
