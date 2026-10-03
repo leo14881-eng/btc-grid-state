@@ -35,7 +35,7 @@ class V2CapitalDecisionTests(unittest.TestCase):
  def test_profit_protection_caps_large_giveback(self):
   p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":7.0}
   self.assertTrue(profit_protection(p,104)["exit"])
- def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(24.,48.,72.))
+ def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(1.,6.,24.,48.,72.))
  def test_tranche_counterfactuals_compare_one_vs_two(self):
   p={"tranches":[{"price":100,"notional_usdt":1000,"buy_slippage_bps":0},{"price":90,"notional_usdt":1000,"buy_slippage_bps":0}]}
   x=scenario_returns(p,96);self.assertIn("1_tranche",x);self.assertIn("2_tranche",x)
