@@ -38,8 +38,8 @@ def evidence(c,liq,supply):
   "blockers":hard_blockers(c)}
 def bybit_channel(bybit,a):
  spot=bybit.get("spot") or {}; alpha=bybit.get("alpha") or {}; a=str(a or "").upper()
- spot_v=(a in set(spot.get("symbols") or [])) if spot.get("status")=="OK" else None
- alpha_v=(a in set(alpha.get("symbols") or [])) if alpha.get("status")=="OK" else None
+ spot_v=(a in set(spot.get("symbols") or [])) if str(spot.get("status") or "").startswith("OK") else None
+ alpha_v=(a in set(alpha.get("symbols") or [])) if str(alpha.get("status") or "").startswith("OK") else None
  if spot_v is True:return {"channel":"BYBIT_SPOT","spot":True,"alpha":alpha_v}
  if alpha_v is True:return {"channel":"BYBIT_ALPHA","spot":spot_v,"alpha":True}
  if spot_v is False and alpha_v is False:return {"channel":"NOT_ON_BYBIT","spot":False,"alpha":False}
