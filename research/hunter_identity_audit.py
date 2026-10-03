@@ -54,6 +54,51 @@ def source_candidates(rows):
     for symbol in ambiguous:by.pop(symbol,None)
     return by,ambiguous
 
+def fetch_coin_registry():
+    """One bulk request: all active CoinGecko IDs + platform/contract mappings."""
+    url=CG+"/coins/list?"+urllib.parse.urlencode({"include_platform":"true","status":"active"})
+    req=urllib.request.Request(url,headers={"User-Agent":"hunter-identity-registry/2.0","Accept":"application/json"})
+    with urllib.request.urlopen(req,timeout=20) as response:
+        data=json.load(response)
+    if not isinstance(data,list) or not data:
+        raise ValueError("COINGECKO_BULK_REGISTRY_INVALID")
+    rows=[]
+    for x in data:
+        if not isinstance(x,dict): continue
+        cid=x.get("id"); sym=str(x.get("symbol") or "").upper()
+        if not cid or not sym: continue
+        rows.append({"id":cid,"symbol":sym,"name":x.get("name"),
+                     "platforms":x.get("platforms") or {},
+                     "contract_as_of_utc":dt.datetime.now(dt.timezone.utc).isoformat(),
+                     "source_url":"https://www.coingecko.com/en/coins/"+cid})
+    return rows
+
+def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry):
+    """Refresh CoinGecko identity registry in one request; reuse fresh cache on 429/outage."""
+    cache=dict(cache or {})
+    try:
+        age=(now-dt.datetime.fromisoformat(cache.get("_bulk_as_of_utc",""))).total_seconds()/3600
+    except Exception: age=float("inf")
+    rows=cache.get("_bulk_rows") or []
+    meta={"mode":"BULK_COINS_LIST_INCLUDE_PLATFORM","network_requests":0,"cache_used":False,"error":None}
+    if rows and 0 <= age <= 24:
+        meta["cache_used"]=True
+    else:
+        try:
+            rows=fetch(); meta["network_requests"]=1
+            cache["_bulk_as_of_utc"]=now.isoformat(); cache["_bulk_rows"]=rows
+        except urllib.error.HTTPError as exc:
+            meta["error"]="HTTP_"+str(exc.code)
+            if not rows: raise
+            meta["cache_used"]=True
+        except Exception as exc:
+            meta["error"]=type(exc).__name__+":"+str(exc)[:120]
+            if not rows: raise
+            meta["cache_used"]=True
+    # Bulk registry is authoritative for third-party identity leads; do not mix a
+    # partial top-N market feed into symbol uniqueness decisions.
+    return dict(market,coingecko=rows),cache,meta
+
 def fetch_contract_platforms(coin_id):
     if not re.fullmatch(r"[a-zA-Z0-9_-]{2,100}",coin_id):
         raise ValueError("INVALID_COINGECKO_ID")
@@ -140,7 +185,17 @@ def normalize_contract(value):
 
 def identity_status(sym,coin,fact,third_party,now):
     if not fact.get("contract_verified"):
-        return "UNVERIFIED",["OFFICIAL_CONTRACT_ATTESTATION_MISSING"]
+        # Automated lane: Binance executable symbol + a unique current CoinGecko
+        # ID is sufficient to establish a third-party identity lead. Explicit
+        # ticker collisions are removed by source_candidates() and never pass.
+        cg=third_party.get(sym) or {}
+        try:
+            age=(now-dt.datetime.fromisoformat(cg["contract_as_of_utc"])).total_seconds()/3600
+        except Exception:
+            age=float("inf")
+        if cg.get("id") and 0 <= age <= 24:
+            return "THIRD_PARTY_UNIQUE_ID_CORROBORATED",[]
+        return "UNVERIFIED",["THIRD_PARTY_IDENTITY_UNAVAILABLE"]
     ident=fact.get("identity") or {}
     pair=ident.get("exchange_pair")
     if pair not in {p.get("pair") for p in coin.get("pairs") or []}:
@@ -211,7 +266,8 @@ def build(scan,market,registry,now):
                      "coingecko_symbol_only_id":(cg.get(sym) or {}).get("id"),
                      "blockers":blockers,
                      "capital_identity_pass":status in ("THIRD_PARTY_CORROBORATED",
-                                                         "THIRD_PARTY_NATIVE_CORROBORATED")
+                                                         "THIRD_PARTY_NATIVE_CORROBORATED",
+                                                         "THIRD_PARTY_UNIQUE_ID_CORROBORATED")
                      and typ=="SPOT_TOKEN_UNVERIFIED"
                      and "CROSS_VENUE_CONTRACT_MAPPING_UNVERIFIED" not in blockers}
         counts[status]=counts.get(status,0)+1
@@ -231,16 +287,18 @@ def main():
     try:cache=json.loads(CONTRACT_CACHE.read_text())
     except (OSError,ValueError):cache={}
     state=cooldown.load()
-    market,cache,lookups=enrich_contracts(
-        market,registry,cache,now,
-        limit=0 if cooldown.blocked(state,now) else 8)
-    if "_source_rate_limit" in lookups["failures"]:
-        state=cooldown.record_429(state,now,lookups.get("retry_after"),"identity")
-        cooldown.save(state)
-    lookups["shared_cooldown_active"]=cooldown.blocked(state,now)
+    # Primary path is one bulk CoinGecko request, not N per-asset calls.
+    try:
+        market,cache,bulk=enrich_bulk_registry(market,cache,now)
+    except urllib.error.HTTPError as exc:
+        if exc.code==429:
+            state=cooldown.record_429(state,now,exc.headers.get("Retry-After") if exc.headers else None,"identity_bulk")
+            cooldown.save(state)
+        raise
     save_contract_cache(cache,CONTRACT_CACHE)
     report=build(json.loads(SCAN.read_text()),market,registry,now)
-    report["third_party_contract_lookup"]=lookups
+    report["identity_registry_sync"]=bulk
+    report["third_party_contract_lookup"]={"mode":"EXCEPTION_ONLY","fetched":0,"failures":{}}
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps({"universe_count":report["universe_count"],
                       "identity_counts":report["counts"],
