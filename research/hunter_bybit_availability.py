@@ -7,7 +7,7 @@ import datetime as dt, hashlib, hmac, json, os, pathlib, time, urllib.error, url
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json"
-HOST=os.getenv("HUNTER_BYBIT_API","https://bybit-api-test.qinx468.workers.dev/bybit")
+HOST=os.getenv("HUNTER_BYBIT_API","https://api.bybit.com")
 SPOT_PROXY=os.getenv("HUNTER_BYBIT_SPOT_PROXY","https://bybit-api-test.qinx468.workers.dev").rstrip("/")
 KEY=os.getenv("BYBIT_ALPHA_API_KEY","")
 SECRET=os.getenv("BYBIT_ALPHA_API_SECRET","")
