@@ -65,3 +65,26 @@ def test_hybrid_engine_keeps_right_side_entry():
     d=ss.entry_decision(_m(price=80,dv=200_000_000,r5=6,r20=18,sma20=75,vol=2.5),spy,qqq)
     assert d["ready"] is True
     assert d["entry_structure"] == "MOMENTUM_TREND"
+
+
+def _load_position_monitor():
+    p=Path("research/stock_shadow/stock_position_monitor.py")
+    spec=importlib.util.spec_from_file_location("spm",p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+
+def test_position_monitor_has_no_buy_or_discovery_capability():
+    m=_load_position_monitor()
+    assert not hasattr(m,"stock_universe")
+    assert not hasattr(m,"entry_decision")
+    assert m.BATCH_SIZE >= 20
+    assert m.MAX_BATCHES <= 12
+
+def test_position_monitor_parses_batched_spark_price():
+    m=_load_position_monitor()
+    payload={"spark":{"result":[{"symbol":"AAPL","response":[{"meta":{"regularMarketPrice":123.45}}]}]}}
+    assert m.parse_spark(payload)=={"AAPL":123.45}
+
+def test_position_monitor_market_hours_gate():
+    m=_load_position_monitor()
+    from datetime import datetime, timezone
+    assert m.market_open(datetime(2026,10,5,14,0,tzinfo=timezone.utc)) is True
+    assert m.market_open(datetime(2026,10,4,14,0,tzinfo=timezone.utc)) is False
