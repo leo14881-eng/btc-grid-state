@@ -25,7 +25,7 @@ EARLY=ROOT/"hunter-early-signals.json"
 OUT=ROOT/"hunter-liquidity-probe.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 PER_LANE=6
-MAX_BOOKS=160
+# No fixed book-count cap: every current capital-review signal must receive an order-book attempt.
 
 def read(path):
     return json.loads(path.read_text())
@@ -69,14 +69,14 @@ def targets(dossiers,scan,early=None):
     selected=[];seen=set()
     early_names=[x.get("base") for x in ((early or {}).get("early") or []) if x.get("base")]
     for lane,names,quota in (
-        ("capital_early_signals",early_names,MAX_BOOKS),
+        ("capital_early_signals",early_names,len(early_names)),
         ("reviewed_watchlist",dossiers.get("reviewed_watchlist") or [],6),
         ("early_entry_watchlist",dossiers.get("early_entry_watchlist") or [],PER_LANE),
         ("continuation_watchlist",dossiers.get("continuation_watchlist") or [],PER_LANE),
-        ("overflow",[d["asset"] for d in dossiers.get("dossiers") or []],MAX_BOOKS)):
+        ("overflow",[d["asset"] for d in dossiers.get("dossiers") or []],len(dossiers.get("dossiers") or []))):
         n=0
         for sym in names:
-            if n>=quota or len(selected)>=MAX_BOOKS:break
+            if n>=quota:break
             coin=coins.get(sym) or {}
             pairs=[p for p in coin.get("pairs") or [] if p.get("venue")=="binance"]
             if not pairs or sym in seen:continue
