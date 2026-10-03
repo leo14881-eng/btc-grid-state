@@ -18,10 +18,10 @@
           "reason": "INITIAL"
         }
       ],
-      "mfe_pct": 1.263,
+      "mfe_pct": 2.0555,
       "mae_pct": 0.0,
-      "last_price": 0.04089,
-      "last_marked_at_utc": "2026-10-03T23:03:39.972326+00:00",
+      "last_price": 0.04121,
+      "last_marked_at_utc": "2026-10-03T23:04:41.813928+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -37,7 +37,7 @@
         "source": "CAPITAL_REVIEW_FINAL_ACTION",
         "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
       },
-      "holding_hours": 0.13
+      "holding_hours": 0.14
     },
     {
       "shadow_id": "SHV2-20261003T230244-NEXO-8dc4a0",
@@ -53,12 +53,20 @@
           "notional_usdt": 1000.0,
           "buy_slippage_bps": 17.082,
           "reason": "INITIAL"
+        },
+        {
+          "tranche": 2,
+          "at": "2026-10-03T23:04:41.813928+00:00",
+          "price": 0.861,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 22.374,
+          "reason": "LOWER_PRICE_FULL_REVALIDATION"
         }
       ],
       "mfe_pct": 0.0,
-      "mae_pct": 0.0,
-      "last_price": 0.862,
-      "last_marked_at_utc": "2026-10-03T23:03:39.972326+00:00",
+      "mae_pct": -0.116,
+      "last_price": 0.861,
+      "last_marked_at_utc": "2026-10-03T23:04:41.813928+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -74,7 +82,43 @@
         "source": "CAPITAL_REVIEW_FINAL_ACTION",
         "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
       },
-      "holding_hours": 0.02
+      "holding_hours": 0.03
+    },
+    {
+      "shadow_id": "SHV2-20261003T230441-XTZ-c84917",
+      "asset": "XTZ",
+      "opened_at_utc": "2026-10-03T23:04:41.813928+00:00",
+      "scan_generation_id": "20261003T230312229436Z",
+      "btc_entry_price": 84782.01,
+      "tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-03T23:04:41.813928+00:00",
+          "price": 0.3211,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 17.014,
+          "reason": "INITIAL"
+        }
+      ],
+      "mfe_pct": 0.0,
+      "mae_pct": 0.0,
+      "last_price": 0.3211,
+      "last_marked_at_utc": "2026-10-03T23:04:41.813928+00:00",
+      "capital_authority": "NONE_SHADOW_ONLY",
+      "discovery_gate": "BROAD_FORWARD_SAMPLE",
+      "execution_channel": {
+        "channel": "BYBIT_SPOT",
+        "spot": true,
+        "alpha": false
+      },
+      "executable_gate": {
+        "pass": true,
+        "reasons": [
+          "FULL_EVIDENCE_VALIDATED"
+        ],
+        "source": "CAPITAL_REVIEW_FINAL_ACTION",
+        "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
+      }
     }
   ],
   "closed_positions": [],
@@ -98,10 +142,30 @@
       "tranches": 1,
       "notional_usdt": 1000.0,
       "reason": "EXECUTABLE_ENTRY"
+    },
+    {
+      "type": "SHADOW_V2_ADD",
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "asset": "NEXO",
+      "shadow_id": "SHV2-20261003T230244-NEXO-8dc4a0",
+      "price": 0.861,
+      "tranches": 2,
+      "notional_usdt": 2000.0,
+      "reason": "LOWER_PRICE_FULL_REVALIDATION"
+    },
+    {
+      "type": "SHADOW_V2_BUY",
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "asset": "XTZ",
+      "shadow_id": "SHV2-20261003T230441-XTZ-c84917",
+      "price": 0.3211,
+      "tranches": 1,
+      "notional_usdt": 1000.0,
+      "reason": "EXECUTABLE_ENTRY"
     }
   ],
-  "updated_at_utc": "2026-10-03T23:03:39.972326+00:00",
-  "last_cycle_generation_id": "20261003T230151968304Z",
+  "updated_at_utc": "2026-10-03T23:04:41.813928+00:00",
+  "last_cycle_generation_id": "20261003T230312229436Z",
   "decisions": [
     {
       "at": "2026-10-03T21:22:19.618362+00:00",
@@ -26269,12 +26333,3298 @@
       },
       "tranches": 0,
       "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": "SHV2-20261003T225608-S-6105bb",
+      "asset": "S",
+      "action": "HOLD",
+      "price": 0.04121,
+      "reasons": [
+        "ADD_NOT_BELOW_CURRENT_AVERAGE"
+      ],
+      "evidence": {
+        "asset": "S",
+        "score": 20.6668,
+        "independent": 5,
+        "btc_rel_1h": 4.2909,
+        "btc_rel_4h": 7.8499,
+        "rel_accel": 2.3284,
+        "spread_bps": 4.834,
+        "bid_depth_2pct_usdt": 92327.66,
+        "ask_depth_2pct_usdt": 58438.07,
+        "buy_slippage_bps": 6.659,
+        "estimated_rr": 1.776,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": []
+      },
+      "tranches": 1,
+      "notional_usdt": 1000.0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": "SHV2-20261003T230244-NEXO-8dc4a0",
+      "asset": "NEXO",
+      "action": "ADD",
+      "price": 0.861,
+      "reasons": [
+        "BETTER_PRICE",
+        "THESIS_REVALIDATED",
+        "STABILIZATION_PRESENT",
+        "AVERAGE_COST_IMPROVEMENT_0.12PCT"
+      ],
+      "evidence": {
+        "asset": "NEXO",
+        "score": 9.1462,
+        "independent": 5,
+        "btc_rel_1h": 1.9329,
+        "btc_rel_4h": 2.2096,
+        "rel_accel": 1.3805,
+        "spread_bps": 23.229,
+        "bid_depth_2pct_usdt": 106233.01,
+        "ask_depth_2pct_usdt": 93987.82,
+        "buy_slippage_bps": 22.374,
+        "estimated_rr": 1.718,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": []
+      },
+      "tranches": 2,
+      "notional_usdt": 2000.0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "STRK",
+      "action": "WAIT",
+      "price": 0.05438,
+      "reasons": [
+        "WAIT",
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
+      ],
+      "evidence": {
+        "asset": "STRK",
+        "score": 16.6485,
+        "independent": 4,
+        "btc_rel_1h": 3.7449,
+        "btc_rel_4h": 4.9939,
+        "rel_accel": 2.4965,
+        "spread_bps": 7.416,
+        "bid_depth_2pct_usdt": 100285.1,
+        "ask_depth_2pct_usdt": 90241.82,
+        "buy_slippage_bps": 7.526,
+        "estimated_rr": 1.801,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BTTC",
+      "action": "SYSTEM_BLOCKED",
+      "price": 3.7e-07,
+      "reasons": [
+        "SYSTEM_BLOCKED",
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+        "SPREAD_EXCEEDS_50_BPS"
+      ],
+      "evidence": {
+        "asset": "BTTC",
+        "score": 10.996,
+        "independent": 4,
+        "btc_rel_1h": 2.6238,
+        "btc_rel_4h": 2.9005,
+        "rel_accel": 1.8987,
+        "spread_bps": 266.667,
+        "bid_depth_2pct_usdt": 297600.95,
+        "ask_depth_2pct_usdt": 331808.48,
+        "buy_slippage_bps": 133.333,
+        "estimated_rr": 1.251,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "SPREAD_EXCEEDS_50_BPS"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AT",
+      "action": "REJECT",
+      "price": 0.1338,
+      "reasons": [
+        "RELATIVE_MOMENTUM_DECELERATING",
+        "DEPTH_INSUFFICIENT",
+        "SUPPLY_RISK_UNVERIFIED",
+        "BLOCKER:DEPTH_BELOW_30K_USDT"
+      ],
+      "evidence": {
+        "asset": "AT",
+        "score": 10.0642,
+        "independent": 3,
+        "btc_rel_1h": 0.8302,
+        "btc_rel_4h": 7.7038,
+        "rel_accel": -1.0958,
+        "spread_bps": 7.488,
+        "bid_depth_2pct_usdt": 23043.39,
+        "ask_depth_2pct_usdt": 11113.52,
+        "buy_slippage_bps": 36.074,
+        "estimated_rr": 1.704,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "DEPTH_BELOW_30K_USDT"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": "SHV2-20261003T230441-XTZ-c84917",
+      "asset": "XTZ",
+      "action": "BUY",
+      "price": 0.3211,
+      "reasons": [
+        "FULL_EVIDENCE_VALIDATED"
+      ],
+      "evidence": {
+        "asset": "XTZ",
+        "score": 9.3898,
+        "independent": 5,
+        "btc_rel_1h": 1.9774,
+        "btc_rel_4h": 2.3503,
+        "rel_accel": 1.3898,
+        "spread_bps": 3.107,
+        "bid_depth_2pct_usdt": 130173.97,
+        "ask_depth_2pct_usdt": 109875.19,
+        "buy_slippage_bps": 17.014,
+        "estimated_rr": 1.771,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": []
+      },
+      "tranches": 1,
+      "notional_usdt": 1000.0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ALPINE",
+      "action": "REJECT",
+      "price": 0.363,
+      "reasons": [
+        "DEPTH_INSUFFICIENT",
+        "SUPPLY_RISK_UNVERIFIED",
+        "BLOCKER:DEPTH_BELOW_30K_USDT"
+      ],
+      "evidence": {
+        "asset": "ALPINE",
+        "score": 8.3187,
+        "independent": 5,
+        "btc_rel_1h": 1.6017,
+        "btc_rel_4h": 2.7401,
+        "rel_accel": 0.9167,
+        "spread_bps": 27.51,
+        "bid_depth_2pct_usdt": 19279.2,
+        "ask_depth_2pct_usdt": 20153.49,
+        "buy_slippage_bps": 13.755,
+        "estimated_rr": 1.62,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "DEPTH_BELOW_30K_USDT"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SOMI",
+      "action": "WAIT",
+      "price": 0.2118,
+      "reasons": [
+        "WAIT",
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
+      ],
+      "evidence": {
+        "asset": "SOMI",
+        "score": 6.2814,
+        "independent": 4,
+        "btc_rel_1h": 1.2608,
+        "btc_rel_4h": 2.9634,
+        "rel_accel": 0.5199,
+        "spread_bps": 9.461,
+        "bid_depth_2pct_usdt": 68182.8,
+        "ask_depth_2pct_usdt": 66792.03,
+        "buy_slippage_bps": 21.452,
+        "estimated_rr": 1.728,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "COTI",
+      "action": "WAIT",
+      "price": 0.01399,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "COTI",
+        "score": 5.945,
+        "independent": 3,
+        "btc_rel_1h": 1.1512,
+        "btc_rel_4h": 3.0654,
+        "rel_accel": 0.3848,
+        "spread_bps": 14.306,
+        "bid_depth_2pct_usdt": 118546.47,
+        "ask_depth_2pct_usdt": 69387.62,
+        "buy_slippage_bps": 10.807,
+        "estimated_rr": 1.777,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "LTC",
+      "action": "WAIT",
+      "price": 70.17,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "LTC",
+        "score": 5.7035,
+        "independent": 3,
+        "btc_rel_1h": 1.2496,
+        "btc_rel_4h": 1.8649,
+        "rel_accel": 0.7834,
+        "spread_bps": 1.427,
+        "bid_depth_2pct_usdt": 589047.4,
+        "ask_depth_2pct_usdt": 707569.37,
+        "buy_slippage_bps": 0.714,
+        "estimated_rr": 1.84,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "PARTI",
+      "action": "WAIT",
+      "price": 0.0284,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "PARTI",
+        "score": 5.4817,
+        "independent": 5,
+        "btc_rel_1h": 0.9887,
+        "btc_rel_4h": 1.2654,
+        "rel_accel": 0.6723,
+        "spread_bps": 35.273,
+        "bid_depth_2pct_usdt": 32664.07,
+        "ask_depth_2pct_usdt": 30727.81,
+        "buy_slippage_bps": 17.637,
+        "estimated_rr": 1.672,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "GTC",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.11497,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "GTC",
+        "score": 5.1894,
+        "independent": 4,
+        "btc_rel_1h": 1.0203,
+        "btc_rel_4h": 2.0132,
+        "rel_accel": 0.517,
+        "spread_bps": 19.155,
+        "bid_depth_2pct_usdt": 30606.65,
+        "ask_depth_2pct_usdt": 15255.06,
+        "buy_slippage_bps": 24.107,
+        "estimated_rr": 1.638,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "DEPTH_BELOW_30K_USDT"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AERO",
+      "action": "WAIT",
+      "price": 0.8406,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "AERO",
+        "score": 4.9941,
+        "independent": 2,
+        "btc_rel_1h": 0.6403,
+        "btc_rel_4h": 3.2266,
+        "rel_accel": -0.1663,
+        "spread_bps": 3.57,
+        "bid_depth_2pct_usdt": 191142.36,
+        "ask_depth_2pct_usdt": 170728.15,
+        "buy_slippage_bps": 3.74,
+        "estimated_rr": 1.81,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SC",
+      "action": "REJECT",
+      "price": 0.001034,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SC",
+        "score": 4.9374,
+        "independent": 4,
+        "btc_rel_1h": 0.8976,
+        "btc_rel_4h": 1.273,
+        "rel_accel": 0.5794,
+        "spread_bps": 19.342,
+        "bid_depth_2pct_usdt": 23752.95,
+        "ask_depth_2pct_usdt": 4468.44,
+        "buy_slippage_bps": 56.299,
+        "estimated_rr": 1.599,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "DEPTH_BELOW_30K_USDT"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "VELODROME",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.03703,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "VELODROME",
+        "score": 4.921,
+        "independent": 2,
+        "btc_rel_1h": 0.5736,
+        "btc_rel_4h": 3.3463,
+        "rel_accel": -0.263,
+        "spread_bps": 8.094,
+        "bid_depth_2pct_usdt": 28273.42,
+        "ask_depth_2pct_usdt": 32140.65,
+        "buy_slippage_bps": 12.717,
+        "estimated_rr": 1.765,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "DEPTH_BELOW_30K_USDT"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "TAO",
+      "action": "WAIT",
+      "price": 303.5,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "TAO",
+        "score": 4.8361,
+        "independent": 3,
+        "btc_rel_1h": 0.8532,
+        "btc_rel_4h": 2.664,
+        "rel_accel": 0.1872,
+        "spread_bps": 3.298,
+        "bid_depth_2pct_usdt": 609023.34,
+        "ask_depth_2pct_usdt": 795539.45,
+        "buy_slippage_bps": 1.649,
+        "estimated_rr": 1.843,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": []
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "TREE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0467,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "TREE",
+        "score": 4.7246,
+        "independent": 4,
+        "btc_rel_1h": 1.0033,
+        "btc_rel_4h": 1.9407,
+        "rel_accel": 0.5182,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "CBRSB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 181.82,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "CBRSB",
+        "score": 4.5563,
+        "independent": 3,
+        "btc_rel_1h": 0.9113,
+        "btc_rel_4h": 2.1866,
+        "rel_accel": 0.3647,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RUNE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.746,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RUNE",
+        "score": 4.3929,
+        "independent": 3,
+        "btc_rel_1h": 0.8683,
+        "btc_rel_4h": 2.1103,
+        "rel_accel": 0.3407,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SKY",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.09027,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SKY",
+        "score": 4.366,
+        "independent": 2,
+        "btc_rel_1h": 0.7027,
+        "btc_rel_4h": 2.9411,
+        "rel_accel": -0.0326,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MANTA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.07016,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MANTA",
+        "score": 4.293,
+        "independent": 4,
+        "btc_rel_1h": 0.8679,
+        "btc_rel_4h": 1.583,
+        "rel_accel": 0.4721,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ROBO",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.00847,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ROBO",
+        "score": 4.1904,
+        "independent": 2,
+        "btc_rel_1h": -0.6658,
+        "btc_rel_4h": 3.4904,
+        "rel_accel": -1.5384,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "NOM",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.002406,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "NOM",
+        "score": 4.0925,
+        "independent": 2,
+        "btc_rel_1h": -0.493,
+        "btc_rel_4h": 3.9958,
+        "rel_accel": -1.4919,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "IOST",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.000849,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "IOST",
+        "score": 3.9217,
+        "independent": 3,
+        "btc_rel_1h": 0.8723,
+        "btc_rel_4h": 1.3897,
+        "rel_accel": 0.5249,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SENT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.02229,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SENT",
+        "score": 3.7885,
+        "independent": 3,
+        "btc_rel_1h": 0.3265,
+        "btc_rel_4h": 2.6334,
+        "rel_accel": -0.3319,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "PROVE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.2162,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "PROVE",
+        "score": 3.7103,
+        "independent": 3,
+        "btc_rel_1h": 0.526,
+        "btc_rel_4h": 0.9433,
+        "rel_accel": 0.2902,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "PROM",
+      "action": "SYSTEM_BLOCKED",
+      "price": 6.289,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "PROM",
+        "score": 3.7043,
+        "independent": 2,
+        "btc_rel_1h": 0.5773,
+        "btc_rel_4h": 2.3251,
+        "rel_accel": -0.004,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SXT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.00967,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SXT",
+        "score": 3.6719,
+        "independent": 3,
+        "btc_rel_1h": 0.4403,
+        "btc_rel_4h": 2.6316,
+        "rel_accel": -0.2176,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ICP",
+      "action": "SYSTEM_BLOCKED",
+      "price": 3.361,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ICP",
+        "score": 3.5873,
+        "independent": 2,
+        "btc_rel_1h": 0.4595,
+        "btc_rel_4h": 2.3869,
+        "rel_accel": -0.1372,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "JUV",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.325,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "JUV",
+        "score": 3.5848,
+        "independent": 3,
+        "btc_rel_1h": 0.8528,
+        "btc_rel_4h": 0.817,
+        "rel_accel": 0.6485,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "METIS",
+      "action": "SYSTEM_BLOCKED",
+      "price": 3.34,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "METIS",
+        "score": 3.5652,
+        "independent": 3,
+        "btc_rel_1h": 0.5235,
+        "btc_rel_4h": 2.3384,
+        "rel_accel": -0.0611,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MET",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.3025,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MET",
+        "score": 3.5257,
+        "independent": 2,
+        "btc_rel_1h": 0.6201,
+        "btc_rel_4h": 2.0839,
+        "rel_accel": 0.0992,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SIGN",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.01274,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SIGN",
+        "score": 3.3968,
+        "independent": 2,
+        "btc_rel_1h": 0.1577,
+        "btc_rel_4h": 2.6978,
+        "rel_accel": -0.5168,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "LAZIO",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.389,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "LAZIO",
+        "score": 3.3185,
+        "independent": 3,
+        "btc_rel_1h": 0.4365,
+        "btc_rel_4h": 2.0254,
+        "rel_accel": -0.0698,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "GNS",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.422,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "GNS",
+        "score": 3.2376,
+        "independent": 2,
+        "btc_rel_1h": 0.6371,
+        "btc_rel_4h": 0.674,
+        "rel_accel": 0.4686,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.5091,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RE",
+        "score": 3.1651,
+        "independent": 3,
+        "btc_rel_1h": 0.3548,
+        "btc_rel_4h": 1.7528,
+        "rel_accel": -0.0834,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "WCT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.04333,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "WCT",
+        "score": 3.1219,
+        "independent": 2,
+        "btc_rel_1h": 0.5014,
+        "btc_rel_4h": 1.8398,
+        "rel_accel": 0.0414,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MUBARAK",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.06358,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MUBARAK",
+        "score": 3.0387,
+        "independent": 3,
+        "btc_rel_1h": 0.2523,
+        "btc_rel_4h": 1.9572,
+        "rel_accel": -0.237,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AXL",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.055,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "AXL",
+        "score": 3.0335,
+        "independent": 2,
+        "btc_rel_1h": 0.1032,
+        "btc_rel_4h": 2.2386,
+        "rel_accel": -0.4564,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ZK",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.01321,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ZK",
+        "score": 2.998,
+        "independent": 3,
+        "btc_rel_1h": 0.4538,
+        "btc_rel_4h": 1.5014,
+        "rel_accel": 0.0784,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "TOWNS",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.002212,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "TOWNS",
+        "score": 2.9794,
+        "independent": 3,
+        "btc_rel_1h": 0.3298,
+        "btc_rel_4h": 1.6198,
+        "rel_accel": -0.0751,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "IO",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1682,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "IO",
+        "score": 2.9736,
+        "independent": 2,
+        "btc_rel_1h": 0.0996,
+        "btc_rel_4h": 2.0743,
+        "rel_accel": -0.4189,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MINA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1625,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MINA",
+        "score": 2.9257,
+        "independent": 2,
+        "btc_rel_1h": -0.5078,
+        "btc_rel_4h": 2.399,
+        "rel_accel": -1.1076,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "EUL",
+      "action": "SYSTEM_BLOCKED",
+      "price": 1.429,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "EUL",
+        "score": 2.9095,
+        "independent": 2,
+        "btc_rel_1h": 0.6968,
+        "btc_rel_4h": 0.3379,
+        "rel_accel": 0.6123,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ETHFI",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.7239,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ETHFI",
+        "score": 2.8225,
+        "independent": 2,
+        "btc_rel_1h": 0.2674,
+        "btc_rel_4h": 1.911,
+        "rel_accel": -0.2104,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SEI",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.07162,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SEI",
+        "score": 2.7993,
+        "independent": 3,
+        "btc_rel_1h": 0.4263,
+        "btc_rel_4h": 1.8455,
+        "rel_accel": -0.035,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "C",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0988,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "C",
+        "score": 2.7674,
+        "independent": 2,
+        "btc_rel_1h": 0.2256,
+        "btc_rel_4h": 1.7394,
+        "rel_accel": -0.2092,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "DYM",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.01941,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "DYM",
+        "score": 2.7577,
+        "independent": 2,
+        "btc_rel_1h": 0.3349,
+        "btc_rel_4h": 1.5026,
+        "rel_accel": -0.0407,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "OP",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1361,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "OP",
+        "score": 2.7483,
+        "independent": 2,
+        "btc_rel_1h": 0.3642,
+        "btc_rel_4h": 1.842,
+        "rel_accel": -0.0963,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "KNC",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1423,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "KNC",
+        "score": 2.6999,
+        "independent": 2,
+        "btc_rel_1h": 0.3445,
+        "btc_rel_4h": 1.4069,
+        "rel_accel": -0.0072,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "HIVE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0565,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "HIVE",
+        "score": 2.6283,
+        "independent": 2,
+        "btc_rel_1h": 0.0984,
+        "btc_rel_4h": 0.7316,
+        "rel_accel": -0.0845,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "INIT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.11357,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "INIT",
+        "score": 2.4647,
+        "independent": 2,
+        "btc_rel_1h": -0.123,
+        "btc_rel_4h": 1.8276,
+        "rel_accel": -0.5799,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SYRUP",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.2572,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SYRUP",
+        "score": 2.4646,
+        "independent": 2,
+        "btc_rel_1h": -0.9274,
+        "btc_rel_4h": 1.8585,
+        "rel_accel": -1.392,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AI",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0203,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "AI",
+        "score": 2.4398,
+        "independent": 2,
+        "btc_rel_1h": 0.4113,
+        "btc_rel_4h": 1.183,
+        "rel_accel": 0.1155,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "1000SATS",
+      "action": "SYSTEM_BLOCKED",
+      "price": 1.254e-05,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "1000SATS",
+        "score": 2.3799,
+        "independent": 2,
+        "btc_rel_1h": 0.4018,
+        "btc_rel_4h": 0.4376,
+        "rel_accel": 0.2925,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BARD",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1366,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BARD",
+        "score": 2.3384,
+        "independent": 2,
+        "btc_rel_1h": -0.0057,
+        "btc_rel_4h": 1.6836,
+        "rel_accel": -0.4266,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RAY",
+      "action": "SYSTEM_BLOCKED",
+      "price": 2.0935,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RAY",
+        "score": 2.3379,
+        "independent": 2,
+        "btc_rel_1h": 0.5408,
+        "btc_rel_4h": 0.2216,
+        "rel_accel": 0.4854,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "VTHO",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.000655,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "VTHO",
+        "score": 2.3166,
+        "independent": 2,
+        "btc_rel_1h": 0.3812,
+        "btc_rel_4h": 1.1223,
+        "rel_accel": 0.1006,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "STX",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.3837,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "STX",
+        "score": 2.3006,
+        "independent": 2,
+        "btc_rel_1h": -0.2352,
+        "btc_rel_4h": 1.6006,
+        "rel_accel": -0.6353,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "CTK",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1289,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "CTK",
+        "score": 2.2342,
+        "independent": 2,
+        "btc_rel_1h": -0.3883,
+        "btc_rel_4h": 1.5342,
+        "rel_accel": -0.7718,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "HUMA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.03328,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "HUMA",
+        "score": 2.2307,
+        "independent": 2,
+        "btc_rel_1h": 0.2527,
+        "btc_rel_4h": 1.1074,
+        "rel_accel": -0.0241,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "KERNEL",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0544,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "KERNEL",
+        "score": 2.1855,
+        "independent": 2,
+        "btc_rel_1h": 0.2901,
+        "btc_rel_4h": 0.7523,
+        "rel_accel": 0.102,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MMT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1927,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MMT",
+        "score": 2.1322,
+        "independent": 2,
+        "btc_rel_1h": -0.3375,
+        "btc_rel_4h": 1.6707,
+        "rel_accel": -0.7551,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "NEWT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.05072,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "NEWT",
+        "score": 2.1142,
+        "independent": 2,
+        "btc_rel_1h": 0.3368,
+        "btc_rel_4h": 1.2133,
+        "rel_accel": 0.0334,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BERA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.2276,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BERA",
+        "score": 2.1067,
+        "independent": 2,
+        "btc_rel_1h": 0.3624,
+        "btc_rel_4h": 0.8167,
+        "rel_accel": 0.1582,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ALICE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1727,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ALICE",
+        "score": 2.0858,
+        "independent": 2,
+        "btc_rel_1h": 0.3278,
+        "btc_rel_4h": 0.7798,
+        "rel_accel": 0.1329,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RSR",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.001691,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RSR",
+        "score": 2.0382,
+        "independent": 2,
+        "btc_rel_1h": 0.3368,
+        "btc_rel_4h": 1.0928,
+        "rel_accel": 0.0636,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "CAKE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 2.527,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "CAKE",
+        "score": 1.9905,
+        "independent": 2,
+        "btc_rel_1h": 0.3982,
+        "btc_rel_4h": 0.1582,
+        "rel_accel": 0.3587,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BNB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 789.5,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BNB",
+        "score": 1.9566,
+        "independent": 2,
+        "btc_rel_1h": 0.4802,
+        "btc_rel_4h": 0.1927,
+        "rel_accel": 0.4321,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ME",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.07821,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ME",
+        "score": 1.9554,
+        "independent": 2,
+        "btc_rel_1h": 0.2546,
+        "btc_rel_4h": 0.5828,
+        "rel_accel": 0.1089,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AEVO",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.02688,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "AEVO",
+        "score": 1.9257,
+        "independent": 2,
+        "btc_rel_1h": 0.257,
+        "btc_rel_4h": -0.8696,
+        "rel_accel": 0.4744,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MAV",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.01134,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MAV",
+        "score": 1.8637,
+        "independent": 2,
+        "btc_rel_1h": 0.0978,
+        "btc_rel_4h": 0.1978,
+        "rel_accel": 0.0483,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "KAIA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0375,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "KAIA",
+        "score": 1.8284,
+        "independent": 2,
+        "btc_rel_1h": 0.1885,
+        "btc_rel_4h": 0.4651,
+        "rel_accel": 0.0722,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MTL",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.3186,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MTL",
+        "score": 1.8055,
+        "independent": 2,
+        "btc_rel_1h": -0.0789,
+        "btc_rel_4h": 0.7977,
+        "rel_accel": -0.2783,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ERA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0651,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ERA",
+        "score": 1.7326,
+        "independent": 2,
+        "btc_rel_1h": -0.0789,
+        "btc_rel_4h": 0.816,
+        "rel_accel": -0.2829,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "WLD",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.5983,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "WLD",
+        "score": 1.7221,
+        "independent": 2,
+        "btc_rel_1h": -0.296,
+        "btc_rel_4h": 1.5035,
+        "rel_accel": -0.6719,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "KORUB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 22.69,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "KORUB",
+        "score": 1.6996,
+        "independent": 2,
+        "btc_rel_1h": 0.0535,
+        "btc_rel_4h": 0.2419,
+        "rel_accel": -0.007,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "KAT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.00478,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "KAT",
+        "score": 1.691,
+        "independent": 2,
+        "btc_rel_1h": -0.0789,
+        "btc_rel_4h": 0.6179,
+        "rel_accel": -0.2334,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MRVLB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 272.98,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MRVLB",
+        "score": 1.6129,
+        "independent": 2,
+        "btc_rel_1h": -0.1412,
+        "btc_rel_4h": 0.2968,
+        "rel_accel": -0.2154,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RAD",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.262,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RAD",
+        "score": 1.6008,
+        "independent": 2,
+        "btc_rel_1h": 0.3042,
+        "btc_rel_4h": 0.5809,
+        "rel_accel": 0.159,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "F",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.003462,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "F",
+        "score": 1.577,
+        "independent": 2,
+        "btc_rel_1h": 0.0078,
+        "btc_rel_4h": 0.8081,
+        "rel_accel": -0.1942,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "牛来",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.07896,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "牛来",
+        "score": 1.5471,
+        "independent": 2,
+        "btc_rel_1h": 0.0479,
+        "btc_rel_4h": -2.5276,
+        "rel_accel": 0.6798,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "TRB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 20.44,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "TRB",
+        "score": 1.5437,
+        "independent": 2,
+        "btc_rel_1h": 0.1172,
+        "btc_rel_4h": -1.8157,
+        "rel_accel": 0.5711,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AVGOB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 356.23,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "AVGOB",
+        "score": 1.5005,
+        "independent": 2,
+        "btc_rel_1h": 0.0476,
+        "btc_rel_4h": 0.3721,
+        "rel_accel": -0.0455,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BEAMX",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.002128,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BEAMX",
+        "score": 1.4781,
+        "independent": 2,
+        "btc_rel_1h": -0.2197,
+        "btc_rel_4h": 0.5278,
+        "rel_accel": -0.3517,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "FORM",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.2796,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "FORM",
+        "score": 1.4553,
+        "independent": 2,
+        "btc_rel_1h": -0.0074,
+        "btc_rel_4h": -0.0874,
+        "rel_accel": 0.0145,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RDDTB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 147.27,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RDDTB",
+        "score": 1.446,
+        "independent": 2,
+        "btc_rel_1h": -0.1536,
+        "btc_rel_4h": 0.1774,
+        "rel_accel": -0.1979,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MAGIC",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0574,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MAGIC",
+        "score": 1.4305,
+        "independent": 2,
+        "btc_rel_1h": 0.2707,
+        "btc_rel_4h": 0.5474,
+        "rel_accel": 0.1339,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "WAL",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.03491,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "WAL",
+        "score": 1.4132,
+        "independent": 2,
+        "btc_rel_1h": 0.266,
+        "btc_rel_4h": -0.2301,
+        "rel_accel": 0.3235,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "HOT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.000451,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "HOT",
+        "score": 1.3987,
+        "independent": 2,
+        "btc_rel_1h": 0.1433,
+        "btc_rel_4h": 0.1978,
+        "rel_accel": 0.0939,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "POL",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.10996,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "POL",
+        "score": 1.384,
+        "independent": 2,
+        "btc_rel_1h": 0.0669,
+        "btc_rel_4h": 0.7467,
+        "rel_accel": -0.1198,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BREV",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.085,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BREV",
+        "score": 1.3734,
+        "independent": 2,
+        "btc_rel_1h": -0.4306,
+        "btc_rel_4h": 0.1978,
+        "rel_accel": -0.4801,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "DELLB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 560.83,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "DELLB",
+        "score": 1.3641,
+        "independent": 2,
+        "btc_rel_1h": -0.0255,
+        "btc_rel_4h": 0.2316,
+        "rel_accel": -0.0834,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BAT",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.0951,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BAT",
+        "score": 1.2944,
+        "independent": 2,
+        "btc_rel_1h": 0.0263,
+        "btc_rel_4h": 0.4085,
+        "rel_accel": -0.0758,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MEME",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.000595,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MEME",
+        "score": 1.2788,
+        "independent": 2,
+        "btc_rel_1h": -0.247,
+        "btc_rel_4h": -0.3047,
+        "rel_accel": -0.1708,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "AMDB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 633.92,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "AMDB",
+        "score": 1.2714,
+        "independent": 2,
+        "btc_rel_1h": -0.101,
+        "btc_rel_4h": 0.3067,
+        "rel_accel": -0.1777,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "GSB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 902.01,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "GSB",
+        "score": 1.233,
+        "independent": 2,
+        "btc_rel_1h": -0.2604,
+        "btc_rel_4h": -0.0819,
+        "rel_accel": -0.2399,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BOME",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.001002,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BOME",
+        "score": 1.2166,
+        "independent": 2,
+        "btc_rel_1h": -0.3477,
+        "btc_rel_4h": 0.3177,
+        "rel_accel": -0.4271,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "MARSCOIN",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.1092,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "MARSCOIN",
+        "score": 1.2124,
+        "independent": 2,
+        "btc_rel_1h": 0.2891,
+        "btc_rel_4h": 0.1978,
+        "rel_accel": 0.2396,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "INTWB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 30.07,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "INTWB",
+        "score": 0.9757,
+        "independent": 2,
+        "btc_rel_1h": -0.4104,
+        "btc_rel_4h": -0.1667,
+        "rel_accel": -0.3687,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "FOGO",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.00525,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "FOGO",
+        "score": 0.9754,
+        "independent": 2,
+        "btc_rel_1h": -1.3947,
+        "btc_rel_4h": -0.1817,
+        "rel_accel": -1.3493,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BEB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 287.52,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BEB",
+        "score": 0.9434,
+        "independent": 2,
+        "btc_rel_1h": -0.1866,
+        "btc_rel_4h": 0.2569,
+        "rel_accel": -0.2509,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "PUMP",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.006266,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "PUMP",
+        "score": 0.7978,
+        "independent": 2,
+        "btc_rel_1h": -1.2448,
+        "btc_rel_4h": -1.831,
+        "rel_accel": -0.7871,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "STG",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.174,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "STG",
+        "score": 0.7577,
+        "independent": 2,
+        "btc_rel_1h": -0.7079,
+        "btc_rel_4h": -2.5443,
+        "rel_accel": -0.0718,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "RARE",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.01721,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "RARE",
+        "score": 0.6736,
+        "independent": 2,
+        "btc_rel_1h": -0.4272,
+        "btc_rel_4h": -0.0347,
+        "rel_accel": -0.4185,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "blockers": [
+          "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "BONK",
+      "action": "SYSTEM_BLOCKED",
+      "price": 3.77e-06,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "BONK",
+        "score": 0.6581,
+        "independent": 2,
+        "btc_rel_1h": -0.6052,
+        "btc_rel_4h": -1.1111,
+        "rel_accel": -0.3275,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SUN",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.01709,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SUN",
+        "score": 0.5284,
+        "independent": 2,
+        "btc_rel_1h": -0.1374,
+        "btc_rel_4h": -0.1521,
+        "rel_accel": -0.0994,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "SHIB",
+      "action": "SYSTEM_BLOCKED",
+      "price": 5.75e-06,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "SHIB",
+        "score": 0.5275,
+        "independent": 2,
+        "btc_rel_1h": -0.2531,
+        "btc_rel_4h": 0.0235,
+        "rel_accel": -0.259,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": true,
+        "supply_status": "CURRENT_SUPPLY_EFFECTIVELY_FULLY_CIRCULATING",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
+    },
+    {
+      "at": "2026-10-03T23:04:41.813928+00:00",
+      "shadow_id": null,
+      "asset": "ADA",
+      "action": "SYSTEM_BLOCKED",
+      "price": 0.2443,
+      "reasons": [
+        "DISCOVERY_SCORE_WEAK"
+      ],
+      "evidence": {
+        "asset": "ADA",
+        "score": 0.4921,
+        "independent": 2,
+        "btc_rel_1h": -0.3239,
+        "btc_rel_4h": -0.332,
+        "rel_accel": -0.2409,
+        "spread_bps": null,
+        "bid_depth_2pct_usdt": null,
+        "ask_depth_2pct_usdt": null,
+        "buy_slippage_bps": null,
+        "estimated_rr": null,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "blockers": [
+          "LIVE_ORDERBOOK_MISSING"
+        ]
+      },
+      "tranches": 0,
+      "notional_usdt": 0
     }
   ],
   "overfilter_guard_status": "NORMAL",
   "reset_reason": "USER_REQUESTED_PRE_OPTIMIZATION_RESET",
   "ever_entered_assets": [
     "NEXO",
-    "S"
+    "S",
+    "XTZ"
   ]
 }

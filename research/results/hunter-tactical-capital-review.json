@@ -1,7 +1,7 @@
 {
   "schema": "hunter_tactical_capital_review_v1",
-  "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-  "scan_generation_id": "20261003T230151968304Z",
+  "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+  "scan_generation_id": "20261003T230312229436Z",
   "policy": "NO_AUTO_TRADE__SHORT_HORIZON_GATE_SEPARATE_FROM_LONG_HORIZON_VALUATION",
   "alt_pool_cap_usdt": 20000.0,
   "capital_state": {
@@ -10,47 +10,48 @@
     "available_usdt": 20000.0
   },
   "capital_review_eligible": [
-    "STRK",
     "S",
-    "NEXO",
+    "STRK",
     "XTZ",
+    "NEXO",
     "SOMI",
-    "LTC",
     "COTI",
+    "LTC",
     "PARTI",
-    "TAO",
-    "AERO"
+    "AERO",
+    "TAO"
   ],
   "executable_buy": [
     "S",
+    "XTZ",
     "NEXO"
   ],
   "decision_counts": {
-    "BUY": 2,
-    "WAIT": 8,
-    "REJECT": 4,
-    "SYSTEM_BLOCKED": 99
+    "BUY": 3,
+    "WAIT": 7,
+    "REJECT": 3,
+    "SYSTEM_BLOCKED": 96
   },
   "candidates": [
     {
-      "asset": "STRK",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.05438,
+      "asset": "S",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.04121,
       "signal": {
-        "base": "STRK",
-        "pair": "STRKUSDT",
+        "base": "S",
+        "pair": "SUSDT",
         "stage": "EARLY",
-        "score": 20.9112,
-        "btc_relative_1h_pct": 4.8651,
-        "btc_relative_4h_pct": 5.7511,
-        "relative_acceleration_pct": 3.4273,
-        "return_1h_pct": 4.944,
-        "return_4h_pct": 5.5534,
+        "score": 20.6668,
+        "btc_relative_1h_pct": 4.2909,
+        "btc_relative_4h_pct": 7.8499,
+        "relative_acceleration_pct": 2.3284,
+        "return_1h_pct": 4.3698,
+        "return_4h_pct": 7.6521,
         "independent_signal_count": 5,
-        "volume_acceleration_15m": 1.4621,
-        "compression_ratio": 1.1654,
-        "return_15m_pct": 0.2581,
-        "range_position_6h": 0.9534,
+        "volume_acceleration_15m": 2.4851,
+        "compression_ratio": 0.4887,
+        "return_15m_pct": 1.4457,
+        "range_position_6h": 1.0,
         "pre_move_components": {
           "volume": true,
           "compression": false,
@@ -62,19 +63,74 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.05453,
-        "buy_avg": 0.054587416,
-        "exit_avg": 0.054497476,
-        "buy_slippage_bps": 10.529,
-        "exit_slippage_bps": 5.964,
-        "spread_bps": 3.668,
-        "roundtrip_cost_usdt": 10.94,
+        "mid": 0.04137,
+        "buy_avg": 0.041397547,
+        "exit_avg": 0.041319697,
+        "buy_slippage_bps": 6.659,
+        "exit_slippage_bps": 12.159,
+        "spread_bps": 4.834,
+        "roundtrip_cost_usdt": 11.64,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.057463077,
-        "required_mid_gain_pct": 5.379,
-        "stop_mid": 0.053222731,
-        "estimated_stop_loss_usdt": 82.67,
-        "estimated_rr": 1.814,
+        "required_future_mid": 0.043605395,
+        "required_mid_gain_pct": 5.403,
+        "stop_mid": 0.040362608,
+        "estimated_stop_loss_usdt": 84.48,
+        "estimated_rr": 1.776,
+        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
+      },
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE"
+      ],
+      "entry_stage": "EXECUTABLE_BUY",
+      "first_tranche_allowed": true,
+      "confirmation_role": "ADD_POSITION_ONLY",
+      "blockers": [],
+      "capital_review_eligible": true,
+      "trade_action": "BUY"
+    },
+    {
+      "asset": "STRK",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.05438,
+      "signal": {
+        "base": "STRK",
+        "pair": "STRKUSDT",
+        "stage": "EARLY",
+        "score": 16.6485,
+        "btc_relative_1h_pct": 3.7449,
+        "btc_relative_4h_pct": 4.9939,
+        "relative_acceleration_pct": 2.4965,
+        "return_1h_pct": 3.8239,
+        "return_4h_pct": 4.7961,
+        "independent_signal_count": 4,
+        "volume_acceleration_15m": 1.7641,
+        "compression_ratio": 1.1086,
+        "return_15m_pct": -0.295,
+        "range_position_6h": 0.8589,
+        "pre_move_components": {
+          "volume": true,
+          "compression": false,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": {
+        "quote_usdt": 3000,
+        "fee_bps": 10.0,
+        "mid": 0.05394,
+        "buy_avg": 0.053980598,
+        "exit_avg": 0.053896281,
+        "buy_slippage_bps": 7.526,
+        "exit_slippage_bps": 8.105,
+        "spread_bps": 7.416,
+        "roundtrip_cost_usdt": 10.68,
+        "target_net_usdt": 150.0,
+        "required_future_mid": 0.056836465,
+        "required_mid_gain_pct": 5.37,
+        "stop_mid": 0.052631083,
+        "estimated_stop_loss_usdt": 83.29,
+        "estimated_rr": 1.801,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -89,24 +145,24 @@
       "trade_action": "WAIT"
     },
     {
-      "asset": "S",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.04089,
+      "asset": "XTZ",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.3211,
       "signal": {
-        "base": "S",
-        "pair": "SUSDT",
+        "base": "XTZ",
+        "pair": "XTZUSDT",
         "stage": "EARLY",
-        "score": 18.2445,
-        "btc_relative_1h_pct": 3.6594,
-        "btc_relative_4h_pct": 7.6671,
-        "relative_acceleration_pct": 1.7426,
-        "return_1h_pct": 3.7383,
-        "return_4h_pct": 7.4693,
+        "score": 9.3898,
+        "btc_relative_1h_pct": 1.9774,
+        "btc_relative_4h_pct": 2.3503,
+        "relative_acceleration_pct": 1.3898,
+        "return_1h_pct": 2.0563,
+        "return_4h_pct": 2.1526,
         "independent_signal_count": 5,
-        "volume_acceleration_15m": 2.2895,
-        "compression_ratio": 0.5375,
-        "return_15m_pct": 0.8331,
-        "range_position_6h": 0.9901,
+        "volume_acceleration_15m": 16.6151,
+        "compression_ratio": 0.3808,
+        "return_15m_pct": 0.5609,
+        "range_position_6h": 0.9205,
         "pre_move_components": {
           "volume": true,
           "compression": false,
@@ -118,19 +174,19 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.041195,
-        "buy_avg": 0.041243085,
-        "exit_avg": 0.04113214,
-        "buy_slippage_bps": 11.672,
-        "exit_slippage_bps": 15.259,
-        "spread_bps": 7.282,
-        "roundtrip_cost_usdt": 14.06,
+        "mid": 0.32185,
+        "buy_avg": 0.322397599,
+        "exit_avg": 0.321433919,
+        "buy_slippage_bps": 17.014,
+        "exit_slippage_bps": 12.928,
+        "spread_bps": 3.107,
+        "roundtrip_cost_usdt": 14.96,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.043456182,
-        "required_mid_gain_pct": 5.489,
-        "stop_mid": 0.040212007,
-        "estimated_stop_loss_usdt": 85.38,
-        "estimated_rr": 1.757,
+        "required_future_mid": 0.339618107,
+        "required_mid_gain_pct": 5.521,
+        "stop_mid": 0.314337659,
+        "estimated_stop_loss_usdt": 84.7,
+        "estimated_rr": 1.771,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -145,20 +201,20 @@
     },
     {
       "asset": "NEXO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.862,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.861,
       "signal": {
         "base": "NEXO",
         "pair": "NEXOUSDT",
         "stage": "EARLY",
-        "score": 8.1698,
-        "btc_relative_1h_pct": 1.6962,
-        "btc_relative_4h_pct": 1.9729,
-        "relative_acceleration_pct": 1.203,
-        "return_1h_pct": 1.7751,
-        "return_4h_pct": 1.7751,
+        "score": 9.1462,
+        "btc_relative_1h_pct": 1.9329,
+        "btc_relative_4h_pct": 2.2096,
+        "relative_acceleration_pct": 1.3805,
+        "return_1h_pct": 2.0118,
+        "return_4h_pct": 2.0118,
         "independent_signal_count": 5,
-        "volume_acceleration_15m": 8.542,
+        "volume_acceleration_15m": 9.0222,
         "compression_ratio": 0.4583,
         "return_15m_pct": 0.0,
         "range_position_6h": 0.8696,
@@ -173,19 +229,19 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.8615,
-        "buy_avg": 0.863466824,
-        "exit_avg": 0.859819004,
-        "buy_slippage_bps": 22.83,
-        "exit_slippage_bps": 19.512,
-        "spread_bps": 11.608,
-        "roundtrip_cost_usdt": 18.66,
+        "mid": 0.861,
+        "buy_avg": 0.862926433,
+        "exit_avg": 0.859115209,
+        "buy_slippage_bps": 22.374,
+        "exit_slippage_bps": 21.891,
+        "spread_bps": 23.229,
+        "roundtrip_cost_usdt": 19.24,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.910188042,
-        "required_mid_gain_pct": 5.652,
-        "stop_mid": 0.841880153,
-        "estimated_stop_loss_usdt": 86.63,
-        "estimated_rr": 1.732,
+        "required_future_mid": 0.90983522,
+        "required_mid_gain_pct": 5.672,
+        "stop_mid": 0.841353272,
+        "estimated_stop_loss_usdt": 87.32,
+        "estimated_rr": 1.718,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -199,64 +255,9 @@
       "trade_action": "BUY"
     },
     {
-      "asset": "XTZ",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.3209,
-      "signal": {
-        "base": "XTZ",
-        "pair": "XTZUSDT",
-        "stage": "EARLY",
-        "score": 7.4124,
-        "btc_relative_1h_pct": 1.5029,
-        "btc_relative_4h_pct": 1.8438,
-        "relative_acceleration_pct": 1.0419,
-        "return_1h_pct": 1.5818,
-        "return_4h_pct": 1.6461,
-        "independent_signal_count": 5,
-        "volume_acceleration_15m": 13.4442,
-        "compression_ratio": 0.504,
-        "return_15m_pct": 0.0623,
-        "range_position_6h": 0.942,
-        "pre_move_components": {
-          "volume": true,
-          "compression": false,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": {
-        "quote_usdt": 3000,
-        "fee_bps": 10.0,
-        "mid": 0.32275,
-        "buy_avg": 0.323126899,
-        "exit_avg": 0.322450012,
-        "buy_slippage_bps": 11.678,
-        "exit_slippage_bps": 9.295,
-        "spread_bps": 3.098,
-        "roundtrip_cost_usdt": 12.28,
-        "target_net_usdt": 150.0,
-        "required_future_mid": 0.340262582,
-        "required_mid_gain_pct": 5.426,
-        "stop_mid": 0.315048727,
-        "estimated_stop_loss_usdt": 83.64,
-        "estimated_rr": 1.793,
-        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
-      },
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE"
-      ],
-      "entry_stage": "WATCH",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [],
-      "capital_review_eligible": true,
-      "trade_action": "WAIT"
-    },
-    {
       "asset": "SOMI",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.2115,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.2118,
       "signal": {
         "base": "SOMI",
         "pair": "SOMIUSDT",
@@ -283,19 +284,19 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.2118,
-        "buy_avg": 0.212234091,
-        "exit_avg": 0.211424078,
-        "buy_slippage_bps": 20.495,
-        "exit_slippage_bps": 17.749,
-        "spread_bps": 9.443,
-        "roundtrip_cost_usdt": 17.44,
+        "mid": 0.2114,
+        "buy_avg": 0.211853492,
+        "exit_avg": 0.210975504,
+        "buy_slippage_bps": 21.452,
+        "exit_slippage_bps": 20.08,
+        "spread_bps": 9.461,
+        "roundtrip_cost_usdt": 18.42,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.223678315,
-        "required_mid_gain_pct": 5.608,
-        "stop_mid": 0.206928239,
-        "estimated_stop_loss_usdt": 86.11,
-        "estimated_rr": 1.742,
+        "required_future_mid": 0.223329351,
+        "required_mid_gain_pct": 5.643,
+        "stop_mid": 0.206557155,
+        "estimated_stop_loss_usdt": 86.79,
+        "estimated_rr": 1.728,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -310,24 +311,24 @@
       "trade_action": "WAIT"
     },
     {
-      "asset": "LTC",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 70.16,
+      "asset": "COTI",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.01399,
       "signal": {
-        "base": "LTC",
-        "pair": "LTCUSDT",
+        "base": "COTI",
+        "pair": "COTIUSDT",
         "stage": "EARLY",
-        "score": 5.7663,
-        "btc_relative_1h_pct": 1.264,
-        "btc_relative_4h_pct": 1.9084,
-        "relative_acceleration_pct": 0.7869,
-        "return_1h_pct": 1.343,
-        "return_4h_pct": 1.7106,
-        "independent_signal_count": 4,
-        "volume_acceleration_15m": 1.2989,
-        "compression_ratio": 0.4377,
+        "score": 5.945,
+        "btc_relative_1h_pct": 1.1512,
+        "btc_relative_4h_pct": 3.0654,
+        "relative_acceleration_pct": 0.3848,
+        "return_1h_pct": 1.2301,
+        "return_4h_pct": 2.8676,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 0.7385,
+        "compression_ratio": 0.3641,
         "return_15m_pct": 0.0,
-        "range_position_6h": 0.929,
+        "range_position_6h": 0.8913,
         "pre_move_components": {
           "volume": false,
           "compression": false,
@@ -339,72 +340,17 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 70.165,
-        "buy_avg": 70.172840967,
-        "exit_avg": 70.155572425,
-        "buy_slippage_bps": 1.118,
-        "exit_slippage_bps": 1.344,
-        "spread_bps": 1.425,
-        "roundtrip_cost_usdt": 6.74,
-        "target_net_usdt": 150.0,
-        "required_future_mid": 73.835402078,
-        "required_mid_gain_pct": 5.231,
-        "stop_mid": 68.418519943,
-        "estimated_stop_loss_usdt": 81.32,
-        "estimated_rr": 1.845,
-        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
-      },
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE"
-      ],
-      "entry_stage": "WATCH",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [],
-      "capital_review_eligible": true,
-      "trade_action": "WAIT"
-    },
-    {
-      "asset": "COTI",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.01398,
-      "signal": {
-        "base": "COTI",
-        "pair": "COTIUSDT",
-        "stage": "EARLY",
-        "score": 5.6458,
-        "btc_relative_1h_pct": 1.0788,
-        "btc_relative_4h_pct": 2.9919,
-        "relative_acceleration_pct": 0.3309,
-        "return_1h_pct": 1.1577,
-        "return_4h_pct": 2.7941,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.7266,
-        "compression_ratio": 0.3641,
-        "return_15m_pct": -0.0715,
-        "range_position_6h": 0.8696,
-        "pre_move_components": {
-          "volume": false,
-          "compression": false,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": {
-        "quote_usdt": 3000,
-        "fee_bps": 10.0,
         "mid": 0.01398,
-        "buy_avg": 0.01399374,
-        "exit_avg": 0.013963292,
-        "buy_slippage_bps": 9.828,
+        "buy_avg": 0.013995109,
+        "exit_avg": 0.013963293,
+        "buy_slippage_bps": 10.807,
         "exit_slippage_bps": 11.951,
         "spread_bps": 14.306,
-        "roundtrip_cost_usdt": 12.52,
+        "roundtrip_cost_usdt": 12.81,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.014739758,
-        "required_mid_gain_pct": 5.435,
-        "stop_mid": 0.013643896,
+        "required_future_mid": 0.0147412,
+        "required_mid_gain_pct": 5.445,
+        "stop_mid": 0.013645231,
         "estimated_stop_loss_usdt": 84.42,
         "estimated_rr": 1.777,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
@@ -421,8 +367,63 @@
       "trade_action": "WAIT"
     },
     {
+      "asset": "LTC",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 70.17,
+      "signal": {
+        "base": "LTC",
+        "pair": "LTCUSDT",
+        "stage": "EARLY",
+        "score": 5.7035,
+        "btc_relative_1h_pct": 1.2496,
+        "btc_relative_4h_pct": 1.8649,
+        "relative_acceleration_pct": 0.7834,
+        "return_1h_pct": 1.3285,
+        "return_4h_pct": 1.6671,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 1.3287,
+        "compression_ratio": 0.4377,
+        "return_15m_pct": -0.0713,
+        "range_position_6h": 0.8968,
+        "pre_move_components": {
+          "volume": false,
+          "compression": false,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": {
+        "quote_usdt": 3000,
+        "fee_bps": 10.0,
+        "mid": 70.075,
+        "buy_avg": 70.08,
+        "exit_avg": 70.060458323,
+        "buy_slippage_bps": 0.714,
+        "exit_slippage_bps": 2.075,
+        "spread_bps": 1.427,
+        "roundtrip_cost_usdt": 6.84,
+        "target_net_usdt": 150.0,
+        "required_future_mid": 73.743110676,
+        "required_mid_gain_pct": 5.235,
+        "stop_mid": 68.328,
+        "estimated_stop_loss_usdt": 81.53,
+        "estimated_rr": 1.84,
+        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
+      },
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE"
+      ],
+      "entry_stage": "WATCH",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [],
+      "capital_review_eligible": true,
+      "trade_action": "WAIT"
+    },
+    {
       "asset": "PARTI",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0284,
       "signal": {
         "base": "PARTI",
@@ -431,7 +432,7 @@
         "score": 5.4817,
         "btc_relative_1h_pct": 0.9887,
         "btc_relative_4h_pct": 1.2654,
-        "relative_acceleration_pct": 0.6724,
+        "relative_acceleration_pct": 0.6723,
         "return_1h_pct": 1.0676,
         "return_4h_pct": 1.0676,
         "independent_signal_count": 5,
@@ -452,17 +453,17 @@
         "fee_bps": 10.0,
         "mid": 0.02835,
         "buy_avg": 0.0284,
-        "exit_avg": 0.0283,
+        "exit_avg": 0.02826486,
         "buy_slippage_bps": 17.637,
-        "exit_slippage_bps": 17.637,
+        "exit_slippage_bps": 30.032,
         "spread_bps": 35.273,
-        "roundtrip_cost_usdt": 16.55,
+        "roundtrip_cost_usdt": 20.26,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.029931067,
-        "required_mid_gain_pct": 5.577,
+        "required_future_mid": 0.029968278,
+        "required_mid_gain_pct": 5.708,
         "stop_mid": 0.02769,
-        "estimated_stop_loss_usdt": 86.08,
-        "estimated_rr": 1.743,
+        "estimated_stop_loss_usdt": 89.7,
+        "estimated_rr": 1.672,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -477,26 +478,83 @@
       "trade_action": "WAIT"
     },
     {
+      "asset": "AERO",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.8406,
+      "signal": {
+        "base": "AERO",
+        "pair": "AEROUSDT",
+        "stage": "EARLY",
+        "score": 4.9941,
+        "btc_relative_1h_pct": 0.6403,
+        "btc_relative_4h_pct": 3.2266,
+        "relative_acceleration_pct": -0.1663,
+        "return_1h_pct": 0.7193,
+        "return_4h_pct": 3.0288,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.6033,
+        "compression_ratio": 2.3909,
+        "return_15m_pct": -0.0357,
+        "range_position_6h": 0.9196,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": {
+        "quote_usdt": 3000,
+        "fee_bps": 10.0,
+        "mid": 0.84035,
+        "buy_avg": 0.840664255,
+        "exit_avg": 0.839786033,
+        "buy_slippage_bps": 3.74,
+        "exit_slippage_bps": 6.711,
+        "spread_bps": 3.57,
+        "roundtrip_cost_usdt": 9.13,
+        "target_net_usdt": 150.0,
+        "required_future_mid": 0.885016498,
+        "required_mid_gain_pct": 5.315,
+        "stop_mid": 0.819647649,
+        "estimated_stop_loss_usdt": 82.89,
+        "estimated_rr": 1.81,
+        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
+      },
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "WATCH",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [],
+      "capital_review_eligible": true,
+      "trade_action": "WAIT"
+    },
+    {
       "asset": "TAO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 303.3,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 303.5,
       "signal": {
         "base": "TAO",
         "pair": "TAOUSDT",
         "stage": "EARLY",
-        "score": 5.3185,
-        "btc_relative_1h_pct": 0.9863,
-        "btc_relative_4h_pct": 2.7315,
-        "relative_acceleration_pct": 0.3034,
-        "return_1h_pct": 1.0652,
-        "return_4h_pct": 2.5338,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.3184,
+        "score": 4.8361,
+        "btc_relative_1h_pct": 0.8532,
+        "btc_relative_4h_pct": 2.664,
+        "relative_acceleration_pct": 0.1872,
+        "return_1h_pct": 0.9321,
+        "return_4h_pct": 2.4662,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 1.3701,
         "compression_ratio": 0.7207,
-        "return_15m_pct": -0.0329,
-        "range_position_6h": 0.8595,
+        "return_15m_pct": -0.0988,
+        "range_position_6h": 0.843,
         "pre_move_components": {
-          "volume": false,
+          "volume": true,
           "compression": false,
           "relative_turn": false
         },
@@ -506,17 +564,17 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 303.45,
-        "buy_avg": 303.5,
-        "exit_avg": 303.4,
-        "buy_slippage_bps": 1.648,
-        "exit_slippage_bps": 1.648,
-        "spread_bps": 3.295,
+        "mid": 303.25,
+        "buy_avg": 303.3,
+        "exit_avg": 303.2,
+        "buy_slippage_bps": 1.649,
+        "exit_slippage_bps": 1.649,
+        "spread_bps": 3.298,
         "roundtrip_cost_usdt": 6.99,
         "target_net_usdt": 150.0,
-        "required_future_mid": 319.350417738,
+        "required_future_mid": 319.140007339,
         "required_mid_gain_pct": 5.24,
-        "stop_mid": 295.9125,
+        "stop_mid": 295.7175,
         "estimated_stop_loss_usdt": 81.41,
         "estimated_rr": 1.843,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
@@ -533,124 +591,9 @@
       "trade_action": "WAIT"
     },
     {
-      "asset": "AERO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.8407,
-      "signal": {
-        "base": "AERO",
-        "pair": "AEROUSDT",
-        "stage": "EARLY",
-        "score": 5.2717,
-        "btc_relative_1h_pct": 0.7362,
-        "btc_relative_4h_pct": 3.3124,
-        "relative_acceleration_pct": -0.0919,
-        "return_1h_pct": 0.8152,
-        "return_4h_pct": 3.1147,
-        "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.6016,
-        "compression_ratio": 2.3909,
-        "return_15m_pct": 0.0119,
-        "range_position_6h": 0.9291,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": {
-        "quote_usdt": 3000,
-        "fee_bps": 10.0,
-        "mid": 0.8401,
-        "buy_avg": 0.840453621,
-        "exit_avg": 0.839648037,
-        "buy_slippage_bps": 4.209,
-        "exit_slippage_bps": 5.38,
-        "spread_bps": 2.381,
-        "roundtrip_cost_usdt": 8.87,
-        "target_net_usdt": 150.0,
-        "required_future_mid": 0.884676901,
-        "required_mid_gain_pct": 5.306,
-        "stop_mid": 0.819442281,
-        "estimated_stop_loss_usdt": 82.5,
-        "estimated_rr": 1.818,
-        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
-      },
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "WATCH",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [],
-      "capital_review_eligible": true,
-      "trade_action": "WAIT"
-    },
-    {
-      "asset": "AT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1339,
-      "signal": {
-        "base": "AT",
-        "pair": "ATUSDT",
-        "stage": "EARLY",
-        "score": 11.1644,
-        "btc_relative_1h_pct": 1.0574,
-        "btc_relative_4h_pct": 8.3495,
-        "relative_acceleration_pct": -1.0299,
-        "return_1h_pct": 1.1364,
-        "return_4h_pct": 8.1517,
-        "independent_signal_count": 4,
-        "volume_acceleration_15m": 0.1818,
-        "compression_ratio": 5.3572,
-        "return_15m_pct": 0.2994,
-        "range_position_6h": 0.7507,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": {
-        "quote_usdt": 3000,
-        "fee_bps": 10.0,
-        "mid": 0.1335,
-        "buy_avg": 0.133857613,
-        "exit_avg": 0.133121308,
-        "buy_slippage_bps": 26.788,
-        "exit_slippage_bps": 28.366,
-        "spread_bps": 14.981,
-        "roundtrip_cost_usdt": 22.49,
-        "target_net_usdt": 150.0,
-        "required_future_mid": 0.141225784,
-        "required_mid_gain_pct": 5.787,
-        "stop_mid": 0.130511173,
-        "estimated_stop_loss_usdt": 89.21,
-        "estimated_rr": 1.681,
-        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
-      },
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
-      ],
-      "entry_stage": "BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "DEPTH_BELOW_30K_USDT"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "REJECT"
-    },
-    {
       "asset": "BTTC",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 3.8e-07,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 3.7e-07,
       "signal": {
         "base": "BTTC",
         "pair": "BTTCUSDT",
@@ -662,7 +605,7 @@
         "return_1h_pct": 2.7027,
         "return_4h_pct": 2.7027,
         "independent_signal_count": 4,
-        "volume_acceleration_15m": 0.2186,
+        "volume_acceleration_15m": 0.2279,
         "compression_ratio": 1.0,
         "return_15m_pct": 0.0,
         "range_position_6h": 1.0,
@@ -707,28 +650,28 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "ALPINE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.364,
+      "asset": "AT",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1338,
       "signal": {
-        "base": "ALPINE",
-        "pair": "ALPINEUSDT",
+        "base": "AT",
+        "pair": "ATUSDT",
         "stage": "EARLY",
-        "score": 8.3187,
-        "btc_relative_1h_pct": 1.6017,
-        "btc_relative_4h_pct": 2.7401,
-        "relative_acceleration_pct": 0.9167,
-        "return_1h_pct": 1.6807,
-        "return_4h_pct": 2.5424,
-        "independent_signal_count": 5,
-        "volume_acceleration_15m": 4.5818,
-        "compression_ratio": 0.5085,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.7333,
+        "score": 10.0642,
+        "btc_relative_1h_pct": 0.8302,
+        "btc_relative_4h_pct": 7.7038,
+        "relative_acceleration_pct": -1.0958,
+        "return_1h_pct": 0.9091,
+        "return_4h_pct": 7.5061,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 0.1931,
+        "compression_ratio": 5.3572,
+        "return_15m_pct": -0.1497,
+        "range_position_6h": 0.7337,
         "pre_move_components": {
-          "volume": true,
-          "compression": false,
-          "relative_turn": true
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
         },
         "research_only": true
       },
@@ -736,19 +679,19 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.3635,
-        "buy_avg": 0.364,
-        "exit_avg": 0.362053544,
-        "buy_slippage_bps": 13.755,
-        "exit_slippage_bps": 39.792,
-        "spread_bps": 27.51,
-        "roundtrip_cost_usdt": 22.03,
+        "mid": 0.13355,
+        "buy_avg": 0.134031766,
+        "exit_avg": 0.133224604,
+        "buy_slippage_bps": 36.074,
+        "exit_slippage_bps": 24.365,
+        "spread_bps": 7.488,
+        "roundtrip_cost_usdt": 24.05,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.384476875,
-        "required_mid_gain_pct": 5.771,
-        "stop_mid": 0.3549,
-        "estimated_stop_loss_usdt": 92.55,
-        "estimated_rr": 1.621,
+        "required_future_mid": 0.141352802,
+        "required_mid_gain_pct": 5.843,
+        "stop_mid": 0.130680972,
+        "estimated_stop_loss_usdt": 88.04,
+        "estimated_rr": 1.704,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -765,24 +708,82 @@
       "trade_action": "REJECT"
     },
     {
-      "asset": "VELODROME",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.0371,
+      "asset": "ALPINE",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.363,
       "signal": {
-        "base": "VELODROME",
-        "pair": "VELODROMEUSDT",
+        "base": "ALPINE",
+        "pair": "ALPINEUSDT",
         "stage": "EARLY",
-        "score": 5.0576,
-        "btc_relative_1h_pct": 0.628,
-        "btc_relative_4h_pct": 3.3741,
-        "relative_acceleration_pct": -0.2155,
-        "return_1h_pct": 0.7069,
-        "return_4h_pct": 3.1764,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.4892,
-        "compression_ratio": 2.2216,
-        "return_15m_pct": -0.054,
-        "range_position_6h": 0.8927,
+        "score": 8.3187,
+        "btc_relative_1h_pct": 1.6017,
+        "btc_relative_4h_pct": 2.7401,
+        "relative_acceleration_pct": 0.9167,
+        "return_1h_pct": 1.6807,
+        "return_4h_pct": 2.5424,
+        "independent_signal_count": 5,
+        "volume_acceleration_15m": 4.5828,
+        "compression_ratio": 0.5085,
+        "return_15m_pct": 0.0,
+        "range_position_6h": 0.7333,
+        "pre_move_components": {
+          "volume": true,
+          "compression": false,
+          "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": {
+        "quote_usdt": 3000,
+        "fee_bps": 10.0,
+        "mid": 0.3635,
+        "buy_avg": 0.364,
+        "exit_avg": 0.36205187,
+        "buy_slippage_bps": 13.755,
+        "exit_slippage_bps": 39.839,
+        "spread_bps": 27.51,
+        "roundtrip_cost_usdt": 22.04,
+        "target_net_usdt": 150.0,
+        "required_future_mid": 0.384478653,
+        "required_mid_gain_pct": 5.771,
+        "stop_mid": 0.3549,
+        "estimated_stop_loss_usdt": 92.57,
+        "estimated_rr": 1.62,
+        "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
+      },
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
+      ],
+      "entry_stage": "BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "DEPTH_BELOW_30K_USDT"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "REJECT"
+    },
+    {
+      "asset": "GTC",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.11497,
+      "signal": {
+        "base": "GTC",
+        "pair": "GTCUSDT",
+        "stage": "EARLY",
+        "score": 5.1894,
+        "btc_relative_1h_pct": 1.0203,
+        "btc_relative_4h_pct": 2.0132,
+        "relative_acceleration_pct": 0.517,
+        "return_1h_pct": 1.0992,
+        "return_4h_pct": 1.8154,
+        "independent_signal_count": 4,
+        "volume_acceleration_15m": 0.453,
+        "compression_ratio": 2.0292,
+        "return_15m_pct": -0.5192,
+        "range_position_6h": 0.7885,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -794,39 +795,39 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.037,
-        "buy_avg": 0.037044737,
-        "exit_avg": 0.036947923,
-        "buy_slippage_bps": 12.091,
-        "exit_slippage_bps": 14.075,
-        "spread_bps": 5.405,
-        "roundtrip_cost_usdt": 13.83,
+        "mid": 0.11485,
+        "buy_avg": 0.115126872,
+        "exit_avg": 0.114431784,
+        "buy_slippage_bps": 24.107,
+        "exit_slippage_bps": 36.414,
+        "spread_bps": 19.155,
+        "roundtrip_cost_usdt": 24.09,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.039027923,
-        "required_mid_gain_pct": 5.481,
-        "stop_mid": 0.036118618,
-        "estimated_stop_loss_usdt": 85.04,
-        "estimated_rr": 1.764,
+        "required_future_mid": 0.121562119,
+        "required_mid_gain_pct": 5.844,
+        "stop_mid": 0.1122487,
+        "estimated_stop_loss_usdt": 91.57,
+        "estimated_rr": 1.638,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
         "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
       ],
       "entry_stage": "SYSTEM_BLOCKED",
       "first_tranche_allowed": false,
       "confirmation_role": "NONE",
       "blockers": [
-        "ASSET_IDENTITY_SOURCE_UNAVAILABLE"
+        "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+        "DEPTH_BELOW_30K_USDT"
       ],
       "capital_review_eligible": false,
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
       "asset": "SC",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.001035,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.001034,
       "signal": {
         "base": "SC",
         "pair": "SCUSDT",
@@ -854,18 +855,18 @@
         "quote_usdt": 3000,
         "fee_bps": 10.0,
         "mid": 0.001034,
-        "buy_avg": 0.001040042,
-        "exit_avg": 0.001029864,
-        "buy_slippage_bps": 58.437,
-        "exit_slippage_bps": 40.003,
+        "buy_avg": 0.001039821,
+        "exit_avg": 0.00102944,
+        "buy_slippage_bps": 56.299,
+        "exit_slippage_bps": 44.099,
         "spread_bps": 19.342,
-        "roundtrip_cost_usdt": 35.33,
+        "roundtrip_cost_usdt": 35.92,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.001098573,
-        "required_mid_gain_pct": 6.245,
-        "stop_mid": 0.001014041,
-        "estimated_stop_loss_usdt": 92.61,
-        "estimated_rr": 1.62,
+        "required_future_mid": 0.001098792,
+        "required_mid_gain_pct": 6.266,
+        "stop_mid": 0.001013826,
+        "estimated_stop_loss_usdt": 93.81,
+        "estimated_rr": 1.599,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
@@ -881,24 +882,24 @@
       "trade_action": "REJECT"
     },
     {
-      "asset": "JUV",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.325,
+      "asset": "VELODROME",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.03703,
       "signal": {
-        "base": "JUV",
-        "pair": "JUVUSDT",
+        "base": "VELODROME",
+        "pair": "VELODROMEUSDT",
         "stage": "EARLY",
-        "score": 4.8652,
-        "btc_relative_1h_pct": 1.1633,
-        "btc_relative_4h_pct": 1.1265,
-        "relative_acceleration_pct": 0.8817,
-        "return_1h_pct": 1.2422,
-        "return_4h_pct": 0.9288,
-        "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.2934,
-        "compression_ratio": 1.2558,
-        "return_15m_pct": -0.3067,
-        "range_position_6h": 0.8333,
+        "score": 4.921,
+        "btc_relative_1h_pct": 0.5736,
+        "btc_relative_4h_pct": 3.3463,
+        "relative_acceleration_pct": -0.263,
+        "return_1h_pct": 0.6525,
+        "return_4h_pct": 3.1485,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.5031,
+        "compression_ratio": 2.2216,
+        "return_15m_pct": -0.081,
+        "range_position_6h": 0.887,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -910,37 +911,39 @@
       "execution_scenario": {
         "quote_usdt": 3000,
         "fee_bps": 10.0,
-        "mid": 0.3255,
-        "buy_avg": 0.326808864,
-        "exit_avg": 0.324089391,
-        "buy_slippage_bps": 40.211,
-        "exit_slippage_bps": 43.337,
-        "spread_bps": 30.722,
-        "roundtrip_cost_usdt": 30.94,
+        "mid": 0.037065,
+        "buy_avg": 0.037112135,
+        "exit_avg": 0.037013201,
+        "buy_slippage_bps": 12.717,
+        "exit_slippage_bps": 13.975,
+        "spread_bps": 8.094,
+        "roundtrip_cost_usdt": 13.99,
         "target_net_usdt": 150.0,
-        "required_future_mid": 0.345316423,
-        "required_mid_gain_pct": 6.088,
-        "stop_mid": 0.318638642,
-        "estimated_stop_loss_usdt": 93.59,
-        "estimated_rr": 1.603,
+        "required_future_mid": 0.039098539,
+        "required_mid_gain_pct": 5.486,
+        "stop_mid": 0.036184331,
+        "estimated_stop_loss_usdt": 85.01,
+        "estimated_rr": 1.765,
         "caveat": "Static snapshot; orderbook, fees and fills can change; research only."
       },
       "research_gaps": [
         "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
       ],
-      "entry_stage": "BLOCKED",
+      "entry_stage": "SYSTEM_BLOCKED",
       "first_tranche_allowed": false,
       "confirmation_role": "NONE",
       "blockers": [
+        "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
         "DEPTH_BELOW_30K_USDT"
       ],
       "capital_review_eligible": false,
-      "trade_action": "REJECT"
+      "trade_action": "SYSTEM_BLOCKED"
     },
     {
       "asset": "TREE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0467,
       "signal": {
         "base": "TREE",
@@ -981,66 +984,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "GTC",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.11471,
-      "signal": {
-        "base": "GTC",
-        "pair": "GTCUSDT",
-        "stage": "EARLY",
-        "score": 4.3906,
-        "btc_relative_1h_pct": 0.8268,
-        "btc_relative_4h_pct": 1.8184,
-        "relative_acceleration_pct": 0.3722,
-        "return_1h_pct": 0.9057,
-        "return_4h_pct": 1.6206,
-        "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.4483,
-        "compression_ratio": 2.0292,
-        "return_15m_pct": -0.7095,
-        "range_position_6h": 0.75,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "CBRSB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 181.28,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 181.82,
       "signal": {
         "base": "CBRSB",
         "pair": "CBRSBUSDT",
         "stage": "EARLY",
-        "score": 4.3725,
-        "btc_relative_1h_pct": 0.8668,
-        "btc_relative_4h_pct": 2.1417,
-        "relative_acceleration_pct": 0.3314,
-        "return_1h_pct": 0.9458,
-        "return_4h_pct": 1.9439,
+        "score": 4.5563,
+        "btc_relative_1h_pct": 0.9113,
+        "btc_relative_4h_pct": 2.1866,
+        "relative_acceleration_pct": 0.3647,
+        "return_1h_pct": 0.9903,
+        "return_4h_pct": 1.9889,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.3019,
-        "compression_ratio": 0.4671,
-        "return_15m_pct": 0.1933,
-        "range_position_6h": 1.0,
+        "volume_acceleration_15m": 0.3127,
+        "compression_ratio": 0.4144,
+        "return_15m_pct": 0.2374,
+        "range_position_6h": 0.9358,
         "pre_move_components": {
           "volume": false,
           "compression": false,
@@ -1065,20 +1026,20 @@
     },
     {
       "asset": "RUNE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.745,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.746,
       "signal": {
         "base": "RUNE",
         "pair": "RUNEUSDT",
         "stage": "EARLY",
-        "score": 4.3673,
+        "score": 4.3929,
         "btc_relative_1h_pct": 0.8683,
         "btc_relative_4h_pct": 2.1103,
         "relative_acceleration_pct": 0.3407,
         "return_1h_pct": 0.9472,
         "return_4h_pct": 1.9126,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 1.0185,
+        "volume_acceleration_15m": 1.0698,
         "compression_ratio": 0.7337,
         "return_15m_pct": 0.0,
         "range_position_6h": 0.9375,
@@ -1106,23 +1067,23 @@
     },
     {
       "asset": "SKY",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.09011,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.09027,
       "signal": {
         "base": "SKY",
         "pair": "SKYUSDT",
         "stage": "EARLY",
-        "score": 4.1974,
-        "btc_relative_1h_pct": 0.6468,
-        "btc_relative_4h_pct": 2.8841,
-        "relative_acceleration_pct": -0.0742,
-        "return_1h_pct": 0.7258,
-        "return_4h_pct": 2.6864,
+        "score": 4.366,
+        "btc_relative_1h_pct": 0.7027,
+        "btc_relative_4h_pct": 2.9411,
+        "relative_acceleration_pct": -0.0326,
+        "return_1h_pct": 0.7816,
+        "return_4h_pct": 2.7433,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.5049,
+        "volume_acceleration_15m": 0.5153,
         "compression_ratio": 1.0558,
-        "return_15m_pct": 0.1553,
-        "range_position_6h": 0.9703,
+        "return_15m_pct": 0.1442,
+        "range_position_6h": 0.967,
         "pre_move_components": {
           "volume": false,
           "compression": false,
@@ -1146,8 +1107,49 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "MANTA",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.07016,
+      "signal": {
+        "base": "MANTA",
+        "pair": "MANTAUSDT",
+        "stage": "EARLY",
+        "score": 4.293,
+        "btc_relative_1h_pct": 0.8679,
+        "btc_relative_4h_pct": 1.583,
+        "relative_acceleration_pct": 0.4721,
+        "return_1h_pct": 0.9468,
+        "return_4h_pct": 1.3853,
+        "independent_signal_count": 4,
+        "volume_acceleration_15m": 1.5323,
+        "compression_ratio": 0.4251,
+        "return_15m_pct": 1.0935,
+        "range_position_6h": 0.8252,
+        "pre_move_components": {
+          "volume": true,
+          "compression": false,
+          "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "ROBO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.00847,
       "signal": {
         "base": "ROBO",
@@ -1160,7 +1162,7 @@
         "return_1h_pct": -0.5869,
         "return_4h_pct": 3.2927,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.2282,
+        "volume_acceleration_15m": 0.2375,
         "compression_ratio": 6.1312,
         "return_15m_pct": 0.0,
         "range_position_6h": 0.3448,
@@ -1190,23 +1192,23 @@
     },
     {
       "asset": "NOM",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.00241,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.002406,
       "signal": {
         "base": "NOM",
         "pair": "NOMUSDT",
         "stage": "EARLY",
-        "score": 4.1788,
-        "btc_relative_1h_pct": -0.4102,
-        "btc_relative_4h_pct": 4.0821,
-        "relative_acceleration_pct": -1.4307,
-        "return_1h_pct": -0.3313,
-        "return_4h_pct": 3.8843,
+        "score": 4.0925,
+        "btc_relative_1h_pct": -0.493,
+        "btc_relative_4h_pct": 3.9958,
+        "relative_acceleration_pct": -1.4919,
+        "return_1h_pct": -0.4141,
+        "return_4h_pct": 3.798,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.0743,
+        "volume_acceleration_15m": 0.0752,
         "compression_ratio": 1.2763,
-        "return_15m_pct": 0.0832,
-        "range_position_6h": 0.6078,
+        "return_15m_pct": 0.0416,
+        "range_position_6h": 0.6013,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -1232,92 +1234,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "SIGN",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.01274,
-      "signal": {
-        "base": "SIGN",
-        "pair": "SIGNUSDT",
-        "stage": "EARLY",
-        "score": 4.1119,
-        "btc_relative_1h_pct": 0.3943,
-        "btc_relative_4h_pct": 2.9397,
-        "relative_acceleration_pct": -0.3407,
-        "return_1h_pct": 0.4732,
-        "return_4h_pct": 2.7419,
-        "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.3277,
-        "compression_ratio": 2.0963,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.9111,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "SUI",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 1.1843,
-      "signal": {
-        "base": "SUI",
-        "pair": "SUIUSDT",
-        "stage": "EARLY",
-        "score": 3.9984,
-        "btc_relative_1h_pct": 0.7636,
-        "btc_relative_4h_pct": 1.1351,
-        "relative_acceleration_pct": 0.4798,
-        "return_1h_pct": 0.8425,
-        "return_4h_pct": 0.9374,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.233,
-        "compression_ratio": 0.8817,
-        "return_15m_pct": 0.0253,
-        "range_position_6h": 0.7784,
-        "pre_move_components": {
-          "volume": true,
-          "compression": false,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "IOST",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.000849,
       "signal": {
         "base": "IOST",
@@ -1325,7 +1243,7 @@
         "stage": "EARLY",
         "score": 3.9217,
         "btc_relative_1h_pct": 0.8723,
-        "btc_relative_4h_pct": 1.3896,
+        "btc_relative_4h_pct": 1.3897,
         "relative_acceleration_pct": 0.5249,
         "return_1h_pct": 0.9512,
         "return_4h_pct": 1.1919,
@@ -1358,7 +1276,7 @@
     },
     {
       "asset": "SENT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.02229,
       "signal": {
         "base": "SENT",
@@ -1400,8 +1318,8 @@
     },
     {
       "asset": "PROVE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.2159,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.2162,
       "signal": {
         "base": "PROVE",
         "pair": "PROVEUSDT",
@@ -1413,7 +1331,7 @@
         "return_1h_pct": 0.6049,
         "return_4h_pct": 0.7456,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 3.0401,
+        "volume_acceleration_15m": 3.877,
         "compression_ratio": 1.7992,
         "return_15m_pct": 0.2783,
         "range_position_6h": 0.7407,
@@ -1442,13 +1360,13 @@
     },
     {
       "asset": "PROM",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 6.289,
       "signal": {
         "base": "PROM",
         "pair": "PROMUSDT",
         "stage": "EARLY",
-        "score": 3.7042,
+        "score": 3.7043,
         "btc_relative_1h_pct": 0.5773,
         "btc_relative_4h_pct": 2.3251,
         "relative_acceleration_pct": -0.004,
@@ -1483,28 +1401,70 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "ICP",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 3.365,
+      "asset": "SXT",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.00967,
       "signal": {
-        "base": "ICP",
-        "pair": "ICPUSDT",
+        "base": "SXT",
+        "pair": "SXTUSDT",
         "stage": "EARLY",
-        "score": 3.6472,
-        "btc_relative_1h_pct": 0.4894,
-        "btc_relative_4h_pct": 2.3869,
-        "relative_acceleration_pct": -0.1073,
-        "return_1h_pct": 0.5684,
-        "return_4h_pct": 2.1891,
+        "score": 3.6719,
+        "btc_relative_1h_pct": 0.4403,
+        "btc_relative_4h_pct": 2.6316,
+        "relative_acceleration_pct": -0.2176,
+        "return_1h_pct": 0.5192,
+        "return_4h_pct": 2.4339,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.2946,
-        "compression_ratio": 1.8041,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.8966,
+        "volume_acceleration_15m": 0.1117,
+        "compression_ratio": 1.4563,
+        "return_15m_pct": 0.207,
+        "range_position_6h": 0.8125,
         "pre_move_components": {
           "volume": false,
           "compression": true,
           "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "ICP",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 3.361,
+      "signal": {
+        "base": "ICP",
+        "pair": "ICPUSDT",
+        "stage": "EARLY",
+        "score": 3.5873,
+        "btc_relative_1h_pct": 0.4595,
+        "btc_relative_4h_pct": 2.3869,
+        "relative_acceleration_pct": -0.1372,
+        "return_1h_pct": 0.5384,
+        "return_4h_pct": 2.1891,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.3092,
+        "compression_ratio": 1.8041,
+        "return_15m_pct": -0.0298,
+        "range_position_6h": 0.8851,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
         },
         "research_only": true
       },
@@ -1524,8 +1484,49 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "JUV",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.325,
+      "signal": {
+        "base": "JUV",
+        "pair": "JUVUSDT",
+        "stage": "EARLY",
+        "score": 3.5848,
+        "btc_relative_1h_pct": 0.8528,
+        "btc_relative_4h_pct": 0.817,
+        "relative_acceleration_pct": 0.6485,
+        "return_1h_pct": 0.9317,
+        "return_4h_pct": 0.6192,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 0.3043,
+        "compression_ratio": 1.2558,
+        "return_15m_pct": -0.3067,
+        "range_position_6h": 0.8333,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "METIS",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 3.34,
       "signal": {
         "base": "METIS",
@@ -1538,7 +1539,7 @@
         "return_1h_pct": 0.6024,
         "return_4h_pct": 2.1407,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.2368,
+        "volume_acceleration_15m": 0.4354,
         "compression_ratio": 1.5136,
         "return_15m_pct": 0.0,
         "range_position_6h": 0.875,
@@ -1568,8 +1569,8 @@
     },
     {
       "asset": "MET",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.3028,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.3025,
       "signal": {
         "base": "MET",
         "pair": "METUSDT",
@@ -1609,24 +1610,66 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "SXT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.00967,
+      "asset": "SIGN",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.01274,
       "signal": {
-        "base": "SXT",
-        "pair": "SXTUSDT",
+        "base": "SIGN",
+        "pair": "SIGNUSDT",
         "stage": "EARLY",
-        "score": 3.3584,
-        "btc_relative_1h_pct": 0.3364,
-        "btc_relative_4h_pct": 2.5258,
-        "relative_acceleration_pct": -0.295,
-        "return_1h_pct": 0.4154,
-        "return_4h_pct": 2.328,
+        "score": 3.3968,
+        "btc_relative_1h_pct": 0.1577,
+        "btc_relative_4h_pct": 2.6978,
+        "relative_acceleration_pct": -0.5168,
+        "return_1h_pct": 0.2366,
+        "return_4h_pct": 2.5,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.3799,
+        "compression_ratio": 2.0963,
+        "return_15m_pct": -0.2355,
+        "range_position_6h": 0.8444,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "LAZIO",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.389,
+      "signal": {
+        "base": "LAZIO",
+        "pair": "LAZIOUSDT",
+        "stage": "EARLY",
+        "score": 3.3185,
+        "btc_relative_1h_pct": 0.4365,
+        "btc_relative_4h_pct": 2.0254,
+        "relative_acceleration_pct": -0.0698,
+        "return_1h_pct": 0.5155,
+        "return_4h_pct": 1.8277,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.0483,
-        "compression_ratio": 1.4563,
-        "return_15m_pct": 0.1035,
-        "range_position_6h": 0.7812,
+        "volume_acceleration_15m": 0.4705,
+        "compression_ratio": 2.2,
+        "return_15m_pct": 0.7752,
+        "range_position_6h": 0.7273,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -1652,7 +1695,7 @@
     },
     {
       "asset": "GNS",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.422,
       "signal": {
         "base": "GNS",
@@ -1660,7 +1703,7 @@
         "stage": "EARLY",
         "score": 3.2376,
         "btc_relative_1h_pct": 0.6371,
-        "btc_relative_4h_pct": 0.6739,
+        "btc_relative_4h_pct": 0.674,
         "relative_acceleration_pct": 0.4686,
         "return_1h_pct": 0.716,
         "return_4h_pct": 0.4762,
@@ -1693,108 +1736,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "OP",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1363,
+      "asset": "RE",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.5091,
       "signal": {
-        "base": "OP",
-        "pair": "OPUSDT",
+        "base": "RE",
+        "pair": "REUSDT",
         "stage": "EARLY",
-        "score": 3.2143,
-        "btc_relative_1h_pct": 0.5119,
-        "btc_relative_4h_pct": 1.9915,
-        "relative_acceleration_pct": 0.0141,
-        "return_1h_pct": 0.5908,
-        "return_4h_pct": 1.7937,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.4502,
-        "compression_ratio": 1.5083,
-        "return_15m_pct": -0.1467,
-        "range_position_6h": 0.7429,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "EUL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 1.431,
-      "signal": {
-        "base": "EUL",
-        "pair": "EULUSDT",
-        "stage": "EARLY",
-        "score": 3.195,
-        "btc_relative_1h_pct": 0.7673,
-        "btc_relative_4h_pct": 0.408,
-        "relative_acceleration_pct": 0.6653,
-        "return_1h_pct": 0.8463,
-        "return_4h_pct": 0.2102,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.2372,
-        "compression_ratio": 1.3878,
-        "return_15m_pct": -0.1397,
-        "range_position_6h": 0.9062,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "MANTA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.07036,
-      "signal": {
-        "base": "MANTA",
-        "pair": "MANTAUSDT",
-        "stage": "EARLY",
-        "score": 3.1267,
-        "btc_relative_1h_pct": 0.5666,
-        "btc_relative_4h_pct": 1.4387,
-        "relative_acceleration_pct": 0.2069,
-        "return_1h_pct": 0.6455,
-        "return_4h_pct": 1.241,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.4887,
-        "compression_ratio": 0.4251,
-        "return_15m_pct": 0.9496,
-        "range_position_6h": 0.7552,
+        "score": 3.1651,
+        "btc_relative_1h_pct": 0.3548,
+        "btc_relative_4h_pct": 1.7528,
+        "relative_acceleration_pct": -0.0834,
+        "return_1h_pct": 0.4338,
+        "return_4h_pct": 1.555,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 2.4053,
+        "compression_ratio": 0.7039,
+        "return_15m_pct": 0.0589,
+        "range_position_6h": 0.9478,
         "pre_move_components": {
           "volume": true,
           "compression": false,
@@ -1820,7 +1779,7 @@
     },
     {
       "asset": "WCT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.04333,
       "signal": {
         "base": "WCT",
@@ -1861,70 +1820,28 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "TOWNS",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.002212,
+      "asset": "MUBARAK",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.06358,
       "signal": {
-        "base": "TOWNS",
-        "pair": "TOWNSUSDT",
+        "base": "MUBARAK",
+        "pair": "MUBARAKUSDT",
         "stage": "EARLY",
-        "score": 3.1161,
-        "btc_relative_1h_pct": 0.3752,
-        "btc_relative_4h_pct": 1.6656,
-        "relative_acceleration_pct": -0.0412,
-        "return_1h_pct": 0.4541,
-        "return_4h_pct": 1.4679,
+        "score": 3.0387,
+        "btc_relative_1h_pct": 0.2523,
+        "btc_relative_4h_pct": 1.9572,
+        "relative_acceleration_pct": -0.237,
+        "return_1h_pct": 0.3312,
+        "return_4h_pct": 1.7594,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.0325,
-        "compression_ratio": 5.181,
-        "return_15m_pct": 0.0452,
-        "range_position_6h": 0.4083,
+        "volume_acceleration_15m": 0.6924,
+        "compression_ratio": 2.6486,
+        "return_15m_pct": 0.0,
+        "range_position_6h": 0.7846,
         "pre_move_components": {
           "volume": false,
           "compression": true,
           "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "MINA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1628,
-      "signal": {
-        "base": "MINA",
-        "pair": "MINAUSDT",
-        "stage": "EARLY",
-        "score": 3.0515,
-        "btc_relative_1h_pct": -0.5078,
-        "btc_relative_4h_pct": 2.5248,
-        "relative_acceleration_pct": -1.139,
-        "return_1h_pct": -0.4289,
-        "return_4h_pct": 2.327,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.2222,
-        "compression_ratio": 2.5047,
-        "return_15m_pct": 0.1847,
-        "range_position_6h": 0.8727,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
         },
         "research_only": true
       },
@@ -1945,7 +1862,7 @@
     },
     {
       "asset": "AXL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.055,
       "signal": {
         "base": "AXL",
@@ -1986,20 +1903,20 @@
     },
     {
       "asset": "ZK",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.0132,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.01321,
       "signal": {
         "base": "ZK",
         "pair": "ZKUSDT",
         "stage": "EARLY",
-        "score": 2.9944,
+        "score": 2.998,
         "btc_relative_1h_pct": 0.4538,
         "btc_relative_4h_pct": 1.5014,
         "relative_acceleration_pct": 0.0784,
         "return_1h_pct": 0.5327,
         "return_4h_pct": 1.3037,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 1.8798,
+        "volume_acceleration_15m": 1.887,
         "compression_ratio": 1.0794,
         "return_15m_pct": 0.0758,
         "range_position_6h": 0.9,
@@ -2027,65 +1944,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "MUBARAK",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.06351,
+      "asset": "TOWNS",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.002212,
       "signal": {
-        "base": "MUBARAK",
-        "pair": "MUBARAKUSDT",
+        "base": "TOWNS",
+        "pair": "TOWNSUSDT",
         "stage": "EARLY",
-        "score": 2.9436,
-        "btc_relative_1h_pct": 0.2207,
-        "btc_relative_4h_pct": 1.9252,
-        "relative_acceleration_pct": -0.2606,
-        "return_1h_pct": 0.2996,
-        "return_4h_pct": 1.7274,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.651,
-        "compression_ratio": 2.6486,
-        "return_15m_pct": -0.11,
-        "range_position_6h": 0.7561,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "SEI",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.0716,
-      "signal": {
-        "base": "SEI",
-        "pair": "SEIUSDT",
-        "stage": "EARLY",
-        "score": 2.9126,
-        "btc_relative_1h_pct": 0.4404,
-        "btc_relative_4h_pct": 1.9307,
-        "relative_acceleration_pct": -0.0423,
-        "return_1h_pct": 0.5193,
-        "return_4h_pct": 1.733,
+        "score": 2.9794,
+        "btc_relative_1h_pct": 0.3298,
+        "btc_relative_4h_pct": 1.6198,
+        "relative_acceleration_pct": -0.0751,
+        "return_1h_pct": 0.4087,
+        "return_4h_pct": 1.422,
         "independent_signal_count": 3,
-        "volume_acceleration_15m": 0.6248,
-        "compression_ratio": 1.2889,
-        "return_15m_pct": 0.0978,
-        "range_position_6h": 0.8974,
+        "volume_acceleration_15m": 0.0368,
+        "compression_ratio": 5.181,
+        "return_15m_pct": 0.0,
+        "range_position_6h": 0.4,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2110,65 +1986,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "ETHFI",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.7245,
-      "signal": {
-        "base": "ETHFI",
-        "pair": "ETHFIUSDT",
-        "stage": "EARLY",
-        "score": 2.8357,
-        "btc_relative_1h_pct": 0.2951,
-        "btc_relative_4h_pct": 1.8689,
-        "relative_acceleration_pct": -0.1721,
-        "return_1h_pct": 0.374,
-        "return_4h_pct": 1.6711,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.708,
-        "compression_ratio": 2.0763,
-        "return_15m_pct": -0.3304,
-        "range_position_6h": 0.8414,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "IO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1683,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1682,
       "signal": {
         "base": "IO",
         "pair": "IOUSDT",
         "stage": "EARLY",
-        "score": 2.794,
-        "btc_relative_1h_pct": 0.0401,
-        "btc_relative_4h_pct": 2.0137,
-        "relative_acceleration_pct": -0.4633,
-        "return_1h_pct": 0.119,
-        "return_4h_pct": 1.816,
+        "score": 2.9736,
+        "btc_relative_1h_pct": 0.0996,
+        "btc_relative_4h_pct": 2.0743,
+        "relative_acceleration_pct": -0.4189,
+        "return_1h_pct": 0.1786,
+        "return_4h_pct": 1.8765,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.133,
+        "volume_acceleration_15m": 0.1449,
         "compression_ratio": 3.632,
-        "return_15m_pct": 0.119,
-        "range_position_6h": 0.5875,
+        "return_15m_pct": 0.1786,
+        "range_position_6h": 0.6,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2193,8 +2028,174 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "MINA",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1625,
+      "signal": {
+        "base": "MINA",
+        "pair": "MINAUSDT",
+        "stage": "EARLY",
+        "score": 2.9257,
+        "btc_relative_1h_pct": -0.5078,
+        "btc_relative_4h_pct": 2.399,
+        "relative_acceleration_pct": -1.1076,
+        "return_1h_pct": -0.4289,
+        "return_4h_pct": 2.2013,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.2242,
+        "compression_ratio": 2.5047,
+        "return_15m_pct": 0.1847,
+        "range_position_6h": 0.8727,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "EUL",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 1.429,
+      "signal": {
+        "base": "EUL",
+        "pair": "EULUSDT",
+        "stage": "EARLY",
+        "score": 2.9095,
+        "btc_relative_1h_pct": 0.6968,
+        "btc_relative_4h_pct": 0.3379,
+        "relative_acceleration_pct": 0.6123,
+        "return_1h_pct": 0.7757,
+        "return_4h_pct": 0.1402,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 1.2475,
+        "compression_ratio": 1.3878,
+        "return_15m_pct": -0.2095,
+        "range_position_6h": 0.875,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "ETHFI",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.7239,
+      "signal": {
+        "base": "ETHFI",
+        "pair": "ETHFIUSDT",
+        "stage": "EARLY",
+        "score": 2.8225,
+        "btc_relative_1h_pct": 0.2674,
+        "btc_relative_4h_pct": 1.911,
+        "relative_acceleration_pct": -0.2104,
+        "return_1h_pct": 0.3463,
+        "return_4h_pct": 1.7132,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.736,
+        "compression_ratio": 2.0763,
+        "return_15m_pct": -0.2754,
+        "range_position_6h": 0.859,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "SEI",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.07162,
+      "signal": {
+        "base": "SEI",
+        "pair": "SEIUSDT",
+        "stage": "EARLY",
+        "score": 2.7993,
+        "btc_relative_1h_pct": 0.4263,
+        "btc_relative_4h_pct": 1.8455,
+        "relative_acceleration_pct": -0.035,
+        "return_1h_pct": 0.5053,
+        "return_4h_pct": 1.6477,
+        "independent_signal_count": 3,
+        "volume_acceleration_15m": 0.9731,
+        "compression_ratio": 1.2889,
+        "return_15m_pct": 0.014,
+        "range_position_6h": 0.859,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "C",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0988,
       "signal": {
         "base": "C",
@@ -2237,8 +2238,8 @@
     },
     {
       "asset": "DYM",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.01942,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.01941,
       "signal": {
         "base": "DYM",
         "pair": "DYMUSDT",
@@ -2250,7 +2251,7 @@
         "return_1h_pct": 0.4139,
         "return_4h_pct": 1.3048,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.6903,
+        "volume_acceleration_15m": 0.6955,
         "compression_ratio": 2.6722,
         "return_15m_pct": -0.0515,
         "range_position_6h": 0.6875,
@@ -2278,66 +2279,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "RE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.509,
+      "asset": "OP",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1361,
       "signal": {
-        "base": "RE",
-        "pair": "REUSDT",
+        "base": "OP",
+        "pair": "OPUSDT",
         "stage": "EARLY",
-        "score": 2.7476,
-        "btc_relative_1h_pct": 0.2168,
-        "btc_relative_4h_pct": 1.693,
-        "relative_acceleration_pct": -0.2064,
-        "return_1h_pct": 0.2957,
-        "return_4h_pct": 1.4952,
+        "score": 2.7483,
+        "btc_relative_1h_pct": 0.3642,
+        "btc_relative_4h_pct": 1.842,
+        "relative_acceleration_pct": -0.0963,
+        "return_1h_pct": 0.4431,
+        "return_4h_pct": 1.6442,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.242,
-        "compression_ratio": 0.7039,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.9217,
-        "pre_move_components": {
-          "volume": true,
-          "compression": false,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "LAZIO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.389,
-      "signal": {
-        "base": "LAZIO",
-        "pair": "LAZIOUSDT",
-        "stage": "EARLY",
-        "score": 2.7332,
-        "btc_relative_1h_pct": 0.1788,
-        "btc_relative_4h_pct": 1.7643,
-        "relative_acceleration_pct": -0.2623,
-        "return_1h_pct": 0.2577,
-        "return_4h_pct": 1.5666,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.4554,
-        "compression_ratio": 2.7465,
-        "return_15m_pct": 0.5168,
-        "range_position_6h": 0.6364,
+        "volume_acceleration_15m": 0.5052,
+        "compression_ratio": 1.5083,
+        "return_15m_pct": -0.2201,
+        "range_position_6h": 0.7143,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2363,7 +2322,7 @@
     },
     {
       "asset": "KNC",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.1423,
       "signal": {
         "base": "KNC",
@@ -2404,50 +2363,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "BERA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.2274,
-      "signal": {
-        "base": "BERA",
-        "pair": "BERAUSDT",
-        "stage": "EARLY",
-        "score": 2.653,
-        "btc_relative_1h_pct": 0.4948,
-        "btc_relative_4h_pct": 0.9493,
-        "relative_acceleration_pct": 0.2575,
-        "return_1h_pct": 0.5737,
-        "return_4h_pct": 0.7515,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.9185,
-        "compression_ratio": 1.9371,
-        "return_15m_pct": 0.264,
-        "range_position_6h": 0.7419,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "HIVE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0565,
       "signal": {
         "base": "HIVE",
@@ -2489,66 +2406,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "PENDLE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 2.402,
-      "signal": {
-        "base": "PENDLE",
-        "pair": "PENDLEUSDT",
-        "stage": "EARLY",
-        "score": 2.6174,
-        "btc_relative_1h_pct": 0.3395,
-        "btc_relative_4h_pct": 1.5491,
-        "relative_acceleration_pct": -0.0478,
-        "return_1h_pct": 0.4184,
-        "return_4h_pct": 1.3514,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.3266,
-        "compression_ratio": 2.1124,
-        "return_15m_pct": -0.0416,
-        "range_position_6h": 0.9556,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "INIT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.11349,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.11357,
       "signal": {
         "base": "INIT",
         "pair": "INITUSDT",
         "stage": "EARLY",
-        "score": 2.5815,
-        "btc_relative_1h_pct": 0.0092,
-        "btc_relative_4h_pct": 1.9261,
-        "relative_acceleration_pct": -0.4724,
-        "return_1h_pct": 0.0881,
-        "return_4h_pct": 1.7283,
+        "score": 2.4647,
+        "btc_relative_1h_pct": -0.123,
+        "btc_relative_4h_pct": 1.8276,
+        "relative_acceleration_pct": -0.5799,
+        "return_1h_pct": -0.044,
+        "return_4h_pct": 1.6298,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.1637,
+        "volume_acceleration_15m": 0.1663,
         "compression_ratio": 2.8203,
-        "return_15m_pct": 0.0176,
-        "range_position_6h": 0.8262,
+        "return_15m_pct": -0.0792,
+        "range_position_6h": 0.8067,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2575,23 +2450,23 @@
     },
     {
       "asset": "SYRUP",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.2563,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.2572,
       "signal": {
         "base": "SYRUP",
         "pair": "SYRUPUSDT",
         "stage": "EARLY",
-        "score": 2.5005,
-        "btc_relative_1h_pct": -0.8888,
-        "btc_relative_4h_pct": 1.898,
-        "relative_acceleration_pct": -1.3633,
-        "return_1h_pct": -0.8099,
-        "return_4h_pct": 1.7003,
+        "score": 2.4646,
+        "btc_relative_1h_pct": -0.9274,
+        "btc_relative_4h_pct": 1.8585,
+        "relative_acceleration_pct": -1.392,
+        "return_1h_pct": -0.8484,
+        "return_4h_pct": 1.6607,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.0465,
+        "volume_acceleration_15m": 1.0539,
         "compression_ratio": 2.6548,
-        "return_15m_pct": -0.4259,
-        "range_position_6h": 0.7065,
+        "return_15m_pct": -0.4646,
+        "range_position_6h": 0.6957,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2616,28 +2491,28 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "STX",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.3841,
+      "asset": "AI",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.0203,
       "signal": {
-        "base": "STX",
-        "pair": "STXUSDT",
+        "base": "AI",
+        "pair": "AIUSDT",
         "stage": "EARLY",
-        "score": 2.4594,
-        "btc_relative_1h_pct": -0.157,
-        "btc_relative_4h_pct": 1.7594,
-        "relative_acceleration_pct": -0.5969,
-        "return_1h_pct": -0.0781,
-        "return_4h_pct": 1.5617,
+        "score": 2.4398,
+        "btc_relative_1h_pct": 0.4113,
+        "btc_relative_4h_pct": 1.183,
+        "relative_acceleration_pct": 0.1155,
+        "return_1h_pct": 0.4902,
+        "return_4h_pct": 0.9852,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.1007,
-        "compression_ratio": 5.9295,
-        "return_15m_pct": -0.1301,
-        "range_position_6h": 0.3621,
+        "volume_acceleration_15m": 0.0757,
+        "compression_ratio": 1.7457,
+        "return_15m_pct": 0.0,
+        "range_position_6h": 0.1429,
         "pre_move_components": {
           "volume": false,
           "compression": true,
-          "relative_turn": false
+          "relative_turn": true
         },
         "research_only": true
       },
@@ -2658,7 +2533,7 @@
     },
     {
       "asset": "1000SATS",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 1.254e-05,
       "signal": {
         "base": "1000SATS",
@@ -2700,7 +2575,7 @@
     },
     {
       "asset": "BARD",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.1366,
       "signal": {
         "base": "BARD",
@@ -2741,18 +2616,142 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "RAY",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 2.0935,
+      "signal": {
+        "base": "RAY",
+        "pair": "RAYUSDT",
+        "stage": "EARLY",
+        "score": 2.3379,
+        "btc_relative_1h_pct": 0.5408,
+        "btc_relative_4h_pct": 0.2216,
+        "relative_acceleration_pct": 0.4854,
+        "return_1h_pct": 0.6197,
+        "return_4h_pct": 0.0239,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.185,
+        "compression_ratio": 1.8757,
+        "return_15m_pct": 0.1626,
+        "range_position_6h": 0.566,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "VTHO",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.000655,
+      "signal": {
+        "base": "VTHO",
+        "pair": "VTHOUSDT",
+        "stage": "EARLY",
+        "score": 2.3166,
+        "btc_relative_1h_pct": 0.3812,
+        "btc_relative_4h_pct": 1.1223,
+        "relative_acceleration_pct": 0.1006,
+        "return_1h_pct": 0.4601,
+        "return_4h_pct": 0.9245,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.1555,
+        "compression_ratio": 1.8028,
+        "return_15m_pct": 0.1529,
+        "range_position_6h": 0.8889,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "STX",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.3837,
+      "signal": {
+        "base": "STX",
+        "pair": "STXUSDT",
+        "stage": "EARLY",
+        "score": 2.3006,
+        "btc_relative_1h_pct": -0.2352,
+        "btc_relative_4h_pct": 1.6006,
+        "relative_acceleration_pct": -0.6353,
+        "return_1h_pct": -0.1563,
+        "return_4h_pct": 1.4029,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.1095,
+        "compression_ratio": 5.1349,
+        "return_15m_pct": -0.2863,
+        "range_position_6h": 0.3362,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "CTK",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.129,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1289,
       "signal": {
         "base": "CTK",
         "pair": "CTKUSDT",
         "stage": "EARLY",
         "score": 2.2342,
-        "btc_relative_1h_pct": -0.3109,
+        "btc_relative_1h_pct": -0.3883,
         "btc_relative_4h_pct": 1.5342,
-        "relative_acceleration_pct": -0.6945,
-        "return_1h_pct": -0.232,
+        "relative_acceleration_pct": -0.7718,
+        "return_1h_pct": -0.3094,
         "return_4h_pct": 1.3365,
         "independent_signal_count": 2,
         "volume_acceleration_15m": 0.3041,
@@ -2785,7 +2784,7 @@
     },
     {
       "asset": "HUMA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.03328,
       "signal": {
         "base": "HUMA",
@@ -2827,7 +2826,7 @@
     },
     {
       "asset": "KERNEL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0544,
       "signal": {
         "base": "KERNEL",
@@ -2868,24 +2867,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "0G",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.2986,
+      "asset": "MMT",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1927,
       "signal": {
-        "base": "0G",
-        "pair": "0GUSDT",
+        "base": "MMT",
+        "pair": "MMTUSDT",
         "stage": "EARLY",
-        "score": 2.1689,
-        "btc_relative_1h_pct": 0.1557,
-        "btc_relative_4h_pct": 1.5189,
-        "relative_acceleration_pct": -0.2241,
-        "return_1h_pct": 0.2346,
-        "return_4h_pct": 1.3211,
+        "score": 2.1322,
+        "btc_relative_1h_pct": -0.3375,
+        "btc_relative_4h_pct": 1.6707,
+        "relative_acceleration_pct": -0.7551,
+        "return_1h_pct": -0.2585,
+        "return_4h_pct": 1.4729,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.2035,
-        "compression_ratio": 1.9677,
-        "return_15m_pct": 0.134,
-        "range_position_6h": 0.8824,
+        "volume_acceleration_15m": 0.3562,
+        "compression_ratio": 2.3186,
+        "return_15m_pct": -0.1036,
+        "range_position_6h": 0.6471,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2910,24 +2909,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "RAY",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 2.0924,
+      "asset": "NEWT",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.05072,
       "signal": {
-        "base": "RAY",
-        "pair": "RAYUSDT",
+        "base": "NEWT",
+        "pair": "NEWTUSDT",
         "stage": "EARLY",
-        "score": 2.1597,
-        "btc_relative_1h_pct": 0.4976,
-        "btc_relative_4h_pct": 0.1786,
-        "relative_acceleration_pct": 0.4529,
-        "return_1h_pct": 0.5765,
-        "return_4h_pct": -0.0191,
+        "score": 2.1142,
+        "btc_relative_1h_pct": 0.3368,
+        "btc_relative_4h_pct": 1.2133,
+        "relative_acceleration_pct": 0.0334,
+        "return_1h_pct": 0.4157,
+        "return_4h_pct": 1.0155,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.1798,
-        "compression_ratio": 1.8757,
-        "return_15m_pct": 0.1243,
-        "range_position_6h": 0.55,
+        "volume_acceleration_15m": 0.3053,
+        "compression_ratio": 1.5064,
+        "return_15m_pct": 0.0197,
+        "range_position_6h": 0.9661,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2952,24 +2951,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "CAKE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 2.528,
+      "asset": "BERA",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.2276,
       "signal": {
-        "base": "CAKE",
-        "pair": "CAKEUSDT",
+        "base": "BERA",
+        "pair": "BERAUSDT",
         "stage": "EARLY",
-        "score": 2.1544,
-        "btc_relative_1h_pct": 0.438,
-        "btc_relative_4h_pct": 0.1978,
-        "relative_acceleration_pct": 0.3885,
-        "return_1h_pct": 0.5169,
-        "return_4h_pct": 0.0,
+        "score": 2.1067,
+        "btc_relative_1h_pct": 0.3624,
+        "btc_relative_4h_pct": 0.8167,
+        "relative_acceleration_pct": 0.1582,
+        "return_1h_pct": 0.4413,
+        "return_4h_pct": 0.6189,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.79,
-        "compression_ratio": 2.4226,
-        "return_15m_pct": 0.1189,
-        "range_position_6h": 0.3256,
+        "volume_acceleration_15m": 0.9261,
+        "compression_ratio": 1.9371,
+        "return_15m_pct": 0.132,
+        "range_position_6h": 0.6452,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -2994,28 +2993,28 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "PIXEL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.00631,
+      "asset": "ALICE",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1727,
       "signal": {
-        "base": "PIXEL",
-        "pair": "PIXELUSDT",
+        "base": "ALICE",
+        "pair": "ALICEUSDT",
         "stage": "EARLY",
-        "score": 2.1032,
-        "btc_relative_1h_pct": 0.2385,
-        "btc_relative_4h_pct": -1.5156,
-        "relative_acceleration_pct": 0.6174,
-        "return_1h_pct": 0.3175,
-        "return_4h_pct": -1.7134,
+        "score": 2.0858,
+        "btc_relative_1h_pct": 0.3278,
+        "btc_relative_4h_pct": 0.7798,
+        "relative_acceleration_pct": 0.1329,
+        "return_1h_pct": 0.4067,
+        "return_4h_pct": 0.5821,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.4305,
-        "compression_ratio": 3.6321,
-        "return_15m_pct": 0.1587,
-        "range_position_6h": 0.2273,
+        "volume_acceleration_15m": 0.2712,
+        "compression_ratio": 2.2888,
+        "return_15m_pct": 0.0,
+        "range_position_6h": 0.4359,
         "pre_move_components": {
           "volume": false,
           "compression": true,
-          "relative_turn": false
+          "relative_turn": true
         },
         "research_only": true
       },
@@ -3037,134 +3036,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "TUT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.025,
-      "signal": {
-        "base": "TUT",
-        "pair": "TUTUSDT",
-        "stage": "EARLY",
-        "score": 2.0873,
-        "btc_relative_1h_pct": -0.3184,
-        "btc_relative_4h_pct": 1.5765,
-        "relative_acceleration_pct": -0.7126,
-        "return_1h_pct": -0.2395,
-        "return_4h_pct": 1.3788,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.043,
-        "compression_ratio": 2.4594,
-        "return_15m_pct": 0.1201,
-        "range_position_6h": 0.7831,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "LDO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.4655,
-      "signal": {
-        "base": "LDO",
-        "pair": "LDOUSDT",
-        "stage": "EARLY",
-        "score": 2.0759,
-        "btc_relative_1h_pct": 0.2877,
-        "btc_relative_4h_pct": 0.7378,
-        "relative_acceleration_pct": 0.1032,
-        "return_1h_pct": 0.3666,
-        "return_4h_pct": 0.5401,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.7015,
-        "compression_ratio": 2.7368,
-        "return_15m_pct": 0.0645,
-        "range_position_6h": 0.5169,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "LINK",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 14.106,
-      "signal": {
-        "base": "LINK",
-        "pair": "LINKUSDT",
-        "stage": "EARLY",
-        "score": 2.061,
-        "btc_relative_1h_pct": 0.2198,
-        "btc_relative_4h_pct": 1.542,
-        "relative_acceleration_pct": -0.1657,
-        "return_1h_pct": 0.2987,
-        "return_4h_pct": 1.3443,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.3174,
-        "compression_ratio": 1.2271,
-        "return_15m_pct": -0.1134,
-        "range_position_6h": 0.6906,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "RSR",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.001691,
       "signal": {
         "base": "RSR",
@@ -3172,7 +3045,7 @@
         "stage": "EARLY",
         "score": 2.0382,
         "btc_relative_1h_pct": 0.3368,
-        "btc_relative_4h_pct": 1.0927,
+        "btc_relative_4h_pct": 1.0928,
         "relative_acceleration_pct": 0.0636,
         "return_1h_pct": 0.4157,
         "return_4h_pct": 0.895,
@@ -3205,108 +3078,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "NEWT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.05072,
+      "asset": "CAKE",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 2.527,
       "signal": {
-        "base": "NEWT",
-        "pair": "NEWTUSDT",
+        "base": "CAKE",
+        "pair": "CAKEUSDT",
         "stage": "EARLY",
-        "score": 2.0325,
-        "btc_relative_1h_pct": 0.317,
-        "btc_relative_4h_pct": 1.1934,
-        "relative_acceleration_pct": 0.0186,
-        "return_1h_pct": 0.3959,
-        "return_4h_pct": 0.9956,
+        "score": 1.9905,
+        "btc_relative_1h_pct": 0.3982,
+        "btc_relative_4h_pct": 0.1582,
+        "relative_acceleration_pct": 0.3587,
+        "return_1h_pct": 0.4771,
+        "return_4h_pct": -0.0396,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.3005,
-        "compression_ratio": 1.5064,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.9492,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "MMT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1932,
-      "signal": {
-        "base": "MMT",
-        "pair": "MMTUSDT",
-        "stage": "EARLY",
-        "score": 2.0269,
-        "btc_relative_1h_pct": -0.4409,
-        "btc_relative_4h_pct": 1.5655,
-        "relative_acceleration_pct": -0.8322,
-        "return_1h_pct": -0.3619,
-        "return_4h_pct": 1.3677,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.3454,
-        "compression_ratio": 2.3186,
-        "return_15m_pct": -0.2071,
-        "range_position_6h": 0.6235,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "JTO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.5676,
-      "signal": {
-        "base": "JTO",
-        "pair": "JTOUSDT",
-        "stage": "EARLY",
-        "score": 1.9809,
-        "btc_relative_1h_pct": 0.3458,
-        "btc_relative_4h_pct": -0.1884,
-        "relative_acceleration_pct": 0.3929,
-        "return_1h_pct": 0.4247,
-        "return_4h_pct": -0.3862,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.1732,
-        "compression_ratio": 3.6654,
-        "return_15m_pct": 0.0705,
-        "range_position_6h": 0.1652,
+        "volume_acceleration_15m": 0.79,
+        "compression_ratio": 2.4226,
+        "return_15m_pct": 0.1189,
+        "range_position_6h": 0.3256,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -3332,23 +3121,23 @@
     },
     {
       "asset": "BNB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 789.57,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 789.5,
       "signal": {
         "base": "BNB",
         "pair": "BNBUSDT",
         "stage": "EARLY",
-        "score": 1.97,
-        "btc_relative_1h_pct": 0.4841,
+        "score": 1.9566,
+        "btc_relative_1h_pct": 0.4802,
         "btc_relative_4h_pct": 0.1927,
-        "relative_acceleration_pct": 0.4359,
-        "return_1h_pct": 0.563,
+        "relative_acceleration_pct": 0.4321,
+        "return_1h_pct": 0.5592,
         "return_4h_pct": -0.0051,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.5123,
+        "volume_acceleration_15m": 0.5336,
         "compression_ratio": 1.4439,
-        "return_15m_pct": 0.0329,
-        "range_position_6h": 0.5797,
+        "return_15m_pct": 0.0317,
+        "range_position_6h": 0.5785,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -3373,7 +3162,7 @@
     },
     {
       "asset": "ME",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.07821,
       "signal": {
         "base": "ME",
@@ -3416,7 +3205,7 @@
     },
     {
       "asset": "AEVO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.02688,
       "signal": {
         "base": "AEVO",
@@ -3457,175 +3246,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "1MBABYDOGE",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.0004131,
-      "signal": {
-        "base": "1MBABYDOGE",
-        "pair": "1MBABYDOGEUSDT",
-        "stage": "EARLY",
-        "score": 1.9142,
-        "btc_relative_1h_pct": 0.432,
-        "btc_relative_4h_pct": 0.0527,
-        "relative_acceleration_pct": 0.4188,
-        "return_1h_pct": 0.5109,
-        "return_4h_pct": -0.145,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.1539,
-        "compression_ratio": 2.0548,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.4478,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "WLD",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.5998,
-      "signal": {
-        "base": "WLD",
-        "pair": "WLDUSDT",
-        "stage": "EARLY",
-        "score": 1.8917,
-        "btc_relative_1h_pct": -0.1123,
-        "btc_relative_4h_pct": 1.6731,
-        "relative_acceleration_pct": -0.5306,
-        "return_1h_pct": -0.0334,
-        "return_4h_pct": 1.4753,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.4118,
-        "compression_ratio": 1.6246,
-        "return_15m_pct": -0.2833,
-        "range_position_6h": 0.6846,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "QNT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 259.14,
-      "signal": {
-        "base": "QNT",
-        "pair": "QNTUSDT",
-        "stage": "EARLY",
-        "score": 1.8851,
-        "btc_relative_1h_pct": -1.7275,
-        "btc_relative_4h_pct": 1.5716,
-        "relative_acceleration_pct": -2.1204,
-        "return_1h_pct": -1.6486,
-        "return_4h_pct": 1.3739,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.4793,
-        "compression_ratio": 1.8957,
-        "return_15m_pct": -0.5686,
-        "range_position_6h": 0.4954,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "MTL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.3188,
-      "signal": {
-        "base": "MTL",
-        "pair": "MTLUSDT",
-        "stage": "EARLY",
-        "score": 1.8687,
-        "btc_relative_1h_pct": -0.0161,
-        "btc_relative_4h_pct": 0.8608,
-        "relative_acceleration_pct": -0.2314,
-        "return_1h_pct": 0.0628,
-        "return_4h_pct": 0.6631,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.6861,
-        "compression_ratio": 2.8993,
-        "return_15m_pct": -0.0941,
-        "range_position_6h": 0.7586,
-        "pre_move_components": {
-          "volume": true,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "MAV",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.01134,
       "signal": {
         "base": "MAV",
@@ -3667,7 +3289,7 @@
     },
     {
       "asset": "KAIA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0375,
       "signal": {
         "base": "KAIA",
@@ -3707,28 +3329,28 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "GRT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.02819,
+      "asset": "MTL",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.3186,
       "signal": {
-        "base": "GRT",
-        "pair": "GRTUSDT",
+        "base": "MTL",
+        "pair": "MTLUSDT",
         "stage": "EARLY",
-        "score": 1.8167,
-        "btc_relative_1h_pct": 0.2771,
-        "btc_relative_4h_pct": 0.3398,
-        "relative_acceleration_pct": 0.1921,
-        "return_1h_pct": 0.356,
-        "return_4h_pct": 0.1421,
+        "score": 1.8055,
+        "btc_relative_1h_pct": -0.0789,
+        "btc_relative_4h_pct": 0.7977,
+        "relative_acceleration_pct": -0.2783,
+        "return_1h_pct": 0.0,
+        "return_4h_pct": 0.5999,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.5339,
-        "compression_ratio": 2.813,
-        "return_15m_pct": 0.0355,
-        "range_position_6h": 0.4167,
+        "volume_acceleration_15m": 1.6861,
+        "compression_ratio": 2.8993,
+        "return_15m_pct": -0.0941,
+        "range_position_6h": 0.7586,
         "pre_move_components": {
-          "volume": false,
+          "volume": true,
           "compression": true,
-          "relative_turn": true
+          "relative_turn": false
         },
         "research_only": true
       },
@@ -3743,49 +3365,6 @@
       "first_tranche_allowed": false,
       "confirmation_role": "NONE",
       "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
-      "asset": "LAYER",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.078,
-      "signal": {
-        "base": "LAYER",
-        "pair": "LAYERUSDT",
-        "stage": "EARLY",
-        "score": 1.8009,
-        "btc_relative_1h_pct": 0.3072,
-        "btc_relative_4h_pct": 0.7132,
-        "relative_acceleration_pct": 0.1289,
-        "return_1h_pct": 0.3861,
-        "return_4h_pct": 0.5155,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.3687,
-        "compression_ratio": 1.8,
-        "return_15m_pct": 0.1284,
-        "range_position_6h": 0.6667,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": true
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
         "LIVE_ORDERBOOK_MISSING"
       ],
       "capital_review_eligible": false,
@@ -3793,20 +3372,20 @@
     },
     {
       "asset": "ERA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0651,
       "signal": {
         "base": "ERA",
         "pair": "ERAUSDT",
         "stage": "EARLY",
-        "score": 1.7272,
+        "score": 1.7326,
         "btc_relative_1h_pct": -0.0789,
         "btc_relative_4h_pct": 0.816,
         "relative_acceleration_pct": -0.2829,
         "return_1h_pct": 0.0,
         "return_4h_pct": 0.6182,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.6486,
+        "volume_acceleration_15m": 1.6594,
         "compression_ratio": 2.6769,
         "return_15m_pct": -0.1534,
         "range_position_6h": 0.75,
@@ -3835,16 +3414,58 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "WLD",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.5983,
+      "signal": {
+        "base": "WLD",
+        "pair": "WLDUSDT",
+        "stage": "EARLY",
+        "score": 1.7221,
+        "btc_relative_1h_pct": -0.296,
+        "btc_relative_4h_pct": 1.5035,
+        "relative_acceleration_pct": -0.6719,
+        "return_1h_pct": -0.2171,
+        "return_4h_pct": 1.3057,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.4261,
+        "compression_ratio": 1.6246,
+        "return_15m_pct": -0.4167,
+        "range_position_6h": 0.6309,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "KORUB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 22.7,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 22.69,
       "signal": {
         "base": "KORUB",
         "pair": "KORUBUSDT",
         "stage": "EARLY",
         "score": 1.6996,
         "btc_relative_1h_pct": 0.0535,
-        "btc_relative_4h_pct": 0.2418,
+        "btc_relative_4h_pct": 0.2419,
         "relative_acceleration_pct": -0.007,
         "return_1h_pct": 0.1324,
         "return_4h_pct": 0.0441,
@@ -3877,50 +3498,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "TRB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 20.45,
-      "signal": {
-        "base": "TRB",
-        "pair": "TRBUSDT",
-        "stage": "EARLY",
-        "score": 1.6973,
-        "btc_relative_1h_pct": 0.1662,
-        "btc_relative_4h_pct": -1.7677,
-        "relative_acceleration_pct": 0.6081,
-        "return_1h_pct": 0.2451,
-        "return_4h_pct": -1.9655,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.0359,
-        "compression_ratio": 2.2936,
-        "return_15m_pct": -0.0489,
-        "range_position_6h": 0.2128,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "KAT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.00478,
       "signal": {
         "base": "KAT",
@@ -3962,49 +3541,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "FLOW",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.03302,
-      "signal": {
-        "base": "FLOW",
-        "pair": "FLOWUSDT",
-        "stage": "EARLY",
-        "score": 1.6848,
-        "btc_relative_1h_pct": -0.7707,
-        "btc_relative_4h_pct": 1.6105,
-        "relative_acceleration_pct": -1.1733,
-        "return_1h_pct": -0.6917,
-        "return_4h_pct": 1.4128,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.1075,
-        "compression_ratio": 1.2123,
-        "return_15m_pct": 0.2429,
-        "range_position_6h": 0.6383,
-        "pre_move_components": {
-          "volume": false,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "MRVLB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 272.98,
       "signal": {
         "base": "MRVLB",
@@ -4013,7 +3551,7 @@
         "score": 1.6129,
         "btc_relative_1h_pct": -0.1412,
         "btc_relative_4h_pct": 0.2968,
-        "relative_acceleration_pct": -0.2153,
+        "relative_acceleration_pct": -0.2154,
         "return_1h_pct": -0.0622,
         "return_4h_pct": 0.099,
         "independent_signal_count": 2,
@@ -4045,24 +3583,24 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "MARSCOIN",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1092,
+      "asset": "RAD",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.262,
       "signal": {
-        "base": "MARSCOIN",
-        "pair": "MARSCOINUSDT",
+        "base": "RAD",
+        "pair": "RADUSDT",
         "stage": "EARLY",
-        "score": 1.5917,
-        "btc_relative_1h_pct": 0.3811,
-        "btc_relative_4h_pct": 0.2894,
-        "relative_acceleration_pct": 0.3087,
-        "return_1h_pct": 0.46,
-        "return_4h_pct": 0.0917,
+        "score": 1.6008,
+        "btc_relative_1h_pct": 0.3042,
+        "btc_relative_4h_pct": 0.5809,
+        "relative_acceleration_pct": 0.159,
+        "return_1h_pct": 0.3831,
+        "return_4h_pct": 0.3831,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.57,
-        "compression_ratio": 1.2204,
-        "return_15m_pct": 0.0917,
-        "range_position_6h": 0.5556,
+        "volume_acceleration_15m": 0.6616,
+        "compression_ratio": 1.4943,
+        "return_15m_pct": 0.3831,
+        "range_position_6h": 0.6667,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -4074,6 +3612,7 @@
       "execution_scenario": null,
       "research_gaps": [
         "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
         "BTC_RELATIVE_CONFIRMATION_PENDING"
       ],
       "entry_stage": "SYSTEM_BLOCKED",
@@ -4087,7 +3626,7 @@
     },
     {
       "asset": "F",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.003462,
       "signal": {
         "base": "F",
@@ -4095,7 +3634,7 @@
         "stage": "EARLY",
         "score": 1.577,
         "btc_relative_1h_pct": 0.0078,
-        "btc_relative_4h_pct": 0.808,
+        "btc_relative_4h_pct": 0.8081,
         "relative_acceleration_pct": -0.1942,
         "return_1h_pct": 0.0867,
         "return_4h_pct": 0.6103,
@@ -4130,23 +3669,23 @@
     },
     {
       "asset": "牛来",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.07902,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.07896,
       "signal": {
         "base": "牛来",
         "pair": "牛来USDT",
         "stage": "EARLY",
-        "score": 1.5545,
-        "btc_relative_1h_pct": 0.0606,
-        "btc_relative_4h_pct": -2.429,
-        "relative_acceleration_pct": 0.6678,
-        "return_1h_pct": 0.1395,
-        "return_4h_pct": -2.6267,
+        "score": 1.5471,
+        "btc_relative_1h_pct": 0.0479,
+        "btc_relative_4h_pct": -2.5276,
+        "relative_acceleration_pct": 0.6798,
+        "return_1h_pct": 0.1268,
+        "return_4h_pct": -2.7254,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 0.2978,
+        "volume_acceleration_15m": 0.3056,
         "compression_ratio": 2.2331,
-        "return_15m_pct": 0.0634,
-        "range_position_6h": 0.2672,
+        "return_15m_pct": 0.0254,
+        "range_position_6h": 0.2621,
         "pre_move_components": {
           "volume": false,
           "compression": true,
@@ -4170,24 +3709,66 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "POL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.11013,
+      "asset": "TRB",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 20.44,
       "signal": {
-        "base": "POL",
-        "pair": "POLUSDT",
+        "base": "TRB",
+        "pair": "TRBUSDT",
         "stage": "EARLY",
-        "score": 1.4731,
-        "btc_relative_1h_pct": 0.1033,
-        "btc_relative_4h_pct": 0.7833,
-        "relative_acceleration_pct": -0.0925,
-        "return_1h_pct": 0.1822,
-        "return_4h_pct": 0.5855,
+        "score": 1.5437,
+        "btc_relative_1h_pct": 0.1172,
+        "btc_relative_4h_pct": -1.8157,
+        "relative_acceleration_pct": 0.5711,
+        "return_1h_pct": 0.1961,
+        "return_4h_pct": -2.0134,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.6357,
-        "compression_ratio": 1.4724,
-        "return_15m_pct": 0.1914,
-        "range_position_6h": 0.6644,
+        "volume_acceleration_15m": 0.0359,
+        "compression_ratio": 2.2936,
+        "return_15m_pct": -0.0489,
+        "range_position_6h": 0.2128,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "AVGOB",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 356.23,
+      "signal": {
+        "base": "AVGOB",
+        "pair": "AVGOBUSDT",
+        "stage": "EARLY",
+        "score": 1.5005,
+        "btc_relative_1h_pct": 0.0476,
+        "btc_relative_4h_pct": 0.3721,
+        "relative_acceleration_pct": -0.0455,
+        "return_1h_pct": 0.1265,
+        "return_4h_pct": 0.1743,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 2.1622,
+        "compression_ratio": 2.292,
+        "return_15m_pct": 0.0674,
+        "range_position_6h": 1.0,
         "pre_move_components": {
           "volume": true,
           "compression": true,
@@ -4199,6 +3780,7 @@
       "execution_scenario": null,
       "research_gaps": [
         "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
         "BTC_RELATIVE_CONFIRMATION_PENDING"
       ],
       "entry_stage": "SYSTEM_BLOCKED",
@@ -4212,23 +3794,23 @@
     },
     {
       "asset": "BEAMX",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.002129,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.002128,
       "signal": {
         "base": "BEAMX",
         "pair": "BEAMXUSDT",
         "stage": "EARLY",
-        "score": 1.47,
+        "score": 1.4781,
         "btc_relative_1h_pct": -0.2197,
         "btc_relative_4h_pct": 0.5278,
-        "relative_acceleration_pct": -0.3516,
+        "relative_acceleration_pct": -0.3517,
         "return_1h_pct": -0.1408,
         "return_4h_pct": 0.33,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.7678,
+        "volume_acceleration_15m": 1.7839,
         "compression_ratio": 2.5951,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.4872,
+        "return_15m_pct": -0.047,
+        "range_position_6h": 0.4615,
         "pre_move_components": {
           "volume": true,
           "compression": true,
@@ -4254,9 +3836,51 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "FORM",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.2796,
+      "signal": {
+        "base": "FORM",
+        "pair": "FORMUSDT",
+        "stage": "EARLY",
+        "score": 1.4553,
+        "btc_relative_1h_pct": -0.0074,
+        "btc_relative_4h_pct": -0.0874,
+        "relative_acceleration_pct": 0.0145,
+        "return_1h_pct": 0.0716,
+        "return_4h_pct": -0.2852,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 4.4842,
+        "compression_ratio": 2.2388,
+        "return_15m_pct": 0.0716,
+        "range_position_6h": 0.275,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "RDDTB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 147.26,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 147.27,
       "signal": {
         "base": "RDDTB",
         "pair": "RDDTBUSDT",
@@ -4296,51 +3920,9 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "FORM",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.2796,
-      "signal": {
-        "base": "FORM",
-        "pair": "FORMUSDT",
-        "stage": "EARLY",
-        "score": 1.4336,
-        "btc_relative_1h_pct": -0.0431,
-        "btc_relative_4h_pct": -0.1231,
-        "relative_acceleration_pct": -0.0124,
-        "return_1h_pct": 0.0358,
-        "return_4h_pct": -0.3209,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 3.751,
-        "compression_ratio": 2.2388,
-        "return_15m_pct": 0.0358,
-        "range_position_6h": 0.25,
-        "pre_move_components": {
-          "volume": true,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "MAGIC",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.0575,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.0574,
       "signal": {
         "base": "MAGIC",
         "pair": "MAGICUSDT",
@@ -4382,7 +3964,7 @@
     },
     {
       "asset": "WAL",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.03491,
       "signal": {
         "base": "WAL",
@@ -4423,51 +4005,9 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "AVGOB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 356.11,
-      "signal": {
-        "base": "AVGOB",
-        "pair": "AVGOBUSDT",
-        "stage": "EARLY",
-        "score": 1.3993,
-        "btc_relative_1h_pct": 0.0138,
-        "btc_relative_4h_pct": 0.3384,
-        "relative_acceleration_pct": -0.0708,
-        "return_1h_pct": 0.0928,
-        "return_4h_pct": 0.1406,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.1622,
-        "compression_ratio": 2.292,
-        "return_15m_pct": 0.0674,
-        "range_position_6h": 1.0,
-        "pre_move_components": {
-          "volume": true,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "HOT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.000452,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.000451,
       "signal": {
         "base": "HOT",
         "pair": "HOTUSDT",
@@ -4506,8 +4046,49 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "POL",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.10996,
+      "signal": {
+        "base": "POL",
+        "pair": "POLUSDT",
+        "stage": "EARLY",
+        "score": 1.384,
+        "btc_relative_1h_pct": 0.0669,
+        "btc_relative_4h_pct": 0.7467,
+        "relative_acceleration_pct": -0.1198,
+        "return_1h_pct": 0.1458,
+        "return_4h_pct": 0.5489,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 1.6764,
+        "compression_ratio": 1.4724,
+        "return_15m_pct": 0.1276,
+        "range_position_6h": 0.6164,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "BREV",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.085,
       "signal": {
         "base": "BREV",
@@ -4549,23 +4130,23 @@
     },
     {
       "asset": "DELLB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 560.73,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 560.83,
       "signal": {
         "base": "DELLB",
         "pair": "DELLBUSDT",
         "stage": "EARLY",
-        "score": 1.3587,
-        "btc_relative_1h_pct": -0.2285,
-        "btc_relative_4h_pct": 0.1674,
-        "relative_acceleration_pct": -0.2703,
-        "return_1h_pct": -0.1496,
-        "return_4h_pct": -0.0303,
+        "score": 1.3641,
+        "btc_relative_1h_pct": -0.0255,
+        "btc_relative_4h_pct": 0.2316,
+        "relative_acceleration_pct": -0.0834,
+        "return_1h_pct": 0.0534,
+        "return_4h_pct": 0.0339,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 3.4906,
-        "compression_ratio": 1.5465,
-        "return_15m_pct": -0.1496,
-        "range_position_6h": 0.4774,
+        "volume_acceleration_15m": 4.768,
+        "compression_ratio": 1.3785,
+        "return_15m_pct": -0.0855,
+        "range_position_6h": 0.6128,
         "pre_move_components": {
           "volume": true,
           "compression": true,
@@ -4590,49 +4171,8 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
-      "asset": "BOME",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.0010039,
-      "signal": {
-        "base": "BOME",
-        "pair": "BOMEUSDT",
-        "stage": "EARLY",
-        "score": 1.3314,
-        "btc_relative_1h_pct": -0.278,
-        "btc_relative_4h_pct": 0.4377,
-        "relative_acceleration_pct": -0.3874,
-        "return_1h_pct": -0.1991,
-        "return_4h_pct": 0.2399,
-        "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.0403,
-        "compression_ratio": 2.0673,
-        "return_15m_pct": -0.1693,
-        "range_position_6h": 0.4309,
-        "pre_move_components": {
-          "volume": true,
-          "compression": true,
-          "relative_turn": false
-        },
-        "research_only": true
-      },
-      "proposed_max_cost_usdt": 3000.0,
-      "execution_scenario": null,
-      "research_gaps": [
-        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
-        "BTC_RELATIVE_CONFIRMATION_PENDING"
-      ],
-      "entry_stage": "SYSTEM_BLOCKED",
-      "first_tranche_allowed": false,
-      "confirmation_role": "NONE",
-      "blockers": [
-        "LIVE_ORDERBOOK_MISSING"
-      ],
-      "capital_review_eligible": false,
-      "trade_action": "SYSTEM_BLOCKED"
-    },
-    {
       "asset": "BAT",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.0951,
       "signal": {
         "base": "BAT",
@@ -4673,23 +4213,23 @@
     },
     {
       "asset": "MEME",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.000594,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.000595,
       "signal": {
         "base": "MEME",
         "pair": "MEMEUSDT",
         "stage": "EARLY",
-        "score": 1.2782,
-        "btc_relative_1h_pct": -0.0789,
-        "btc_relative_4h_pct": -0.1373,
-        "relative_acceleration_pct": -0.0446,
-        "return_1h_pct": 0.0,
-        "return_4h_pct": -0.335,
+        "score": 1.2788,
+        "btc_relative_1h_pct": -0.247,
+        "btc_relative_4h_pct": -0.3047,
+        "relative_acceleration_pct": -0.1708,
+        "return_1h_pct": -0.1681,
+        "return_4h_pct": -0.5025,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.8634,
+        "volume_acceleration_15m": 2.8647,
         "compression_ratio": 1.9899,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.3333,
+        "return_15m_pct": -0.1681,
+        "range_position_6h": 0.2222,
         "pre_move_components": {
           "volume": true,
           "compression": true,
@@ -4713,8 +4253,50 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "AMDB",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 633.92,
+      "signal": {
+        "base": "AMDB",
+        "pair": "AMDBUSDT",
+        "stage": "EARLY",
+        "score": 1.2714,
+        "btc_relative_1h_pct": -0.101,
+        "btc_relative_4h_pct": 0.3067,
+        "relative_acceleration_pct": -0.1777,
+        "return_1h_pct": -0.0221,
+        "return_4h_pct": 0.109,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 1.5294,
+        "compression_ratio": 3.3583,
+        "return_15m_pct": -0.0205,
+        "range_position_6h": 0.5758,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "GSB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 902.01,
       "signal": {
         "base": "GSB",
@@ -4755,21 +4337,103 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "BOME",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.001002,
+      "signal": {
+        "base": "BOME",
+        "pair": "BOMEUSDT",
+        "stage": "EARLY",
+        "score": 1.2166,
+        "btc_relative_1h_pct": -0.3477,
+        "btc_relative_4h_pct": 0.3177,
+        "relative_acceleration_pct": -0.4271,
+        "return_1h_pct": -0.2687,
+        "return_4h_pct": 0.12,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 2.0507,
+        "compression_ratio": 2.0673,
+        "return_15m_pct": -0.2887,
+        "range_position_6h": 0.367,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "MARSCOIN",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.1092,
+      "signal": {
+        "base": "MARSCOIN",
+        "pair": "MARSCOINUSDT",
+        "stage": "EARLY",
+        "score": 1.2124,
+        "btc_relative_1h_pct": 0.2891,
+        "btc_relative_4h_pct": 0.1978,
+        "relative_acceleration_pct": 0.2396,
+        "return_1h_pct": 0.368,
+        "return_4h_pct": 0.0,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 0.577,
+        "compression_ratio": 1.2204,
+        "return_15m_pct": 0.0,
+        "range_position_6h": 0.5333,
+        "pre_move_components": {
+          "volume": false,
+          "compression": true,
+          "relative_turn": true
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "INTWB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 30.07,
       "signal": {
         "base": "INTWB",
         "pair": "INTWBUSDT",
         "stage": "EARLY",
-        "score": 0.9695,
+        "score": 0.9757,
         "btc_relative_1h_pct": -0.4104,
         "btc_relative_4h_pct": -0.1667,
         "relative_acceleration_pct": -0.3687,
         "return_1h_pct": -0.3315,
         "return_4h_pct": -0.3645,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.4971,
+        "volume_acceleration_15m": 2.5095,
         "compression_ratio": 1.6312,
         "return_15m_pct": -0.0665,
         "range_position_6h": 0.5,
@@ -4798,20 +4462,20 @@
     },
     {
       "asset": "FOGO",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.00526,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.00525,
       "signal": {
         "base": "FOGO",
         "pair": "FOGOUSDT",
         "stage": "EARLY",
-        "score": 0.9685,
+        "score": 0.9754,
         "btc_relative_1h_pct": -1.3947,
-        "btc_relative_4h_pct": -0.1818,
+        "btc_relative_4h_pct": -0.1817,
         "relative_acceleration_pct": -1.3493,
         "return_1h_pct": -1.3158,
         "return_4h_pct": -0.3795,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 2.7046,
+        "volume_acceleration_15m": 2.7183,
         "compression_ratio": 1.3321,
         "return_15m_pct": -0.1901,
         "range_position_6h": 0.0833,
@@ -4840,7 +4504,7 @@
     },
     {
       "asset": "BEB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 287.52,
       "signal": {
         "base": "BEB",
@@ -4881,24 +4545,192 @@
       "trade_action": "SYSTEM_BLOCKED"
     },
     {
+      "asset": "PUMP",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.006266,
+      "signal": {
+        "base": "PUMP",
+        "pair": "PUMPUSDT",
+        "stage": "EARLY",
+        "score": 0.7978,
+        "btc_relative_1h_pct": -1.2448,
+        "btc_relative_4h_pct": -1.831,
+        "relative_acceleration_pct": -0.7871,
+        "return_1h_pct": -1.1659,
+        "return_4h_pct": -2.0287,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 1.3537,
+        "compression_ratio": 2.7741,
+        "return_15m_pct": 0.447,
+        "range_position_6h": 0.6057,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
       "asset": "STG",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 0.1729,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.174,
       "signal": {
         "base": "STG",
         "pair": "STGUSDT",
         "stage": "EARLY",
-        "score": 0.7549,
-        "btc_relative_1h_pct": -1.0509,
-        "btc_relative_4h_pct": -2.4324,
-        "relative_acceleration_pct": -0.4428,
-        "return_1h_pct": -0.972,
-        "return_4h_pct": -2.6301,
+        "score": 0.7577,
+        "btc_relative_1h_pct": -0.7079,
+        "btc_relative_4h_pct": -2.5443,
+        "relative_acceleration_pct": -0.0718,
+        "return_1h_pct": -0.6289,
+        "return_4h_pct": -2.742,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.528,
+        "volume_acceleration_15m": 1.5336,
         "compression_ratio": 2.4026,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.1167,
+        "return_15m_pct": -0.1149,
+        "range_position_6h": 0.1,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "RARE",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.01721,
+      "signal": {
+        "base": "RARE",
+        "pair": "RAREUSDT",
+        "stage": "EARLY",
+        "score": 0.6736,
+        "btc_relative_1h_pct": -0.4272,
+        "btc_relative_4h_pct": -0.0347,
+        "relative_acceleration_pct": -0.4185,
+        "return_1h_pct": -0.3482,
+        "return_4h_pct": -0.2324,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 2.1921,
+        "compression_ratio": 1.2215,
+        "return_15m_pct": -0.3482,
+        "range_position_6h": 0.0455,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "TACTICAL_SUPPLY_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "ASSET_IDENTITY_SOURCE_UNAVAILABLE",
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "BONK",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 3.77e-06,
+      "signal": {
+        "base": "BONK",
+        "pair": "BONKUSDT",
+        "stage": "EARLY",
+        "score": 0.6581,
+        "btc_relative_1h_pct": -0.6052,
+        "btc_relative_4h_pct": -1.1111,
+        "relative_acceleration_pct": -0.3275,
+        "return_1h_pct": -0.5263,
+        "return_4h_pct": -1.3089,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 1.7693,
+        "compression_ratio": 1.7812,
+        "return_15m_pct": -0.5277,
+        "range_position_6h": 0.5,
+        "pre_move_components": {
+          "volume": true,
+          "compression": true,
+          "relative_turn": false
+        },
+        "research_only": true
+      },
+      "proposed_max_cost_usdt": 3000.0,
+      "execution_scenario": null,
+      "research_gaps": [
+        "FORWARD_SUPPLY_UNLOCK_RESEARCH_INCOMPLETE",
+        "BTC_RELATIVE_CONFIRMATION_PENDING"
+      ],
+      "entry_stage": "SYSTEM_BLOCKED",
+      "first_tranche_allowed": false,
+      "confirmation_role": "NONE",
+      "blockers": [
+        "LIVE_ORDERBOOK_MISSING"
+      ],
+      "capital_review_eligible": false,
+      "trade_action": "SYSTEM_BLOCKED"
+    },
+    {
+      "asset": "SUN",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 0.01709,
+      "signal": {
+        "base": "SUN",
+        "pair": "SUNUSDT",
+        "stage": "EARLY",
+        "score": 0.5284,
+        "btc_relative_1h_pct": -0.1374,
+        "btc_relative_4h_pct": -0.1521,
+        "relative_acceleration_pct": -0.0994,
+        "return_1h_pct": -0.0585,
+        "return_4h_pct": -0.3499,
+        "independent_signal_count": 2,
+        "volume_acceleration_15m": 1.3601,
+        "compression_ratio": 1.9953,
+        "return_15m_pct": 0.0585,
+        "range_position_6h": 0.2,
         "pre_move_components": {
           "volume": true,
           "compression": true,
@@ -4924,23 +4756,23 @@
     },
     {
       "asset": "SHIB",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
-      "reference_price": 5.74e-06,
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
+      "reference_price": 5.75e-06,
       "signal": {
         "base": "SHIB",
         "pair": "SHIBUSDT",
         "stage": "EARLY",
-        "score": 0.5833,
-        "btc_relative_1h_pct": -0.0789,
-        "btc_relative_4h_pct": 0.1978,
-        "relative_acceleration_pct": -0.1284,
-        "return_1h_pct": 0.0,
-        "return_4h_pct": 0.0,
+        "score": 0.5275,
+        "btc_relative_1h_pct": -0.2531,
+        "btc_relative_4h_pct": 0.0235,
+        "relative_acceleration_pct": -0.259,
+        "return_1h_pct": -0.1742,
+        "return_4h_pct": -0.1742,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.5402,
+        "volume_acceleration_15m": 1.777,
         "compression_ratio": 1.3299,
-        "return_15m_pct": 0.0,
-        "range_position_6h": 0.4,
+        "return_15m_pct": -0.1742,
+        "range_position_6h": 0.2,
         "pre_move_components": {
           "volume": true,
           "compression": true,
@@ -4965,23 +4797,23 @@
     },
     {
       "asset": "ADA",
-      "as_of_utc": "2026-10-03T23:03:39.001853+00:00",
+      "as_of_utc": "2026-10-03T23:04:40.918989+00:00",
       "reference_price": 0.2443,
       "signal": {
         "base": "ADA",
         "pair": "ADAUSDT",
         "stage": "EARLY",
-        "score": 0.5786,
+        "score": 0.4921,
         "btc_relative_1h_pct": -0.3239,
-        "btc_relative_4h_pct": -0.2097,
-        "relative_acceleration_pct": -0.2715,
+        "btc_relative_4h_pct": -0.332,
+        "relative_acceleration_pct": -0.2409,
         "return_1h_pct": -0.245,
-        "return_4h_pct": -0.4075,
+        "return_4h_pct": -0.5297,
         "independent_signal_count": 2,
-        "volume_acceleration_15m": 1.3988,
-        "compression_ratio": 2.0833,
-        "return_15m_pct": -0.0818,
-        "range_position_6h": 0.5,
+        "volume_acceleration_15m": 1.4509,
+        "compression_ratio": 1.762,
+        "return_15m_pct": -0.1227,
+        "range_position_6h": 0.0357,
         "pre_move_components": {
           "volume": true,
           "compression": true,
