@@ -88,11 +88,14 @@ jobs:
           opens=state.get('open_positions') or []
           actual=[x.get('asset') for x in opens if x.get('asset')]
           duplicates=sorted({a for a in actual if actual.count(a)>1})
-          missing=sorted(expected-set(actual))
+          entered={x.get('asset') for x in state.get('events',[]) if x.get('type')=='SHADOW_V1_BUY' and x.get('asset')}
+          missing=sorted(expected-(set(actual)|entered))
           assert not duplicates, f'V1_DUPLICATE_OPEN_ASSETS {duplicates}'
-          assert not missing, f'V1_EARLY_COVERAGE_MISSING count={len(missing)} sample={missing[:20]}'
+          assert not missing, f'V1_EARLY_COVERAGE_MISSING_NEVER_ENTERED count={len(missing)} sample={missing[:20]}'
           assert len(expected)==int(early.get('early_count') or 0), 'V1_EARLY_COUNT_MISMATCH'
-          print(f'V1_EARLY_COVERAGE_OK early={len(expected)} open={len(actual)} legacy_open={len(set(actual)-expected)}')
+          assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
+          assert state.get('events'), 'V1_EVENTS_EMPTY'
+          print(f'V1_EARLY_COVERAGE_OK early={len(expected)} open={len(actual)} entered_history={len(entered)} legacy_open={len(set(actual)-expected)}')
           PY
       - name: Refresh official Bybit execution channels
         env:
@@ -115,6 +118,7 @@ jobs:
           python - <<'PY'
           import json
           state=json.load(open('research/results/hunter-shadow-v2-portfolio.json'))
+          review=json.load(open('research/results/hunter-tactical-capital-review.json'))
           assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           assert state.get('schema')=='hunter_shadow_v2_portfolio_v2'
           opens=state.get('open_positions') or []
@@ -122,7 +126,12 @@ jobs:
           assert len(assets)==len(set(assets)), f'V2_DUPLICATE_OPEN_ASSETS {assets}'
           used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in opens)
           assert used <= 20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'
-          print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} decisions={len(state.get("decisions") or [])}')
+          buyset=set(review.get('executable_buy') or [])
+          current_generation=review.get('scan_generation_id')
+          current_open={x.get('asset') for x in opens if x.get('scan_generation_id')==current_generation}
+          assert current_open <= buyset, f'V2_ENTRY_NOT_AUTHORIZED_BY_CAPITAL_REVIEW {sorted(current_open-buyset)}'
+          assert all(x.get('trade_action') in ('BUY','WAIT','REJECT','SYSTEM_BLOCKED') for x in review.get('candidates') or []), 'V2_FINAL_ACTION_MISSING'
+          print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} executable_buy={sorted(buyset)} decisions={len(state.get("decisions") or [])}')
           PY
       - name: Reject mixed-generation research
         env:
