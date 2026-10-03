@@ -1,7 +1,7 @@
 {
   "schema": "hunter_health_queue_v1",
-  "as_of_utc": "2026-10-03T21:02:18.110357+00:00",
-  "scan_as_of_utc": "2026-10-03T20:59:52.322499+00:00",
+  "as_of_utc": "2026-10-03T21:03:33.665404+00:00",
+  "scan_as_of_utc": "2026-10-03T21:02:46.751943+00:00",
   "health": {
     "snapshot_consistent": true,
     "snapshot_mismatches": {},
@@ -13,14 +13,14 @@
     "universe_size": 497,
     "researched_cached": 497,
     "market_data_screened_cached": 497,
-    "official_contract_identity_verified": 2,
+    "official_contract_identity_verified": 1,
     "forward_economic_scenario_ready": 0,
     "coverage_warning": "MARKET_SCREENING_IS_NOT_VERIFIED_FUNDAMENTAL_RESEARCH",
     "unresearched": 0,
     "dossiers": 40,
     "reviewed_candidates_retained": 5,
     "unresolved_material_supply_events": 1,
-    "identity_corroborated": 2,
+    "identity_corroborated": 1,
     "liquidity_requested": 16,
     "liquidity_successful": 16,
     "liquidity_failures": {},
@@ -39,6 +39,8 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
         "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
         "LIVE_ORDERBOOK_NOT_IN_TOP_16"
@@ -83,11 +85,13 @@
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
       ],
-      "has_current_orderbook": true,
+      "has_current_orderbook": false,
       "needs_human_primary_source_review": true,
       "capital_ready": false
     },
@@ -159,7 +163,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -222,7 +225,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -263,6 +265,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -282,6 +285,7 @@
       "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -323,7 +327,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -331,6 +334,24 @@
         "LIVE_ORDERBOOK_NOT_IN_TOP_16"
       ],
       "has_current_orderbook": false,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
+    {
+      "asset": "QNT",
+      "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
+      "review_status": null,
+      "review_action": null,
+      "risk_event": null,
+      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
+        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+      ],
+      "has_current_orderbook": true,
       "needs_human_primary_source_review": true,
       "capital_ready": false
     },
@@ -343,7 +364,6 @@
       "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -373,24 +393,6 @@
       "capital_ready": false
     },
     {
-      "asset": "QNT",
-      "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
-      "review_status": null,
-      "review_action": null,
-      "risk_event": null,
-      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
-        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
-      ],
-      "has_current_orderbook": true,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
       "asset": "MOVR",
       "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
       "review_status": null,
@@ -400,6 +402,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -420,7 +423,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -441,7 +443,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -474,7 +475,7 @@
       "capital_ready": false
     },
     {
-      "asset": "STG",
+      "asset": "STRK",
       "cohort": "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED",
       "review_status": null,
       "review_action": null,
@@ -494,7 +495,7 @@
       "capital_ready": false
     },
     {
-      "asset": "STRK",
+      "asset": "ZAMA",
       "cohort": "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED",
       "review_status": null,
       "review_action": null,
@@ -503,7 +504,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -526,6 +526,8 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
         "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
         "LIVE_ORDERBOOK_NOT_IN_TOP_16"
@@ -570,11 +572,13 @@
       "status": "RESEARCH_INCOMPLETE",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
       ],
-      "has_current_orderbook": true,
+      "has_current_orderbook": false,
       "needs_human_primary_source_review": true,
       "capital_ready": false
     },
@@ -646,7 +650,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -709,7 +712,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -750,6 +752,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -770,6 +773,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -790,6 +794,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -849,7 +854,6 @@
       "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -889,6 +893,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -949,6 +954,7 @@
       "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -990,7 +996,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -998,6 +1003,24 @@
         "LIVE_ORDERBOOK_NOT_IN_TOP_16"
       ],
       "has_current_orderbook": false,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
+    {
+      "asset": "QNT",
+      "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
+      "review_status": null,
+      "review_action": null,
+      "risk_event": null,
+      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
+        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
+      ],
+      "has_current_orderbook": true,
       "needs_human_primary_source_review": true,
       "capital_ready": false
     },
@@ -1010,7 +1033,6 @@
       "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -1040,24 +1062,6 @@
       "capital_ready": false
     },
     {
-      "asset": "QNT",
-      "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
-      "review_status": null,
-      "review_action": null,
-      "risk_event": null,
-      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
-        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING"
-      ],
-      "has_current_orderbook": true,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
       "asset": "MOVR",
       "cohort": "CONTINUATION_FORWARD_UPSIDE_ATTENTION",
       "review_status": null,
@@ -1067,6 +1071,7 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -1087,7 +1092,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -1108,7 +1112,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -1141,26 +1144,6 @@
       "capital_ready": false
     },
     {
-      "asset": "STG",
-      "cohort": "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED",
-      "review_status": null,
-      "review_action": null,
-      "risk_event": null,
-      "status": "RESEARCH_INCOMPLETE",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
-        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
-        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
-      ],
-      "has_current_orderbook": false,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
       "asset": "STRK",
       "cohort": "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED",
       "review_status": null,
@@ -1170,7 +1153,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -1222,7 +1204,28 @@
       "capital_ready": false
     },
     {
-      "asset": "INTWB",
+      "asset": "STG",
+      "cohort": "ROTATING_FUNDAMENTALS_OR_UNCONFIRMED",
+      "review_status": null,
+      "review_action": null,
+      "risk_event": null,
+      "status": "RESEARCH_INCOMPLETE",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
+        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
+      ],
+      "has_current_orderbook": false,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
+    {
+      "asset": "KSM",
       "cohort": "EARLY_FLOW_ATTENTION",
       "review_status": null,
       "review_action": null,
@@ -1231,6 +1234,48 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
+        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
+      ],
+      "has_current_orderbook": false,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
+    {
+      "asset": "LUMIA",
+      "cohort": "EARLY_FLOW_ATTENTION",
+      "review_status": null,
+      "review_action": null,
+      "risk_event": null,
+      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
+        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
+        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
+        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
+        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
+        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
+      ],
+      "has_current_orderbook": false,
+      "needs_human_primary_source_review": true,
+      "capital_ready": false
+    },
+    {
+      "asset": "MAGIC",
+      "cohort": "EARLY_FLOW_ATTENTION",
+      "review_status": null,
+      "review_action": null,
+      "risk_event": null,
+      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
+      "blockers": [
+        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
+        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
+        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
@@ -1270,47 +1315,6 @@
       "blockers": [
         "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
         "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
-        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
-        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
-      ],
-      "has_current_orderbook": false,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
-      "asset": "ACM",
-      "cohort": "EARLY_FLOW_ATTENTION",
-      "review_status": null,
-      "review_action": null,
-      "risk_event": null,
-      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
-        "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
-        "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
-        "FORWARD_SUPPLY_AND_VALUATION_SCENARIO_MISSING",
-        "LIVE_ORDERBOOK_NOT_IN_TOP_16"
-      ],
-      "has_current_orderbook": false,
-      "needs_human_primary_source_review": true,
-      "capital_ready": false
-    },
-    {
-      "asset": "ALGO",
-      "cohort": "EARLY_FLOW_ATTENTION",
-      "review_status": null,
-      "review_action": null,
-      "risk_event": null,
-      "status": "POTENTIAL_CANDIDATE__EVIDENCE_OPEN",
-      "blockers": [
-        "EVIDENCE_GATED_SCENARIO_UNAVAILABLE",
-        "LIVE_ORDERBOOK_VENUE_OR_PAIR_MISMATCH",
-        "CONTRACT_IDENTITY_NOT_CORROBORATED_OR_STALE",
         "IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT",
         "OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING",
         "OFFICIAL_SUPPLY_VALUE_CAPTURE_AND_SCENARIO_REVIEW_PENDING",
