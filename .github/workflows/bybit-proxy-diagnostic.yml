@@ -50,6 +50,13 @@ jobs:
           persisted=json.load(open("/tmp/hunter/research/results/hunter-bybit-availability.json"))
           assert persisted["spot"]["status"].startswith("OK_"), persisted["spot"]
           assert persisted["spot"].get("error_reason") is None, persisted["spot"]
+          assert persisted["spot"].get("transport")=="CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB"
+          assert persisted["spot"].get("upstream")=="BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"
+          dirty=(persisted["spot"].get("input_rejections") or {}).get("币安人生")
+          if dirty:
+              assert dirty.get("reason")=="INVALID_SYMBOL"
+              assert dirty.get("detail")=="REJECTED_BEFORE_TRANSPORT"
+          assert "币安人生" not in persisted["spot"].get("symbols",[])
           print("PERSISTED_SPOT",json.dumps(persisted["spot"]))
           PY
           echo
