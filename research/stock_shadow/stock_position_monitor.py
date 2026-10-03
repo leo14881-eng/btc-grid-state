@@ -8,7 +8,9 @@ from zoneinfo import ZoneInfo
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"
 FEE_RATE=0.002; BATCH_SIZE=40; MAX_BATCHES=12
-ARM_NET_PCT=3.0; GIVEBACK_PCT=5.0; PROFIT_FLOOR_NET_PCT=0.5
+ARM_NET_PCT=1.0
+PROFIT_FLOOR_NET_PCT=0.10
+PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
 NY=ZoneInfo("America/New_York")
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -29,6 +31,14 @@ def net_pnl(p,price):
     return proceeds-c-(c*FEE_RATE+proceeds*FEE_RATE)
 def net_pct(p,price):
     c=sum(t["notional"] for t in p["tranches"]); return net_pnl(p,price)/c*100 if c else 0
+def profit_floor_net_pct(mfe):
+    """Same V3 dynamic after-fee profit floor as the full Stock Shadow lifecycle."""
+    if mfe < ARM_NET_PCT: return None
+    for threshold, giveback_fraction in PROFIT_GIVEBACK_BANDS:
+        if mfe >= threshold:
+            return max(PROFIT_FLOOR_NET_PCT, mfe*(1.0-giveback_fraction))
+    return None
+
 def _get_json(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-position-monitor","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=20) as r: return json.load(r)
@@ -93,9 +103,11 @@ def main(force=False):
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6),"mfe_net_pct":mfe,"mae_net_pct":mae})
         updated+=1
         giveback=mfe-r
-        # V2: five-minute quotes update MFE/MAE and arm profit protection, but cannot sell on giveback alone.
-        # Structural exits are decided by the full position-state engine with market-relative evidence.
-        p["profit_protection_signal"]=bool(mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT))
+        # V3: five-minute monitor uses the exact same dynamic AFTER-FEE profit floor
+        # as the full lifecycle. It never discovers BUY/ADD candidates.
+        floor=profit_floor_net_pct(mfe)
+        p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
+        p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
         p["profit_giveback_pct_points"]=round(giveback,6)
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
