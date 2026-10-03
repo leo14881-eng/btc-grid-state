@@ -116,3 +116,9 @@ def test_monitor_has_no_giveback_only_sell_path():
     src=inspect.getsource(m.main)
     assert "PROFIT_GIVEBACK_POSITION_MONITOR" not in src
     assert "profit_protection_signal" in src
+
+def test_v2_add_requires_state_transition():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert 'previous_state!="HEALTHY_PULLBACK"' in src
+    assert 'pullback <= -3*n' not in src
