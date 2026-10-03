@@ -6,6 +6,7 @@ on:
     paths:
       - 'research/hunter_shadow_trader_v2.py'
       - 'research/hunter_early_signals.py'
+      - 'research/hunter_bybit_availability.py'
       - 'tests/test_hunter_shadow_trader_v2.py'
       - '.github/workflows/hunter-research-pipeline.yml'
   workflow_run:
@@ -83,7 +84,12 @@ jobs:
             sleep $((attempt*2))
           done
           exit 1
-      - name: Update Hunter shadow v2 staged account
+      - name: Refresh official Bybit execution channels
+        env:
+          BYBIT_ALPHA_API_KEY: ${{ secrets.BYBIT_ALPHA_API_KEY }}
+          BYBIT_ALPHA_API_SECRET: ${{ secrets.BYBIT_ALPHA_API_SECRET }}
+        run: python research/hunter_bybit_availability.py
+      - name: Update Hunter shadow v2 broad discovery account
         run: python research/hunter_shadow_trader_v2.py
       - name: Reject mixed-generation research
         env:
@@ -128,6 +134,7 @@ jobs:
             research/results/hunter-shadow-v2-portfolio.json \
             research/results/hunter-shadow-v2-summary.json \
             research/results/hunter-shadow-v2-overfilter-guard.json \
+            research/results/hunter-bybit-availability.json \
             research/results/hunter-shadow-candidate-ledger.json \
             research/results/hunter-shadow-rules.json \
             research/results/hunter-shadow-optimizer-audit.jsonl; do
