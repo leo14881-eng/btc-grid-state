@@ -46,3 +46,8 @@ def test_selector_can_approve_liquid_relative_strength():
     assert d["ready"] is True
     assert d["score"] >= ss.MIN_SCORE
     assert "OUTPERFORMS_SPY_QQQ" in d["reasons"]
+
+
+def test_selector_rejects_medium_term_overextension():
+    assert "OVEREXTENDED_20D" in ss.entry_decision(_m(r5=10,r20=60,sma20=48))["rejects"]
+    assert "TOO_FAR_ABOVE_SMA20" in ss.entry_decision(_m(price=70,r5=10,r20=30,sma20=50))["rejects"]
