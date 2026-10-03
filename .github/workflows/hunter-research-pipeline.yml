@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
 concurrency:
+  # Stock-Shadow style: one serialized owner for the complete downstream lifecycle.
   group: hunter-research-main
   cancel-in-progress: false
 jobs:
@@ -21,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Hunter change regression gate
+      - name: Test complete Hunter system before state mutation
         run: |
           set -euo pipefail
           python -m compileall -q research tests
@@ -56,7 +57,7 @@ jobs:
               print('id='+d['generation_id'],file=f)
           print('RESEARCH_INPUT_GENERATION',d['generation_id'])
           PY
-      - name: Hunter v4 PRE_MOVE multi-factor funnel
+      - name: Run Hunter closed-loop engine — signals
         run: python research/hunter_early_signals.py
       - name: Forward-upside research
         run: python research/hunter_forward_research.py
@@ -81,7 +82,7 @@ jobs:
         run: python research/hunter_candidate_dossiers.py
       - name: Tactical supply and unlock risk
         run: python research/hunter_tactical_supply_risk.py
-      - name: Tactical short-horizon capital review
+      - name: Single authoritative BUY WAIT REJECT decision
         run: python research/hunter_tactical_capital_review.py
       - name: Health and candidate gate report
         run: python research/hunter_health_and_queue.py
@@ -185,7 +186,38 @@ jobs:
           assert not bad, f'MIXED_GENERATION_STAGES {bad}'
           print('DOWNSTREAM_GENERATION_VERIFIED',expected,sorted(checks))
           PY
-      - name: Persist downstream results without touching discovery
+      - name: Closed-loop acceptance guard
+        env:
+          EXPECTED: ${{ steps.generation.outputs.id }}
+        run: |
+          python - <<'PY'
+          import json,os
+          expected=os.environ['EXPECTED']
+          scan=json.load(open('research/results/hunter-cex-universe-run.json'))
+          identity=json.load(open('research/results/hunter-identity-audit.json'))
+          supply=json.load(open('research/results/hunter-tactical-supply-risk.json'))
+          review=json.load(open('research/results/hunter-tactical-capital-review.json'))
+          v1=json.load(open('research/results/hunter-shadow-portfolio.json'))
+          v2=json.load(open('research/results/hunter-shadow-v2-portfolio.json'))
+          assert scan.get('generation_id')==expected
+          at=scan.get('as_of_utc')
+          assert identity.get('scan_as_of_utc')==at
+          assert supply.get('scan_as_of_utc')==at
+          assert review.get('scan_generation_id')==expected
+          actions={x.get('trade_action') for x in review.get('candidates') or []}
+          assert actions <= {'BUY','WAIT','REJECT','SYSTEM_BLOCKED'}
+          buy={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}
+          assert buy==set(review.get('executable_buy') or [])
+          for state,label in ((v1,'V1'),(v2,'V2')):
+              opens=state.get('open_positions') or []
+              names=[x.get('asset') for x in opens if x.get('asset')]
+              assert len(names)==len(set(names)),f'{label}_DUPLICATE_OPEN'
+              assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
+          used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in v2.get('open_positions') or [])
+          assert used<=20000.000001
+          print('HUNTER_CLOSED_LOOP_ACCEPTED',expected,'BUY',sorted(buy),'V1',len(v1.get('open_positions') or []),'V2',len(v2.get('open_positions') or []))
+          PY
+      - name: Persist Hunter state only after closed-loop acceptance
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
         run: |
