@@ -95,9 +95,21 @@ def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry):
             meta["error"]=type(exc).__name__+":"+str(exc)[:120]
             if not rows: raise
             meta["cache_used"]=True
-    # Bulk registry is authoritative for third-party identity leads; do not mix a
-    # partial top-N market feed into symbol uniqueness decisions.
-    return dict(market,coingecko=rows),cache,meta
+    # Preserve the market-enrichment project-ID selection and enrich those IDs
+    # from the bulk registry. Global ticker duplication must not by itself turn a
+    # known Binance/CoinGecko project mapping into a collision.
+    bulk_by_id={str(x.get("id")):x for x in rows if isinstance(x,dict) and x.get("id")}
+    leads=[]
+    for lead in market.get("coingecko") or []:
+        if not isinstance(lead,dict): continue
+        item=dict(lead); reg=bulk_by_id.get(str(item.get("id")))
+        if reg and str(reg.get("symbol") or "").upper()==str(item.get("symbol") or "").upper():
+            item["platforms"]=reg.get("platforms") or {}
+            item["contract_as_of_utc"]=cache.get("_bulk_as_of_utc") or now.isoformat()
+            item["source_url"]=reg.get("source_url")
+        leads.append(item)
+    meta["registry_rows"]=len(rows); meta["matched_market_leads"]=sum(1 for x in leads if x.get("contract_as_of_utc"))
+    return dict(market,coingecko=leads),cache,meta
 
 def fetch_contract_platforms(coin_id):
     if not re.fullmatch(r"[a-zA-Z0-9_-]{2,100}",coin_id):
