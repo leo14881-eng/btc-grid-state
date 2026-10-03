@@ -1,36 +1,63 @@
 {
-  "schema": "hunter_shadow_summary_v1",
-  "as_of_utc": "2026-10-03T17:58:51.306018+00:00",
+  "schema": "hunter_shadow_v2_summary_v2",
+  "as_of_utc": "2026-10-03T20:18:29.794156+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
-  "open_positions": 0,
+  "strategy": "SHARED_DECISION_ENGINE_V1_BROAD_NET",
+  "open_positions": 31,
   "closed_positions": 0,
-  "wins": 0,
-  "losses": 0,
-  "win_rate_pct": null,
   "net_pnl_usdt": 0,
   "profit_factor": null,
-  "avg_net_return_pct": null,
-  "avg_btc_relative_return_pct": null,
-  "max_adverse_excursion_pct": 0,
   "policy": {
-    "notional_usdt": 1000,
-    "fee_bps_each_side": 10,
-    "target_pct": 8,
-    "invalidation_pct": -6,
-    "max_hold_hours": 24,
-    "max_open": 50,
-    "broad_observation_entry": true,
-    "average_down_drawdowns_pct": [
-      -4,
-      -8
+    "tranches_usdt": [
+      1000.0,
+      1000.0,
+      1000.0
     ],
-    "max_tranches": 3,
-    "profit_arm_net_pct": 2,
-    "profit_giveback_pct": 2,
-    "profit_floor_net_pct": 0.35,
-    "loss_exit": false,
-    "sell_alert_required": true
+    "price_only_stop_loss": false,
+    "time_exit_enabled": false,
+    "time_review_hours": [
+      1.0,
+      6.0,
+      24.0,
+      48.0,
+      72.0
+    ],
+    "entry_mode": "DISCOVERY",
+    "entry_requires_full_execution_validation": false,
+    "add_requires_revalidation": true,
+    "fail_closed_on_missing_candidate_evidence": true,
+    "min_estimated_rr": 1.5,
+    "max_spread_bps": 50.0,
+    "min_depth_2pct_usdt": 30000.0,
+    "max_buy_slippage_bps": 75.0,
+    "profit_review_trigger_pct": 8.0,
+    "profit_target_is_forced_exit": false,
+    "runner_requires_positive_1h_4h_relative_and_acceleration": true,
+    "profit_protection": {
+      "arm_mfe_pct": 2.0,
+      "max_giveback_pct": 2.0,
+      "min_protected_net_pct": 0.35
+    },
+    "three_tranche_adds_are_conditional_not_mechanical": true,
+    "capital_pool_usdt": null,
+    "max_open": null,
+    "discovery_sample_cap": null,
+    "first_tranche": "AFTER_RESEARCH_DISCOVERY_ADMISSION",
+    "bybit_channel_is_label_not_discovery_gate": true,
+    "post_exit_tracking_hours": [
+      1.0,
+      6.0,
+      24.0,
+      48.0,
+      72.0
+    ],
+    "tranche_counterfactuals_at_exit": true,
+    "overfilter_guard": {
+      "zero_buy_cycles": 3,
+      "missed_move_pct": 8.0,
+      "min_safe_misses": 2,
+      "status": "NORMAL"
+    }
   },
-  "capital_authority": "NONE_SHADOW_ONLY",
-  "reset_reason": "USER_REQUESTED_PRE_OPTIMIZATION_RESET"
+  "capital_authority": "NONE_SHADOW_ONLY"
 }
