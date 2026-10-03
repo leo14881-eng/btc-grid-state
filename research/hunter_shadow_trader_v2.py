@@ -11,6 +11,7 @@ PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
 MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
 OVERFILTER_ZERO_BUY_CYCLES=3; OVERFILTER_LOOKBACK=12; OVERFILTER_MISSED_MOVE_PCT=8.; OVERFILTER_MIN_SAFE_MISSES=2
 MAX_DECISION_HISTORY=1500
+MAX_EVENT_HISTORY=5000
 CAPITAL_POOL_USDT=20000.
 ENTRY_MODE="EXECUTABLE"
 STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
@@ -208,6 +209,9 @@ def trade_event(state,pos,action,now,p,reason=None,pnl=None):
  if reason is not None:event["reason"]=reason
  if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
  state["events"].append(event)
+ if action=="BUY":
+  entered=set(state.get("ever_entered_assets") or [])
+  entered.add(pos["asset"]);state["ever_entered_assets"]=sorted(entered)
 def add(pos,p,e,now):
  i=len(pos["tranches"]);pos["tranches"].append({"tranche":i+1,"at":now.isoformat(),"price":p,"notional_usdt":TRANCHES[i],
   "buy_slippage_bps":e.get("buy_slippage_bps") or 0,"reason":"INITIAL" if i==0 else "LOWER_PRICE_FULL_REVALIDATION"})
@@ -319,6 +323,12 @@ def main():
  if len(state["decisions"])>MAX_DECISION_HISTORY:
   state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+len(state["decisions"])-MAX_DECISION_HISTORY
   state["decisions"]=state["decisions"][-MAX_DECISION_HISTORY:]
+ entered=set(state.get("ever_entered_assets") or [])
+ entered.update(x.get("asset") for x in state.get("events",[]) if x.get("type") in ("SHADOW_V1_BUY","SHADOW_V2_BUY") and x.get("asset"))
+ state["ever_entered_assets"]=sorted(entered)
+ if len(state["events"])>MAX_EVENT_HISTORY:
+  state["event_history_truncated"]=int(state.get("event_history_truncated") or 0)+len(state["events"])-MAX_EVENT_HISTORY
+  state["events"]=state["events"][-MAX_EVENT_HISTORY:]
  state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
  closed=state["closed_positions"];gp=sum(max(0,x["net_pnl_usdt"]) for x in closed);gl=-sum(min(0,x["net_pnl_usdt"]) for x in closed)
  summary={"schema":"hunter_shadow_v2_summary_v2","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
