@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hunter v3 early-signal funnel: Binance-only, research-only, never trades."""
+"""Hunter v4 PRE_MOVE funnel: multi-horizon volume/structure/BTC-relative signals; research only."""
 import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
 from concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results")
@@ -38,7 +38,39 @@ def rolling(symbols,window):
     if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
     return out
 
-def score_row(sym,base,r1,r4,btc1,btc4):
+def micro(symbols):
+    """15m PRE_MOVE features: volume acceleration, compression, range position and short momentum."""
+    def one(sym):
+        q=urllib.parse.urlencode({"symbol":sym,"interval":"15m","limit":25})
+        rows=get(BN+"/api/v3/klines?"+q,8)
+        if not isinstance(rows,list) or len(rows)<25:return None
+        closes=[finite(x[4]) for x in rows]; highs=[finite(x[2]) for x in rows]; lows=[finite(x[3]) for x in rows]
+        vols=[finite(x[7]) or 0 for x in rows]
+        if any(x is None or x<=0 for x in closes+highs+lows):return None
+        recent=sum(vols[-2:])/2; baseline=sum(vols[-14:-2])/12
+        vol_accel=recent/baseline if baseline>0 else 0
+        def rng(seqh,seql):
+            hi=max(seqh);lo=min(seql);mid=(hi+lo)/2
+            return (hi-lo)/mid*100 if mid>0 else 999
+        range_recent=rng(highs[-8:],lows[-8:]); range_prior=rng(highs[-24:-8],lows[-24:-8])
+        compression=range_prior/max(range_recent,0.05)
+        mom15=(closes[-1]/closes[-2]-1)*100
+        mom60=(closes[-1]/closes[-5]-1)*100
+        hi24=max(highs[-24:]); lo24=min(lows[-24:])
+        range_pos=(closes[-1]-lo24)/(hi24-lo24) if hi24>lo24 else .5
+        return sym,{"volume_acceleration":vol_accel,"compression_ratio":compression,
+                    "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos}
+    out={}
+    with ThreadPoolExecutor(max_workers=64) as ex:
+        futs={ex.submit(one,s):s for s in symbols}
+        for fut in as_completed(futs):
+            try:
+                row=fut.result()
+                if row:out[row[0]]=row[1]
+            except Exception:continue
+    return out
+
+def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
     a=r1.get(sym);b=r4.get(sym)
     if not a or not b or not btc1 or not btc4:return None
     rel1=a["return_pct"]-btc1["return_pct"];rel4=b["return_pct"]-btc4["return_pct"]
@@ -51,16 +83,20 @@ def score_row(sym,base,r1,r4,btc1,btc4):
       "btc_relative_1h_pct":round(rel1,4),"btc_relative_4h_pct":round(rel4,4),
       "relative_acceleration_pct":round(accel,4),
       "return_1h_pct":round(a["return_pct"],4),"return_4h_pct":round(b["return_pct"],4),
-      "independent_signal_count":independent,"research_only":True}
-def build(scan,r1,r4,now):
+      "independent_signal_count":independent,
+      "volume_acceleration_15m":round(va,4),"compression_ratio":round(comp,4),
+      "return_15m_pct":round(m15,4),"range_position_6h":round(rp,4),
+      "pre_move_components":{"volume":pre_volume,"compression":pre_compression,"relative_turn":pre_turn},
+      "research_only":True}
+def build(scan,r1,r4,microdata,now):
     pairs={c["pairs"][0]["pair"]:base for base,c in (scan.get("coins") or {}).items()
            if c.get("pairs") and c["pairs"][0].get("venue")=="binance"}
     btc1=r1.get("BTCUSDT");btc4=r4.get("BTCUSDT")
     if not btc1 or not btc4:raise ValueError("BTC benchmark missing")
-    rows=[x for sym,base in pairs.items() if (x:=score_row(sym,base,r1,r4,btc1,btc4))]
+    rows=[x for sym,base in pairs.items() if (x:=score_row(sym,base,r1,r4,btc1,btc4,microdata))]
     rows.sort(key=lambda x:(x["stage"]!="EARLY",-x["score"],x["base"]))
     early=[x for x in rows if x["stage"]=="EARLY"]
-    return {"schema":"hunter_early_signals_v3","as_of_utc":now.isoformat(),
+    return {"schema":"hunter_early_signals_v4","as_of_utc":now.isoformat(),
       "scan_generation_id":scan.get("generation_id"),"capital_authority":"NONE_RESEARCH_ONLY",
       "method":"1h/4h BTC-relative strength + relative acceleration; no 24h-gain prerequisite",
       "early_count":len(early),"early":early,"watch":rows[:30]}
