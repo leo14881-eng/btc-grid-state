@@ -1,15 +1,28 @@
-import datetime as dt,unittest
-from research.hunter_shadow_trader_v2 import thesis_alive,weighted_entry,should_add,add_tranche,net_pnl,REVIEW_HOURS
-class ShadowV2Tests(unittest.TestCase):
- def c(self,r1=1,r4=2,ind=2):return {"signal":{"btc_relative_1h_pct":r1,"btc_relative_4h_pct":r4,"independent_signal_count":ind},"execution_scenario":{"buy_slippage_bps":10}}
- def pos(self):return {"tranches":[{"tranche":1,"at":"x","price":100.0,"notional_usdt":1000.0,"buy_slippage_bps":10}],"mfe_pct":0,"mae_pct":0}
- def test_drawdown_alone_not_invalidation(self):self.assertTrue(thesis_alive(self.c()))
- def test_signal_collapse_invalidates(self):self.assertFalse(thesis_alive(self.c(-3,-4,1)))
- def test_add_at_lower_price(self):self.assertTrue(should_add(self.pos(),95.9,self.c()))
- def test_no_add_when_thesis_dead(self):self.assertFalse(should_add(self.pos(),90,self.c(-3,-4,1)))
- def test_average_falls_after_add(self):
-  p=self.pos();add_tranche(p,92,self.c(),dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
- def test_costs_counted(self):self.assertLess(net_pnl(self.pos(),108),80)
- def test_time_is_review_not_exit(self):
-  self.assertEqual(REVIEW_HOURS,(24.0,48.0,72.0)); self.assertTrue(thesis_alive(self.c()))
+import unittest
+from research.hunter_shadow_trader_v2 import decision,weighted_entry,add,REVIEW_HOURS
+class V2CapitalDecisionTests(unittest.TestCase):
+ def base(self):
+  c={"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
+   "execution_scenario":{"buy_slippage_bps":10,"estimated_rr":2},"blockers":["PORTFOLIO_USAGE_REQUIRES_CURRENT_INPUT"]}
+  scan={"coins":{"X":{"reference_price":96,"change_24h_pct":5}}}
+  liq={"snapshots":{"X":{"spread_bps":10,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000}}}
+  supply={"assets":{"X":{"tactical_supply_risk_verified":True,"status":"FULLY_UNLOCKED"}}}
+  return c,scan,liq,supply
+ def test_entry_requires_full_evidence(self):
+  c,s,l,u=self.base();self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"BUY")
+ def test_missing_liquidity_rejects(self):
+  c,s,l,u=self.base();self.assertEqual(decision(c,s,{},u,"ENTRY")[0],"REJECT")
+ def test_unverified_supply_rejects(self):
+  c,s,l,u=self.base();self.assertEqual(decision(c,s,l,{},"ENTRY")[0],"REJECT")
+ def test_real_evidence_blocker_rejects(self):
+  c,s,l,u=self.base();c["blockers"].append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED");self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
+ def test_missing_candidate_exits_existing(self):
+  c,s,l,u=self.base();self.assertEqual(decision(None,s,l,u,"HOLD")[0],"EXIT")
+ def test_add_needs_lower_price_and_full_revalidation(self):
+  c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};self.assertEqual(decision(c,s,l,u,"ADD",p,96)[0],"ADD")
+  l["snapshots"]["X"]["ask_depth_2pct_usdt"]=1000;self.assertNotEqual(decision(c,s,l,u,"ADD",p,96)[0],"ADD")
+ def test_weighted_cost_falls(self):
+  c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};e=decision(c,s,l,u,"ADD",p,96)[2]
+  import datetime as dt;add(p,96,e,dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
+ def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(24.,48.,72.))
 if __name__=="__main__":unittest.main()
