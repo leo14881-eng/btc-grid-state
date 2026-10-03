@@ -1,5 +1,5 @@
 import unittest
-from research.hunter_shadow_trader_v2 import decision,weighted_entry,add,profit_protection,REVIEW_HOURS
+from research.hunter_shadow_trader_v2 import decision,discovery_decision,bybit_channel,market_shock,weighted_entry,add,profit_protection,REVIEW_HOURS
 class V2CapitalDecisionTests(unittest.TestCase):
  def base(self):
   c={"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
@@ -18,9 +18,11 @@ class V2CapitalDecisionTests(unittest.TestCase):
   c,s,l,u=self.base();c["blockers"].append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED");self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
  def test_missing_candidate_is_review_only_for_existing(self):
   c,s,l,u=self.base();self.assertEqual(decision(None,s,l,u,"HOLD")[0],"HOLD")
- def test_add_needs_lower_price_and_full_revalidation(self):
-  c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};self.assertEqual(decision(c,s,l,u,"ADD",p,96)[0],"ADD")
-  l["snapshots"]["X"]["ask_depth_2pct_usdt"]=1000;self.assertNotEqual(decision(c,s,l,u,"ADD",p,96)[0],"ADD")
+ def test_add_needs_better_price_and_revalidation(self):
+  c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};self.assertEqual(decision(c,s,l,u,"ADD",p,99)[0],"ADD")
+  self.assertEqual(decision(c,s,l,u,"ADD",p,101)[0],"HOLD")
+  c["signal"]["relative_acceleration_pct"]=-2;c["signal"]["btc_relative_1h_pct"]=-1
+  self.assertEqual(decision(c,s,l,u,"ADD",p,96)[0],"HOLD")
  def test_weighted_cost_falls(self):
   c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};e=decision(c,s,l,u,"ADD",p,96)[2]
   import datetime as dt;add(p,96,e,dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
@@ -44,4 +46,14 @@ class V2CapitalDecisionTests(unittest.TestCase):
  def test_left_side_entry_not_rejected_for_not_rising(self):
   c,s,l,u=self.base();s["coins"]["X"]["change_24h_pct"]=-8
   self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"BUY")
+ def test_discovery_gate_is_broader_than_executable_gate(self):
+  c,s,l,u=self.base();l={}
+  self.assertEqual(discovery_decision(c)[0],"BUY")
+  self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
+ def test_bybit_channel_unknown_is_not_not_listed(self):
+  self.assertEqual(bybit_channel({"spot":{"status":"UNKNOWN"},"alpha":{"status":"UNKNOWN"}},"X")["channel"],"UNKNOWN")
+  self.assertEqual(bybit_channel({"spot":{"status":"OK","symbols":["X"]},"alpha":{"status":"UNKNOWN"}},"X")["channel"],"BYBIT_SPOT")
+ def test_market_shock_uses_btc_and_breadth(self):
+  scan={"coins":{"BTC":{"change_24h_pct":-3},"A":{"change_24h_pct":-5},"B":{"change_24h_pct":-4},"C":{"change_24h_pct":-1}}}
+  self.assertTrue(market_shock(scan)[0])
 if __name__=="__main__":unittest.main()
