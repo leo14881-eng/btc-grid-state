@@ -23,8 +23,7 @@ jobs:
         run: |
           git fetch origin main
           git checkout -B main origin/main
-      - name: Fast batch monitor V1 and V2 open positions
-        run: python research/hunter_position_monitor.py
+      - name: Test fast position monitor\n        run: python -m unittest tests.test_hunter_position_monitor -v\n      - name: Fast batch monitor V1 and V2 open positions\n        run: python research/hunter_position_monitor.py
       - name: Validate state
         run: |
           python - <<'PY'
