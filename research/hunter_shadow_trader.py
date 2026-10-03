@@ -6,7 +6,10 @@ portfolio constraints: unlimited simulated capital and therefore no cross-asset
 capital competition. It never places exchange orders.
 """
 import pathlib
-import hunter_shadow_trader_v2 as engine
+try:
+    from research import hunter_shadow_trader_v2 as engine
+except ImportError:
+    import hunter_shadow_trader_v2 as engine
 
 ROOT=pathlib.Path("research/results")
 engine.STATE=ROOT/"hunter-shadow-portfolio.json"
