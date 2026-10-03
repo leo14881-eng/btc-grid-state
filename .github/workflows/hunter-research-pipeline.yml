@@ -100,10 +100,30 @@ jobs:
           BYBIT_ALPHA_API_SECRET: ${{ secrets.BYBIT_ALPHA_API_SECRET }}
           HUNTER_PROXY_TOKEN: ${{ secrets.HUNTER_PROXY_TOKEN }}
         run: python research/hunter_bybit_availability.py
-      - name: Verify V2 shadow freeze
+      - name: Run V2 executable shadow orders
         env:
-          HUNTER_SHADOW_FREEZE: '1'
-        run: python research/hunter_shadow_trader_v2.py
+          HUNTER_SHADOW_FREEZE: '0'
+        run: |
+          for attempt in 1 2 3; do
+            if python research/hunter_shadow_trader_v2.py; then exit 0; fi
+            echo "V2_SHADOW_ENGINE_RETRY attempt=$attempt"
+            sleep $((attempt*2))
+          done
+          exit 1
+      - name: Verify V2 shadow state integrity
+        run: |
+          python - <<'PY'
+          import json
+          state=json.load(open('research/results/hunter-shadow-v2-portfolio.json'))
+          assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
+          assert state.get('schema')=='hunter_shadow_v2_portfolio_v2'
+          opens=state.get('open_positions') or []
+          assets=[x.get('asset') for x in opens if x.get('asset')]
+          assert len(assets)==len(set(assets)), f'V2_DUPLICATE_OPEN_ASSETS {assets}'
+          used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in opens)
+          assert used <= 20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'
+          print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} decisions={len(state.get("decisions") or [])}')
+          PY
       - name: Reject mixed-generation research
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
@@ -172,7 +192,7 @@ jobs:
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
-              python -c "import json; a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert a.get('open_positions') or a.get('events'), 'V1_SHADOW_EXPECTED_ACTIVE'; assert b.get('reset_reason')=='USER_REQUESTED_PRE_OPTIMIZATION_RESET'; assert not (b.get('open_positions') or b.get('closed_positions') or b.get('events') or b.get('decisions')); print('V1_SHADOW_ACTIVE_V2_FREEZE_READBACK_OK')"
+              python -c "import json; a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert a.get('open_positions') or a.get('events'), 'V1_SHADOW_EXPECTED_ACTIVE'; assert b.get('schema')=='hunter_shadow_v2_portfolio_v2'; assert b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'; print('V1_V2_SHADOW_ACTIVE_READBACK_OK', 'v2_open='+str(len(b.get('open_positions') or [])), 'v2_used='+str(round(used,2)))"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
