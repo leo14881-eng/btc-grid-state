@@ -36,8 +36,16 @@ def spot():
         if not cursor:break
     return sorted({str(x.get("baseCoin","")).upper() for x in rows if x.get("quoteCoin")=="USDT" and x.get("status")=="Trading" and x.get("baseCoin")})
 
+def classify_error(exc):
+    s=str(exc)
+    if "HTTP_403" in s: return "HTTP_403"
+    if "HTTP_429" in s: return "RATE_LIMIT"
+    if "CREDENTIALS_NOT_CONFIGURED" in s: return "CREDENTIALS_NOT_CONFIGURED"
+    if "BYBIT_PROXY_RET_10001" in s or "symbol invalid" in s.lower(): return "INVALID_SYMBOL"
+    return "UPSTREAM_ERROR"
+
 def spot_proxy_candidates():
-    """Candidate-scoped Spot lookup through verified Cloudflare egress; Bybit remains upstream."""
+    """Primary GitHub transport: allowlisted Worker /bybit/spot -> official Bybit V5 instruments-info."""
     try: review=json.loads(REVIEW.read_text())
     except Exception: review={}
     assets={str(x.get("asset","")).upper() for x in review.get("candidates") or [] if x.get("asset")}
@@ -81,17 +89,20 @@ def alpha():
 def main():
     now=dt.datetime.now(dt.timezone.utc).isoformat()
     out={"schema":"hunter_bybit_availability_v1","as_of_utc":now,"source":"BYBIT_OFFICIAL_V5","spot":{"status":"UNKNOWN","symbols":[],"error":None},"alpha":{"status":"UNKNOWN","symbols":[],"error":None}}
+    # GitHub Hosted Runner US egress is known to receive CloudFront HTTP 403 from
+    # api.bybit.com. Avoid a guaranteed failing direct request: Worker is primary
+    # transport, with official Bybit V5 as its upstream.
     try:
-        xs=spot();out["spot"].update({"status":"OK","symbols":xs,"count":len(xs)})
+        xs=spot_proxy_candidates()
+        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"scope":"CURRENT_CANDIDATES_PLUS_BTC_ETH_REGRESSION_PROBES","transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot?symbol={SYMBOL}","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
     except Exception as e:
-        api_error=type(e).__name__+":"+str(e)[:160]
+        proxy_error=type(e).__name__+":"+str(e)[:160]
+        out["spot"].update({"status":"UNKNOWN","business_status":"UNKNOWN","error":proxy_error,"error_reason":classify_error(e),"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"})
         try:
-            xs=spot_proxy_candidates();out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","symbols":xs,"count":len(xs),"scope":"CURRENT_CANDIDATES_PLUS_BTC_ETH_REGRESSION_PROBES","api_error":api_error,"proxy":SPOT_PROXY})
-        except Exception as e2:
-            proxy_error=type(e2).__name__+":"+str(e2)[:120]
-            try:
-                xs=spot_official_pages();out["spot"].update({"status":"OK_CANDIDATE_SCOPED_OFFICIAL_PAGE_FALLBACK","symbols":xs,"count":len(xs),"scope":"CURRENT_CANDIDATES_PLUS_ALPHA_REGRESSION_PROBE","api_error":api_error,"proxy_error":proxy_error})
-            except Exception as e3:out["spot"]["error"]=api_error+"; PROXY="+proxy_error+"; FALLBACK="+type(e3).__name__+":"+str(e3)[:120]
+            xs=spot_official_pages()
+            out["spot"].update({"status":"OK_CANDIDATE_SCOPED_OFFICIAL_PAGE_FALLBACK","business_status":"TRADING","symbols":xs,"count":len(xs),"scope":"CURRENT_CANDIDATES_PLUS_ALPHA_REGRESSION_PROBE","proxy_error":proxy_error})
+        except Exception as e3:
+            out["spot"]["fallback_error"]=type(e3).__name__+":"+str(e3)[:120]
     try:
         xs,why=alpha()
         if xs is None:out["alpha"]["error"]=why
