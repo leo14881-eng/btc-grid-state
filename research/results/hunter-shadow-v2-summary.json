@@ -1,9 +1,9 @@
 {
   "schema": "hunter_shadow_v2_summary_v2",
-  "as_of_utc": "2026-10-03T13:54:02.348340+00:00",
+  "as_of_utc": "2026-10-03T14:40:54.899252+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
-  "open_positions": 0,
+  "open_positions": 1,
   "closed_positions": 3,
   "net_pnl_usdt": 147.08,
   "profit_factor": 7.088,
@@ -20,7 +20,8 @@
       48.0,
       72.0
     ],
-    "entry_and_add_require_full_revalidation": true,
+    "entry_full_execution_validation_is_label_only": true,
+    "add_requires_revalidation": true,
     "fail_closed_on_missing_candidate_evidence": true,
     "min_estimated_rr": 1.5,
     "max_spread_bps": 50.0,
@@ -35,7 +36,16 @@
       "min_protected_net_pct": 0.35
     },
     "three_tranche_adds_are_conditional_not_mechanical": true,
-    "max_open": 3,
+    "max_open": null,
+    "discovery_sample_cap": null,
+    "first_tranche": "IMMEDIATE_MARKET_REFERENCE_ON_BROAD_DISCOVERY_GATE",
+    "bybit_channel_is_label_not_discovery_gate": true,
+    "post_exit_tracking_hours": [
+      24.0,
+      48.0,
+      72.0
+    ],
+    "tranche_counterfactuals_at_exit": true,
     "overfilter_guard": {
       "zero_buy_cycles": 3,
       "missed_move_pct": 8.0,
