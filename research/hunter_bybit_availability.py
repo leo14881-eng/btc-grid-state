@@ -104,7 +104,9 @@ def alpha():
     if not KEY or not SECRET:return None,"CREDENTIALS_NOT_CONFIGURED"
     ts=str(int(time.time()*1000)); body=json.dumps({"tokenTag":0},separators=(",",":"))
     sign=hmac.new(SECRET.encode(),(ts+KEY+RECV+body).encode(),hashlib.sha256).hexdigest()
-    if not PROXY_TOKEN:return None,"PROXY_TOKEN_NOT_CONFIGURED"\n    d=request(ALPHA_PROXY,body.encode(),{"Content-Type":"application/json","X-Hunter-Proxy-Token":PROXY_TOKEN,"X-BAPI-API-KEY":KEY,"X-BAPI-TIMESTAMP":ts,"X-BAPI-RECV-WINDOW":RECV,"X-BAPI-SIGN":sign})
+    if not PROXY_TOKEN:
+        return None,"PROXY_TOKEN_NOT_CONFIGURED"
+    d=request(ALPHA_PROXY,body.encode(),{"Content-Type":"application/json","X-Hunter-Proxy-Token":PROXY_TOKEN,"X-BAPI-API-KEY":KEY,"X-BAPI-TIMESTAMP":ts,"X-BAPI-RECV-WINDOW":RECV,"X-BAPI-SIGN":sign})
     if d.get("retCode")!=0:raise RuntimeError("BYBIT_ALPHA_RET_"+str(d.get("retCode")))
     rows=d.get("result") or []
     return sorted({str(x.get("symbol","")).upper() for x in rows if x.get("symbol") and int(x.get("riskFlag") or 0)==0}),None
