@@ -18,6 +18,25 @@ This is the single canonical logic source for the five active investment automat
 
 # Shared Global Rules
 
+## 0A. CURRENT CAPITAL + KPI OVERRIDE — 2026-10-03
+
+This section is the current authoritative capital/KPI override and supersedes contradictory A/B/C/D/E, daily-short-term/larger-swing, fixed 120K+40K, permanent 0.5-BTC floor, 45/35/15 portfolio-weight, and “no ordinary BTC swing” language elsewhere in this historical file.
+
+- Main investment capital = **200,000 USDT**: **160,000 USDT BTC unified pool + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve**.
+- BTC unified pool accounting is only **core BTC + swing BTC + standby USDT = 160,000 USDT**. Internal proportions are dynamic. There is no “large swing” module and no fixed 120K core + 40K swing split.
+- **14,000 USDT BTC Grid is separate and outside the 200K main investment capital.**
+- **50,000 USD crisis/living reserve is separate and never investment NAV.**
+- Core BTC exposure is governed by valuation/historical drawdown; trend controls execution pace. Ordinary short-term bearish forecasts do not casually liquidate core.
+- BTC swing primary KPI is **realized net USDT profit after fees and reasonable slippage**. BTC-quantity change and BTC Buy&Hold-relative return are diagnostic opportunity-cost metrics only, not minimum-profit gates.
+- A swing is eligible whenever current verifiable evidence supports **positive expected net USDT profit after fees/slippage and executable liquidity**. There is **no minimum profit amount or percentage threshold** and small profit alone must not cause NO TRADE. Size remains dynamic by opportunity quality, structure, remaining cash, and sell-fly/rebuy risk.
+- Hunter capital is one **20,000 USDT altcoin pool**. Existing ~6,000U AXS is an existing Hunter-pool position. Until AXS exits net profitable after fees and Hunter has sufficient reviewable profit evidence, no new altcoin live BUY/ADD/amount and no mechanical AXS averaging-down; research/shadow continues.
+- Extreme-crash 20K is isolated from normal BTC volatility and reserved for flash crash/systemic-liquidity-shock/severe mispricing conditions.
+- Unified management objective: manage the 200K main-investment capital toward approximately **600,000 USDT by 2028-03**. This is a management target, not a guaranteed return. Track verifiable main-investment NAV, cumulative realized net USDT profit, module contribution, and gap/completion versus 600K; unknown values remain UNKNOWN.
+- User remains sole trade executor. No automation may auto-trade or change these capital caps.
+
+**Compatibility rule:** whenever any later section conflicts with this 0A override, 0A wins. Old A/B/C/D/E and historical portfolio-weight text remains only as history until fully retired and must not control new recommendations.
+
+
 ## 0. Latest execution architecture override — 2026-09-28
 
 This section is the authoritative **execution-layer override** for the user-confirmed trading plan. It supersedes contradictory older language in this file about ordinary BTC swing trading, unconfirmed B funding-pool size, and old allocation percentage gates **only for these isolated sleeves**. Preserve the historical long-horizon portfolio policy as historical context, not as an automatic veto on separately authorized swing sleeves. Do not reinterpret any planned budget as verified exchange cash.
