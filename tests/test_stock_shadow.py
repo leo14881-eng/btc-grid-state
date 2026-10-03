@@ -37,8 +37,8 @@ def test_selector_rejects_penny_and_illiquid_noise():
     assert "PRICE_TOO_LOW" in ss.entry_decision(_m(price=0.5))["rejects"]
     assert "LOW_DOLLAR_VOLUME" in ss.entry_decision(_m(dv=500_000))["rejects"]
 
-def test_selector_rejects_overextended_chase():
-    assert "OVEREXTENDED_5D" in ss.entry_decision(_m(r5=35,r20=40))["rejects"]
+def test_selector_rejects_only_parabolic_chase():
+    assert "PARABOLIC_5D" in ss.entry_decision(_m(r5=40,r20=70))["rejects"]
 
 def test_selector_can_approve_liquid_relative_strength():
     spy=_m(r20=3); qqq=_m(r20=4)
@@ -48,6 +48,19 @@ def test_selector_can_approve_liquid_relative_strength():
     assert "OUTPERFORMS_SPY_QQQ" in d["reasons"]
 
 
-def test_selector_rejects_medium_term_overextension():
-    assert "OVEREXTENDED_20D" in ss.entry_decision(_m(r5=10,r20=60,sma20=48))["rejects"]
-    assert "TOO_FAR_ABOVE_SMA20" in ss.entry_decision(_m(price=70,r5=10,r20=30,sma20=50))["rejects"]
+def test_selector_rejects_only_extreme_medium_term_overextension():
+    assert "PARABOLIC_20D" in ss.entry_decision(_m(r5=10,r20=90,sma20=48))["rejects"]
+    assert "PARABOLIC_SMA20_EXTENSION" in ss.entry_decision(_m(price=70,r5=10,r20=30,sma20=50))["rejects"]
+
+def test_early_anomaly_can_enter_before_breakout():
+    spy=_m(r20=2); qqq=_m(r20=3)
+    d=ss.entry_decision(_m(price=51,dv=120_000_000,r5=2,r20=7,sma20=50,vol=2.0,volume_ratio=1.8,range_pos=0.62),spy,qqq)
+    assert d["ready"] is True
+    assert d["entry_structure"] == "EARLY_ACCUMULATION"
+    assert "EARLY_VOLUME_ANOMALY" in d["reasons"]
+
+def test_hybrid_engine_keeps_right_side_entry():
+    spy=_m(r20=3); qqq=_m(r20=4)
+    d=ss.entry_decision(_m(price=80,dv=200_000_000,r5=6,r20=18,sma20=75,vol=2.5),spy,qqq)
+    assert d["ready"] is True
+    assert d["entry_structure"] == "MOMENTUM_TREND"
