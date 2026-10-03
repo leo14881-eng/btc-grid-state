@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Independent Stock Shadow V1. Broad paper sampling only; never places orders."""
-import json, math, urllib.request
+import json, math, urllib.request, concurrent.futures
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,25 +29,75 @@ def load(p,d):
 def save(p,o):
     p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
 
-STOCK_SYMBOLS = """AAPL MSFT NVDA AMZN GOOGL META TSLA AVGO BRK-B JPM LLY V WMT ORCL MA NFLX COST XOM JNJ HD PG BAC ABBV KO CRM AMD PLTR CSCO CVX IBM GE CAT MCD DIS ADBE QCOM TXN AMAT MU INTC UBER ABNB SHOP COIN HOOD XYZ PYPL TSM NKE SBUX BA GS MS PFE MRK UNH TMO NOW PANW CRWD SNOW""".split()
+NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
+EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHTS", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
+MAX_MARKET_WORKERS = 24
+
+def get_text(url):
+    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"text/plain,*/*"})
+    with urllib.request.urlopen(req,timeout=25) as r: return r.read().decode("utf-8","replace")
+
+def _plain_common_stock(name):
+    u=(" "+name.upper()+" ")
+    return not any(marker in u for marker in EXCLUDED_NAME_MARKERS)
+
+def discover_us_common_stocks():
+    """Discover US-listed common stocks from Nasdaq Trader symbol directories.
+
+    Includes Nasdaq plus NYSE/NYSE American and other US exchange listings.
+    Excludes ETFs/test issues and obvious non-common-stock security types.
+    """
+    symbols=set(); source_errors=[]
+    try:
+        lines=get_text(NASDAQ_LISTED).splitlines()
+        header=lines[0].split("|")
+        for line in lines[1:]:
+            if not line or line.startswith("File Creation Time"): continue
+            row=dict(zip(header,line.split("|")))
+            symbol=row.get("Symbol","").strip()
+            name=row.get("Security Name","").strip()
+            if symbol and row.get("Test Issue")=="N" and row.get("ETF")=="N" and _plain_common_stock(name):
+                symbols.add(symbol)
+    except Exception as e:
+        source_errors.append({"source":"NASDAQ_LISTED","error":type(e).__name__})
+    try:
+        lines=get_text(OTHER_LISTED).splitlines()
+        header=lines[0].split("|")
+        for line in lines[1:]:
+            if not line or line.startswith("File Creation Time"): continue
+            row=dict(zip(header,line.split("|")))
+            symbol=(row.get("ACT Symbol") or row.get("NASDAQ Symbol") or "").strip()
+            name=row.get("Security Name","").strip()
+            if symbol and row.get("Test Issue")=="N" and row.get("ETF")=="N" and _plain_common_stock(name):
+                symbols.add(symbol)
+    except Exception as e:
+        source_errors.append({"source":"OTHER_LISTED","error":type(e).__name__})
+    # Yahoo uses '-' for class shares; Nasdaq directories commonly use '.'.
+    return sorted(s.replace(".","-") for s in symbols), source_errors
+
+def _stock_snapshot(symbol):
+    url=f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=5d&interval=5m"
+    d=get_json(url); r=d["chart"]["result"][0]
+    closes=[x for x in r["indicators"]["quote"][0]["close"] if x is not None]
+    if not closes: raise ValueError("no close")
+    price=float(closes[-1]); prev=float(r.get("meta",{}).get("chartPreviousClose") or (closes[-2] if len(closes)>1 else price))
+    if price<=0 or not math.isfinite(price): raise ValueError("bad price")
+    return {"base":symbol,"price":price,"change24h":((price/prev)-1)*100 if prev else 0,
+            "volume24h":None,"status":"OBSERVED","source":"FREE_PUBLIC_CHART_5M","observed_at":now()}
 
 def stock_universe():
-    """Free public underlying-stock snapshots. Each symbol is independently degradable."""
+    """Discover the full US common-stock universe, then observe symbols concurrently."""
+    symbols, discovery_errors=discover_us_common_stocks()
     out={}; failed=[]
-    for symbol in STOCK_SYMBOLS:
-        ysymbol=symbol.replace("-", "-")
-        url=f"https://query1.finance.yahoo.com/v8/finance/chart/{ysymbol}?range=5d&interval=5m"
-        try:
-            d=get_json(url); r=d["chart"]["result"][0]
-            closes=[x for x in r["indicators"]["quote"][0]["close"] if x is not None]
-            if not closes: raise ValueError("no close")
-            price=float(closes[-1]); prev=float(r.get("meta",{}).get("chartPreviousClose") or (closes[-2] if len(closes)>1 else price))
-            if price<=0 or not math.isfinite(price): raise ValueError("bad price")
-            out[symbol]={"base":symbol,"price":price,"change24h":((price/prev)-1)*100 if prev else 0,
-                         "volume24h":None,"status":"OBSERVED","source":"FREE_PUBLIC_CHART_5M","observed_at":now()}
-        except Exception as e:
-            failed.append({"symbol":symbol,"error":type(e).__name__})
-    return out, failed
+    def one(symbol):
+        try: return symbol, _stock_snapshot(symbol), None
+        except Exception as e: return symbol, None, type(e).__name__
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_MARKET_WORKERS) as ex:
+        for symbol,snapshot,error in ex.map(one,symbols):
+            if snapshot is not None: out[symbol]=snapshot
+            else: failed.append({"symbol":symbol,"error":error})
+    return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors}
 
 def avg(p):
     q=sum(t["notional"]/t["price"] for t in p["tranches"]); c=sum(t["notional"] for t in p["tranches"])
@@ -64,7 +114,7 @@ def net_pct(p,price):
 def main():
     state=load(STATE,{"version":2,"simulation_only":True,"positions":{},"closed":[]})
     events=load(EVENTS,[])
-    market, failed_symbols=stock_universe()
+    market, failed_symbols, discovery=stock_universe()
     data_status="OK" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"
     # V1 broad net: every valid discovered stock gets a standardized first paper tranche. No MAX_OPEN.
     for s,m in market.items():
@@ -94,7 +144,7 @@ def main():
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_seen":len(market),"market_data_status":data_status,"failed_symbols":failed_symbols,"open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
