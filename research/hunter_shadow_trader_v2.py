@@ -96,11 +96,16 @@ def main():
    record(state,pos,"EXIT",now,reasons,e,p);state["closed_positions"].append(pos);continue
   else:record(state,pos,"HOLD",now,reasons,e,p)
   if raw>=TARGET:
-   pnl=net_pnl(pos,p);notion=total_notional(pos);br=(btc/pos["btc_entry_price"]-1)*100
-   pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"TARGET_FROM_WEIGHTED_AVG",
-    "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
-    "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
-   record(state,pos,"EXIT",now,["TARGET_8PCT_FROM_WEIGHTED_AVG"],e,p);state["closed_positions"].append(pos);continue
+   r1=e.get("btc_rel_1h"); r4=e.get("btc_rel_4h"); accel=e.get("rel_accel")
+   runner=act!="REJECT" and r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
+   if runner:
+    record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
+   else:
+    pnl=net_pnl(pos,p);notion=total_notional(pos);br=(btc/pos["btc_entry_price"]-1)*100
+    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"PROFIT_REVIEW_MOMENTUM_FADED",
+     "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
+     "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
+    record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);state["closed_positions"].append(pos);continue
   still.append(pos)
  state["open_positions"]=still;open_assets={x["asset"] for x in still};slots=max(0,MAX_OPEN-len(still))
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
@@ -122,7 +127,7 @@ def main():
   "net_pnl_usdt":round(sum(x["net_pnl_usdt"] for x in closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":False,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),
    "entry_and_add_require_full_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
-   "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"target_pct":TARGET,"max_open":MAX_OPEN},
+   "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,"max_open":MAX_OPEN},
   "capital_authority":"NONE_SHADOW_ONLY"}
  STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
  print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(closed),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
