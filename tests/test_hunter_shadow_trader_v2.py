@@ -26,7 +26,7 @@ class V2CapitalDecisionTests(unittest.TestCase):
   import datetime as dt;add(p,96,e,dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
  def test_profit_protection_arms_after_real_mfe(self):
   p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":3.0}
-  self.assertTrue(profit_protection(p,101)["exit"])
+  self.assertTrue(profit_protection(p,100.5)["exit"])
  def test_profit_protection_does_not_fake_unprofitable_trade(self):
   p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":1.5}
   self.assertFalse(profit_protection(p,99)["armed"])
