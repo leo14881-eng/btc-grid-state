@@ -3,7 +3,7 @@
 Spot uses the public V5 endpoint. Alpha uses the official authenticated Alpha token-list endpoint when credentials exist.
 Failure is UNKNOWN, never NOT_LISTED.
 """
-import datetime as dt, hashlib, hmac, json, os, pathlib, time, urllib.error, urllib.parse, urllib.request
+import datetime as dt, hashlib, hmac, json, os, pathlib, re, time, urllib.error, urllib.parse, urllib.request
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json"
@@ -44,19 +44,26 @@ def classify_error(exc):
     if "BYBIT_PROXY_RET_10001" in s or "symbol invalid" in s.lower(): return "INVALID_SYMBOL"
     return "UPSTREAM_ERROR"
 
+def exchange_asset(value):
+    """Normalize only exchange-safe base tickers; human labels never become API symbols."""
+    a=str(value or "").strip().upper()
+    return a if re.fullmatch(r"[A-Z0-9]{1,30}",a) else None
+
 def spot_proxy_candidates():
     """Primary GitHub transport: allowlisted Worker /bybit/spot -> official Bybit V5 instruments-info."""
     try: review=json.loads(REVIEW.read_text())
     except Exception: review={}
-    assets={str(x.get("asset","")).upper() for x in review.get("candidates") or [] if x.get("asset")}
+    assets=set(); rejected_inputs={}
+    for row in review.get("candidates") or []:
+        raw=row.get("asset") if isinstance(row,dict) else None
+        a=exchange_asset(raw)
+        if a: assets.add(a)
+        elif raw: rejected_inputs[str(raw)]={"reason":"INVALID_SYMBOL","detail":"REJECTED_BEFORE_TRANSPORT"}
     assets.update({"BTC","ETH"})
-    ok=[]; failures={}
+    ok=[]; failures=dict(rejected_inputs)
     for a in sorted(assets):
         symbol=a+"USDT"
-        # Worker route intentionally accepts only exchange-style symbols.
-        if not symbol.isascii() or not symbol.replace("-","").isalnum():
-            failures[a]={"reason":"INVALID_SYMBOL","detail":"NON_ASCII_OR_UNSAFE_SYMBOL"}
-            continue
+        # exchange_asset() already prevents human labels or unsafe strings from reaching transport.
         try:
             d=request(SPOT_PROXY+"/bybit/spot?"+urllib.parse.urlencode({"symbol":symbol}))
             if d.get("retCode")!=0:
@@ -108,7 +115,7 @@ def main():
     # transport, with official Bybit V5 as its upstream.
     try:
         xs,symbol_failures=spot_proxy_candidates()
-        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"symbol_failures":symbol_failures,"scope":"CURRENT_CANDIDATES_PLUS_BTC_ETH_REGRESSION_PROBES","transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot?symbol={SYMBOL}","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
+        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"symbol_failures":symbol_failures,"input_rejections":{k:v for k,v in symbol_failures.items() if v.get("detail")=="REJECTED_BEFORE_TRANSPORT"},"scope":"CURRENT_CANDIDATES_PLUS_BTC_ETH_REGRESSION_PROBES","transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot?symbol={SYMBOL}","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
     except Exception as e:
         proxy_error=type(e).__name__+":"+str(e)[:160]
         out["spot"].update({"status":"UNKNOWN","business_status":"UNKNOWN","error":proxy_error,"error_reason":classify_error(e),"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"})
