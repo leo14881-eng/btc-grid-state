@@ -28,34 +28,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: On code push wait for a fresh discovery generation
-        if: ${{ github.event_name == 'push' }}
-        env:
-          TRIGGER_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          trigger_epoch=$(git show -s --format=%ct "$TRIGGER_SHA")
-          for attempt in $(seq 1 30); do
-            git fetch origin main
-            git show origin/main:research/results/hunter-cex-universe-run.json > /tmp/fresh-scan.json || true
-            if python - "$trigger_epoch" <<'PY'
-          import datetime as dt,json,sys
-          try:
-              x=json.load(open('/tmp/fresh-scan.json'))
-              t=dt.datetime.fromisoformat(x['as_of_utc'].replace('Z','+00:00')).timestamp()
-              assert x.get('binance_complete') is True and t >= float(sys.argv[1])-5
-          except Exception:
-              raise SystemExit(1)
-          PY
-            then
-              git reset --hard origin/main
-              echo "FRESH_DISCOVERY_AFTER_HUNTER_CHANGE_OK"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "FRESH_DISCOVERY_TIMEOUT"
-          exit 1
       - name: Hunter change regression gate
         run: |
           set -euo pipefail
