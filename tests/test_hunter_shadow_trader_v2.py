@@ -16,8 +16,8 @@ class V2CapitalDecisionTests(unittest.TestCase):
   c,s,l,u=self.base();self.assertEqual(decision(c,s,l,{},"ENTRY")[0],"REJECT")
  def test_real_evidence_blocker_rejects(self):
   c,s,l,u=self.base();c["blockers"].append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED");self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
- def test_missing_candidate_exits_existing(self):
-  c,s,l,u=self.base();self.assertEqual(decision(None,s,l,u,"HOLD")[0],"EXIT")
+ def test_missing_candidate_is_review_only_for_existing(self):
+  c,s,l,u=self.base();self.assertEqual(decision(None,s,l,u,"HOLD")[0],"HOLD")
  def test_add_needs_lower_price_and_full_revalidation(self):
   c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};self.assertEqual(decision(c,s,l,u,"ADD",p,96)[0],"ADD")
   l["snapshots"]["X"]["ask_depth_2pct_usdt"]=1000;self.assertNotEqual(decision(c,s,l,u,"ADD",p,96)[0],"ADD")
@@ -36,4 +36,12 @@ class V2CapitalDecisionTests(unittest.TestCase):
  def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(24.,48.,72.))
  def test_strong_profitable_signal_remains_valid(self):
   c,s,l,u=self.base();self.assertEqual(decision(c,s,l,u,"HOLD")[0],"HOLD")
+ def test_right_side_chase_requires_extra_edge(self):
+  c,s,l,u=self.base();s["coins"]["X"]["change_24h_pct"]=25
+  self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"BUY")
+  c["execution_scenario"]["estimated_rr"]=1.7
+  self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
+ def test_left_side_entry_not_rejected_for_not_rising(self):
+  c,s,l,u=self.base();s["coins"]["X"]["change_24h_pct"]=-8
+  self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"BUY")
 if __name__=="__main__":unittest.main()
