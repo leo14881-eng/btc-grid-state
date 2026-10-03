@@ -31,7 +31,7 @@ def save(p,o):
 
 NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
-EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHTS", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
+EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
 MAX_MARKET_WORKERS = 24
 
 def get_text(url):
@@ -57,7 +57,7 @@ def discover_us_common_stocks():
             row=dict(zip(header,line.split("|")))
             symbol=row.get("Symbol","").strip()
             name=row.get("Security Name","").strip()
-            if symbol and row.get("Test Issue")=="N" and row.get("ETF")=="N" and _plain_common_stock(name):
+            if symbol and "$" not in symbol and row.get("Test Issue")=="N" and row.get("ETF")=="N" and _plain_common_stock(name):
                 symbols.add(symbol)
     except Exception as e:
         source_errors.append({"source":"NASDAQ_LISTED","error":type(e).__name__})
@@ -115,7 +115,7 @@ def main():
     state=load(STATE,{"version":2,"simulation_only":True,"positions":{},"closed":[]})
     events=load(EVENTS,[])
     market, failed_symbols, discovery=stock_universe()
-    data_status="OK" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"
+    data_status=("OK" if market and not failed_symbols else ("PARTIAL" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"))
     # V1 broad net: every valid discovered stock gets a standardized first paper tranche. No MAX_OPEN.
     for s,m in market.items():
         if s not in state["positions"]:
