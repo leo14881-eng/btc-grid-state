@@ -85,6 +85,8 @@ def build(data,now):
             "market_data_screened_cached":research.get("deep_research_total_cached"),
             "strict_contract_identity_verified":sum((identity.get("counts") or {}).get(k,0)
                 for k in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
+            "official_contract_identity_verified":sum((identity.get("counts") or {}).get(k,0)
+                for k in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
             "capital_identity_pass":sum(1 for x in (identity.get("assets") or {}).values() if x.get("capital_identity_pass")),
             "forward_economic_scenario_ready":sum(bool(d.get("scenario_map"))
                 for d in dossiers.get("dossiers") or []),
