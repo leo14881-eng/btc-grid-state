@@ -8,7 +8,7 @@ ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
 NOTIONAL=1000.0; MAX_TRANCHES=5
 MIN_PRICE=2.0; MIN_DOLLAR_VOLUME=10_000_000.0; MIN_SCORE=68.0
-MAX_5D_RETURN=25.0; MIN_20D_RETURN=-8.0
+MAX_5D_RETURN=18.0; MAX_20D_RETURN=45.0; MAX_SMA20_EXTENSION=18.0; MIN_20D_RETURN=-8.0
 FEE_RATE=0.002          # conservative xStock spot-side research assumption; stored explicitly
 ARM_NET_PCT=3.0
 GIVEBACK_PCT=5.0
@@ -104,6 +104,7 @@ def score_candidate(m, spy=None, qqq=None):
     if price < MIN_PRICE: rejects.append("PRICE_TOO_LOW")
     if dv < MIN_DOLLAR_VOLUME: rejects.append("LOW_DOLLAR_VOLUME")
     if r5 > MAX_5D_RETURN: rejects.append("OVEREXTENDED_5D")
+    if r20 > MAX_20D_RETURN: rejects.append("OVEREXTENDED_20D")
     if r20 < MIN_20D_RETURN: rejects.append("WEAK_20D_TREND")
     if price < m["sma20"]*0.94: rejects.append("BELOW_TREND")
     score=0.0
@@ -118,6 +119,7 @@ def score_candidate(m, spy=None, qqq=None):
     score += max(0.0,min(25.0,12.5+rel*0.8))
     # Price vs SMA20 structure, 0..10.
     dist=(price/m["sma20"]-1)*100
+    if dist > MAX_SMA20_EXTENSION: rejects.append("TOO_FAR_ABOVE_SMA20")
     score += max(0.0,min(10.0,7.0+dist*0.35))
     # Volatility quality, 0..10: enough movement, but penalize extreme noise.
     v=m["daily_volatility20"]
