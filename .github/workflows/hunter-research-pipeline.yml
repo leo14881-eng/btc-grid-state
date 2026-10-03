@@ -68,9 +68,9 @@ jobs:
         run: python -m unittest tests.test_hunter_shadow_trader tests.test_hunter_shadow_trader_v2 tests.test_hunter_shadow_optimizer -v
       - name: Shadow optimizer frozen pending user acceptance
         run: echo "SHADOW_STRATEGY_FREEZE optimizer_writes=0"
-      - name: Verify V1 shadow freeze
+      - name: Run V1 broad-net shadow orders
         env:
-          HUNTER_SHADOW_FREEZE: '1'
+          HUNTER_SHADOW_FREEZE: '0'
         run: |
           for attempt in 1 2 3; do
             if python research/hunter_shadow_trader.py; then exit 0; fi
@@ -155,7 +155,7 @@ jobs:
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
-              python -c "import json; a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert a.get('reset_reason')=='USER_REQUESTED_PRE_OPTIMIZATION_RESET'; assert b.get('reset_reason')=='USER_REQUESTED_PRE_OPTIMIZATION_RESET'; assert not (a.get('open_positions') or a.get('closed_positions') or a.get('events')); assert not (b.get('open_positions') or b.get('closed_positions') or b.get('events') or b.get('decisions')); print('SHADOW_FREEZE_READBACK_OK')"
+              python -c "import json; a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert a.get('open_positions') or a.get('events'), 'V1_SHADOW_EXPECTED_ACTIVE'; assert b.get('reset_reason')=='USER_REQUESTED_PRE_OPTIMIZATION_RESET'; assert not (b.get('open_positions') or b.get('closed_positions') or b.get('events') or b.get('decisions')); print('V1_SHADOW_ACTIVE_V2_FREEZE_READBACK_OK')"
               exit 0
             fi
             git rebase --abort 2>/dev/null || true
