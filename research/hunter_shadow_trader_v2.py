@@ -104,6 +104,12 @@ def profit_protection(pos,p):
 def record(state,pos,action,now,reasons,e,p):
  state["decisions"].append({"at":now.isoformat(),"shadow_id":pos.get("shadow_id"),"asset":pos["asset"],"action":action,
   "price":p,"reasons":reasons,"evidence":e,"tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0})
+def trade_event(state,pos,action,now,p,reason=None,pnl=None):
+ event={"type":"SHADOW_V2_"+action,"at":now.isoformat(),"asset":pos["asset"],"shadow_id":pos.get("shadow_id"),"price":p,
+  "tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0}
+ if reason is not None:event["reason"]=reason
+ if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
+ state["events"].append(event)
 def add(pos,p,e,now):
  i=len(pos["tranches"]);pos["tranches"].append({"tranche":i+1,"at":now.isoformat(),"price":p,"notional_usdt":TRANCHES[i],
   "buy_slippage_bps":e.get("buy_slippage_bps") or 0,"reason":"INITIAL" if i==0 else "LOWER_PRICE_FULL_REVALIDATION"})
@@ -147,13 +153,13 @@ def main():
   c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();hours=(now-parse(pos["opened_at_utc"])).total_seconds()/3600;pos["holding_hours"]=round(hours,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
-  if act=="ADD":add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);raw=raw_return(pos,p)
+  if act=="ADD":add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
   elif act=="EXIT":
    pnl=net_pnl(pos,p);notion=total_notional(pos);br=(btc/pos["btc_entry_price"]-1)*100
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"THESIS_INVALIDATION",
     "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
     "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
-   record(state,pos,"EXIT",now,reasons,e,p);state["closed_positions"].append(pos);continue
+   record(state,pos,"EXIT",now,reasons,e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   else:record(state,pos,"HOLD",now,reasons,e,p)
   protection=profit_protection(pos,p)
   if protection["exit"]:
@@ -162,7 +168,7 @@ def main():
     "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
     "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4),
     "profit_protection":protection})
-   record(state,pos,"EXIT",now,["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"],e,p);state["closed_positions"].append(pos);continue
+   record(state,pos,"EXIT",now,["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   if raw>=TARGET:
    r1=e.get("btc_rel_1h"); r4=e.get("btc_rel_4h"); accel=e.get("rel_accel")
    runner=act!="REJECT" and r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
@@ -173,7 +179,7 @@ def main():
     pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":"PROFIT_REVIEW_MOMENTUM_FADED",
      "weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),
      "net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
-    record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);state["closed_positions"].append(pos);continue
+    record(state,pos,"EXIT",now,["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"],e,p);trade_event(state,pos,"SELL",now,p,pos["exit_reason"],pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
  state["open_positions"]=still;open_assets={x["asset"] for x in still};slots=max(0,MAX_OPEN-len(still));buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
@@ -187,7 +193,7 @@ def main():
   pos={"shadow_id":"SHV2-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY"}
-  add(pos,p,e,now);record(state,pos,"BUY",now,reasons,e,p);state["open_positions"].append(pos);open_assets.add(a);slots-=1;buy_count+=1
+  add(pos,p,e,now);record(state,pos,"BUY",now,reasons,e,p);trade_event(state,pos,"BUY",now,p,"INITIAL");state["open_positions"].append(pos);open_assets.add(a);slots-=1;buy_count+=1
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
  state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
  closed=state["closed_positions"];gp=sum(max(0,x["net_pnl_usdt"]) for x in closed);gl=-sum(min(0,x["net_pnl_usdt"]) for x in closed)
