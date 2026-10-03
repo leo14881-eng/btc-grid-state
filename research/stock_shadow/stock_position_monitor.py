@@ -51,7 +51,25 @@ def nasdaq_snapshot_quotes(symbols):
             if s in wanted:
                 p=_parse_price(row.get("lastsale") or row.get("lastSalePrice"))
                 if p is not None: prices[s]=p
-        return prices,[],1
+        missing=wanted-set(prices)
+        extra_requests=0
+        # Rare class-share aliases can be absent from the bulk snapshot. Use a bounded
+        # one-symbol chart fallback only for missing holdings, never for the full book.
+        for s in sorted(missing)[:3]:
+            alias=s.replace("-",".")
+            url2=f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(alias)}?range=1d&interval=5m"
+            try:
+                d=_get_json(url2); extra_requests+=1
+                r=((d.get("chart") or {}).get("result") or [None])[0]
+                if r:
+                    meta=r.get("meta") or {}; p=_parse_price(meta.get("regularMarketPrice"))
+                    if p is None:
+                        closes=((r.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+                        vals=[_parse_price(x) for x in closes]; vals=[x for x in vals if x is not None]; p=vals[-1] if vals else None
+                    if p is not None: prices[s]=p
+            except Exception:
+                extra_requests+=1
+        return prices,[],1+extra_requests
     except urllib.error.HTTPError as e:
         return {},[{"batch":0,"reason":f"HTTP_{e.code}"}],1
     except Exception as e:
