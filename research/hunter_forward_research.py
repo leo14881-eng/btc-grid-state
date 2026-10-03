@@ -110,6 +110,7 @@ def compact_market(market,universe):
     return market
 
 def select_rotation(coins,previous,early_symbols=None):
+    early_symbols=list(early_symbols or [])
     symbols=sorted(coins)
     if not symbols:return [],0,[]
     cursor=int(previous.get("rotation_cursor",0))%len(symbols)
