@@ -256,10 +256,11 @@ def main():
         # V2: ADD and SELL share the same position-state engine; price loss alone triggers neither.
         n=len(p["tranches"]); decision=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
         ps=position_state_v2(m,bench.get("SPY"),bench.get("QQQ"))
+        previous_state=(p.get("position_state_v2") or {}).get("state")
         p["position_state_v2"]=ps
         mfe=p.get("mfe_net_pct",r); giveback=mfe-r
         p["profit_protection_signal"]=bool(mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT))
-        if n<MAX_TRANCHES and ps["state"]=="HEALTHY_PULLBACK" and decision["ready"]:
+        if n<MAX_TRANCHES and ps["state"]=="HEALTHY_PULLBACK" and previous_state!="HEALTHY_PULLBACK" and decision["ready"]:
             tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"HEALTHY_PULLBACK_ADD_V2","score":decision["score"],"position_state":ps,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
         if ps["state"]=="BROKEN":
