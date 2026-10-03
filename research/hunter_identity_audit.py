@@ -73,7 +73,7 @@ def fetch_coin_registry():
                      "source_url":"https://www.coingecko.com/en/coins/"+cid})
     return rows
 
-def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry):
+def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry,universe_symbols=None):
     """Refresh CoinGecko identity registry in one request; reuse fresh cache on 429/outage."""
     cache=dict(cache or {})
     try:
@@ -107,6 +107,8 @@ def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry):
         if not isinstance(lead,dict): continue
         item=dict(lead); sym=str(item.get("symbol") or "").upper()
         reg=bulk_by_id.get(str(item.get("id")))
+        if sym in bulk_collisions:
+            item["_bulk_symbol_collision"]=True
         if reg and str(reg.get("symbol") or "").upper()==sym:
             item["platforms"]=reg.get("platforms") or {}
             item["contract_as_of_utc"]=cache.get("_bulk_as_of_utc") or now.isoformat()
@@ -116,6 +118,7 @@ def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry):
     # paginated market feed.  Deliberately do not copy market-cap/supply fields:
     # this stage establishes identity only.
     for sym,reg in bulk_by_symbol.items():
+        if universe_symbols is not None and sym not in universe_symbols: continue
         if sym in seen: continue
         leads.append({"id":reg.get("id"),"symbol":sym,"name":reg.get("name"),
                       "platforms":reg.get("platforms") or {},
@@ -283,9 +286,9 @@ def build(scan,market,registry,now):
         typ=classify(sym)
         fact=facts.get(sym) or {}
         status,blockers=identity_status(sym,coin,fact,cg,now)
-        if sym in collisions:
+        if sym in collisions or (cg.get(sym) or {}).get("_bulk_symbol_collision"):
             blockers.append("COINGECKO_TICKER_COLLISION")
-            if status in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED"):
+            if status in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED","THIRD_PARTY_UNIQUE_ID_CORROBORATED"):
                 status="UNVERIFIED"
         if typ!="SPOT_TOKEN_UNVERIFIED":
             blockers.append("ASSET_TYPE_REQUIRES_INDEPENDENT_REVIEW")
@@ -318,7 +321,8 @@ def main():
     state=cooldown.load()
     # Primary path is one bulk CoinGecko request, not N per-asset calls.
     try:
-        market,cache,bulk=enrich_bulk_registry(market,cache,now)
+        scan=json.loads(SCAN.read_text())
+        market,cache,bulk=enrich_bulk_registry(market,cache,now,universe_symbols=set((scan.get("coins") or {}).keys()))
     except urllib.error.HTTPError as exc:
         if exc.code==429:
             state=cooldown.record_429(state,now,exc.headers.get("Retry-After") if exc.headers else None,"identity_bulk")
