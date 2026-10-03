@@ -20,7 +20,8 @@ def read(p,d={}):
  except (OSError,ValueError):return d
 def main():
  now=dt.datetime.now(dt.timezone.utc)
- active={d.get("asset") for d in read(DOS).get("dossiers") or []}
+ dossier=read(DOS)
+ active={d.get("asset") for d in dossier.get("dossiers") or []}
  assets={}
  for sym,e in EVIDENCE.items():
   if sym not in active:continue
@@ -30,7 +31,7 @@ def main():
   # in the next event. Larger/unknown events stay blocked.
   row["tactical_supply_risk_verified"]=row["status"]=="FULLY_UNLOCKED" or pct<=0.5
   assets[sym]=row
- report={"schema":"hunter_tactical_supply_risk_v1","as_of_utc":now.isoformat(),
+ report={"schema":"hunter_tactical_supply_risk_v1","as_of_utc":now.isoformat(),"scan_as_of_utc":dossier.get("scan_as_of_utc"),
    "assets":assets,"policy":"FAIL_CLOSED__UNKNOWN_ASSETS_REMAIN_BLOCKED__NO_AUTO_TRADE"}
  OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
  print(json.dumps({"assets":list(assets),"verified":[s for s,x in assets.items() if x["tactical_supply_risk_verified"]]}))
