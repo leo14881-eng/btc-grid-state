@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
 NOTIONAL=1000.0; MAX_TRANCHES=5
-MIN_PRICE=2.0; MIN_DOLLAR_VOLUME=10_000_000.0; MIN_SCORE=68.0
+LOW_PRICE_REFERENCE=2.0; MIN_DOLLAR_VOLUME=10_000_000.0; LOW_PRICE_MIN_DOLLAR_VOLUME=25_000_000.0; MIN_SCORE=68.0
 MAX_5D_RETURN=18.0; MAX_20D_RETURN=45.0; MAX_SMA20_EXTENSION=18.0; MIN_20D_RETURN=-8.0
 PARABOLIC_5D_RETURN=35.0; PARABOLIC_20D_RETURN=80.0; PARABOLIC_SMA20_EXTENSION=30.0
 EARLY_MIN_SCORE=62.0; EARLY_MAX_20D_RETURN=18.0; EARLY_MAX_SMA20_EXTENSION=8.0
@@ -113,7 +113,8 @@ def _stock_snapshot(symbol):
 def score_candidate(m, spy=None, qqq=None):
     reasons=[]; rejects=[]
     price=m["price"]; dv=m["avg_dollar_volume20"]; r5=m["ret5"]; r20=m["ret20"]
-    if price < MIN_PRICE: rejects.append("PRICE_TOO_LOW")
+    # V2 tradeability: price alone is not a rejection. Low-priced names must prove stronger liquidity.
+    if price < LOW_PRICE_REFERENCE and dv < LOW_PRICE_MIN_DOLLAR_VOLUME: rejects.append("LOW_PRICE_INSUFFICIENT_LIQUIDITY")
     if dv < MIN_DOLLAR_VOLUME: rejects.append("LOW_DOLLAR_VOLUME")
     if r5 > PARABOLIC_5D_RETURN: rejects.append("PARABOLIC_5D")
     if r20 > PARABOLIC_20D_RETURN: rejects.append("PARABOLIC_20D")
@@ -171,6 +172,32 @@ def entry_decision(m, spy=None, qqq=None):
     if ready and structure!="EARLY_ACCUMULATION" and r5>MAX_5D_RETURN*0.75: reasons.append("LATE_STAGE_CAUTION")
     return {"ready":ready,"score":score,"reasons":reasons,"rejects":rejects,"metrics":metrics,"entry_structure":structure}
 
+
+def position_state_v2(m, spy=None, qqq=None):
+    """Small, explainable state engine. No single indicator can mark a position BROKEN."""
+    price=m["price"]; sma=m["sma20"]; r5=m["ret5"]; r20=m["ret20"]
+    spy20=spy["ret20"] if spy else 0.0; qqq20=qqq["ret20"] if qqq else 0.0
+    relative20=((r20-spy20)+(r20-qqq20))/2
+    dist=(price/sma-1)*100
+    vr=m.get("volume_ratio20",1.0)
+    trend_broken=(dist < -6.0 and r20 < 0)
+    relative_weak=(relative20 < -5.0)
+    selling_pressure=(r5 < -5.0 and vr >= 1.5)
+    trend_strong=(dist >= 0 and r20 > 0)
+    relative_strong=(relative20 >= 0)
+    # BROKEN requires independent confirmation: structure + relative weakness.
+    if trend_broken and relative_weak:
+        state="BROKEN"
+    elif r5 < 0 and not trend_broken and not relative_weak:
+        state="HEALTHY_PULLBACK"
+    elif trend_strong and relative_strong:
+        state="STRONG"
+    else:
+        state="UNCERTAIN"
+    return {"state":state,"market_relative20":round(relative20,4),"distance_sma20_pct":round(dist,4),
+            "selling_pressure":selling_pressure,"trend_broken":trend_broken,"relative_weak":relative_weak,
+            "sector_relative_status":"UNAVAILABLE_V2_BASELINE"}
+
 def stock_universe():
     """Discover the full US common-stock universe, then observe symbols concurrently."""
     symbols, discovery_errors=discover_us_common_stocks()
@@ -226,23 +253,24 @@ def main():
         price=m["price"]; r=net_pct(p,price)
         p["mfe_net_pct"]=max(p.get("mfe_net_pct",r),r); p["mae_net_pct"]=min(p.get("mae_net_pct",r),r)
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6)})
-        # ADD only when the thesis still passes selection and the pullback improves entry; never average mechanically.
-        n=len(p["tranches"]); first=p["tranches"][0]["price"]; decision=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
-        pullback=(price/first-1)*100
-        if n<MAX_TRANCHES and decision["ready"] and pullback <= -3*n and m["price"]>=m["sma20"]*0.97:
-            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"THESIS_CONFIRMED_PULLBACK_ADD","score":decision["score"],"snapshot":m}
-            p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
-        # Profit protection: only sells while still net profitable after an armed MFE.
+        # V2: ADD and SELL share the same position-state engine; price loss alone triggers neither.
+        n=len(p["tranches"]); decision=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
+        ps=position_state_v2(m,bench.get("SPY"),bench.get("QQQ"))
+        p["position_state_v2"]=ps
         mfe=p.get("mfe_net_pct",r); giveback=mfe-r
-        if mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT):
-            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":"PROFIT_GIVEBACK","realized_net_pnl_usdt":round(net_pnl(p,price),6),"realized_net_return_pct":round(r,6),"profit_giveback_pct_points":round(giveback,6)})
+        p["profit_protection_signal"]=bool(mfe>=ARM_NET_PCT and r>0 and (giveback>=GIVEBACK_PCT or r<=PROFIT_FLOOR_NET_PCT))
+        if n<MAX_TRANCHES and ps["state"]=="HEALTHY_PULLBACK" and decision["ready"]:
+            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"HEALTHY_PULLBACK_ADD_V2","score":decision["score"],"position_state":ps,"snapshot":m}
+            p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
+        if ps["state"]=="BROKEN":
+            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":"STRUCTURE_BROKEN_V2","realized_net_pnl_usdt":round(net_pnl(p,price),6),"realized_net_return_pct":round(r,6),"profit_giveback_pct_points":round(giveback,6),"post_exit_tracking_due_days":[1,3,5,10]})
             state["closed"].append(closed); del state["positions"][s]
-            events.append({"type":"SELL","at":closed["closed_at"],"symbol":s,"price":price,"reason":"PROFIT_GIVEBACK","net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],"mfe_net_pct":mfe,"giveback_pct_points":giveback,"USER_ALERT_REQUIRED":True})
+            events.append({"type":"SELL","at":closed["closed_at"],"symbol":s,"price":price,"reason":"STRUCTURE_BROKEN_V2","net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],"position_state":ps,"USER_ALERT_REQUIRED":True})
     wins=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)>0]; losses=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)<=0]
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V2","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
