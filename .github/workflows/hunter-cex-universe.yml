@@ -4,23 +4,17 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 * * * *'
+  # Any Hunter implementation/workflow/test change must automatically start
+  # one complete discovery -> research -> V1/V2 validation cycle. Result-only
+  # bot commits are intentionally excluded to avoid recursive runs.
   push:
     branches: [main]
     paths:
-      - 'research/hunter_cex_scan.py'
-      - 'research/hunter_early_signals.py'
-      - 'tests/test_hunter_cex_scan.py'
-      - 'research/hunter_shadow_trader.py'
-      - 'research/hunter_shadow_trader_v2.py'
-      - 'tests/test_hunter_shadow_trader.py'
-      - 'research/hunter_identity_audit.py'
-      - 'research/hunter_tactical_capital_review.py'
-      - 'research/hunter_bybit_availability.py'
-      - 'research/hunter_health_and_queue.py'
-      - 'research/hunter-capital-state.json'
-      - 'tests/test_hunter_identity_audit.py'
-      - '.github/workflows/hunter-cex-universe.yml'
-      - '.github/workflows/hunter-research-pipeline.yml'
+      - 'research/*.py'
+      - 'research/hunter-*.json'
+      - 'tests/test_hunter*.py'
+      - '.github/workflows/hunter-*.yml'
+      - '.github/workflows/bybit-proxy-diagnostic.yml'
 permissions:
   contents: write
 concurrency:
