@@ -65,7 +65,12 @@ def discovery_decision(c):
  e=sig(c); reasons=[]
  if (finite(e.get("score")) or 0)<DISCOVERY_MIN_SCORE:reasons.append("DISCOVERY_SCORE_WEAK")
  if int(e.get("independent_signal_count") or 0)<DISCOVERY_MIN_INDEPENDENT:reasons.append("DISCOVERY_INDEPENDENT_SIGNALS_WEAK")
- blockers=[x for x in hard_blockers(c) if "IDENTITY" in x or "CONTRACT" in x]
+ # V1 discovery is an experiment lane: missing identity evidence is a label, not
+ # proof of a bad asset. Only explicit mismatch/invalid identity blocks discovery.
+ # V2 remains fail-closed because decision() still consumes every hard blocker.
+ identity_blockers=[x for x in hard_blockers(c) if "IDENTITY" in x or "CONTRACT" in x]
+ fatal_tokens=("MISMATCH","INVALID","WRONG_ASSET","CONFLICT")
+ blockers=[x for x in identity_blockers if any(t in x for t in fatal_tokens)]
  if blockers:reasons += ["BLOCKER:"+x for x in blockers]
  return ("BUY" if not reasons else "REJECT"),(reasons or ["BROAD_DISCOVERY_GATE_PASS"])
 
