@@ -1,11 +1,11 @@
 {
   "schema": "hunter_identity_audit_v1",
-  "as_of_utc": "2026-10-03T19:47:04.632982+00:00",
-  "scan_as_of_utc": "2026-10-03T19:45:05.701904+00:00",
+  "as_of_utc": "2026-10-03T20:02:10.721482+00:00",
+  "scan_as_of_utc": "2026-10-03T20:01:18.576866+00:00",
   "universe_count": 497,
   "counts": {
     "UNVERIFIED": 495,
-    "THIRD_PARTY_CORROBORATED": 2
+    "ANALYST_ATTESTED_ONLY": 2
   },
   "ticker_collisions": [],
   "assets": {
@@ -1048,10 +1048,12 @@
     },
     "COMP": {
       "asset_class": "SPOT_TOKEN_UNVERIFIED",
-      "identity_status": "THIRD_PARTY_CORROBORATED",
+      "identity_status": "ANALYST_ATTESTED_ONLY",
       "coingecko_symbol_only_id": "compound-governance-token",
-      "blockers": [],
-      "capital_identity_pass": true
+      "blockers": [
+        "INDEPENDENT_PLATFORM_CONTRACT_UNAVAILABLE"
+      ],
+      "capital_identity_pass": false
     },
     "COOKIE": {
       "asset_class": "SPOT_TOKEN_UNVERIFIED",
@@ -1280,10 +1282,12 @@
     },
     "DOLO": {
       "asset_class": "SPOT_TOKEN_UNVERIFIED",
-      "identity_status": "THIRD_PARTY_CORROBORATED",
-      "coingecko_symbol_only_id": "dolomite",
-      "blockers": [],
-      "capital_identity_pass": true
+      "identity_status": "ANALYST_ATTESTED_ONLY",
+      "coingecko_symbol_only_id": null,
+      "blockers": [
+        "INDEPENDENT_PLATFORM_CONTRACT_UNAVAILABLE"
+      ],
+      "capital_identity_pass": false
     },
     "DOT": {
       "asset_class": "SPOT_TOKEN_UNVERIFIED",
@@ -4490,13 +4494,19 @@
   },
   "capital_authority": "NONE__ANALYST_EVIDENCE_AND_EXECUTION_GATES_SEPARATE",
   "third_party_contract_lookup": {
-    "fetched": 0,
+    "fetched": 6,
     "source_urls": {
-      "COMP": "https://www.coingecko.com/en/coins/compound-governance-token",
-      "DOLO": "https://www.coingecko.com/en/coins/dolomite"
+      "0G": "https://www.coingecko.com/en/coins/zero-gravity",
+      "1INCH": "https://www.coingecko.com/en/coins/1inch",
+      "2Z": "https://www.coingecko.com/en/coins/doublezero",
+      "A": "https://www.coingecko.com/en/coins/vaulta",
+      "AAVE": "https://www.coingecko.com/en/coins/aave"
     },
-    "failures": {},
-    "retry_after": null,
-    "shared_cooldown_active": false
+    "failures": {
+      "ADA": "HTTP_429: HTTP Error 429: Too Many Requests",
+      "_source_rate_limit": "COINGECKO_429__SHARED_COOLDOWN"
+    },
+    "retry_after": "60",
+    "shared_cooldown_active": true
   }
 }
