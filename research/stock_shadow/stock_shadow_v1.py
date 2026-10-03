@@ -29,7 +29,7 @@ def load(p,d):
 def save(p,o):
     p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
 
-STOCK_SYMBOLS = """AAPL MSFT NVDA AMZN GOOGL META TSLA AVGO BRK-B JPM LLY V WMT ORCL MA NFLX COST XOM JNJ HD PG BAC ABBV KO CRM AMD PLTR CSCO CVX IBM GE CAT MCD DIS ADBE QCOM TXN AMAT MU INTC UBER ABNB SHOP COIN HOOD SQ PYPL TSM NKE SBUX BA GS MS PFE MRK UNH TMO NOW PANW CRWD SNOW""".split()
+STOCK_SYMBOLS = """AAPL MSFT NVDA AMZN GOOGL META TSLA AVGO BRK-B JPM LLY V WMT ORCL MA NFLX COST XOM JNJ HD PG BAC ABBV KO CRM AMD PLTR CSCO CVX IBM GE CAT MCD DIS ADBE QCOM TXN AMAT MU INTC UBER ABNB SHOP COIN HOOD XYZ PYPL TSM NKE SBUX BA GS MS PFE MRK UNH TMO NOW PANW CRWD SNOW""".split()
 
 def stock_universe():
     """Free public underlying-stock snapshots. Each symbol is independently degradable."""
