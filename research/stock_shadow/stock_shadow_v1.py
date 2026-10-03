@@ -68,7 +68,13 @@ def net_pct(p,price):
 def main():
     state=load(STATE,{"version":2,"simulation_only":True,"positions":{},"closed":[]})
     events=load(EVENTS,[])
-    market=bybit_universe()
+    try:
+        market=bybit_universe()
+        data_status="OK"
+    except Exception as e:
+        # Network/data-source failure is UNKNOWN, never a false empty/not-listed conclusion.
+        market={}
+        data_status="UNKNOWN:"+type(e).__name__
     # V1 broad net: every valid discovered xStock gets a standardized first paper tranche. No MAX_OPEN.
     for s,m in market.items():
         if s not in state["positions"]:
@@ -97,7 +103,7 @@ def main():
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_seen":len(market),"open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_seen":len(market),"market_data_status":data_status,"open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_giveback_pct_points":GIVEBACK_PCT,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
