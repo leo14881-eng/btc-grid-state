@@ -52,35 +52,30 @@ def exchange_asset(value):
     return a if re.fullmatch(r"[A-Z0-9]{1,30}",a) else None
 
 def spot_proxy_candidates():
-    """Primary GitHub transport: allowlisted Worker /bybit/spot -> official Bybit V5 instruments-info."""
+    """One Worker request -> official Bybit V5 full spot instrument registry."""
     try: review=json.loads(REVIEW.read_text())
     except Exception: review={}
-    assets=set(); rejected_inputs={}
+    requested=set()
+    rejected_inputs={}
     for row in review.get("candidates") or []:
         raw=row.get("asset") if isinstance(row,dict) else None
         a=exchange_asset(raw)
-        if a: assets.add(a)
+        if a: requested.add(a)
         elif raw: rejected_inputs[str(raw)]={"reason":"INVALID_SYMBOL","detail":"REJECTED_BEFORE_TRANSPORT"}
-    assets.update({"BTC","ETH"})
-    ok=[]; failures=dict(rejected_inputs)
-    for a in sorted(assets):
-        symbol=a+"USDT"
-        # exchange_asset() already prevents human labels or unsafe strings from reaching transport.
-        try:
-            d=request(SPOT_PROXY+"/bybit/spot?"+urllib.parse.urlencode({"symbol":symbol}))
-            if d.get("retCode")!=0:
-                failures[a]={"reason":"UPSTREAM_ERROR","detail":"BYBIT_PROXY_RET_"+str(d.get("retCode"))}
-                continue
-            rows=(d.get("result") or {}).get("list") or []
-            if any(str(x.get("symbol","")).upper()==symbol and x.get("quoteCoin")=="USDT" and x.get("status")=="Trading" for x in rows):
-                ok.append(a)
-            else:
-                failures[a]={"reason":"INVALID_SYMBOL","detail":"NOT_TRADING_OR_NOT_LISTED"}
-        except Exception as exc:
-            failures[a]={"reason":classify_error(exc),"detail":type(exc).__name__+":"+str(exc)[:120]}
-    if not ok:
-        raise RuntimeError("BYBIT_PROXY_NO_VALID_SYMBOLS "+json.dumps(failures,ensure_ascii=False)[:500])
-    return ok,failures
+    requested.update({"BTC","ETH"})
+    # Spot instruments-info returns the complete spot list; no symbol loop.
+    d=request(SPOT_PROXY+"/bybit/spot")
+    if d.get("retCode")!=0:
+        raise RuntimeError("BYBIT_PROXY_RET_"+str(d.get("retCode")))
+    rows=(d.get("result") or {}).get("list") or []
+    trading={str(x.get("baseCoin","")).upper() for x in rows
+             if x.get("quoteCoin")=="USDT" and x.get("status")=="Trading" and x.get("baseCoin")}
+    if not trading: raise RuntimeError("BYBIT_PROXY_BULK_SPOT_EMPTY")
+    ok=sorted(requested & trading)
+    failures=dict(rejected_inputs)
+    for a in sorted(requested-trading):
+        failures[a]={"reason":"INVALID_SYMBOL","detail":"NOT_TRADING_OR_NOT_LISTED"}
+    return ok,failures,len(rows)
 
 def spot_official_pages():
     """Candidate-scoped fallback when V5 is region-blocked. Uses only official Bybit spot pages."""
@@ -118,8 +113,8 @@ def main():
     # api.bybit.com. Avoid a guaranteed failing direct request: Worker is primary
     # transport, with official Bybit V5 as its upstream.
     try:
-        xs,symbol_failures=spot_proxy_candidates()
-        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"symbol_failures":symbol_failures,"input_rejections":{k:v for k,v in symbol_failures.items() if v.get("detail")=="REJECTED_BEFORE_TRANSPORT"},"scope":"CURRENT_CANDIDATES_PLUS_BTC_ETH_REGRESSION_PROBES","transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot?symbol={SYMBOL}","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
+        xs,symbol_failures,registry_count=spot_proxy_candidates()
+        out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING","symbols":xs,"count":len(xs),"symbol_failures":symbol_failures,"input_rejections":{k:v for k,v in symbol_failures.items() if v.get("detail")=="REJECTED_BEFORE_TRANSPORT"},"scope":"BULK_SPOT_REGISTRY_LOCAL_MATCH","registry_count":registry_count,"network_requests":1,"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO","endpoint_template":"/bybit/spot","http_status":200,"retCode":0,"retMsg":"OK","proxy":SPOT_PROXY,"error_reason":None})
     except Exception as e:
         proxy_error=type(e).__name__+":"+str(e)[:160]
         out["spot"].update({"status":"UNKNOWN","business_status":"UNKNOWN","error":proxy_error,"error_reason":classify_error(e),"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"})
