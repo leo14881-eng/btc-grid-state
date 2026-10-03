@@ -15,7 +15,10 @@ ENTRY_MODE="EXECUTABLE"
 STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
 ID_PREFIX="SHV2"
 EVENT_PREFIX="SHADOW_V2"
-SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","0")=="1"
+SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"
+
+def entry_allowed(mode,broad,current_price,executable_action):
+ return broad=="BUY" and current_price is not None and (mode=="DISCOVERY" or executable_action=="BUY")
 
 def used_capital(state):
  return sum(total_notional(x) for x in state.get("open_positions",[]) if x.get("tranches"))
@@ -275,7 +278,7 @@ def main():
   a=c.get("asset")
   if not a or a in open_assets:continue
   broad,broad_reasons=discovery_decision(c);p=price(scan,a);act,reasons,e=decision(c,scan,liq,supply,"ENTRY")
-  if broad!="BUY" or not p or (ENTRY_MODE=="EXECUTABLE" and act!="BUY"):
+  if not entry_allowed(ENTRY_MODE,broad,p,act):
    if broad!="BUY": reject_reasons=broad_reasons
    elif not p: reject_reasons=["CURRENT_PRICE_MISSING"]
    else: reject_reasons=reasons
@@ -298,7 +301,7 @@ def main():
    "entry_mode":ENTRY_MODE,"entry_requires_full_execution_validation":ENTRY_MODE=="EXECUTABLE","add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
-   "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":"ONLY_AFTER_SHARED_FULL_DECISION_GATE","bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
+   "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":("AFTER_RESEARCH_DISCOVERY_ADMISSION" if ENTRY_MODE=="DISCOVERY" else "ONLY_AFTER_FULL_EXECUTABLE_DECISION_GATE"),"bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard["status"]}},
   "capital_authority":"NONE_SHADOW_ONLY"}
  STATE.write_text(json.dumps(state,ensure_ascii=False,indent=2)+"\n");SUMMARY.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
