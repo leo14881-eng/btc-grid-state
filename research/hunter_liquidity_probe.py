@@ -25,7 +25,7 @@ EARLY=ROOT/"hunter-early-signals.json"
 OUT=ROOT/"hunter-liquidity-probe.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 PER_LANE=6
-MAX_BOOKS=16
+MAX_BOOKS=160
 
 def read(path):
     return json.loads(path.read_text())
