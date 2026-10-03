@@ -1,4 +1,5 @@
-# V3 frozen baseline: 2026-10-04 through 2026-11-04; strategy retuning disabled during forward sample window.\nimport importlib.util
+# V3 frozen baseline: 2026-10-04 through 2026-11-04; strategy retuning disabled during forward sample window.
+import importlib.util
 from pathlib import Path
 
 P=Path("research/stock_shadow/stock_shadow_v1.py")
