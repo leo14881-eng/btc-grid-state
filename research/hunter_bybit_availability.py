@@ -60,8 +60,10 @@ def spot_proxy_candidates():
     try: cache=json.loads(SPOT_CACHE.read_text())
     except Exception: cache={}
     now=dt.datetime.now(dt.timezone.utc); requested=set(); rejected_inputs={}
-    for row in review.get("candidates") or []:
-        raw=row.get("asset") if isinstance(row,dict) else None; a=exchange_asset(raw)
+    # Bybit is supplemental; Binance is the execution universe. Query only
+    # candidates that already passed V2 capital review, plus regression probes.
+    for raw in review.get("capital_review_eligible") or []:
+        a=exchange_asset(raw)
         if a: requested.add(a)
         elif raw: rejected_inputs[str(raw)]={"reason":"INVALID_SYMBOL","detail":"REJECTED_BEFORE_TRANSPORT"}
     requested.update({"BTC","ETH"}); ok=[]; failures=dict(rejected_inputs); network_requests=0
