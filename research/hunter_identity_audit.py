@@ -108,7 +108,12 @@ def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry,universe_sym
         item=dict(lead); sym=str(item.get("symbol") or "").upper()
         reg=bulk_by_id.get(str(item.get("id")))
         if sym in bulk_collisions:
-            item["_bulk_symbol_collision"]=True
+            # A duplicate ticker in the global registry is not by itself a
+            # contradiction when the current market feed already resolved a
+            # concrete CoinGecko ID. Keep the collision as audit metadata;
+            # only unresolved symbol-only matches must fail closed.
+            item["_bulk_symbol_collision"]=False
+            item["_bulk_symbol_collision_present"]=True
         if reg and str(reg.get("symbol") or "").upper()==sym:
             item["platforms"]=reg.get("platforms") or {}
             item["contract_as_of_utc"]=cache.get("_bulk_as_of_utc") or now.isoformat()
@@ -286,7 +291,7 @@ def build(scan,market,registry,now):
         typ=classify(sym)
         fact=facts.get(sym) or {}
         status,blockers=identity_status(sym,coin,fact,cg,now)
-        if sym in collisions or (cg.get(sym) or {}).get("_bulk_symbol_collision"):
+        if sym in collisions or ((cg.get(sym) or {}).get("_bulk_symbol_collision") and not (cg.get(sym) or {}).get("id")):
             blockers.append("COINGECKO_TICKER_COLLISION")
             if status in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED","THIRD_PARTY_UNIQUE_ID_CORROBORATED"):
                 status="UNVERIFIED"
