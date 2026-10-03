@@ -103,6 +103,30 @@ class IdentityAuditTests(unittest.TestCase):
         r=audit.build(scan(),enriched,{"assets":{"ABC":fact()}},NOW)
         self.assertFalse(r["assets"]["ABC"]["capital_identity_pass"])
 
+    def test_bulk_registry_adds_unique_small_cap_identity_not_in_market_pages(self):
+        market={"coingecko":[]}
+        rows=[{"id":"abc-project","symbol":"ABC","name":"ABC",
+               "platforms":{"ethereum":"0x123"}}]
+        enriched,_,meta=audit.enrich_bulk_registry(
+            market,{"_bulk_as_of_utc":AT,"_bulk_rows":rows},NOW)
+        self.assertEqual(len(enriched["coingecko"]),1)
+        self.assertEqual(enriched["coingecko"][0]["id"],"abc-project")
+        self.assertEqual(enriched["coingecko"][0]["identity_source"],
+                         "COINGECKO_ALL_ACTIVE_REGISTRY")
+        r=audit.build(scan(),enriched,{"assets":{}},NOW)
+        self.assertTrue(r["assets"]["ABC"]["capital_identity_pass"])
+        self.assertEqual(meta["registry_only_identity_leads"],1)
+
+    def test_bulk_registry_collision_stays_fail_closed(self):
+        rows=[{"id":"abc-one","symbol":"ABC","name":"One","platforms":{}},
+              {"id":"abc-two","symbol":"ABC","name":"Two","platforms":{}}]
+        enriched,_,meta=audit.enrich_bulk_registry(
+            {"coingecko":[]},{"_bulk_as_of_utc":AT,"_bulk_rows":rows},NOW)
+        self.assertEqual(enriched["coingecko"],[])
+        self.assertEqual(meta["registry_symbol_collisions"],1)
+        r=audit.build(scan(),enriched,{"assets":{}},NOW)
+        self.assertFalse(r["assets"]["ABC"]["capital_identity_pass"])
+
     def test_small_cap_not_in_market_top500_can_be_corrobated(self):
         declared=fact()
         declared["identity"]["coingecko_id"]="abc-project"
