@@ -36,15 +36,15 @@ def stock_universe():
     out={}; failed=[]
     for symbol in STOCK_SYMBOLS:
         ysymbol=symbol.replace("-", "-")
-        url=f"https://query1.finance.yahoo.com/v8/finance/chart/{ysymbol}?range=5d&interval=1d"
+        url=f"https://query1.finance.yahoo.com/v8/finance/chart/{ysymbol}?range=5d&interval=5m"
         try:
             d=get_json(url); r=d["chart"]["result"][0]
             closes=[x for x in r["indicators"]["quote"][0]["close"] if x is not None]
             if not closes: raise ValueError("no close")
-            price=float(closes[-1]); prev=float(closes[-2]) if len(closes)>1 else price
+            price=float(closes[-1]); prev=float(r.get("meta",{}).get("chartPreviousClose") or (closes[-2] if len(closes)>1 else price))
             if price<=0 or not math.isfinite(price): raise ValueError("bad price")
             out[symbol]={"base":symbol,"price":price,"change24h":((price/prev)-1)*100 if prev else 0,
-                         "volume24h":None,"status":"OBSERVED","source":"FREE_PUBLIC_CHART","observed_at":now()}
+                         "volume24h":None,"status":"OBSERVED","source":"FREE_PUBLIC_CHART_5M","observed_at":now()}
         except Exception as e:
             failed.append({"symbol":symbol,"error":type(e).__name__})
     return out, failed
