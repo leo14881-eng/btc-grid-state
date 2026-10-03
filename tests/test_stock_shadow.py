@@ -117,11 +117,45 @@ def test_monitor_has_no_giveback_only_sell_path():
     assert "PROFIT_GIVEBACK_POSITION_MONITOR" not in src
     assert "profit_protection_signal" in src
 
-def test_v2_add_requires_state_transition():
+def test_v3_add_requires_recovery_not_decline():
     import inspect
     src=inspect.getsource(ss.main)
-    assert 'previous_state!="HEALTHY_PULLBACK"' in src
+    assert 'recovery["eligible"]' in src
+    assert 'PULLBACK_RECOVERY_ADD_V3' in src
     assert 'pullback <= -3*n' not in src
+
+def test_recovery_add_requires_price_and_relative_improvement():
+    p={"swing_high_price":100.0,"pullback_low_price":90.0,"pullback_seen":True,
+       "position_state_v2":{"market_relative20":-2.0}}
+    m=_m(price=94,r5=-1,r20=5,sma20=93)
+    ps={"state":"HEALTHY_PULLBACK","market_relative20":-1.0}
+    assert ss.recovery_add_signal(p,m,ps)["eligible"] is True
+    p2={"swing_high_price":100.0,"pullback_low_price":90.0,"pullback_seen":True,
+        "position_state_v2":{"market_relative20":-1.0}}
+    ps2={"state":"UNCERTAIN","market_relative20":-2.0}
+    assert ss.recovery_add_signal(p2,m,ps2)["eligible"] is False
+
+def test_broken_state_never_adds_even_if_price_bounces():
+    p={"swing_high_price":100.0,"pullback_low_price":90.0,"pullback_seen":True,
+       "position_state_v2":{"market_relative20":-3.0}}
+    m=_m(price=95,r5=-2,r20=-10,sma20=100)
+    ps={"state":"BROKEN","market_relative20":-2.0}
+    assert ss.recovery_add_signal(p,m,ps)["eligible"] is False
+
+def test_profit_floor_is_positive_and_tightens_with_mfe():
+    assert ss.profit_floor_net_pct(0.5) is None
+    assert ss.profit_floor_net_pct(4.0) == 2.0
+    assert ss.profit_floor_net_pct(10.0) == 6.5
+    assert ss.profit_floor_net_pct(20.0) == 15.0
+    assert ss.profit_floor_net_pct(40.0) == 32.0
+
+def test_closed_trade_records_net_return_and_costs():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert '"realized_net_return_pct"' in src
+    assert '"estimated_total_fees_usdt"' in src
+    assert '"gross_price_return_pct"' in src
+    assert 'NET_PROFIT_GIVEBACK_V3' in src
 
 def test_fresh_buy_cannot_add_in_same_run():
     import inspect
