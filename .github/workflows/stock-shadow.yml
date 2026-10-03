@@ -2,6 +2,12 @@ name: Stock Shadow
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/stock_shadow/**'
+      - 'tests/test_stock_shadow.py'
+      - '.github/workflows/stock-shadow.yml'
   schedule:
     - cron: '23 * * * *'
 
