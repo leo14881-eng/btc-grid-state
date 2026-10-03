@@ -19,9 +19,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Refresh persisted discovery generation
+      - name: Bind exact published discovery generation
         env:
           TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: |
           git fetch origin main
           git checkout -B main origin/main
@@ -29,10 +30,18 @@ jobs:
           import json
           d=json.load(open('research/results/hunter-cex-universe-run.json'))
           assert d.get('generation_id') and d.get('binance_complete') is True
-          # workflow_run must consume exactly the generation published by that
-          # completed Universe run; later scans must not be silently consumed.
-          expected=os.environ.get('TRIGGER_SHA')
-          print('DOWNSTREAM_USING_PERSISTED_DISCOVERY',d['generation_id'],'trigger_sha',expected)
+          trigger_sha=os.environ.get('TRIGGER_SHA')
+          trigger_event=os.environ.get('TRIGGER_EVENT')
+          # Never silently consume a newer generation from main. workflow_run
+          # is accepted only when the persisted discovery explicitly records
+          # the source SHA that caused that Universe run.
+          source_sha=d.get('source_head_sha')
+          if trigger_event == 'workflow_run':
+              assert trigger_sha and source_sha == trigger_sha, (
+                  f'GENERATION_TRIGGER_MISMATCH trigger={trigger_sha} source={source_sha} '
+                  f'generation={d.get("generation_id")}'
+              )
+          print('DOWNSTREAM_BOUND_GENERATION',d['generation_id'],'source_head_sha',source_sha)
           PY
       - uses: actions/setup-python@v5
         with:
