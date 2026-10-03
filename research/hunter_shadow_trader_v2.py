@@ -20,6 +20,13 @@ SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"
 def entry_allowed(mode,broad,current_price,executable_action):
  return broad=="BUY" and current_price is not None and (mode=="DISCOVERY" or executable_action=="BUY")
 
+def authoritative_entry_action(c, fallback_action):
+ # V2 consumes Capital Review's final entry action. V1 discovery deliberately
+ # bypasses it. Legacy fixtures without trade_action retain fallback behavior.
+ if ENTRY_MODE!="EXECUTABLE": return fallback_action
+ a=(c or {}).get("trade_action")
+ return a if a in ("BUY","WAIT","REJECT","SYSTEM_BLOCKED") else fallback_action
+
 def used_capital(state):
  return sum(total_notional(x) for x in state.get("open_positions",[]) if x.get("tranches"))
 def capital_available(state,amount):
@@ -282,17 +289,20 @@ def main():
  for c in ranked:
   a=c.get("asset")
   if not a or a in open_assets:continue
-  broad,broad_reasons=discovery_decision(c);p=price(scan,a);act,reasons,e=decision(c,scan,liq,supply,"ENTRY")
+  broad,broad_reasons=discovery_decision(c);p=price(scan,a);fallback,reasons,e=decision(c,scan,liq,supply,"ENTRY")
+  act=authoritative_entry_action(c,fallback)
   if not entry_allowed(ENTRY_MODE,broad,p,act):
    if broad!="BUY": reject_reasons=broad_reasons
    elif not p: reject_reasons=["CURRENT_PRICE_MISSING"]
+   elif ENTRY_MODE=="EXECUTABLE" and act in ("WAIT","SYSTEM_BLOCKED"):
+    reject_reasons=[act]+list(c.get("research_gaps") or [])+list(c.get("blockers") or [])
    else: reject_reasons=reasons
-   dummy={"asset":a,"tranches":[]};record(state,dummy,"REJECT",now,reject_reasons,e,p);continue
+   dummy={"asset":a,"tranches":[]};record(state,dummy,act if act in ("WAIT","SYSTEM_BLOCKED") else "REJECT",now,reject_reasons,e,p);continue
   pos={"shadow_id":ID_PREFIX+"-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
-   "executable_gate":{"pass":act=="BUY","reasons":reasons,"purpose":"AB_LABEL_NOT_DISCOVERY_BLOCKER"}}
+   "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
   if not capital_available(state,TRANCHES[0]):
    record(state,{"asset":a,"tranches":[]},"REJECT",now,["CAPITAL_POOL_FULL_ENTRY_DEFERRED"],e,p);continue
   add(pos,p,e,now);record(state,pos,"BUY",now,(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons),e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);open_assets.add(a);buy_count+=1
