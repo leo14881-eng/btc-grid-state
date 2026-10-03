@@ -14,8 +14,15 @@ PROFIT_FLOOR_NET_PCT=0.5
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def get_json(url):
-    req=urllib.request.Request(url,headers={"User-Agent":"stock-shadow-research/1.0"})
+    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=25) as r: return json.load(r)
+
+def first_json(urls):
+    last=None
+    for url in urls:
+        try: return get_json(url), url
+        except Exception as e: last=e
+    raise last
 def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
     except Exception: return d
@@ -24,8 +31,11 @@ def save(p,o):
 
 def bybit_universe():
     """Discover tradable spot instruments from Bybit instrument metadata, then join tickers."""
-    instruments=get_json("https://api.bybit.com/v5/market/instruments-info?category=spot&limit=1000").get("result",{}).get("list",[])
-    tickers=get_json("https://api.bybit.com/v5/market/tickers?category=spot").get("result",{}).get("list",[])
+    hosts=["https://api.bybit.com","https://api.bytick.com"]
+    ins,ins_url=first_json([h+"/v5/market/instruments-info?category=spot&limit=1000" for h in hosts])
+    tic,tic_url=first_json([h+"/v5/market/tickers?category=spot" for h in hosts])
+    instruments=ins.get("result",{}).get("list",[])
+    tickers=tic.get("result",{}).get("list",[])
     tm={x.get("symbol"):x for x in tickers}
     out={}
     for x in instruments:
