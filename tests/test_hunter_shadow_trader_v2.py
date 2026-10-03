@@ -1,5 +1,5 @@
 import unittest
-from research.hunter_shadow_trader_v2 import decision,weighted_entry,add,REVIEW_HOURS
+from research.hunter_shadow_trader_v2 import decision,weighted_entry,add,profit_protection,REVIEW_HOURS
 class V2CapitalDecisionTests(unittest.TestCase):
  def base(self):
   c={"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
@@ -24,6 +24,15 @@ class V2CapitalDecisionTests(unittest.TestCase):
  def test_weighted_cost_falls(self):
   c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};e=decision(c,s,l,u,"ADD",p,96)[2]
   import datetime as dt;add(p,96,e,dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
+ def test_profit_protection_arms_after_real_mfe(self):
+  p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":3.0}
+  self.assertTrue(profit_protection(p,101)["exit"])
+ def test_profit_protection_does_not_fake_unprofitable_trade(self):
+  p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":1.5}
+  self.assertFalse(profit_protection(p,99)["armed"])
+ def test_profit_protection_caps_large_giveback(self):
+  p={"tranches":[{"price":100,"notional_usdt":1000}],"mfe_pct":7.0}
+  self.assertTrue(profit_protection(p,104)["exit"])
  def test_time_is_review_only(self):self.assertEqual(REVIEW_HOURS,(24.,48.,72.))
  def test_strong_profitable_signal_remains_valid(self):
   c,s,l,u=self.base();self.assertEqual(decision(c,s,l,u,"HOLD")[0],"HOLD")
