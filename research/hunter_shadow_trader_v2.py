@@ -102,7 +102,7 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
     reasons.append("TOO_FAR_ABOVE_DISCOVERY_FOR_REMAINING_RR")
  if kind!="ENTRY" and e["btc_rel_1h"] is not None and e["btc_rel_4h"] is not None and e["btc_rel_1h"]<-2 and e["btc_rel_4h"]<-3:
   reasons.append("SEVERE_BTC_RELATIVE_BREAK")
- if reasons:return ("EXIT" if kind!="ENTRY" and "SEVERE_BTC_RELATIVE_BREAK" in reasons else "REJECT"),reasons,e
+ if reasons:\n  if kind=="ADD" and "SEVERE_BTC_RELATIVE_BREAK" not in reasons:return "HOLD",reasons,e\n  return ("EXIT" if kind!="ENTRY" and "SEVERE_BTC_RELATIVE_BREAK" in reasons else "REJECT"),reasons,e
  if kind=="ADD":
   if pos is None or p is None:return "REJECT",["ADD_CONTEXT_MISSING"],e
   avg=weighted_entry(pos)
