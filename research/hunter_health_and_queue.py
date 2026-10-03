@@ -41,7 +41,8 @@ def build(data,now):
         sym=d["asset"];book=probe.get(sym)
         blockers=list(d.get("capital_gate_blockers") or [])
         if d.get("identity_status") not in ("THIRD_PARTY_CORROBORATED",
-                                           "THIRD_PARTY_NATIVE_CORROBORATED"):
+                                           "THIRD_PARTY_NATIVE_CORROBORATED",
+                                           "THIRD_PARTY_UNIQUE_ID_CORROBORATED"):
             blockers.append("IDENTITY_NEEDS_PRIMARY_AND_INDEPENDENT_CONTRACT")
         if not d.get("official_sources"):
             blockers.append("OFFICIAL_CONTRACT_OR_PROJECT_SOURCE_MISSING")
@@ -82,8 +83,9 @@ def build(data,now):
             "universe_size":len(scan.get("coins") or {}),
             "researched_cached":research.get("deep_research_total_cached"),
             "market_data_screened_cached":research.get("deep_research_total_cached"),
-            "official_contract_identity_verified":sum((identity.get("counts") or {}).get(k,0)
+            "strict_contract_identity_verified":sum((identity.get("counts") or {}).get(k,0)
                 for k in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
+            "capital_identity_pass":sum(1 for x in (identity.get("assets") or {}).values() if x.get("capital_identity_pass")),
             "forward_economic_scenario_ready":sum(bool(d.get("scenario_map"))
                 for d in dossiers.get("dossiers") or []),
             "coverage_warning":"MARKET_SCREENING_IS_NOT_VERIFIED_FUNDAMENTAL_RESEARCH",
@@ -92,8 +94,7 @@ def build(data,now):
             "reviewed_candidates_retained":len(reviewed),
             "unresolved_material_supply_events":sum(bool(x.get("risk_event")) and
                 x["risk_event"].get("status")=="PENDING_ONCHAIN_RECONCILIATION" for x in reviewed),
-            "identity_corroborated":sum((identity.get("counts") or {}).get(k,0) for k in
-                ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED")),
+            "identity_corroborated":sum(1 for x in (identity.get("assets") or {}).values() if x.get("capital_identity_pass")),
             "liquidity_requested":liquidity.get("requested_count"),
             "liquidity_successful":liquidity.get("successful_count"),
             "liquidity_failures":liquidity.get("failures") or {},
