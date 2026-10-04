@@ -13,7 +13,7 @@ BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfa
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
 FRAME_REQUEST_BUDGET=12
-MARKET_BATCH_SCHEMA_VERSION=4
+MARKET_BATCH_SCHEMA_VERSION=5
 PROXY_START_INTERVAL_SECONDS=2.0
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -422,6 +422,14 @@ def _fact_series(facts, concepts, units=("USD","shares")):
         rows=[]
         for unit in units:
             rows.extend(unit_map.get(unit) or [])
+        # Foreign private issuers commonly file IFRS facts in their functional
+        # currency (TWD/EUR/ILS/etc.) rather than USD. CompanyFacts is already
+        # scoped to one issuer, so a same-concept non-share currency series is
+        # valid evidence and must not be discarded merely because it is not USD.
+        if not rows and "USD" in units:
+            for unit,unit_rows in unit_map.items():
+                if unit not in {"shares","pure"}:
+                    rows.extend(unit_rows or [])
         if rows:
             # Prefer filed annual/quarterly facts; de-duplicate amended/repeated facts by end date.
             good=[r for r in rows if r.get("end") and r.get("val") is not None and r.get("form") in {"10-K","10-Q","10-K/A","10-Q/A","20-F","20-F/A","6-K","6-K/A"}]
@@ -449,7 +457,7 @@ def _trend(values):
 
 def financial_evidence(facts):
     specs={
-      "revenue":(["RevenueFromContractWithCustomerExcludingAssessedTax","Revenues","SalesRevenueNet"],("USD",)),
+      "revenue":(["RevenueFromContractWithCustomerExcludingAssessedTax","Revenues","SalesRevenueNet","Revenue"],("USD",)),
       "net_income":(["NetIncomeLoss","ProfitLoss"],("USD",)),
       "operating_cash_flow":(["NetCashProvidedByUsedInOperatingActivities","CashFlowsFromUsedInOperatingActivities"],("USD",)),
       "cash":(["CashAndCashEquivalentsAtCarryingValue","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents","CashAndCashEquivalents"],("USD",)),
@@ -461,7 +469,7 @@ def financial_evidence(facts):
         concept,values=_latest_values(facts,concepts,units=units)
         out[name]={"concept":concept,"values":values,"trend":_trend(values)}
     # FCF is evidence-derived only when both OCF and capex facts are available.
-    _,capex=_latest_values(facts,["PaymentsToAcquirePropertyPlantAndEquipment"],units=("USD",))
+    _,capex=_latest_values(facts,["PaymentsToAcquirePropertyPlantAndEquipment","PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"],units=("USD",))
     ocf=out["operating_cash_flow"]["values"]
     fcf=[]
     cap_by_end={x["end"]:x for x in capex}
