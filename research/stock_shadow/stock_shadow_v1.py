@@ -39,7 +39,7 @@ NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
-ALPACA_BATCH_SIZE = 49  # verified SIP maximum in this account: 49=200; 50=403
+ALPACA_BATCH_SIZE = 200  # batch daily bars; SIP end is delayed outside real-time entitlement window
 
 def get_text(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"text/plain,*/*"})
@@ -114,7 +114,7 @@ def _alpaca_batch_bars(symbols):
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
     if not key or not secret: raise RuntimeError("missing_alpaca_secrets")
     api_symbols=[s.replace("-",".") for s in symbols]
-    end=datetime.now(timezone.utc); start=end-timedelta(days=110)
+    end=datetime.now(timezone.utc)-timedelta(minutes=20); start=end-timedelta(days=110)
     params={"symbols":",".join(api_symbols),"timeframe":"1Day","start":start.isoformat().replace("+00:00","Z"),
             "end":end.isoformat().replace("+00:00","Z"),"limit":10000,"feed":"sip","adjustment":"all"}
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow/3.0"}
