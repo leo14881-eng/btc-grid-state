@@ -196,7 +196,7 @@ def binance_kline_bars(asset,start,end,interval="5m"):
    req=urllib.request.Request(BINANCE_DATA_API+"/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
    with urllib.request.urlopen(req,timeout=4) as r:rows=json.loads(r.read().decode())
    if not rows:break
-   out.extend((int(row[0]),finite(row[2])) for row in rows if finite(row[2]) is not None)
+   out.extend((int(row[0]),int(row[6]),finite(row[2])) for row in rows if finite(row[2]) is not None)
    nxt=int(rows[-1][0])+1
    if nxt<=cursor or len(rows)<1000:break
    cursor=nxt
@@ -205,10 +205,18 @@ def binance_kline_bars(asset,start,end,interval="5m"):
 
 def peak_from_bars(bars,end=None):
  if not bars:return None
- stop=int(end.timestamp()*1000) if end else None;eligible=[x for x in bars if stop is None or x[0]<=stop]
+ stop=int(end.timestamp()*1000) if end else None
+ # Historical evaluation must never use a candle whose HIGH was not fully known at the cutoff.
+ # New tuples are (open_ms, close_ms, high); legacy 2-tuples remain accepted by tests/old callers.
+ eligible=[]
+ for x in bars:
+  if len(x)>=3:
+   open_ms,close_ms,high=x[0],x[1],x[2]
+   if stop is None or close_ms<=stop:eligible.append((open_ms,high))
+  elif stop is None or x[0]<=stop:eligible.append((x[0],x[1]))
  if not eligible:return None
  ts,p=max(eligible,key=lambda x:x[1])
- return {"peak_price":p,"peak_at_utc":dt.datetime.fromtimestamp(ts/1000,dt.timezone.utc).isoformat(),"source":"BINANCE_SPOT_KLINES_5M"}
+ return {"peak_price":p,"peak_at_utc":dt.datetime.fromtimestamp(ts/1000,dt.timezone.utc).isoformat(),"source":"BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"}
 
 def backfill_opportunity_history(pos,now):
  """Bounded historical reconstruction of initial-BUY opportunity peaks; observation only."""
