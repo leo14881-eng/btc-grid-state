@@ -528,7 +528,7 @@ def opportunity_summary(rows):
   elif v<10:dist["5_10"]+=1
   elif v<=20:dist["10_20"]+=1
   else:dist["gt_20"]+=1
- return {"evaluated_positions":len(rows),"completed_72h_observations":sum(bool(x.get("observation_complete")) for x in rows),
+ return {"evaluated_positions":len(rows),"holding_mfe_available":len(holding),"full_opportunity_mfe_available":len(full),"completed_72h_observations":sum(bool(x.get("observation_complete")) for x in rows),
   "avg_holding_mfe_pct":avg(holding),"median_holding_mfe_pct":med(holding),"avg_full_opportunity_mfe_pct":avg(full),"median_full_opportunity_mfe_pct":med(full),
   "avg_realized_net_return_pct":avg(vals("net_return_pct")),"avg_holding_profit_capture_ratio":avg(vals("holding_profit_capture_ratio")),
   "avg_full_opportunity_capture_ratio":avg(vals("full_opportunity_capture_ratio")),
