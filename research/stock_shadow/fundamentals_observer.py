@@ -75,7 +75,7 @@ FMP_BASE="https://financialmodelingprep.com/stable"
 def fmp_bulk_csv(endpoint, year, period, api_key):
     url=FMP_BASE+"/"+endpoint+"?"+urllib.parse.urlencode({"year":year,"period":period,"apikey":api_key})
     req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"text/csv"})
-    with urllib.request.urlopen(req,timeout=60) as r:
+    with urllib.request.urlopen(req,timeout=20) as r:
         raw=r.read().decode("utf-8-sig","replace")
     if raw.lstrip().startswith(("{","[")):
         raise ValueError("fmp_bulk_not_csv_or_plan_denied")
