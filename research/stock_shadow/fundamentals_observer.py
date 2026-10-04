@@ -124,13 +124,19 @@ def fmp_bulk_evidence(symbols, api_key):
             out[sym]=ev
     return out,{"provider":"FMP_BULK","attempted":True,"requests":requests,"errors":errors,"matched_symbols":len(out)}
 
+_sec_direct_blocked=False
+_sec_direct_lock=threading.Lock()
+
 def frame_json(taxonomy, concept, unit, period):
+    global _sec_direct_blocked
     url=f"https://data.sec.gov/api/xbrl/frames/{taxonomy}/{concept}/{unit}/{period}.json"
-    try:
-        return get(url),"SEC_FRAMES_DIRECT"
-    except urllib.error.HTTPError as e:
-        if e.code!=403: raise
-        return proxy_json(url),"SEC_FRAMES_VIA_READONLY_PROXY"
+    if not _sec_direct_blocked:
+        try:
+            return get(url),"SEC_FRAMES_DIRECT"
+        except urllib.error.HTTPError as e:
+            if e.code not in (403,429): raise
+            with _sec_direct_lock: _sec_direct_blocked=True
+    return proxy_json(url),"SEC_FRAMES_VIA_READONLY_PROXY"
 
 def frame_evidence_by_cik():
     # Market-wide SEC XBRL Frames: one request returns one concept for all reporting entities.
@@ -271,11 +277,14 @@ def resolve_cik_efts(symbol):
     return None
 
 def _sec_json_with_readonly_fallback(url):
-    try:
-        return get(url),"SEC_DIRECT"
-    except urllib.error.HTTPError as e:
-        if e.code not in (403,429): raise
-        return proxy_json(url),"SEC_VIA_READONLY_PROXY"
+    global _sec_direct_blocked
+    if not _sec_direct_blocked:
+        try:
+            return get(url),"SEC_DIRECT"
+        except urllib.error.HTTPError as e:
+            if e.code not in (403,429): raise
+            with _sec_direct_lock: _sec_direct_blocked=True
+    return proxy_json(url),"SEC_VIA_READONLY_PROXY"
 
 def sec_submission(cik):
     return _sec_json_with_readonly_fallback(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
