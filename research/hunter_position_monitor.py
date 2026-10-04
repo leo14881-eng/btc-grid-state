@@ -5,6 +5,7 @@ from research import hunter_shadow_trader_v2 as eng
 from research import hunter_shadow_trader as v1
 ROOT=pathlib.Path("research/results");BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 V1=ROOT/"hunter-shadow-portfolio.json";V2=ROOT/"hunter-shadow-v2-portfolio.json";OUT=ROOT/"hunter-position-monitor.json"
+V1_SUMMARY=ROOT/"hunter-shadow-summary.json";V2_SUMMARY=ROOT/"hunter-shadow-v2-summary.json";V1_GUARD=ROOT/"hunter-shadow-v1-overfilter-guard.json";V2_GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json";LIQ=ROOT/"hunter-liquidity-probe.json";SUPPLY=ROOT/"hunter-tactical-supply-risk.json";UNIVERSE=ROOT/"hunter-cex-universe-run.json"
 def load(p):
  try:return json.loads(p.read_text())
@@ -32,7 +33,7 @@ def crypto_exclusions():
 def configure_lane(v1_mode):
  if v1_mode:
   v1.configure_v1();return
- eng.STATE=V2;eng.CAPITAL_POOL_USDT=20000.;eng.ENTRY_MODE="EXECUTABLE";eng.DISCOVERY_MIN_SCORE=6;eng.DISCOVERY_MIN_INDEPENDENT=2;eng.STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2";eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
+ eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=20000.;eng.ENTRY_MODE="EXECUTABLE";eng.DISCOVERY_MIN_SCORE=6;eng.DISCOVERY_MIN_INDEPENDENT=2;eng.STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2";eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
 def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None):
  state=load(path);excluded=set(excluded or [])
  quarantined=[p for p in (state.get("open_positions") or []) if p.get("asset") in excluded]
@@ -46,6 +47,9 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  after={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  added=sorted(a for a,n in after.items() if n>before.get(a,0));closed=sorted(set(before)-set(after))
  state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
+ summary_path=V1_SUMMARY if v1_mode else V2_SUMMARY
+ guard_path=V1_GUARD if v1_mode else V2_GUARD
+ eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL")))
  return {"lane":label,"open":len(after),"added":added,"closed":closed,"quarantined_non_crypto":sorted(p.get("asset") for p in quarantined)}
 def main():
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
