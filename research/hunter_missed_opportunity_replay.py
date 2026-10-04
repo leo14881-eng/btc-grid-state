@@ -72,7 +72,8 @@ def main():
    if s:stats.append((s["day_high_gain_pct"],a,sym,s))
  stats.sort(reverse=True); rows=[]
  by_review={x.get("asset"):x for x in review.get("candidates",[]) if x.get("asset")}
- for _,a,sym,s in stats[:TOP_N]:\n  s=dict(s);s.pop("_candles",None)
+ for _,a,sym,s in stats[:TOP_N]:
+  s=dict(s)
   u=(uhist.get("assets") or {}).get(a) or {}
   h=(hist.get("assets") or {}).get(a) or {}
   v1buy=first_event(v1,a,{"SHADOW_V1_BUY","SHADOW_BUY"})
