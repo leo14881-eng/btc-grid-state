@@ -52,6 +52,12 @@ def price(scan,a):return finite(((scan.get("coins") or {}).get(a) or {}).get("re
 def sig(c):return (c or {}).get("signal") or {}
 def liq_for(liq,a):return (liq.get("snapshots") or {}).get(a) or {}
 def supply_for(supply,a):return (supply.get("assets") or {}).get(a)
+def confirmed_supply_risk(sr):
+ if not sr:return False
+ status=str(sr.get("status") or "").upper()
+ # Missing/incomplete supply evidence is review metadata, not a trading blocker.
+ # Only an explicit, confirmed material near-term unlock/new-circulation risk may veto.
+ return bool(sr.get("confirmed_major_near_term_unlock") is True or status in ("CONFIRMED_MAJOR_NEAR_TERM_UNLOCK","CONFIRMED_MAJOR_NEAR_TERM_SUPPLY_RISK","MAJOR_NEAR_TERM_UNLOCK_CONFIRMED"))
 def hard_blockers(c):
  # Portfolio usage is intentionally ignored in shadow-only simulation; evidence/execution blockers are not.
  return [x for x in ((c or {}).get("blockers") or []) if x!="PORTFOLIO_USAGE_REQUIRES_CURRENT_INPUT"]
@@ -63,7 +69,7 @@ def evidence(c,liq,supply):
   "rel_accel":finite(s.get("relative_acceleration_pct")),"spread_bps":finite(l.get("spread_bps")),
   "bid_depth_2pct_usdt":finite(l.get("bid_depth_2pct_usdt")),"ask_depth_2pct_usdt":finite(l.get("ask_depth_2pct_usdt")),
   "buy_slippage_bps":finite(ex.get("buy_slippage_bps")),"estimated_rr":finite(ex.get("estimated_rr")),
-  "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),
+  "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),"supply_confirmed_major_risk":confirmed_supply_risk(sr),
   "blockers":hard_blockers(c)}
 def bybit_channel(bybit,a):
  spot=bybit.get("spot") or {}; alpha=bybit.get("alpha") or {}; a=str(a or "").upper()
@@ -116,7 +122,7 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
  if any(x is None or x<MIN_DEPTH_USDT for x in depths):reasons.append("DEPTH_INSUFFICIENT")
  if e["buy_slippage_bps"] is None or e["buy_slippage_bps"]>MAX_SLIP_BPS:reasons.append("SLIPPAGE_UNACCEPTABLE")
  if e["estimated_rr"] is None or e["estimated_rr"]<MIN_RR:reasons.append("RR_BELOW_MINIMUM")
- if not e["supply_verified"]:reasons.append("SUPPLY_RISK_UNVERIFIED")
+ if e["supply_confirmed_major_risk"]:reasons.append("CONFIRMED_MAJOR_NEAR_TERM_SUPPLY_RISK")
  if e["blockers"]:reasons+=["BLOCKER:"+x for x in e["blockers"]]
  ch=finite(((scan.get("coins") or {}).get(e["asset"]) or {}).get("change_24h_pct"))
  if kind=="ENTRY":
@@ -135,10 +141,11 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
    if chase_from_discovery>MAX_CHASE_FROM_DISCOVERY_PCT and (e["estimated_rr"] is None or e["estimated_rr"]<MIN_CHASE_RR):
     reasons.append("TOO_FAR_ABOVE_DISCOVERY_FOR_REMAINING_RR")
  if kind!="ENTRY" and e["btc_rel_1h"] is not None and e["btc_rel_4h"] is not None and e["btc_rel_1h"]<-2 and e["btc_rel_4h"]<-3:
-  reasons.append("SEVERE_BTC_RELATIVE_BREAK")
+  # Relative weakness is evidence for review, not sufficient proof that the thesis failed.
+  reasons.append("SEVERE_BTC_RELATIVE_WEAKNESS_REVIEW")
  if reasons:
-  if kind=="ADD" and "SEVERE_BTC_RELATIVE_BREAK" not in reasons:return "HOLD",reasons,e
-  return ("EXIT" if kind!="ENTRY" and "SEVERE_BTC_RELATIVE_BREAK" in reasons else "REJECT"),reasons,e
+  if kind!="ENTRY":return "HOLD",reasons,e
+  return "REJECT",reasons,e
  if kind=="ADD":
   if pos is None or p is None:return "REJECT",["ADD_CONTEXT_MISSING"],e
   avg=weighted_entry(pos)
