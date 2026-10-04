@@ -73,6 +73,9 @@ def bulk_json_by_cik(zf, ciks):
 
 
 FMP_BASE="https://financialmodelingprep.com/stable"
+STOCKFIT_BASE="https://api.stockfit.io/v1"
+STOCKFIT_DAILY_BUDGET=225
+STOCKFIT_SYMBOL_BUDGET=75
 
 def fmp_bulk_csv(endpoint, year, period, api_key):
     url=FMP_BASE+"/"+endpoint+"?"+urllib.parse.urlencode({"year":year,"period":period,"apikey":api_key})
@@ -86,6 +89,67 @@ def fmp_bulk_csv(endpoint, year, period, api_key):
 def _num(v):
     try: return float(v) if v not in (None,"","None","null") else None
     except (TypeError,ValueError): return None
+
+def stockfit_get(path, api_key):
+    url=STOCKFIT_BASE+path
+    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Authorization":"Bearer "+api_key})
+    with urllib.request.urlopen(req,timeout=20) as r:
+        return json.load(r),{k.lower():v for k,v in r.headers.items()}
+
+def stockfit_evidence(symbol, api_key):
+    """Three free-tier statement reads per symbol; filing metadata is retained for PIT/audit use."""
+    endpoints=[
+      ("income","/api/financials/income-statement?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})),
+      ("balance","/api/financials/balance-sheet?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})),
+      ("cashflow","/api/financials/cash-flow-statement?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})),
+    ]
+    rows={}; headers={}; requests=0
+    for bucket,path in endpoints:
+        data,h=stockfit_get(path,api_key); requests+=1; headers=h
+        rows[bucket]=data if isinstance(data,list) else (data.get("data") or [])
+    def values(bucket, fields):
+        out=[]
+        for row in rows.get(bucket,[]):
+            facts=row.get("facts") or {}
+            val=next((facts.get(k) for k in fields if facts.get(k) is not None),None)
+            if val is not None:
+                out.append({"end":row.get("period"),"val":val,"form":"STOCKFIT_NORMALIZED",
+                            "filed":row.get("dateFiled"),"accession":next(iter((row.get("sources") or {}).keys()),None)})
+        out.sort(key=lambda x:str(x.get("end") or ""))
+        return out[-5:]
+    mapping={
+      "revenue":("income",("revenue","revenues","salesRevenueNet")),
+      "net_income":("income",("netIncome","netIncomeLoss","profitLoss")),
+      "operating_cash_flow":("cashflow",("operatingCashFlow","netCashProvidedByOperatingActivities","netCashProvidedByUsedInOperatingActivities")),
+      "free_cash_flow":("cashflow",("freeCashFlow",)),
+      "cash":("balance",("cashAndCashEquivalents","cashAndShortTermInvestments","cash")),
+      "total_debt":("balance",("totalDebt","longTermDebt","debt")),
+      "shares":("income",("weightedAverageShares","weightedAverageShsOut","weightedAverageSharesOutstanding")),
+    }
+    ev={}
+    for key,(bucket,fields) in mapping.items():
+        vals=values(bucket,fields); ev[key]={"concept":"STOCKFIT_NORMALIZED","values":vals,"trend":_trend(vals)}
+    sh=ev["shares"]["values"]; dilution=None
+    if len(sh)>=2 and float(sh[-2]["val"]): dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
+    ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
+    return ev,{"requests":requests,"remaining_day":headers.get("x-ratelimit-remaining-day"),
+               "remaining_minute":headers.get("x-ratelimit-remaining-minute")}
+
+def stockfit_batch_evidence(symbols, api_key):
+    out={}; errors=[]; requests=0; remaining_day=None
+    for sym in symbols:
+        if requests+3>STOCKFIT_DAILY_BUDGET: break
+        try:
+            ev,meta=stockfit_evidence(sym,api_key); requests+=meta["requests"]; remaining_day=meta.get("remaining_day")
+            if any((ev[k]["values"] for k in ("revenue","net_income","operating_cash_flow","cash","total_debt"))): out[sym]=ev
+        except urllib.error.HTTPError as e:
+            requests+=1
+            errors.append({"symbol":sym,"type":"HTTPError","status":e.code,"message":str(e.reason)[:100]})
+            if e.code==429: break
+        except Exception as e:
+            errors.append({"symbol":sym,"type":type(e).__name__,"message":str(e)[:120]})
+    return out,{"provider":"STOCKFIT_FREE","attempted":True,"requests":requests,"matched_symbols":len(out),
+                "remaining_day":remaining_day,"errors":errors}
 
 def fmp_bulk_evidence(symbols, api_key):
     """FMP bulk financial statements. Observation-only; no trading decisions consume this output."""
@@ -482,10 +546,19 @@ def main():
         batch_due=True
     market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
-    frames_by_cik={}; fmp_by_symbol={}
+    frames_by_cik={}; fmp_by_symbol={}; stockfit_by_symbol={}
+    stockfit_status={"provider":"STOCKFIT_FREE","attempted":False,"status":"CACHE_FRESH"}
     frames_status={"attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
     fmp_status={"provider":"FMP_BULK","attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
     if batch_due:
+        stockfit_key=os.getenv("STOCKFIT_API_KEY")
+        if stockfit_key:
+            # At most 75 symbols x 3 statement calls = 225/day. Rotate oldest StockFit evidence first.
+            sf_ranked=sorted(symbols,key=lambda x:str((companies.get(x) or {}).get("stockfit_refresh_at") or ""))[:STOCKFIT_SYMBOL_BUDGET]
+            stockfit_by_symbol,stockfit_status=stockfit_batch_evidence(sf_ranked,stockfit_key)
+            stockfit_status["status"]="OK" if not stockfit_status.get("errors") else "PARTIAL"
+        else:
+            stockfit_status={"provider":"STOCKFIT_FREE","attempted":False,"status":"NO_API_KEY"}
         api_key=os.getenv("FMP_API_KEY")
         if api_key:
             try:
@@ -510,7 +583,8 @@ def main():
     ranked=[]
     for sym,cik in symbol_cik.items():
         prior=companies.get(sym) or {}
-        merged=merge_financial_evidence(prior.get("financial_evidence"),fmp_by_symbol.get(sym))
+        merged=merge_financial_evidence(prior.get("financial_evidence"),stockfit_by_symbol.get(sym))
+        merged=merge_financial_evidence(merged,fmp_by_symbol.get(sym))
         merged=merge_financial_evidence(merged,frames_by_cik.get(cik))
         if not evidence_sufficient(merged):
             ranked.append(sym)
@@ -552,7 +626,7 @@ def main():
             sub_pair=subs_by_cik.get(cik); facts_pair=facts_by_cik.get(cik)
             sub=sub_pair[0] if sub_pair else None; transport=sub_pair[1] if sub_pair else None
             facts=facts_pair[0] if facts_pair else None; facts_transport=facts_pair[1] if facts_pair else None
-            frame_ev=frames_by_cik.get(cik); fmp_ev=fmp_by_symbol.get(s)
+            frame_ev=frames_by_cik.get(cik); fmp_ev=fmp_by_symbol.get(s); stockfit_ev=stockfit_by_symbol.get(s)
             prior_ev=(companies.get(s) or {}).get("financial_evidence")
             # Filing metadata is optional here. Never turn frame-wide financial evidence
             # back into hundreds of per-company submissions requests.
@@ -576,7 +650,7 @@ def main():
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
             sec_ev=financial_evidence(facts) if facts is not None else None
-            evidence=merge_financial_evidence(merge_financial_evidence(merge_financial_evidence(prior_ev,fmp_ev),frame_ev),sec_ev)
+            evidence=merge_financial_evidence(merge_financial_evidence(merge_financial_evidence(merge_financial_evidence(prior_ev,stockfit_ev),fmp_ev),frame_ev),sec_ev)
             prior_risk=(companies.get(s) or {}).get("risk_evidence") or filing_risk_evidence([])
             risk_flags=prior_risk
             semantic_refresh_at=(companies.get(s) or {}).get("semantic_refresh_at")
@@ -594,6 +668,7 @@ def main():
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("FMP_BULK+SEC_XBRL_FRAMES" if fmp_ev and frame_ev else ("FMP_BULK" if fmp_ev else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")))),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),"gap_refresh_at":(now() if s in refresh_set else (companies.get(s) or {}).get("gap_refresh_at")),"semantic_refresh_at":semantic_refresh_at,
+                "stockfit_refresh_at":(now() if stockfit_ev else (companies.get(s) or {}).get("stockfit_refresh_at")),
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
                 "note":"Observation-only fundamentals evidence; no automatic BUY/ADD/SELL effect."}
             refreshed+=1
@@ -604,7 +679,7 @@ def main():
     out={"updated_at":now(),"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
-         "primary_transport":sec_transport,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
+         "primary_transport":sec_transport,"stockfit_transport":stockfit_status,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
          "semantic_verified":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED"),
          "semantic_pending":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")!="TEXT_VERIFIED"),
          "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols) and all(((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED" for s in symbols)) else "PARTIAL","companies":companies}
