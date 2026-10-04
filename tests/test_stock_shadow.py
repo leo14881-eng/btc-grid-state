@@ -383,7 +383,7 @@ def test_monitor_forward_cohort_fingerprint_allows_quote_updates_but_detects_ide
 
 def test_unverified_semantic_risks_are_unknown_not_false():
     import importlib.util
-    path=Path("research/stock_shadow/fundamentals_observer.py")"
+    path=Path("research/stock_shadow/fundamentals_observer.py")
     spec=importlib.util.spec_from_file_location("fundamentals_observer_test",path)
     mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     r=mod.filing_risk_evidence([])
@@ -401,7 +401,7 @@ def test_market_health_separates_transport_from_insufficient_history():
 
 def test_unverified_filing_risks_are_unknown_not_false():
     import importlib.util
-    path=Path("research/stock_shadow/fundamentals_observer.py")"
+    path=Path("research/stock_shadow/fundamentals_observer.py")
     spec=importlib.util.spec_from_file_location("fund_obs_test",path)
     m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     r=m.filing_risk_evidence([{"form":"8-K"}])
