@@ -116,7 +116,7 @@ def _alpaca_batch_bars(symbols):
     api_symbols=[s.replace("-",".") for s in symbols]
     end=datetime.now(timezone.utc); start=end-timedelta(days=110)
     params={"symbols":",".join(api_symbols),"timeframe":"1Day","start":start.isoformat().replace("+00:00","Z"),
-            "end":end.isoformat().replace("+00:00","Z"),"limit":10000,"feed":"iex","adjustment":"all"}
+            "end":end.isoformat().replace("+00:00","Z"),"limit":10000,"feed":"sip","adjustment":"all"}
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow/3.0"}
     merged={}; token=None
     while True:
@@ -277,8 +277,8 @@ def stock_universe():
             failed.extend({"symbol":s,"error":err} for s in batch); continue
         for s in batch:
             rows=bars_by_symbol.get(s,[])
-            try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_IEX_BATCH_1D")
-            except Exception as e: failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_IEX_BATCH"}})
+            try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_SIP_BATCH_1D")
+            except Exception as e: failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_BATCH"}})
     return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors}
 
 
