@@ -1,5 +1,5 @@
 import unittest
-from research.hunter_shadow_trader_v2 import decision,discovery_decision,bybit_channel,market_shock,weighted_entry,add,profit_protection,scenario_returns,REVIEW_HOURS
+from research.hunter_shadow_trader_v2 import decision,discovery_decision,bybit_channel,market_shock,weighted_entry,add,profit_protection,scenario_returns,position_health,reentry_allowed,REVIEW_HOURS
 class V2CapitalDecisionTests(unittest.TestCase):
  def base(self):
   c={"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
@@ -64,6 +64,18 @@ class V2CapitalDecisionTests(unittest.TestCase):
  def test_bybit_channel_unknown_is_not_not_listed(self):
   self.assertEqual(bybit_channel({"spot":{"status":"UNKNOWN"},"alpha":{"status":"UNKNOWN"}},"X")["channel"],"UNKNOWN")
   self.assertEqual(bybit_channel({"spot":{"status":"OK","symbols":["X"]},"alpha":{"status":"UNKNOWN"}},"X")["channel"],"BYBIT_SPOT")
+ def test_health_requires_persistent_multifactor_decay(self):
+  p={};e={"score":4,"independent":1,"btc_rel_1h":-1,"btc_rel_4h":-1,"rel_accel":-2,"spread_bps":10,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000,"supply_confirmed_major_risk":False,"blockers":[]}
+  self.assertEqual(position_health(p,e)[0],"WEAKENING");self.assertEqual(position_health(p,e)[0],"DEGRADED");self.assertEqual(position_health(p,e)[0],"THESIS_INVALIDATED")
+ def test_hard_invalidation_is_separate_from_signal_decay(self):
+  p={};e={"score":12,"independent":3,"btc_rel_1h":2,"btc_rel_4h":3,"rel_accel":1,"spread_bps":250,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000,"supply_confirmed_major_risk":False,"blockers":[]}
+  self.assertEqual(position_health(p,e)[0],"HARD_INVALIDATION")
+ def test_reentry_blocks_same_move_and_allows_reset_breakout(self):
+  state={"reentry_registry":{"X":{"last_exit_price":100,"post_exit_low":100,"reset_seen":False,"state":"POST_EXIT_OBSERVATION"}}}
+  c={"asset":"X","signal":{"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1}}
+  self.assertFalse(reentry_allowed(state,c,100.5)[0])
+  state["reentry_registry"]["X"]["post_exit_low"]=96
+  self.assertTrue(reentry_allowed(state,c,101.5)[0])
  def test_market_shock_uses_btc_and_breadth(self):
   scan={"coins":{"BTC":{"change_24h_pct":-3},"A":{"change_24h_pct":-5},"B":{"change_24h_pct":-4},"C":{"change_24h_pct":-1}}}
   self.assertTrue(market_shock(scan)[0])
