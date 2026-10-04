@@ -327,3 +327,17 @@ def test_fundamental_frame_budget_and_merge():
     assert merged["revenue"]["values"][-1]["val"]==100
     assert merged["net_income"]["values"][-1]["val"]==5
     assert m.evidence_sufficient({"revenue":{"values":[1]},"net_income":{"values":[1]},"cash":{"values":[1]}}) is True
+
+
+def test_manual_reset_markers_are_rejected_by_ledger_invariant():
+    import pytest
+    with pytest.raises(RuntimeError, match="manual_reset_marker_present"):
+        ss.validate_ledger({"positions":{},"closed":[],"reset_reason":"ANY_MANUAL_RESET"},[])
+
+def test_off_session_main_has_state_continuity_guard():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert "starting_positions" in src
+    assert "off_session_position_count_changed" in src
+    assert "off_session_event_count_changed" in src
+    assert "off_session_closed_count_changed" in src
