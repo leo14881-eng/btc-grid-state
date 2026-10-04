@@ -19,9 +19,25 @@ def load(p,d):
     except Exception: return d
 def save(p,o):
     p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
-def market_open(ts=None):
+def _alpaca_exchange_session(ts=None):
     t=(ts or datetime.now(timezone.utc)).astimezone(NY)
-    return t.weekday()<5 and dtime(9,30)<=t.time()<dtime(16,0)
+    key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
+    if not key or not secret: return None
+    day=t.date().isoformat()
+    url="https://paper-api.alpaca.markets/v2/calendar?"+urllib.parse.urlencode({"start":day,"end":day})
+    req=urllib.request.Request(url,headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"Accept":"application/json"})
+    try:
+        with urllib.request.urlopen(req,timeout=15) as r: rows=json.load(r)
+        if not rows: return None
+        row=rows[0]; oh,om=map(int,row["open"].split(":")); ch,cm=map(int,row["close"].split(":"))
+        return {"date":day,"open":dtime(oh,om),"close":dtime(ch,cm),"source":"ALPACA_EXCHANGE_CALENDAR"}
+    except Exception:
+        return None
+
+def market_open(ts=None, session=None):
+    t=(ts or datetime.now(timezone.utc)).astimezone(NY)
+    s=session if session is not None else _alpaca_exchange_session(ts)
+    return bool(s and s["date"]==t.date().isoformat() and s["open"]<=t.time()<s["close"])
 def avg(p):
     q=sum(t["notional"]/t["price"] for t in p["tranches"]); c=sum(t["notional"] for t in p["tranches"])
     return c/q if q else 0
