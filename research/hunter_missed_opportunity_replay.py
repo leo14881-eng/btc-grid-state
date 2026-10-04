@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Daily Missed Opportunity Replay — read-only Hunter audit; never trades."""
-import datetime as dt,json,os,pathlib,urllib.parse,urllib.request\nfrom concurrent.futures import ThreadPoolExecutor,as_completed\nfrom zoneinfo import ZoneInfo
+import datetime as dt,json,os,pathlib,urllib.parse,urllib.request
+from concurrent.futures import ThreadPoolExecutor,as_completed
+from zoneinfo import ZoneInfo
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; UNIVERSE_HISTORY=ROOT/"hunter-universe-history.json"; EARLY=ROOT/"hunter-early-signal-history.json"
 V1=ROOT/"hunter-shadow-portfolio.json"; V2=ROOT/"hunter-shadow-v2-portfolio.json"
