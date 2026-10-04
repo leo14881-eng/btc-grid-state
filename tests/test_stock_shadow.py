@@ -677,7 +677,7 @@ def test_monitor_batches_by_request_size_and_reuses_one_calendar_session():
     main_src=inspect.getsource(m.main)
     assert "MAX_REQUEST_TARGET_CHARS=7000" in src
     assert "BATCH_SIZE=40" not in src
-    assert "timedelta(minutes=90)" in inspect.getsource(m.alpaca_snapshot_quotes)
+    assert "timedelta(days=3)" in inspect.getsource(m.alpaca_snapshot_quotes)
     assert "session=_alpaca_exchange_session()" in main_src
     assert "trade_actions_enabled=is_open" in main_src
 
