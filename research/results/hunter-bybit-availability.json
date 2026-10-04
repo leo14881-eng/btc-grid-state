@@ -1,51 +1,52 @@
 {
   "schema": "hunter_bybit_availability_v1",
-  "as_of_utc": "2026-10-04T11:41:40.013660+00:00",
+  "as_of_utc": "2026-10-04T12:01:51.463458+00:00",
   "source": "BYBIT_OFFICIAL_V5",
   "spot": {
     "status": "OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE",
     "symbols": [
       "A",
+      "ATOM",
       "AXS",
       "BTC",
       "ETH",
       "FET",
       "GMT",
       "HUMA",
-      "ICP",
       "INJ",
       "IO",
-      "ONDO",
-      "THETA",
-      "ZK"
+      "SPK",
+      "STX",
+      "ZK",
+      "ZRX"
     ],
     "error": null,
     "business_status": "TRADING",
-    "count": 13,
+    "count": 14,
     "symbol_failures": {
+      "API3": {
+        "reason": "INVALID_SYMBOL",
+        "detail": "CACHED_NOT_TRADING_OR_NOT_LISTED"
+      },
       "BANANAS31": {
         "reason": "INVALID_SYMBOL",
         "detail": "CACHED_NOT_TRADING_OR_NOT_LISTED"
       },
-      "COTI": {
+      "DEXE": {
         "reason": "INVALID_SYMBOL",
         "detail": "CACHED_NOT_TRADING_OR_NOT_LISTED"
       },
       "GUN": {
-        "reason": "HTTP_403",
-        "detail": "RuntimeError:HTTP_403 url=https://bybit-api-test.qinx468.workers.dev/bybit/spot?symbol=GUNUSDT body={     error:The Amazon CloudFront"
+        "reason": "INVALID_SYMBOL",
+        "detail": "NOT_TRADING_OR_NOT_LISTED"
       },
       "IOTA": {
         "reason": "INVALID_SYMBOL",
         "detail": "CACHED_NOT_TRADING_OR_NOT_LISTED"
       },
-      "JST": {
-        "reason": "HTTP_403",
-        "detail": "RuntimeError:HTTP_403 url=https://bybit-api-test.qinx468.workers.dev/bybit/spot?symbol=JSTUSDT body={     error:The Amazon CloudFront"
-      },
       "KGST": {
         "reason": "INVALID_SYMBOL",
-        "detail": "NOT_TRADING_OR_NOT_LISTED"
+        "detail": "CACHED_NOT_TRADING_OR_NOT_LISTED"
       },
       "MBL": {
         "reason": "INVALID_SYMBOL",
@@ -59,15 +60,19 @@
         "reason": "INVALID_SYMBOL",
         "detail": "CACHED_NOT_TRADING_OR_NOT_LISTED"
       },
-      "STEEM": {
-        "reason": "HTTP_403",
-        "detail": "RuntimeError:HTTP_403 url=https://bybit-api-test.qinx468.workers.dev/bybit/spot?symbol=STEEMUSDT body={     error:The Amazon CloudFro"
+      "RIF": {
+        "reason": "INVALID_SYMBOL",
+        "detail": "NOT_TRADING_OR_NOT_LISTED"
+      },
+      "SYN": {
+        "reason": "INVALID_SYMBOL",
+        "detail": "NOT_TRADING_OR_NOT_LISTED"
       }
     },
     "input_rejections": {},
     "scope": "CACHE_FIRST_CANDIDATE_MATCH",
-    "cache_count": 111,
-    "network_requests": 6,
+    "cache_count": 115,
+    "network_requests": 4,
     "transport": "CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB",
     "upstream": "BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO",
     "endpoint_template": "/bybit/spot?symbol={SYMBOL}",
