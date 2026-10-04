@@ -28,7 +28,8 @@ def test_security_type_filter_excludes_non_common_instruments():
 
 def test_full_market_discovery_has_no_fixed_61_symbol_constant():
     assert not hasattr(ss, "STOCK_SYMBOLS")
-    assert ss.MAX_REQUEST_TARGET_CHARS == 7000\n    assert hasattr(ss,"MARKET_CACHE")
+    assert ss.MAX_REQUEST_TARGET_CHARS == 7000
+    assert hasattr(ss,"MARKET_CACHE")
     assert ss.ALPACA_BARS_URL.startswith("https://data.alpaca.markets/")
 
 
