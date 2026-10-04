@@ -41,6 +41,10 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  configure_lane(v1_mode)
  scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc)
+ if len(state.get("decisions") or [])>eng.MAX_DECISION_HISTORY:
+  n=len(state["decisions"])-eng.MAX_DECISION_HISTORY;state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+n;state["decisions"]=state["decisions"][-eng.MAX_DECISION_HISTORY:]
+ if len(state.get("events") or [])>eng.MAX_EVENT_HISTORY:
+  n=len(state["events"])-eng.MAX_EVENT_HISTORY;state["event_history_truncated"]=int(state.get("event_history_truncated") or 0)+n;state["events"]=state["events"][-eng.MAX_EVENT_HISTORY:]
  after={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  added=sorted(a for a,n in after.items() if n>before.get(a,0));closed=sorted(set(before)-set(after))
  state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
