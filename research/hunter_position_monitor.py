@@ -36,10 +36,7 @@ def configure_lane(v1_mode):
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=20000.;eng.ENTRY_MODE="EXECUTABLE";eng.DISCOVERY_MIN_SCORE=6;eng.DISCOVERY_MIN_INDEPENDENT=2;eng.STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2";eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
 def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None):
  state=load(path);excluded=set(excluded or [])
- quarantined=[p for p in (state.get("open_positions") or []) if p.get("asset") in excluded]
- if quarantined:
-  state["open_positions"]=[p for p in state.get("open_positions") or [] if p.get("asset") not in excluded]
-  state.setdefault("excluded_non_crypto_positions",[]).extend(quarantined)
+ quarantine=eng.quarantine_non_crypto_history(state,excluded)
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
  scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
@@ -50,7 +47,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
  eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL")))
- return {"lane":label,"open":len(after),"added":added,"closed":closed,"quarantined_non_crypto":sorted(p.get("asset") for p in quarantined)}
+ return {"lane":label,"open":len(after),"added":added,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
 def main():
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
  if not wanted:
