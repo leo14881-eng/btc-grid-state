@@ -407,13 +407,7 @@ def main():
     if state.get("reset_reason") or state.get("reset_at"):
         raise RuntimeError("state_continuity:manual_reset_marker_present")
     market, failed_symbols, discovery=stock_universe()
-    bench={}
-    try:
-        bb=_alpaca_batch_bars(["SPY","QQQ"])
-        for idx in ("SPY","QQQ"):
-            if idx in bb: bench[idx]=_snapshot_from_bars(idx,bb[idx],"ALPACA_SIP_BATCH_1D")
-    except Exception:
-        pass
+    bench=discovery.get("benchmarks") or {}
     actions_enabled=trade_action_window()
     candidates=[]; rejection_counts={}
     for s,m in market.items():
