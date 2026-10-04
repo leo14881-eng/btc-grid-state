@@ -70,17 +70,22 @@ def frame_json(taxonomy, concept, unit, period):
 def frame_evidence_by_cik():
     # Market-wide SEC XBRL Frames: one request returns one concept for all reporting entities.
     # Two completed quarters are enough for direction/trend evidence without per-company HTTP loops.
-    periods=["CY2026Q1","CY2026Q2"]
-    instant=["CY2026Q1I","CY2026Q2I"]
+    periods=["CY2025Q4","CY2026Q1","CY2026Q2"]
+    instant=["CY2025Q4I","CY2026Q1I","CY2026Q2I"]
     specs=[
       ("revenue","us-gaap","RevenueFromContractWithCustomerExcludingAssessedTax","USD",periods),
       ("revenue_alt","us-gaap","Revenues","USD",periods),
+      ("revenue_alt2","us-gaap","SalesRevenueNet","USD",periods),
       ("net_income","us-gaap","NetIncomeLoss","USD",periods),
+      ("net_income_alt","us-gaap","ProfitLoss","USD",periods),
       ("operating_cash_flow","us-gaap","NetCashProvidedByUsedInOperatingActivities","USD",periods),
       ("capex","us-gaap","PaymentsToAcquirePropertyPlantAndEquipment","USD",periods),
       ("cash","us-gaap","CashAndCashEquivalentsAtCarryingValue","USD",instant),
+      ("cash_alt","us-gaap","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents","USD",instant),
       ("total_debt","us-gaap","LongTermDebt","USD",instant),
+      ("total_debt_alt","us-gaap","LongTermDebtCurrent","USD",instant),
       ("shares","dei","EntityCommonStockSharesOutstanding","shares",instant),
+      ("shares_alt","us-gaap","CommonStockSharesOutstanding","shares",instant),
     ]
     raw={}; transport=set(); request_errors=[]
     tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
@@ -104,17 +109,21 @@ def frame_evidence_by_cik():
                 request_errors.append({"type":type(e).__name__,"message":str(e)[:160]})
     out={}
     for cik,x in raw.items():
-        def vals(primary,alt=None):
-            rows=x.get(primary) or (x.get(alt) if alt else []) or []
+        def vals(primary,*alts):
+            rows=x.get(primary) or []
+            if not rows:
+                for alt in alts:
+                    rows=x.get(alt) or []
+                    if rows: break
             rows=[r for r in rows if r.get("val") is not None]
             rows.sort(key=lambda r:(str(r.get("end") or ""),str(r.get("filed") or "")))
             return rows[-5:]
         ev={}
         for key,primary,alt in [
-            ("revenue","revenue","revenue_alt"),("net_income","net_income",None),
-            ("operating_cash_flow","operating_cash_flow",None),("cash","cash",None),
-            ("total_debt","total_debt",None),("shares","shares",None)]:
-            v=vals(primary,alt)
+            ("revenue","revenue",("revenue_alt","revenue_alt2")),("net_income","net_income",("net_income_alt",)),
+            ("operating_cash_flow","operating_cash_flow",()),("cash","cash",("cash_alt",)),
+            ("total_debt","total_debt",("total_debt_alt",)),("shares","shares",("shares_alt",))]:
+            v=vals(primary,*alt)
             ev[key]={"concept":"SEC_XBRL_FRAME","values":v,"trend":_trend(v)}
         cap={r.get("end"):r for r in vals("capex")}
         fcf=[]
@@ -127,7 +136,7 @@ def frame_evidence_by_cik():
             dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
         ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
         out[cik]=ev
-    return out,{"requests":len(specs)*2,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
+    return out,{"requests":sum(len(ps) for _,_,_,_,ps in specs),"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
 
 def ticker_map():
     urls=["https://www.sec.gov/files/company_tickers.json","https://www.sec.gov/files/company_tickers_exchange.json"]
@@ -309,9 +318,14 @@ def main():
             if sub is None and fallback_requests < FALLBACK_MAX_REQUESTS:
                 sub,transport=sec_submission(cik); fallback_requests+=1
             if facts is None and frame_ev is None:
-                companies[s]={"symbol":s,"cik":cik,"company":meta.get("title"),"status":"BULK_MISSING",
-                    "transport":transport,"companyfacts_transport":facts_transport,"updated_at":now(),
-                    "strategy_effect":False,"note":"Bulk/frame evidence missing; bounded fallback only."}
+                prev=companies.get(s) or {}
+                if prev.get("financial_evidence"):
+                    prev["status"]="OBSERVED_STALE_FALLBACK"; prev["updated_at"]=now(); prev["strategy_effect"]=False
+                    companies[s]=prev
+                else:
+                    companies[s]={"symbol":s,"cik":cik,"company":meta.get("title"),"status":"BULK_MISSING",
+                        "transport":transport,"companyfacts_transport":facts_transport,"updated_at":now(),
+                        "strategy_effect":False,"note":"Bulk/frame evidence missing; bounded fallback only."}
                 continue
             recent=((sub or {}).get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
