@@ -466,7 +466,7 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
  guard.update({"as_of_utc":now.isoformat(),"consecutive_zero_buy_cycles":zero,"recent_safe_missed_assets":sorted(recent_misses),
   "status":"OVER_FILTERING" if over else "NORMAL",
   "optimizer_action":"RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST" if over else "NONE",
-  "live_capital_rules_changed":False,"opportunity_evaluation":cohorts,"capital_authority":"NONE_SHADOW_ONLY"})
+  "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
  atomic_json_write(GUARD,guard);return guard
 def quarantine_non_crypto_history(state,excluded):
  excluded=set(excluded or [])
