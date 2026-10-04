@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +11,7 @@ UA="stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com"
 BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=12
+FRAME_REQUEST_BUDGET=12
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
@@ -91,7 +92,11 @@ def frame_evidence_by_cik():
       ("net_income","ifrs-full","ProfitLoss","USD",["CY2024","CY2025"]),
     ]
     raw={}; transport=set(); request_errors=[]
-    tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
+    all_tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
+    batches=max(1,math.ceil(len(all_tasks)/FRAME_REQUEST_BUDGET))
+    batch_index=datetime.now(timezone.utc).hour % batches
+    start=batch_index*FRAME_REQUEST_BUDGET
+    tasks=all_tasks[start:start+FRAME_REQUEST_BUDGET]
     def fetch_one(task):
         key,tax,concept,unit,p=task
         last=None
@@ -149,7 +154,21 @@ def frame_evidence_by_cik():
             dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
         ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
         out[cik]=ev
-    return out,{"requests":sum(len(ps) for _,_,_,_,ps in specs),"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
+    return out,{"requests":len(tasks),"request_budget":FRAME_REQUEST_BUDGET,"total_tasks":len(all_tasks),"batch_index":batch_index,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
+
+def merge_financial_evidence(prior,current):
+    """Accumulate bounded frame batches without erasing evidence learned in prior runs."""
+    prior=prior or {}; current=current or {}; out={}
+    for key in ("revenue","net_income","operating_cash_flow","free_cash_flow","cash","total_debt","shares"):
+        cur=current.get(key) or {}; old=prior.get(key) or {}
+        out[key]=cur if cur.get("values") else old
+    out["share_dilution_pct_latest"]=current.get("share_dilution_pct_latest")
+    if out["share_dilution_pct_latest"] is None:
+        out["share_dilution_pct_latest"]=prior.get("share_dilution_pct_latest")
+    return out
+
+def evidence_sufficient(ev):
+    return sum(bool((ev.get(k) or {}).get("values")) for k in ("revenue","net_income","operating_cash_flow","cash","total_debt"))>=3
 
 def ticker_map():
     urls=["https://www.sec.gov/files/company_tickers.json","https://www.sec.gov/files/company_tickers_exchange.json"]
@@ -360,7 +379,7 @@ def main():
                     latest.append({"form":form,"filing_date":date,"accession":an})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
-            evidence=financial_evidence(facts) if facts is not None else frame_ev; risk_flags=filing_risk_evidence(latest)
+            evidence=financial_evidence(facts) if facts is not None else merge_financial_evidence(prior_ev,frame_ev); risk_flags=filing_risk_evidence(latest)
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
@@ -370,8 +389,8 @@ def main():
             refreshed+=1
         except Exception as e:
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
-    complete=sum(1 for s in symbols if (companies.get(s) or {}).get("financial_evidence"))
-    pending_symbols=[s for s in symbols if not (companies.get(s) or {}).get("financial_evidence")]
+    complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
+    pending_symbols=[s for s in symbols if not evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {})]
     out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
