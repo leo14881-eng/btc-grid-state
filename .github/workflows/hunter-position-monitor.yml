@@ -1,6 +1,14 @@
 name: Hunter 5m Position Monitor
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/hunter_position_monitor.py'
+      - 'research/hunter_shadow_trader_v2.py'
+      - 'tests/test_hunter_position_monitor.py'
+      - 'tests/test_hunter_shadow_trader_v2.py'
+      - '.github/workflows/hunter-position-monitor.yml'
   schedule:
     - cron: '*/5 * * * *'
 permissions:
