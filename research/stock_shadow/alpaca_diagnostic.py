@@ -2,7 +2,7 @@ import json, os, time, urllib.parse, urllib.request, urllib.error
 
 BASE = "https://data.alpaca.markets/v2/stocks/bars"
 
-def fetch(symbols, start="2026-09-01T00:00:00Z", end="2026-10-03T23:59:59Z"):
+def fetch(symbols, start="2026-09-01T00:00:00Z", end="2026-10-03T23:59:59Z", feed="iex"):
     headers = {
         "APCA-API-KEY-ID": os.environ["APCA_API_KEY_ID"],
         "APCA-API-SECRET-KEY": os.environ["APCA_API_SECRET_KEY"],
@@ -14,7 +14,7 @@ def fetch(symbols, start="2026-09-01T00:00:00Z", end="2026-10-03T23:59:59Z"):
         "start": start,
         "end": end,
         "limit": 10000,
-        "feed": "iex",
+        "feed": feed,
         "adjustment": "all",
     }
     url = BASE + "?" + urllib.parse.urlencode(params)
@@ -26,6 +26,7 @@ def fetch(symbols, start="2026-09-01T00:00:00Z", end="2026-10-03T23:59:59Z"):
             bars = body.get("bars", {})
             return {
                 "status": resp.status,
+                "feed": feed,
                 "requested": len(symbols),
                 "returned_symbols": len(bars),
                 "bars": sum(len(v) for v in bars.values()),
@@ -34,7 +35,7 @@ def fetch(symbols, start="2026-09-01T00:00:00Z", end="2026-10-03T23:59:59Z"):
                 "sample_fields": sorted(next(iter(bars.values()))[0].keys()) if bars and next(iter(bars.values())) else [],
             }
     except urllib.error.HTTPError as e:
-        return {"status": e.code, "reason": str(e.reason), "body": e.read().decode("utf-8","replace")[:500]}
+        return {"status": e.code, "feed": feed, "reason": str(e.reason), "body": e.read().decode("utf-8","replace")[:500]}
 
 def main():
     if not os.getenv("APCA_API_KEY_ID") or not os.getenv("APCA_API_SECRET_KEY"):
@@ -45,5 +46,6 @@ def main():
     ]
     for g in groups:
         print(json.dumps(fetch(g), sort_keys=True))
+    print(json.dumps(fetch(groups[-1], feed="sip"), sort_keys=True))
 if __name__ == "__main__":
     main()
