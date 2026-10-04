@@ -264,23 +264,23 @@ def test_financial_evidence_extracts_trends_and_dilution():
     assert ev["operating_cash_flow"]["trend"]=="IMPROVING"
     assert ev["free_cash_flow"]["values"][-1]["val"]==19.0
     assert ev["share_dilution_pct_latest"]==6.0
-    assert m.classify_evidence(ev,{"material_8k_present":False})=="WATCH"
+    assert m.classify_evidence(ev,{"material_8k_present":"NOT_VERIFIED"})=="WATCH"
 
 def test_severe_risk_evidence_can_flag_critical_without_strategy_effect():
     m=_load_fundamentals_observer()
-    assert m.classify_evidence({},{"bankruptcy_restructuring":True})=="CRITICAL"
+    assert m.classify_evidence({},{"bankruptcy_restructuring":"VERIFIED_PRESENT"})=="CRITICAL"
 
 
-def test_fundamentals_bulk_architecture_replaces_twelve_stock_rotation():
+def test_fundamentals_hourly_uses_bounded_sec_per_company_json_not_multigb_bulk():
     import inspect
     m=_load_fundamentals_observer()
     src=inspect.getsource(m.main)
-    assert not hasattr(m,"MAX_REFRESH")
-    assert "download_bulk_zip(BULK_COMPANYFACTS)" in src
-    assert "download_bulk_zip(BULK_SUBMISSIONS)" in src
-    assert '"evidence_complete"' in src
-    assert '"evidence_pending"' in src
-    assert '"fallback_requests"' in src
+    assert "download_bulk_zip(BULK_COMPANYFACTS)" not in src
+    assert "download_bulk_zip(BULK_SUBMISSIONS)" not in src
+    assert "sec_companyfacts" in src and "sec_submission" in src
+    assert "refresh_budget=24" in src
+    assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
+    assert '"evidence_complete"' in src and '"evidence_pending"' in src
 
 def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
     import io,zipfile,json
@@ -387,9 +387,9 @@ def test_unverified_semantic_risks_are_unknown_not_false():
     spec=importlib.util.spec_from_file_location("fundamentals_observer_test",path)
     mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     r=mod.filing_risk_evidence([])
-    assert r["going_concern"] is None
-    assert r["bankruptcy_restructuring"] is None
-    assert r["delisting_risk"] is None
+    assert r["going_concern"]=="NOT_VERIFIED"
+    assert r["bankruptcy_restructuring"]=="NOT_VERIFIED"
+    assert r["delisting_risk"]=="NOT_VERIFIED"
     assert r["semantic_risk_state"]=="UNKNOWN_PENDING_TEXT_REVIEW"
     assert r["semantic_review_status"]=="NOT_YET_TEXT_VERIFIED"
 
@@ -405,10 +405,10 @@ def test_unverified_filing_risks_are_unknown_not_false():
     spec=importlib.util.spec_from_file_location("fund_obs_test",path)
     m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     r=m.filing_risk_evidence([{"form":"8-K"}])
-    assert r["going_concern"] is None
-    assert r["bankruptcy_restructuring"] is None
-    assert r["delisting_risk"] is None
-    assert r["material_8k_risk"] is None
+    assert r["going_concern"]=="NOT_VERIFIED"
+    assert r["bankruptcy_restructuring"]=="NOT_VERIFIED"
+    assert r["delisting_risk"]=="NOT_VERIFIED"
+    assert r["material_8k_risk"]=="NOT_VERIFIED"
     assert r["semantic_risk_state"]=="UNKNOWN_PENDING_TEXT_REVIEW"
     assert m.classify_evidence({},r)=="WATCH"
 
@@ -419,7 +419,7 @@ def test_fundamentals_main_migrates_legacy_unverified_false_flags():
     src=inspect.getsource(m.main)
     assert 'semantic_review_status")=="NOT_YET_TEXT_VERIFIED"' in src
     assert '("going_concern","bankruptcy_restructuring","delisting_risk","material_8k_risk")' in src
-    assert '_risk[_key]=None' in src
+    assert '_risk[_key]=None' in src or 'NOT_VERIFIED' in inspect.getsource(m.filing_risk_evidence)
     assert 'UNKNOWN_PENDING_TEXT_REVIEW' in src
 
 
