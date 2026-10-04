@@ -301,8 +301,9 @@ def ensure_opportunity_observation(pos,p=None,now=None,provenance="LIVE_OBSERVAT
   pos["full_opportunity_mfe_pct"]=round((pos["full_opportunity_peak_price"]/buy-1)*100,4)
  pos.setdefault("data_provenance",provenance)
  if pos.get("closed_at_utc"):
-  elapsed=(now-parse(pos["closed_at_utc"])).total_seconds()/3600
-  pos["observation_complete"]=bool(elapsed>=max(REVIEW_HOURS))
+  # Time passing alone is not evidence that the full 72h opportunity was observed.
+  # Completion requires a truthful 72h horizon record (normally historical backfill).
+  pos["observation_complete"]=bool((pos.get("post_exit_observation") or {}).get("72h"))
  else:pos["observation_complete"]=False
  return pos
 
@@ -345,7 +346,9 @@ def update_post_exit(pos,p,now):
    # A late monitor tick cannot truthfully reconstruct an earlier horizon from the
    # current all-time peak. Leave the horizon pending for bounded historical backfill.
    t["marks"].append({"horizon":key,"observed_hours":round(hours,2),"price":p,"rebound_from_exit_pct":round(rebound,4) if rebound is not None else None,"status":"HISTORICAL_BACKFILL_REQUIRED"})
- if hours>=max(REVIEW_HOURS):pos["observation_complete"]=True
+ # Never mark the evaluation complete from elapsed time alone. A late monitor tick
+ # cannot reconstruct the maximum price inside the 72h window.
+ pos["observation_complete"]=bool(obs.get("72h"))
  pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
  pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
  pos["exit_evaluation"]=exit_evaluation(pos)
