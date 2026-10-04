@@ -231,3 +231,41 @@ def test_exchange_calendar_is_dynamic_and_fail_closed():
     assert "weekday()<5" not in inspect.getsource(ss.trade_action_window)
     m=_load_position_monitor()
     assert "paper-api.alpaca.markets/v2/calendar" in inspect.getsource(m._alpaca_exchange_session)
+
+
+def _load_fundamentals_observer():
+    p=Path("research/stock_shadow/fundamentals_observer.py")
+    spec=importlib.util.spec_from_file_location("fo",p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+
+def test_fundamentals_observer_remains_observation_only():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m)
+    assert '"strategy_effect":False' in src
+    assert "BUY" not in inspect.getsource(m.classify_evidence)
+    assert "SELL" not in inspect.getsource(m.classify_evidence)
+
+def test_financial_evidence_extracts_trends_and_dilution():
+    m=_load_fundamentals_observer()
+    def rows(a,b,unit="USD"):
+        return {unit:[{"end":"2025-12-31","val":a,"form":"10-K","filed":"2026-02-01"},
+                      {"end":"2026-06-30","val":b,"form":"10-Q","filed":"2026-08-01"}]}
+    facts={"facts":{"us-gaap":{
+      "RevenueFromContractWithCustomerExcludingAssessedTax":{"units":rows(100,120)},
+      "NetIncomeLoss":{"units":rows(10,12)},
+      "NetCashProvidedByUsedInOperatingActivities":{"units":rows(20,25)},
+      "CashAndCashEquivalentsAtCarryingValue":{"units":rows(30,35)},
+      "LongTermDebt":{"units":rows(50,45)},
+      "CommonStockSharesOutstanding":{"units":rows(100,106,"shares")},
+      "PaymentsToAcquirePropertyPlantAndEquipment":{"units":rows(5,6)}
+    }}}
+    ev=m.financial_evidence(facts)
+    assert ev["revenue"]["trend"]=="IMPROVING"
+    assert ev["operating_cash_flow"]["trend"]=="IMPROVING"
+    assert ev["free_cash_flow"]["values"][-1]["val"]==19.0
+    assert ev["share_dilution_pct_latest"]==6.0
+    assert m.classify_evidence(ev,{"material_8k_present":False})=="WATCH"
+
+def test_severe_risk_evidence_can_flag_critical_without_strategy_effect():
+    m=_load_fundamentals_observer()
+    assert m.classify_evidence({},{"bankruptcy_restructuring":True})=="CRITICAL"
