@@ -38,11 +38,15 @@ def universe_time(scan,asset):
 def main():
  start,now=today_bounds(); scan=load(SCAN); hist=load(EARLY); v1=load(V1); v2=load(V2); review=load(REVIEW)
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
- stats=[]
- candidates=[]\n for a,c in (scan.get("coins") or {}).items():
+ candidates=[]
+ for a,c in (scan.get("coins") or {}).items():
   if a in excluded or not c.get("pairs"):continue
   sym=c["pairs"][0].get("pair")
   if not sym or not sym.endswith("USDT"):continue
+  candidates.append((float(c.get("change_24h_pct") or -999),a,sym))
+ candidates.sort(reverse=True)
+ stats=[]
+ for _,a,sym in candidates[:max(TOP_N*4,40)]:
   try:s=day_stats(sym,start,now)
   except Exception:continue
   if s:stats.append((s["day_high_gain_pct"],a,sym,s))
@@ -64,7 +68,8 @@ def main():
          "why_not_bought":None if v2buy else ((deferred or {}).get("reason") or ((first_decision(v2,a) or {}).get("reasons") or ["NO_DURABLE_V2_DECISION_EVIDENCE"]))},
    "post_detection":{"max_gain_from_first_early_to_day_high_pct":round((s["day_high"]/h["first_early_price"]-1)*100,4) if h.get("first_early_price") else None}})
  out={"schema":"hunter_missed_opportunity_replay_v1","generated_at_utc":now.isoformat(),"date_utc":start.date().isoformat(),"mode":"READ_ONLY_NO_TRADING","top_n":TOP_N,
-  "selection":"Binance spot USDT assets ranked by UTC-day open-to-intraday-high gain","limitations":["Universe historical first-seen is UNKNOWN until durable universe history is added; current scan membership is not backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
+  "selection":"Binance spot USDT assets preselected by current 24h change then ranked by UTC-day open-to-intraday-high gain",
+  "limitations":["Universe historical first-seen is UNKNOWN until durable universe history is added; current scan membership is not backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
  OUT.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"\n")
  print(json.dumps({"date":out["date_utc"],"leaders":[{"asset":x["asset"],"day_high_gain_pct":x["day"]["day_high_gain_pct"],"first_early":x["early"]["first_at_utc"],"v1":x["v1"]["buy_generated"],"v2":x["v2"]["buy_generated"],"why_not":x["v2"]["why_not_bought"]} for x in rows]},ensure_ascii=False))
 if __name__=="__main__":main()
