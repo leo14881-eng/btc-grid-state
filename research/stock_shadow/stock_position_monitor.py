@@ -6,7 +6,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT=Path("research/results/stock-shadow")
-STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"
+STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"; CALENDAR_CACHE=ROOT/"calendar-session-cache-v1.json"
 FEE_RATE=0.002; MAX_REQUEST_TARGET_CHARS=7000
 ARM_NET_PCT=1.0
 PROFIT_FLOOR_NET_PCT=0.10
@@ -14,6 +14,7 @@ PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
 SOURCE_COMMIT=os.getenv("STOCK_SHADOW_SOURCE_COMMIT","LOCAL")
 RUN_ID=os.getenv("STOCK_SHADOW_RUN_ID","LOCAL")
 NY=ZoneInfo("America/New_York")
+CALENDAR_USAGE={"http_requests":0,"cache_hits":0,"cache_misses":0,"errors":0}
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
@@ -48,19 +49,34 @@ def validate_ledger(state, events):
         raise RuntimeError("ledger_invariant:nonpositive_sell_event")
     return True
 def _alpaca_exchange_session(ts=None):
-    t=(ts or datetime.now(timezone.utc)).astimezone(NY)
+    t=(ts or datetime.now(timezone.utc)).astimezone(NY); day=t.date().isoformat()
+    cached=load(CALENDAR_CACHE,{})
+    if cached.get("date")==day:
+        if cached.get("closed") is True:
+            CALENDAR_USAGE["cache_hits"]+=1; return None
+        if cached.get("open") and cached.get("close"):
+            try:
+                oh,om=map(int,cached["open"].split(":")); ch,cm=map(int,cached["close"].split(":"))
+                CALENDAR_USAGE["cache_hits"]+=1
+                return {"date":day,"open":dtime(oh,om),"close":dtime(ch,cm),"source":"ALPACA_EXCHANGE_CALENDAR_CACHE"}
+            except Exception: pass
+    CALENDAR_USAGE["cache_misses"]+=1
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
-    if not key or not secret: return None
-    day=t.date().isoformat()
+    if not key or not secret:
+        CALENDAR_USAGE["errors"]+=1; return None
     url="https://paper-api.alpaca.markets/v2/calendar?"+urllib.parse.urlencode({"start":day,"end":day})
     req=urllib.request.Request(url,headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"Accept":"application/json"})
     try:
+        CALENDAR_USAGE["http_requests"]+=1
         with urllib.request.urlopen(req,timeout=15) as r: rows=json.load(r)
-        if not rows: return None
+        if not rows:
+            save(CALENDAR_CACHE,{"date":day,"closed":True,"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
+            return None
         row=rows[0]; oh,om=map(int,row["open"].split(":")); ch,cm=map(int,row["close"].split(":"))
+        save(CALENDAR_CACHE,{"date":day,"open":row["open"],"close":row["close"],"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
         return {"date":day,"open":dtime(oh,om),"close":dtime(ch,cm),"source":"ALPACA_EXCHANGE_CALENDAR"}
     except Exception:
-        return None
+        CALENDAR_USAGE["errors"]+=1; return None
 
 def market_open(ts=None, session=None):
     t=(ts or datetime.now(timezone.utc)).astimezone(NY)
@@ -147,7 +163,7 @@ def main(force=False):
     session=_alpaca_exchange_session()
     is_open=market_open(session=session)
     if not force and not is_open:
-        save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
+        save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False,"calendar_api_usage":dict(CALENDAR_USAGE)})
         print(json.dumps(load(HEALTH,{}))); return
     prices,errors,requests,logical_batches=alpaca_snapshot_quotes(symbols)
     trade_actions_enabled=is_open
@@ -201,6 +217,6 @@ def main(force=False):
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
-    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
+    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
