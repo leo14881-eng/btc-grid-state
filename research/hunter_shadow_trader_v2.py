@@ -247,6 +247,42 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
   "optimizer_action":"RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST" if over else "NONE",
   "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
  atomic_json_write(GUARD,guard);return guard
+def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
+ """Manage open positions only. Shared by hourly and 5m lanes; never creates a new position."""
+ btc=btc or price(scan,"BTC")
+ cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
+ state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
+ still=[]
+ for pos in state["open_positions"]:
+  p=price(scan,pos["asset"])
+  if not p:record(state,pos,"HOLD",now,["CURRENT_PRICE_MISSING"],{},pos.get("last_price"));still.append(pos);continue
+  c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4)
+  pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
+  act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
+  if act=="ADD":
+   next_amount=TRANCHES[len(pos["tranches"])]
+   if capital_available(state,next_amount):
+    add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
+   else:record(state,pos,"HOLD",now,["CAPITAL_POOL_FULL_ADD_DEFERRED"],e,p)
+  else:record(state,pos,"HOLD",now,reasons,e,p)
+  protection=profit_protection(pos,p)
+  exit_reason=None;exit_reasons=None
+  if protection["exit"]:
+   exit_reason="PROFIT_PROTECTION";exit_reasons=["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"]
+  elif raw>=TARGET:
+   r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");accel=e.get("rel_accel")
+   runner=r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
+   if runner:record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
+   else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
+  if exit_reason:
+   pnl=net_pnl(pos,p);notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
+   pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":exit_reason,"weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
+   if exit_reason=="PROFIT_PROTECTION":pos["profit_protection"]=protection
+   pos.update(exit_analysis(pos,p,exit_reason));record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
+  still.append(pos)
+ state["open_positions"]=still
+ return state
+
 def main():
  if SHADOW_FREEZE:
   print(json.dumps({"status":"SHADOW_STRATEGY_FREEZE","strategy":STRATEGY_ID,"writes":0,"capital_pool_usdt":CAPITAL_POOL_USDT}))
