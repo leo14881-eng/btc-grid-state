@@ -39,8 +39,7 @@ def monitor(path,label,market,short,now):
   raw=eng.raw_return(pos,p);pos["mfe_pct"]=round(max(float(pos.get("mfe_pct") or 0),raw),4);pos["mae_pct"]=round(min(float(pos.get("mae_pct") or 0),raw),4)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-eng.parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   protection=eng.profit_protection(pos,p);rel=relative(a,short)
-  severe=rel.get("btc_rel_15m") is not None and rel.get("btc_rel_60m") is not None and rel["btc_rel_15m"]<=-2 and rel["btc_rel_60m"]<=-3
-  action="EXIT" if protection["exit"] or severe else "HOLD";reason="PROFIT_PROTECTION" if protection["exit"] else ("SEVERE_BTC_RELATIVE_BREAK" if severe else "FAST_MARK")
+  action="EXIT" if protection["exit"] else "HOLD";reason="PROFIT_PROTECTION" if protection["exit"] else "FAST_MARK"
   pos["fast_monitor"]={"at_utc":now.isoformat(),"action":action,"reason":reason,"price":p,**rel}
   if action=="EXIT":
    pnl=eng.net_pnl(pos,p);notion=eng.total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
