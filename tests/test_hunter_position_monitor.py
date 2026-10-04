@@ -19,6 +19,19 @@ class PositionMonitorTests(unittest.TestCase):
    with patch.object(m.v1,"configure_v1",lambda:None):
     out=m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True)
    saved=m.load(p);self.assertEqual([x["asset"] for x in saved["open_positions"]],["X"]);self.assertEqual(len(saved["open_positions"][0]["tranches"]),2);self.assertEqual(out["added"],["X"])
+ def test_bstock_is_quarantined_not_sold_or_managed(self):
+  state,market,review,liq,supply=self.fixture()
+  state["open_positions"][0]["asset"]="MSFTB";market["MSFTB"]=market.pop("X")
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/"s.json";m.eng.atomic_json_write(p,state)
+   with patch.object(m.v1,"configure_v1",lambda:None):
+    out=m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True,{"MSFTB"})
+   saved=m.load(p)
+   self.assertEqual(saved["open_positions"],[])
+   self.assertEqual(saved["excluded_non_crypto_positions"][0]["asset"],"MSFTB")
+   self.assertEqual(out["quarantined_non_crypto"],["MSFTB"])
+   self.assertEqual(saved["closed_positions"],[])
+
  def test_monitor_has_no_new_entry_path(self):
   self.assertFalse(hasattr(m,"entry_allowed"));self.assertFalse(hasattr(m,"discovery_decision"))
 if __name__=="__main__":unittest.main()
