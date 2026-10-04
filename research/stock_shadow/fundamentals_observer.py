@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,11 +31,19 @@ def proxy_json(url):
 
 
 def download_bulk_zip(url):
+    # Stream large SEC archives to disk; do not hold the whole market archive in RAM.
     req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/zip","Accept-Encoding":"identity"})
-    with urllib.request.urlopen(req,timeout=120) as r:
-        raw=r.read()
-        if not raw.startswith(b"PK"): raise ValueError("not_zip_payload")
-        return zipfile.ZipFile(io.BytesIO(raw))
+    tmp=tempfile.NamedTemporaryFile(prefix="stock-shadow-sec-",suffix=".zip",delete=False)
+    try:
+        with urllib.request.urlopen(req,timeout=120) as r:
+            shutil.copyfileobj(r,tmp,length=1024*1024)
+        tmp.close()
+        with open(tmp.name,"rb") as fp:
+            if fp.read(2)!=b"PK": raise ValueError("not_zip_payload")
+        return zipfile.ZipFile(tmp.name)
+    except Exception:
+        tmp.close()
+        raise
 
 def bulk_json_by_cik(zf, ciks):
     wanted={f"CIK{int(c):010d}.json":int(c) for c in ciks}
