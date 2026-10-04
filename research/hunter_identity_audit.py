@@ -112,7 +112,7 @@ def enrich_bulk_registry(market,cache,now,fetch=fetch_coin_registry,universe_sym
             # contradiction when the current market feed already resolved a
             # concrete CoinGecko ID. Keep the collision as audit metadata;
             # only unresolved symbol-only matches must fail closed.
-            item["_bulk_symbol_collision"]=False
+            item["_bulk_symbol_collision"]=True
             item["_bulk_symbol_collision_present"]=True
         if reg and str(reg.get("symbol") or "").upper()==sym:
             item["platforms"]=reg.get("platforms") or {}
@@ -291,7 +291,7 @@ def build(scan,market,registry,now):
         typ=classify(sym)
         fact=facts.get(sym) or {}
         status,blockers=identity_status(sym,coin,fact,cg,now)
-        if sym in collisions or ((cg.get(sym) or {}).get("_bulk_symbol_collision") and not (cg.get(sym) or {}).get("id")):
+        if sym in collisions or (cg.get(sym) or {}).get("_bulk_symbol_collision"):
             blockers.append("COINGECKO_TICKER_COLLISION")
             if status in ("THIRD_PARTY_CORROBORATED","THIRD_PARTY_NATIVE_CORROBORATED","THIRD_PARTY_UNIQUE_ID_CORROBORATED"):
                 status="UNVERIFIED"
