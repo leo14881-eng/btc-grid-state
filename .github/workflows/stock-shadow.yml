@@ -55,6 +55,7 @@ jobs:
         timeout-minutes: 8
         env:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          STOCKFIT_API_KEY: ${{ secrets.STOCKFIT_API_KEY }}
         run: python research/stock_shadow/fundamentals_observer.py
       - name: Run Stock Shadow V1
         env:
