@@ -548,3 +548,37 @@ def test_replay_output_has_acceptance_metrics():
     src=(Path(__file__).parents[1]/"research"/"stock_shadow"/"stock_replay.py").read_text()
     for key in ('"actual_buy_before_high"','"early_before_high"','"missed_before_high"','"future_data_prohibited"'):
         assert key in src
+
+
+def test_replay_uses_live_hourly_decision_clock_and_20m_delay():
+    from datetime import time
+    m=_load_replay()
+    session={"date":"2026-10-02","open":time(9,30),"close":time(16,0),"source":"TEST"}
+    clocks=m.decision_clocks(session)
+    assert clocks
+    assert all(x.minute==23 for x in clocks)
+    bars=[
+      {"t":"2026-10-02T14:00:00Z","o":1,"h":1,"l":1,"c":1,"v":1},
+      {"t":"2026-10-02T14:05:00Z","o":2,"h":2,"l":2,"c":2,"v":1},
+    ]
+    usable,cutoff=m.bars_available_at(bars,__import__("datetime").datetime(2026,10,2,14,23,tzinfo=__import__("datetime").timezone.utc))
+    assert cutoff.isoformat().startswith("2026-10-02T14:03")
+    assert [x["c"] for x in usable]==[1]
+
+def test_replay_future_mutation_invariance_is_real_not_hardcoded():
+    import inspect
+    m=_load_replay()
+    src=inspect.getsource(m)
+    assert "class LookaheadViolation" in src
+    assert "future_mutation_invariance" in src
+    assert "future_mutation_changed_past_decision" in src
+    assert '"future_leakage_detected":False' not in src
+    assert '"lookahead_violations"' in src
+
+def test_replay_output_contract_matches_acceptance_design():
+    import inspect
+    m=_load_replay(); src=inspect.getsource(m.main)
+    for key in ('"big_movers_total"','"early_detected"','"early_detection_rate"','"buy_detected"',
+                '"buy_detection_rate"','"late_early_count"','"missed_by_gate"','"decision_clock"',
+                '"strategy_version"','"gain_before_early_pct"','"lookahead_check"','"gate_trace"'):
+        assert key in src
