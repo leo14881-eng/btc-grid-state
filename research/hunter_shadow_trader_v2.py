@@ -211,12 +211,11 @@ def peak_from_bars(bars,end=None):
  return {"peak_price":p,"peak_at_utc":dt.datetime.fromtimestamp(ts/1000,dt.timezone.utc).isoformat(),"source":"BINANCE_SPOT_KLINES_5M"}
 
 def backfill_opportunity_history(pos,now):
- """One historical fetch per trade; evaluation data never enters trade decisions."""
+ """Bounded historical reconstruction of initial-BUY opportunity peaks; observation only."""
  try:opened=parse(pos.get("opened_at_utc"))
  except Exception:return pos
  closed=parse(pos["closed_at_utc"]) if pos.get("closed_at_utc") else None
- if not closed:return pos
- end=min(now,closed+dt.timedelta(hours=max(REVIEW_HOURS)))
+ end=min(now,closed+dt.timedelta(hours=max(REVIEW_HOURS))) if closed else now
  last=pos.get("opportunity_backfill_at_utc")
  if last:
   try:
@@ -225,7 +224,7 @@ def backfill_opportunity_history(pos,now):
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
   pos["data_provenance"]="BACKFILL_PENDING";return pos
  bars=binance_kline_bars(pos.get("asset"),opened,end);buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
- full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed)
+ full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed or end)
  if not bars or not full or not hold or not buy:
   if pos.get("data_provenance")!="HISTORICAL_BACKFILL":
    pos["data_provenance"]="INSUFFICIENT_HISTORY"
@@ -238,6 +237,9 @@ def backfill_opportunity_history(pos,now):
  pos["holding_peak_price"]=hold["peak_price"];pos["holding_peak_at_utc"]=hold["peak_at_utc"];pos["holding_mfe_pct"]=round((hold["peak_price"]/buy-1)*100,4)
  pos["full_opportunity_peak_price"]=full["peak_price"];pos["full_opportunity_peak_at_utc"]=full["peak_at_utc"];pos["full_opportunity_mfe_pct"]=round((full["peak_price"]/buy-1)*100,4)
  pos["data_provenance"]="HISTORICAL_BACKFILL";pos["opportunity_backfill_source"]=full["source"];pos["opportunity_backfill_at_utc"]=now.isoformat()
+ if not closed:
+  pos["observation_complete"]=False
+  return pos
  obs=pos.setdefault("post_exit_observation",{})
  for target in REVIEW_HOURS:
   horizon_end=closed+dt.timedelta(hours=target)
@@ -269,7 +271,11 @@ def capture_ratio(realized,mfe):
 def ensure_opportunity_observation(pos,p=None,now=None,provenance="LIVE_OBSERVATION"):
  now=now or dt.datetime.now(dt.timezone.utc);buy=initial_buy_price(pos)
  pos.setdefault("sample_cohort",sample_cohort(pos))
- if pos.get("holding_mfe_pct") is None and pos.get("mfe_pct") is not None:pos["holding_mfe_pct"]=finite(pos.get("mfe_pct"))
+ # Legacy mfe_pct is based on the then-current weighted entry after ADDs.  It is
+ # not valid evidence for the new initial-BUY opportunity metric.  Only new-version
+ # positions may seed from live MFE; migration samples require historical bars.
+ if pos.get("holding_mfe_pct") is None and pos.get("mfe_pct") is not None and sample_cohort(pos)=="NEW_VERSION_SAMPLE":
+  pos["holding_mfe_pct"]=finite(pos.get("mfe_pct"))
  if pos.get("holding_peak_price") is None and buy and pos.get("holding_mfe_pct") is not None:
   pos["holding_peak_price"]=round(buy*(1+float(pos["holding_mfe_pct"])/100),12)
  if pos.get("holding_peak_at_utc") is None and pos.get("holding_peak_price") is not None:pos["holding_peak_at_utc"]=pos.get("last_marked_at_utc") or pos.get("opened_at_utc")
@@ -328,12 +334,9 @@ def update_post_exit(pos,p,now):
  for target in REVIEW_HOURS:
   key=f"{int(target)}h"
   if hours>=target and key not in obs:
-   peak=finite(pos.get("full_opportunity_peak_price"))
-   obs[key]={"observed_at_utc":now.isoformat(),"max_price":peak,
-    "max_return_from_initial_buy_pct":round((peak/buy-1)*100,4) if peak and buy else None,
-    "max_return_from_sell_pct":round((peak/sell-1)*100,4) if peak and sell else None,
-    "data_provenance":pos.get("data_provenance") or "LIVE_OBSERVATION"}
-   t["marks"].append({"horizon":key,"observed_hours":round(hours,2),"price":p,"rebound_from_exit_pct":round(rebound,4) if rebound is not None else None})
+   # A late monitor tick cannot truthfully reconstruct an earlier horizon from the
+   # current all-time peak. Leave the horizon pending for bounded historical backfill.
+   t["marks"].append({"horizon":key,"observed_hours":round(hours,2),"price":p,"rebound_from_exit_pct":round(rebound,4) if rebound is not None else None,"status":"HISTORICAL_BACKFILL_REQUIRED"})
  if hours>=max(REVIEW_HOURS):pos["observation_complete"]=True
  pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
  pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
@@ -551,7 +554,9 @@ def opportunity_summary(rows):
 def build_summary(state,now,guard_status="NORMAL"):
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
- for x in state.get("open_positions") or []:ensure_opportunity_observation(x,x.get("last_price"),now)
+ for x in state.get("open_positions") or []:
+  ensure_opportunity_observation(x,x.get("last_price"),now)
+  if x.get("sample_cohort")=="MIGRATION_SAMPLE" and x.get("data_provenance")!="HISTORICAL_BACKFILL":backfill_opportunity_history(x,now)
  for x in closed:ensure_opportunity_observation(x,None,now)
  cohorts={"all_samples":opportunity_summary(all_closed),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"]),
   "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"])}
