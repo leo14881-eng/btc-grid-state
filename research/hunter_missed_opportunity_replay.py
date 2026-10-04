@@ -35,7 +35,7 @@ def first_decision(state,asset):
  ds.sort(key=lambda x:x.get("at") or "")
  return ds[0] if ds else None
 def post_detection(s,h,v1buy):
- first_at=h.get("first_early_at_utc"); first_price=h.get("first_early_price"); candles=s.get("_candles") or []
+ first_at=h.get("first_early_at_utc"); first_price=h.get("first_early_price") or ((v1buy or {}).get("price")); candles=s.get("_candles") or []
  evidence_at=first_at or ((v1buy or {}).get("at") or (v1buy or {}).get("at_utc"))
  status="EXACT_EARLY_RECORDED" if first_at else ("FIRST_EARLY_EXACT_UNKNOWN_BUT_AT_OR_BEFORE_V1_BUY" if v1buy else "NO_EARLY_EVIDENCE")
  if not evidence_at or not first_price:return {"eligibility_status":status,"first_eligibility_evidence_at":evidence_at,"max_gain_after_first_early_pct":None}
