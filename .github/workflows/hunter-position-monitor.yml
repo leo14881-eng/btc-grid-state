@@ -79,7 +79,25 @@ jobs:
           git commit -m 'state: five-minute Hunter position monitor'
           for attempt in 1 2 3 4 5; do
             git fetch origin main
-            if git rebase origin/main && git push origin HEAD:main; then exit 0; fi
+            if git rebase origin/main && git push origin HEAD:main; then
+              git fetch origin main
+              for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json research/results/hunter-position-monitor.json; do
+                git show "origin/main:$p" > "/tmp/$(basename "$p")"
+                [ -s "/tmp/$(basename "$p")" ] || { echo "POST_PUSH_EMPTY $p"; exit 1; }
+                python -c "import json,sys; json.load(open(sys.argv[1]))" "/tmp/$(basename "$p")"
+              done
+              python - <<'PY'
+import json
+v1=json.load(open('/tmp/hunter-shadow-portfolio.json'))
+v2=json.load(open('/tmp/hunter-shadow-v2-portfolio.json'))
+m=json.load(open('/tmp/hunter-position-monitor.json'))
+lanes={x.get('lane'):x for x in m.get('results') or []}
+assert lanes['SHADOW_V1']['open']==len(v1.get('open_positions') or [])
+assert lanes['SHADOW_V2']['open']==len(v2.get('open_positions') or [])
+print('POST_PUSH_SHADOW_STATE_VERIFIED',lanes['SHADOW_V1']['open'],lanes['SHADOW_V2']['open'])
+PY
+              exit 0
+            fi
             git rebase --abort || true
             sleep $((attempt*2))
           done
