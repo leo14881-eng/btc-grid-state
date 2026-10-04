@@ -90,6 +90,7 @@ def main(force=False):
         save(HEALTH,{"updated_at":now(),"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
     prices,errors,requests=alpaca_snapshot_quotes(symbols)
+    trade_actions_enabled=market_open()
     sells=0; updated=0
     for s in list(symbols):
         price=prices.get(s)
@@ -106,7 +107,7 @@ def main(force=False):
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
         p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
         p["profit_giveback_pct_points"]=round(giveback,6)
-        if p["profit_protection_signal"]:
+        if p["profit_protection_signal"] and trade_actions_enabled:
             closed_at=now()
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
             closed=dict(p); closed.update({"closed_at":closed_at,"exit_price":price,
@@ -129,6 +130,6 @@ def main(force=False):
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
-    save(HEALTH,{"updated_at":now(),"status":status,"provider":"NASDAQ_PUBLIC_BULK_SNAPSHOT","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"batch_size":BATCH_SIZE,"errors":errors,"buy_capability":False,"real_orders":False})
+    save(HEALTH,{"updated_at":now(),"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"batch_size":BATCH_SIZE,"errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
