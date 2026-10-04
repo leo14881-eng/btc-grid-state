@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error, urllib.parse
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; OUT=ROOT/"fundamentals-observer-v1.json"
 UA="stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com"
-MAX_REFRESH=12
+BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
+BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
@@ -27,6 +28,25 @@ def proxy_json(url):
     a=raw.find("{"); b=raw.rfind("}")
     if a>=0 and b>a: raw=raw[a:b+1]
     return json.loads(raw)
+
+
+def download_bulk_zip(url):
+    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/zip","Accept-Encoding":"identity"})
+    with urllib.request.urlopen(req,timeout=120) as r:
+        raw=r.read()
+        if not raw.startswith(b"PK"): raise ValueError("not_zip_payload")
+        return zipfile.ZipFile(io.BytesIO(raw))
+
+def bulk_json_by_cik(zf, ciks):
+    wanted={f"CIK{int(c):010d}.json":int(c) for c in ciks}
+    out={}
+    names=set(zf.namelist())
+    for name,cik in wanted.items():
+        candidates=[name, name.replace("CIK","",1)]
+        hit=next((x for x in candidates if x in names),None)
+        if hit:
+            with zf.open(hit) as fp: out[cik]=json.load(fp)
+    return out
 
 def ticker_map():
     urls=["https://www.sec.gov/files/company_tickers.json","https://www.sec.gov/files/company_tickers_exchange.json"]
@@ -159,22 +179,43 @@ def main():
     companies=old.get("companies",{})
     ticker_map_data,map_errors=ticker_map()
     symbols=sorted(state.get("positions",{}))
-    # Rotate stale/unseen holdings; bounded SEC load per run.
-    targets=sorted(symbols,key=lambda s:(s in companies,companies.get(s,{}).get("updated_at","")))[:MAX_REFRESH]
-    refreshed=0; errors=[]
-    for s in targets:
+    symbol_cik={}; errors=[]
+    for s in symbols:
         meta=ticker_map_data.get(s)
         try:
             cik=int(meta.get("cik_str") or meta.get("cik")) if meta else resolve_cik_efts(s)
-        except urllib.error.HTTPError as e:
-            errors.append({"symbol":s,"stage":"CIK_RESOLUTION","type":"HTTPError","status":e.code}); continue
+            if cik: symbol_cik[s]=cik
+            else: companies[s]={"symbol":s,"status":"NO_SEC_MAPPING","updated_at":now()}
         except Exception as e:
-            errors.append({"symbol":s,"stage":"CIK_RESOLUTION","type":type(e).__name__}); continue
-        if not cik:
-            companies[s]={"symbol":s,"status":"NO_SEC_MAPPING","updated_at":now()}; continue
+            errors.append({"symbol":s,"stage":"CIK_RESOLUTION","type":type(e).__name__})
+
+    bulk={"attempted":True,"companyfacts":"NOT_RUN","submissions":"NOT_RUN","ciks_requested":len(set(symbol_cik.values()))}
+    facts_by_cik={}; subs_by_cik={}
+    try:
+        z=download_bulk_zip(BULK_COMPANYFACTS)
+        facts_by_cik=bulk_json_by_cik(z,set(symbol_cik.values()))
+        bulk["companyfacts"]="OK"; bulk["companyfacts_matched"]=len(facts_by_cik)
+    except Exception as e:
+        bulk["companyfacts"]="FAILED"; bulk["companyfacts_error"]=f"{type(e).__name__}:{str(e)[:160]}"
+    try:
+        z=download_bulk_zip(BULK_SUBMISSIONS)
+        subs_by_cik=bulk_json_by_cik(z,set(symbol_cik.values()))
+        bulk["submissions"]="OK"; bulk["submissions_matched"]=len(subs_by_cik)
+    except Exception as e:
+        bulk["submissions"]="FAILED"; bulk["submissions_error"]=f"{type(e).__name__}:{str(e)[:160]}"
+
+    refreshed=0; fallback_requests=0
+    for s,cik in symbol_cik.items():
+        meta=ticker_map_data.get(s) or {}
         try:
-            sub,transport=sec_submission(cik)
-            facts,facts_transport=sec_companyfacts(cik)
+            sub=subs_by_cik.get(cik)
+            facts=facts_by_cik.get(cik)
+            transport="SEC_BULK_SUBMISSIONS" if sub else None
+            facts_transport="SEC_BULK_COMPANYFACTS" if facts else None
+            if sub is None:
+                sub,transport=sec_submission(cik); fallback_requests+=1
+            if facts is None:
+                facts,facts_transport=sec_companyfacts(cik); fallback_requests+=1
             recent=(sub.get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
             latest=[]
@@ -183,24 +224,22 @@ def main():
                     latest.append({"form":form,"filing_date":date,"accession":an})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
-            evidence=financial_evidence(facts)
-            risk_flags=filing_risk_evidence(latest)
-            state_name=classify_evidence(evidence,risk_flags)
-            companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or (meta or {}).get("title"),
+            evidence=financial_evidence(facts); risk_flags=filing_risk_evidence(latest)
+            companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),
-                "fundamental_state":state_name,
-                "strategy_effect":False,
+                "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
                 "note":"Observation-only SEC evidence; no automatic BUY/ADD/SELL effect."}
             refreshed+=1
-        except urllib.error.HTTPError as e:
-            errors.append({"symbol":s,"type":"HTTPError","status":e.code})
         except Exception as e:
-            errors.append({"symbol":s,"type":type(e).__name__})
+            errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
+    complete=sum(1 for s in symbols if (companies.get(s) or {}).get("financial_evidence"))
     out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
-         "tracked":sum(1 for s in symbols if s in companies),"refreshed_this_run":refreshed,
-         "refresh_limit":MAX_REFRESH,"errors":errors,"mapping_errors":map_errors,"status":"OK" if not errors else "PARTIAL","companies":companies}
+         "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
+         "evidence_pending":max(0,len(symbols)-complete),"refreshed_this_run":refreshed,
+         "bulk_transport":bulk,"fallback_requests":fallback_requests,
+         "errors":errors,"mapping_errors":map_errors,"status":"OK" if not errors else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
 
