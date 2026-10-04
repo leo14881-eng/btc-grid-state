@@ -691,7 +691,7 @@ def test_production_fundamentals_disables_known_fmp_402_and_stockfit_is_residual
     assert "systemic_fields" in main_src
     assert "residual_gaps" in main_src
     assert "stockfit_gap_evidence(residual_gaps,stockfit_key)" in main_src
-    assert "missing_financial_fields" in inspect.getsource(m.stockfit_evidence)
+    assert "missing_fields" in inspect.signature(m.stockfit_evidence).parameters\n    assert "need=set(missing_fields or ())" in inspect.getsource(m.stockfit_evidence)
 
 
 def test_stock_shadow_daily_market_cache_is_incremental_and_benchmarks_are_shared():
