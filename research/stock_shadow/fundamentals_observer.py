@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error
+import json, urllib.request, urllib.error, urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,23 +30,38 @@ def ticker_map():
         except Exception as e: errs.append({"url":url,"type":type(e).__name__,"message":str(e)[:120]})
     return {},errs
 
+def resolve_cik_efts(symbol):
+    url="https://efts.sec.gov/LATEST/search-index?"+urllib.parse.urlencode({"q":symbol,"dateRange":"all","from":0,"size":20})
+    d=get(url)
+    hits=((d.get("hits") or {}).get("hits") or [])
+    needle="("+symbol.upper().replace("-",".")+")"
+    for h in hits:
+        src=h.get("_source") or {}
+        names=src.get("display_names") or []
+        if isinstance(names,str): names=[names]
+        if any(needle in str(n).upper() for n in names):
+            ciks=src.get("ciks") or []
+            if ciks: return int(str(ciks[0]).lstrip("0") or "0")
+    return None
+
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
     companies=old.get("companies",{})
     ticker_map_data,map_errors=ticker_map()
-    if not ticker_map_data:
-        out={"updated_at":now(),"mode":"OBSERVATION_ONLY","status":"DEGRADED","mapping_errors":map_errors,
-             "companies":companies,"strategy_effect":False}
-        OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
     symbols=sorted(state.get("positions",{}))
     # Rotate stale/unseen holdings; bounded SEC load per run.
     targets=sorted(symbols,key=lambda s:(s in companies,companies.get(s,{}).get("updated_at","")))[:MAX_REFRESH]
     refreshed=0; errors=[]
     for s in targets:
         meta=ticker_map_data.get(s)
-        if not meta:
+        try:
+            cik=int(meta.get("cik_str") or meta.get("cik")) if meta else resolve_cik_efts(s)
+        except urllib.error.HTTPError as e:
+            errors.append({"symbol":s,"stage":"CIK_RESOLUTION","type":"HTTPError","status":e.code}); continue
+        except Exception as e:
+            errors.append({"symbol":s,"stage":"CIK_RESOLUTION","type":type(e).__name__}); continue
+        if not cik:
             companies[s]={"symbol":s,"status":"NO_SEC_MAPPING","updated_at":now()}; continue
-        cik=int(meta.get("cik_str") or meta.get("cik"))
         try:
             sub=get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
             recent=(sub.get("filings") or {}).get("recent") or {}
@@ -69,7 +84,7 @@ def main():
             errors.append({"symbol":s,"type":type(e).__name__})
     out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"refreshed_this_run":refreshed,
-         "refresh_limit":MAX_REFRESH,"errors":errors,"status":"OK" if not errors else "PARTIAL","companies":companies}
+         "refresh_limit":MAX_REFRESH,"errors":errors,"mapping_errors":map_errors,"status":"OK" if not errors else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
 
