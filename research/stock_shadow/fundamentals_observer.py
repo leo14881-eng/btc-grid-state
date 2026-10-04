@@ -86,6 +86,9 @@ def frame_evidence_by_cik():
       ("total_debt_alt","us-gaap","LongTermDebtCurrent","USD",instant),
       ("shares","dei","EntityCommonStockSharesOutstanding","shares",instant),
       ("shares_alt","us-gaap","CommonStockSharesOutstanding","shares",instant),
+      # Foreign private issuers such as XP can report IFRS rather than US-GAAP.
+      ("revenue","ifrs-full","Revenue","USD",["CY2024","CY2025"]),
+      ("net_income","ifrs-full","ProfitLoss","USD",["CY2024","CY2025"]),
     ]
     raw={}; transport=set(); request_errors=[]
     tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
