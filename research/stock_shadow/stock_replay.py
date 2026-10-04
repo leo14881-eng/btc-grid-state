@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import stock_shadow_v1 as ss
-OUT=Path("research/results/stock-shadow/replay-v1.json"); SURGE_PCT=8.0
+OUT=Path("research/results/stock-shadow/replay-v1.json"); TRADES=Path("research/results/stock-shadow/trades-v1.json"); SURGE_PCT=8.0
 
 def alpaca(symbols,timeframe,start,end):
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
@@ -28,9 +28,12 @@ def partial_day(bars):
 
 def snap(rows): return ss._snapshot_from_bars("REPLAY",rows,"ALPACA_REPLAY_CHRONOLOGICAL")
 
-def chronological_signal(prior,intra,spy_prior=None,spy_intra=None,qqq_prior=None,qqq_intra=None):
+def chronological_trace(prior,intra,cutoff_at=None,spy_prior=None,spy_intra=None,qqq_prior=None,qqq_intra=None):
+    """Replay decisions in timestamp order. cutoff_at is evaluation-only; no post-cutoff bar enters a decision."""
     seen=[]; sp=[]; qp=[]; sm={x["t"]:x for x in (spy_intra or [])}; qm={x["t"]:x for x in (qqq_intra or [])}
+    first_ready=None; first_early=None; last_decision=None
     for bar in sorted(intra,key=lambda x:x["t"]):
+        if cutoff_at and bar["t"]>cutoff_at: break
         seen.append(bar)
         if bar["t"] in sm: sp.append(sm[bar["t"]])
         if bar["t"] in qm: qp.append(qm[bar["t"]])
@@ -40,10 +43,15 @@ def chronological_signal(prior,intra,spy_prior=None,spy_intra=None,qqq_prior=Non
         spy=snap(list(spy_prior)+[partial_day(sp)]) if spy_prior and sp else None
         qqq=snap(list(qqq_prior)+[partial_day(qp)]) if qqq_prior and qp else None
         d=ss.entry_decision(m,spy,qqq)
-        if d["ready"]:
-            return {"at":bar["t"],"price":bar["c"],"entry_structure":d["entry_structure"],"score":d["score"],
-                    "rejects":d["rejects"],"reasons":d["reasons"]}
-    return None
+        rec={"at":bar["t"],"price":bar["c"],"entry_structure":d["entry_structure"],"score":d["score"],
+             "ready":d["ready"],"rejects":d["rejects"],"reasons":d["reasons"]}
+        last_decision=rec
+        if d["ready"] and first_ready is None: first_ready=rec
+        if d["ready"] and d["entry_structure"]=="EARLY_ACCUMULATION" and first_early is None: first_early=rec
+    return {"first_ready":first_ready,"first_early":first_early,"last_pre_high_decision":last_decision}
+
+def chronological_signal(prior,intra,spy_prior=None,spy_intra=None,qqq_prior=None,qqq_intra=None):
+    return chronological_trace(prior,intra,None,spy_prior,spy_intra,qqq_prior,qqq_intra)["first_ready"]
 
 def main():
     symbols,discovery_errors=ss.discover_us_common_stocks()
@@ -69,16 +77,27 @@ def main():
     for i in range(0,len(wanted),200):
         try: intra.update(alpaca(wanted[i:i+200],"5Min",d0.isoformat().replace("+00:00","Z"),d1.isoformat().replace("+00:00","Z")))
         except Exception as e: errors.append({"stage":"INTRADAY","batch_start":i,"type":type(e).__name__,"message":str(e)[:120]})
+    try: trades=json.loads(TRADES.read_text()) if TRADES.exists() else []
+    except Exception: trades=[]
     results=[]
     spy_prior=[b for b in daily.get("SPY",[]) if str(b["t"])[:10]<target]; qqq_prior=[b for b in daily.get("QQQ",[]) if str(b["t"])[:10]<target]
     for sym,gain,day in movers:
         bars=intra.get(sym,[]); prior=[b for b in daily.get(sym,[]) if str(b["t"])[:10]<target]
-        sig=chronological_signal(prior,bars,spy_prior,intra.get("SPY",[]),qqq_prior,intra.get("QQQ",[]))
         high=max((float(x["h"]) for x in bars),default=float(day["h"])); hb=next((x for x in bars if float(x["h"])==high),None)
-        before=bool(sig and hb and sig["at"]<=hb["t"]); rem=((high/float(sig["price"])-1)*100) if sig else None
-        results.append({"symbol":sym,"open_to_high_pct":round(gain,4),"high":high,"high_at":hb["t"] if hb else None,
-                        "first_signal":sig,"discovered_before_high":before,
+        high_at=hb["t"] if hb else None
+        trace=chronological_trace(prior,bars,high_at,spy_prior,intra.get("SPY",[]),qqq_prior,intra.get("QQQ",[]))
+        sig=trace["first_ready"]; early=trace["first_early"]; before=bool(sig and high_at and sig["at"]<=high_at)
+        rem=((high/float(sig["price"])-1)*100) if sig else None
+        early_rem=((high/float(early["price"])-1)*100) if early else None
+        buys=[e for e in trades if e.get("type")=="BUY" and e.get("symbol")==sym and str(e.get("at",""))[:10]==target]
+        buy_before=next((e for e in sorted(buys,key=lambda x:str(x.get("at",""))) if high_at and str(e.get("at",""))<=high_at),None)
+        last=trace["last_pre_high_decision"] or {}
+        results.append({"symbol":sym,"open_to_high_pct":round(gain,4),"high":high,"high_at":high_at,
+                        "first_signal":sig,"first_early_signal":early,"discovered_before_high":before,
+                        "actual_buy_before_high":bool(buy_before),"actual_buy":buy_before,
                         "remaining_upside_after_signal_pct":round(rem,4) if rem is not None else None,
+                        "remaining_upside_after_early_pct":round(early_rem,4) if early_rem is not None else None,
+                        "missed_gate_reasons":last.get("rejects",[]) if not before else [],
                         "miss_reason":None if before else "NO_PRE_HIGH_ENTRY_SIGNAL"})
     out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","strategy_effect":False,
          "target_session":target,"surge_threshold_pct":SURGE_PCT,"universe_discovered":len(symbols),"universe_with_daily_bars":len(daily),
