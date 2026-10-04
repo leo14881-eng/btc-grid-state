@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 OUT=ROOT/"hunter-early-signals.json"
+HISTORY=ROOT/"hunter-early-signal-history.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 BATCH=80
 
@@ -104,6 +105,20 @@ def build(scan,r1,r4,microdata,now):
       "scan_generation_id":scan.get("generation_id"),"capital_authority":"NONE_RESEARCH_ONLY",
       "method":"1h/4h BTC-relative strength + relative acceleration; no 24h-gain prerequisite",
       "early_count":len(early),"early":early,"watch":rows[:30]}
+def persist_first_early(report):
+    """Durable first-seen EARLY evidence for lead-time/missed-opportunity audits."""
+    try: hist=json.loads(HISTORY.read_text())
+    except (OSError,ValueError): hist={"schema":"hunter_early_signal_history_v1","assets":{}}
+    assets=hist.setdefault("assets",{}); now=report.get("as_of_utc")
+    for row in report.get("early") or []:
+        a=row.get("base"); p=finite((((json.loads(SCAN.read_text()).get("coins") or {}).get(a) or {}).get("reference_price")))
+        if not a: continue
+        rec=assets.setdefault(a,{"first_early_at_utc":now,"first_early_price":p,"first_generation_id":report.get("scan_generation_id"),"first_signal":row,"observations":0})
+        rec["observations"]=int(rec.get("observations") or 0)+1
+        rec["last_early_at_utc"]=now; rec["last_early_price"]=p; rec["last_signal"]=row
+    hist["updated_at_utc"]=now
+    tmp=HISTORY.with_suffix(".json.tmp"); tmp.write_text(json.dumps(hist,ensure_ascii=False,indent=2)+"\n"); json.loads(tmp.read_text()); tmp.replace(HISTORY)
+
 def main():
     scan=json.loads(SCAN.read_text())
     if not scan.get("binance_complete"):raise SystemExit("incomplete Binance scan")
@@ -113,5 +128,6 @@ def main():
     r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
     report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc))
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    persist_first_early(report)
     print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]},ensure_ascii=False))
 if __name__=="__main__":main()
