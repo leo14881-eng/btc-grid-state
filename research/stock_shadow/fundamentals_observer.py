@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil\nfrom concurrent.futures import ThreadPoolExecutor, as_completed
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
