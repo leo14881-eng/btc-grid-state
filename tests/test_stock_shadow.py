@@ -723,10 +723,25 @@ def test_history_gap_recovery_is_residual_only_and_classified():
     assert "gap_start=end-timedelta(days=120)" in src
     assert "history_gap_recovery" in src
     assert "SOURCE_HISTORY_1_21_BARS_AFTER_120D_RECOVERY" in src
-    assert "SOURCE_NO_BARS_AFTER_120D_RECOVERY" in src
+    assert "NO_RECENT_DAILY_BARS_AFTER_120D_RECOVERY" in src
+    assert "SOURCE_NO_BARS_AFTER_120D_RECOVERY" not in src
     assert "SOURCE_HISTORY_1_21_BARS_AFTER_120D_RECOVERY" in src
     # The deep read must target only the residual queue, never the whole discovered universe.
     assert '_pack_alpaca_symbol_batches(gap_symbols,"1Day",gap_start,end)' in src
+
+
+def test_zero_bar_residuals_are_universe_exclusions_not_indicator_history_gaps():
+    import inspect
+    universe_src=inspect.getsource(ss.stock_universe)
+    main_src=inspect.getsource(ss.main)
+    assert 'universe_exclusion="NO_RECENT_DAILY_BARS_AFTER_120D_RECOVERY"' in universe_src
+    assert 'classification=None' in universe_src
+    assert '"universe_exclusion":universe_exclusion' in universe_src
+    assert 'history_gap_classification")=="SOURCE_HISTORY_1_21_BARS_AFTER_120D_RECOVERY"' in main_src
+    assert '"universe_exclusion_count":universe_exclusion_count' in main_src
+    # Do not hard-code present-day symbol exceptions; replay must use the same PIT rule.
+    assert '"SVA"' not in universe_src
+    assert '"MMEDV"' not in universe_src
 
 
 def test_exchange_calendar_uses_same_day_persisted_cache_and_fail_closed():
