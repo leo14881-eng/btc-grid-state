@@ -12,8 +12,15 @@ class V2CapitalDecisionTests(unittest.TestCase):
   c,s,l,u=self.base();self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"BUY")
  def test_missing_liquidity_rejects(self):
   c,s,l,u=self.base();self.assertEqual(decision(c,s,{},u,"ENTRY")[0],"REJECT")
- def test_unverified_supply_rejects(self):
-  c,s,l,u=self.base();self.assertEqual(decision(c,s,l,{},"ENTRY")[0],"REJECT")
+ def test_incomplete_supply_alone_is_nonblocking(self):
+  c,s,l,u=self.base();self.assertEqual(decision(c,s,l,{},"ENTRY")[0],"BUY")
+ def test_confirmed_major_supply_risk_rejects(self):
+  c,s,l,u=self.base();u={"assets":{"X":{"status":"CONFIRMED_MAJOR_NEAR_TERM_UNLOCK","confirmed_major_near_term_unlock":True}}}
+  self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
+ def test_relative_weakness_alone_does_not_force_exit(self):
+  c,s,l,u=self.base();c["signal"]["btc_relative_1h_pct"]=-2.5;c["signal"]["btc_relative_4h_pct"]=-3.5
+  act,reasons,_=decision(c,s,l,u,"HOLD")
+  self.assertEqual(act,"HOLD");self.assertIn("SEVERE_BTC_RELATIVE_WEAKNESS_REVIEW",reasons)
  def test_real_evidence_blocker_rejects(self):
   c,s,l,u=self.base();c["blockers"].append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED");self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
  def test_missing_candidate_is_review_only_for_existing(self):
