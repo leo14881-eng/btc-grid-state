@@ -119,13 +119,13 @@ def future_mutation_invariance(prior,intra,session,cutoff_at,spy_prior,spy_intra
 
 def main():
     symbols,discovery_errors=ss.discover_us_common_stocks()
-    end=datetime.now(timezone.utc)-timedelta(minutes=MARKET_DATA_DELAY_MINUTES); start=end-timedelta(days=45)
-    daily={}; errors=[]
-    for i in range(0,len(symbols),ss.ALPACA_BATCH_SIZE):
-        try: daily.update(alpaca(symbols[i:i+ss.ALPACA_BATCH_SIZE],"1Day",start.isoformat().replace("+00:00","Z"),end.isoformat().replace("+00:00","Z")))
-        except Exception as e: errors.append({"stage":"DAILY","batch_start":i,"type":type(e).__name__,"message":str(e)[:120]})
-    try: daily.update(alpaca(["SPY","QQQ"],"1Day",start.isoformat().replace("+00:00","Z"),end.isoformat().replace("+00:00","Z")))
-    except Exception as e: errors.append({"stage":"BENCHMARK_DAILY","type":type(e).__name__,"message":str(e)[:120]})
+    end=datetime.now(timezone.utc)-timedelta(minutes=MARKET_DATA_DELAY_MINUTES)
+    errors=[]
+    market_cache=ss.load(ss.MARKET_CACHE,{"bars":{}})
+    daily=market_cache.get("bars") or {}
+    # Replay consumes the same persisted PIT daily cache as live V3; it must not redownload identical history.
+    if not daily:
+        raise RuntimeError("replay_daily_market_cache_missing")
     dates={}
     for sym,rows in daily.items():
         if sym in {"SPY","QQQ"}: continue
@@ -194,7 +194,7 @@ def main():
       "late_early_count":late_early,"missed_by_gate":sum(not x["discovered_before_high"] for x in results),
       "pre_high_discovered":sum(x["discovered_before_high"] for x in results),"actual_buy_before_high":sum(x["actual_buy_before_high"] for x in results),
       "early_before_high":sum(bool(x["first_early_signal"] and x["high_at"] and _dt(x["first_early_signal"]["at"])<=_dt(x["high_at"])) for x in results),
-      "missed_before_high":sum(not x["discovered_before_high"] for x in results),"benchmark_daily_explicit":True,
+      "missed_before_high":sum(not x["discovered_before_high"] for x in results),"benchmark_daily_explicit":True,"benchmark_daily_source":"UNIFIED_MARKET_CACHE",
       "future_data_prohibited":True,"future_mutation_invariance":True,"lookahead_violations":lookahead_violations,
       "future_leakage_detected":bool(lookahead_violations),"errors":errors,"discovery_errors":discovery_errors,"results":results}
     OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
