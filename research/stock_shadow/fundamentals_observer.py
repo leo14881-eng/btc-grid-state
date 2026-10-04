@@ -156,6 +156,8 @@ def frame_evidence_by_cik():
     tasks=all_tasks
     def fetch_one(task):
         key,tax,concept,unit,p=task
+        # GitHub-hosted runner may need the read-only proxy; pace market-wide calls to avoid proxy 429.
+        time.sleep(0.8)
         last=None
         for attempt in range(3):
             try:
@@ -170,7 +172,7 @@ def frame_evidence_by_cik():
         raise last
     # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
     # below workflow timeout without creating per-symbol request storms.
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    with ThreadPoolExecutor(max_workers=1) as ex:
         futures=[ex.submit(fetch_one,t) for t in tasks]
         for fut in as_completed(futures):
             try:
@@ -410,19 +412,18 @@ def main():
     def fetch_sec_pair(item):
         sym,cik=item
         facts=facts_t=None; sub=sub_t=None; errs=[]
+        time.sleep(1.0)
         try: facts,facts_t=sec_companyfacts(cik)
         except Exception as e: errs.append({"symbol":sym,"stage":"COMPANYFACTS","type":type(e).__name__,"message":str(e)[:120]})
-        try: sub,sub_t=sec_submission(cik)
-        except Exception as e: errs.append({"symbol":sym,"stage":"SUBMISSION","type":type(e).__name__,"message":str(e)[:120]})
-        return sym,cik,facts,facts_t,sub,sub_t,errs
-    with ThreadPoolExecutor(max_workers=3) as ex:
+        return sym,cik,facts,facts_t,None,None,errs
+    with ThreadPoolExecutor(max_workers=1) as ex:
         futures=[ex.submit(fetch_sec_pair,(sym,symbol_cik[sym])) for sym in refresh_set]
         for fut in as_completed(futures):
             sym,cik,facts,facts_t,sub,sub_t,errs=fut.result()
             if facts is not None: facts_by_cik[cik]=(facts,facts_t)
             if sub is not None: subs_by_cik[cik]=(sub,sub_t)
             errors.extend(errs)
-    sec_transport={"provider":"SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA","attempted":True,"refresh_budget":refresh_budget,
+    sec_transport={"provider":"SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FINANCIAL_GAP_BACKFILL","attempted":True,"refresh_budget":refresh_budget,
                    "requested_symbols":len(refresh_set),"companyfacts_ok":len(facts_by_cik),"submissions_ok":len(subs_by_cik),
                    "frames_matched_ciks":len(frames_by_cik)}
     refreshed=0; fallback_requests=0
