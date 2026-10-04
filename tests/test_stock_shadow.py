@@ -278,10 +278,10 @@ def test_fundamentals_hourly_uses_frames_then_bounded_sec_json_not_multigb_bulk(
     assert "download_bulk_zip(BULK_COMPANYFACTS)" not in src
     assert "download_bulk_zip(BULK_SUBMISSIONS)" not in src
     assert "frame_evidence_by_cik()" in src
-    assert "sec_companyfacts" in src and "sec_submission" in src
-    assert "refresh_budget=24" in src
+    assert "sec_companyfacts" not in src and "sec_submission" in src
+    assert "refresh_budget=4" in src
     assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
-    assert "SEC_FRAMES_PLUS_BOUNDED_PER_COMPANY_JSON" in src
+    assert "SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA" in src
     assert '"evidence_complete"' in src and '"evidence_pending"' in src
 
 def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
@@ -322,7 +322,7 @@ def test_result_writers_are_atomic_and_versioned():
 
 def test_fundamental_frame_budget_and_merge():
     m=_load_fundamentals_observer()
-    assert m.FRAME_REQUEST_BUDGET <= 12
+    assert m.FRAME_REQUEST_BUDGET >= 43
     prior={"revenue":{"values":[{"val":100}],"trend":"STABLE"},"cash":{"values":[{"val":20}],"trend":"STABLE"}}
     cur={"net_income":{"values":[{"val":5}],"trend":"IMPROVING"},"share_dilution_pct_latest":None}
     merged=m.merge_financial_evidence(prior,cur)
