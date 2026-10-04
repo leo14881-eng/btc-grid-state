@@ -24,7 +24,8 @@ ENTRY_MODE="EXECUTABLE"
 STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
 ID_PREFIX="SHV2"
 EVENT_PREFIX="SHADOW_V2"
-SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"\nBINANCE_DATA_API=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
+SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"
+BINANCE_DATA_API=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 
 def entry_allowed(mode,broad,current_price,executable_action):
  return broad=="BUY" and current_price is not None and (mode=="DISCOVERY" or executable_action=="BUY")
