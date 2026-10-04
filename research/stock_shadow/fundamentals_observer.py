@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil\nfrom concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -82,17 +82,25 @@ def frame_evidence_by_cik():
       ("shares","dei","EntityCommonStockSharesOutstanding","shares",instant),
     ]
     raw={}; transport=set(); request_errors=[]
-    for key,tax,concept,unit,ps in specs:
-        for p in ps:
+    tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
+    def fetch_one(task):
+        key,tax,concept,unit,p=task
+        d,t=frame_json(tax,concept,unit,p)
+        return task,d,t
+    # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
+    # below workflow timeout without creating per-symbol request storms.
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures=[ex.submit(fetch_one,t) for t in tasks]
+        for fut in as_completed(futures):
             try:
-                d,t=frame_json(tax,concept,unit,p); transport.add(t)
+                (key,tax,concept,unit,p),d,t=fut.result(); transport.add(t)
                 for row in d.get("data") or []:
                     cik=int(row.get("cik") or 0)
                     if not cik: continue
                     raw.setdefault(cik,{}).setdefault(key,[]).append(
                         {"end":row.get("end"),"val":row.get("val"),"form":row.get("form"),"filed":row.get("filed"),"period":p})
             except Exception as e:
-                request_errors.append({"concept":concept,"period":p,"type":type(e).__name__,"message":str(e)[:120]})
+                request_errors.append({"type":type(e).__name__,"message":str(e)[:160]})
     out={}
     for cik,x in raw.items():
         def vals(primary,alt=None):
