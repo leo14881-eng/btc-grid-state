@@ -391,11 +391,11 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
  state["open_positions"]=still;compact_closed_history(state);return state
 
 def build_summary(state,now,guard_status="NORMAL"):
- closed=state.get("closed_positions") or []
- gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in closed)
+ closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
+ gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
  return {"schema":"hunter_shadow_v2_summary_v2","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
-  "strategy":STRATEGY_ID,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),
-  "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
+  "strategy":STRATEGY_ID,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
+  "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in all_closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":False,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),
    "entry_mode":ENTRY_MODE,"entry_requires_full_execution_validation":ENTRY_MODE=="EXECUTABLE","add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
