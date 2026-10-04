@@ -668,3 +668,37 @@ def test_semantic_refresh_failure_preserves_prior_verified_evidence():
     src=inspect.getsource(m.main)
     assert "if reviewed:" in src
     assert "risk_flags=prior_risk" in src
+
+
+def test_monitor_batches_by_request_size_and_reuses_one_calendar_session():
+    import inspect
+    m=_load_position_monitor()
+    src=inspect.getsource(m)
+    main_src=inspect.getsource(m.main)
+    assert "MAX_REQUEST_TARGET_CHARS=7000" in src
+    assert "BATCH_SIZE=40" not in src
+    assert "timedelta(minutes=90)" in inspect.getsource(m.alpaca_snapshot_quotes)
+    assert "session=_alpaca_exchange_session()" in main_src
+    assert "trade_actions_enabled=is_open" in main_src
+
+
+def test_production_fundamentals_disables_known_fmp_402_and_stockfit_is_residual_only():
+    import inspect
+    m=_load_fundamentals_observer()
+    main_src=inspect.getsource(m.main)
+    assert "FMP_FREE_BULK_UNAVAILABLE" in main_src
+    assert "fmp_bulk_evidence(symbols,api_key)" not in main_src
+    assert "systemic_fields" in main_src
+    assert "residual_gaps" in main_src
+    assert "stockfit_gap_evidence(residual_gaps,stockfit_key)" in main_src
+    assert "missing_financial_fields" in inspect.getsource(m.stockfit_evidence)
+
+
+def test_stock_shadow_daily_market_cache_is_incremental_and_benchmarks_are_shared():
+    import inspect
+    src=inspect.getsource(ss.stock_universe)
+    assert "MARKET_CACHE" in src
+    assert "INCREMENTAL_7D" in src
+    assert 'symbols+["SPY","QQQ"]' in src
+    assert 'cached.get(idx,[])' in src
+    assert "DAILY_CACHE_KEEP_BARS = 24" in inspect.getsource(ss)
