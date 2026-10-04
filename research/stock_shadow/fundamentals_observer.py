@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
 # FINAL_ACCEPTANCE_20261004
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +60,60 @@ def bulk_json_by_cik(zf, ciks):
             with zf.open(hit) as fp: out[cik]=json.load(fp)
     return out
 
+
+FMP_BASE="https://financialmodelingprep.com/stable"
+
+def fmp_bulk_csv(endpoint, year, period, api_key):
+    url=FMP_BASE+"/"+endpoint+"?"+urllib.parse.urlencode({"year":year,"period":period,"apikey":api_key})
+    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"text/csv"})
+    with urllib.request.urlopen(req,timeout=60) as r:
+        raw=r.read().decode("utf-8-sig","replace")
+    if raw.lstrip().startswith(("{","[")):
+        raise ValueError("fmp_bulk_not_csv_or_plan_denied")
+    return list(csv.DictReader(io.StringIO(raw)))
+
+def _num(v):
+    try: return float(v) if v not in (None,"","None","null") else None
+    except (TypeError,ValueError): return None
+
+def fmp_bulk_evidence(symbols, api_key):
+    """FMP bulk financial statements. Observation-only; no trading decisions consume this output."""
+    wanted=set(symbols); raw={s:{"income":[],"balance":[],"cashflow":[]} for s in wanted}
+    requests=0; errors=[]
+    periods=[(2025,"Q4"),(2026,"Q1"),(2026,"Q2"),(2026,"Q3")]
+    endpoints=[("income-statement-bulk","income"),("balance-sheet-statement-bulk","balance"),("cash-flow-statement-bulk","cashflow")]
+    for endpoint,bucket in endpoints:
+        for year,period in periods:
+            requests+=1
+            try:
+                for row in fmp_bulk_csv(endpoint,year,period,api_key):
+                    sym=str(row.get("symbol") or "").upper()
+                    if sym in wanted: raw[sym][bucket].append(row)
+            except Exception as e:
+                errors.append({"endpoint":endpoint,"year":year,"period":period,"type":type(e).__name__,"message":str(e)[:120]})
+    out={}
+    def series(rows,field):
+        vals=[]
+        for r in rows:
+            v=_num(r.get(field))
+            if v is not None: vals.append({"end":r.get("date"),"val":v,"form":"FMP_NORMALIZED","filed":r.get("filingDate"),"period":r.get("period")})
+        vals.sort(key=lambda x:str(x.get("end") or ""))
+        return vals[-5:]
+    for sym,b in raw.items():
+        inc=series(b["income"],"revenue"); ni=series(b["income"],"netIncome")
+        ocf=series(b["cashflow"],"operatingCashFlow"); fcf=series(b["cashflow"],"freeCashFlow")
+        cash=series(b["balance"],"cashAndCashEquivalents"); debt=series(b["balance"],"totalDebt")
+        shares=series(b["income"],"weightedAverageShsOut")
+        ev={}
+        for key,vals in [("revenue",inc),("net_income",ni),("operating_cash_flow",ocf),("free_cash_flow",fcf),("cash",cash),("total_debt",debt),("shares",shares)]:
+            ev[key]={"concept":"FMP_NORMALIZED", "values":vals, "trend":_trend(vals)}
+        dilution=None
+        if len(shares)>=2 and shares[-2]["val"]:
+            dilution=(shares[-1]["val"]/shares[-2]["val"]-1)*100
+        ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
+        if any((ev[k]["values"] for k in ("revenue","net_income","operating_cash_flow","cash","total_debt"))):
+            out[sym]=ev
+    return out,{"provider":"FMP_BULK","attempted":True,"requests":requests,"errors":errors,"matched_symbols":len(out)}
 
 def frame_json(taxonomy, concept, unit, period):
     url=f"https://data.sec.gov/api/xbrl/frames/{taxonomy}/{concept}/{unit}/{period}.json"
