@@ -46,12 +46,26 @@ class CexUniverseTests(unittest.TestCase):
             {"symbol":"NEWUSDT","baseAsset":"NEW","quoteAsset":"USDT","status":"TRADING"},
             {"symbol":"OLDUSDT","baseAsset":"OLD","quoteAsset":"USDT","status":"BREAK"}]}
         ticks=[{"symbol":"PUMPUSDT","lastPrice":"0.003","quoteVolume":"50000","priceChangePercent":"-3"}]
-        with patch.object(scan,"fetch",side_effect=[metadata,ticks]):
+        with patch.object(scan,"fetch",side_effect=[{"data":[{"symbol":"MSFTB"}]},metadata,ticks]):
             rows,status=scan.binance()
         self.assertEqual([r["base"] for r in rows],["PUMP"])
         self.assertEqual(rows[0]["change_24h_pct"],-3)
         self.assertEqual(status["active_pairs"],2)
         self.assertEqual(status["missing_or_invalid"],["NEWUSDT"])
+
+    def test_binance_excludes_authoritative_bstocks_but_keeps_crypto_ending_b(self):
+        metadata={"symbols":[
+            {"symbol":"MSFTBUSDT","baseAsset":"MSFTB","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":True},
+            {"symbol":"ARBUSDT","baseAsset":"ARB","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":True}]}
+        ticks=[
+            {"symbol":"MSFTBUSDT","lastPrice":"500","quoteVolume":"100000","priceChangePercent":"1"},
+            {"symbol":"ARBUSDT","lastPrice":"0.2","quoteVolume":"100000","priceChangePercent":"2"}]
+        bstock={"data":[{"ticker":"MSFT","symbol":"MSFTB"}]}
+        with patch.object(scan,"fetch",side_effect=[bstock,metadata,ticks]):
+            rows,status=scan.binance()
+        self.assertEqual([r["base"] for r in rows],["ARB"])
+        self.assertIn("MSFTB",status["excluded_bstocks"])
+        self.assertNotIn("ARB",status["excluded_bstocks"])
 
     def test_bybit_spot_and_negative_price_change(self):
         instruments={"retCode":0,"result":{"list":[
