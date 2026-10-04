@@ -21,7 +21,7 @@ concurrency:
 jobs:
   shadow:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,6 +46,7 @@ jobs:
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
         run: python research/stock_shadow/alpaca_diagnostic.py
       - name: SEC bulk archive diagnostic
+        timeout-minutes: 2
         continue-on-error: true
         run: |
           python - <<'PY'
@@ -64,6 +65,7 @@ jobs:
                   print("SEC_BULK_FAIL",u,type(e).__name__,str(e))
           PY
       - name: Observe fundamentals (no strategy effect)
+        timeout-minutes: 8
         run: python research/stock_shadow/fundamentals_observer.py
       - name: Run Stock Shadow V1
         env:
