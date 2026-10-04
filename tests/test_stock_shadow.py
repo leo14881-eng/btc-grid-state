@@ -722,7 +722,7 @@ def test_history_gap_recovery_is_residual_only_and_classified():
     assert "gap_symbols=[s for s in symbols if len(cached.get(s) or [])<22]" in src
     assert "gap_start=end-timedelta(days=45)" in src
     assert "history_gap_recovery" in src
-    assert "NEW_LISTING_INSUFFICIENT_HISTORY" in src
+    assert "RECENT_SOURCE_HISTORY_POSSIBLE_NEW_LISTING" in src
     assert "SOURCE_HISTORY_GAP" in src
     # The deep read must target only the residual queue, never the whole discovered universe.
     assert '_pack_alpaca_symbol_batches(gap_symbols,"1Day",gap_start,end)' in src
