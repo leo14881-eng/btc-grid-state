@@ -43,7 +43,7 @@ def bstock_bases():
     def walk(x):
         if isinstance(x,dict):
             for k,v in x.items():
-                if str(k).lower() in ("symbol","ticker") and isinstance(v,str) and v:
+                if str(k).lower()=="symbol" and isinstance(v,str) and v:
                     out.add(v.upper().replace("/USDT","").replace("USDT",""))
                 walk(v)
         elif isinstance(x,list):
