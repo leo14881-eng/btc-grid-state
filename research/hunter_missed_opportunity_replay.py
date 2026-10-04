@@ -53,7 +53,8 @@ def main():
  stats.sort(reverse=True); rows=[]
  by_review={x.get("asset"):x for x in review.get("candidates",[]) if x.get("asset")}
  for _,a,sym,s in stats[:TOP_N]:
-  u=(uhist.get("assets") or {}).get(a) or {}\n  h=(hist.get("assets") or {}).get(a) or {}
+  u=(uhist.get("assets") or {}).get(a) or {}
+  h=(hist.get("assets") or {}).get(a) or {}
   v1buy=first_event(v1,a,{"SHADOW_V1_BUY","SHADOW_BUY"})
   v2buy=first_event(v2,a,{"SHADOW_V2_BUY","SHADOW_BUY"})
   vd=[x for x in v2.get("deferred_buy_opportunities",[]) if x.get("asset")==a]
@@ -70,6 +71,7 @@ def main():
  out={"schema":"hunter_missed_opportunity_replay_v1","generated_at_utc":now.isoformat(),"date_utc":start.date().isoformat(),"mode":"READ_ONLY_NO_TRADING","top_n":TOP_N,
   "selection":"Binance spot USDT assets preselected by current 24h change then ranked by UTC-day open-to-intraday-high gain",
   "limitations":["Universe first-seen is durable from hunter-universe-history deployment onward; older membership is never backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
- OUT.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"\n")
+ OUT.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"
+")
  print(json.dumps({"date":out["date_utc"],"leaders":[{"asset":x["asset"],"day_high_gain_pct":x["day"]["day_high_gain_pct"],"first_early":x["early"]["first_at_utc"],"v1":x["v1"]["buy_generated"],"v2":x["v2"]["buy_generated"],"why_not":x["v2"]["why_not_bought"]} for x in rows]},ensure_ascii=False))
 if __name__=="__main__":main()
