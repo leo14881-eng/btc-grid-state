@@ -370,5 +370,5 @@ def main():
  state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
  summary=build_summary(state,now,guard.get("status") or "NORMAL")
  atomic_json_write(STATE,state);atomic_json_write(SUMMARY,summary)
- print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(closed),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
+ print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(state.get("closed_positions") or []),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
 if __name__=="__main__":main()
