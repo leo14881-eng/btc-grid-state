@@ -375,7 +375,11 @@ def main():
             for reason in d["rejects"] or ["SCORE_OR_ENTRY_NOT_READY"]:
                 rejection_counts[reason]=rejection_counts.get(reason,0)+1
     candidates.sort(key=lambda x:x[2]["score"],reverse=True)
-    data_status=("OK" if market and not failed_symbols else ("PARTIAL" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"))
+    http_error_count=sum(1 for x in failed_symbols if (x.get("error") or {}).get("type")=="HTTPError")
+    insufficient_history_count=sum(1 for x in failed_symbols if (x.get("error") or {}).get("message")=="insufficient_history")
+    # Transport health and history eligibility are separate dimensions.
+    data_status=("OK" if market and http_error_count==0 else ("DEGRADED" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"))
+    history_coverage_status=("COMPLETE" if insufficient_history_count==0 else "PARTIAL_HISTORY")
     # Selective V1: scan the whole market, but BUY only candidates that pass every gate.
     newly_opened=set()
     for s,m,d in candidates:
@@ -447,7 +451,7 @@ def main():
             raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"transport_status":("OK" if market and not any((x.get("error") or {}).get("type")=="HTTPError" for x in failed_symbols) else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("message")=="insufficient_history"),"http_error_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("type")=="HTTPError"),"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
