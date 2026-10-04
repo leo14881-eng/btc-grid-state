@@ -54,6 +54,7 @@ jobs:
             "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip",
             "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip",
           ]
+          failed=False
           for u in urls:
               req=urllib.request.Request(u,headers={"User-Agent":"stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com","Range":"bytes=0-3"})
               try:
@@ -61,7 +62,10 @@ jobs:
                       b=r.read(4)
                       print("SEC_BULK_OK",u,"status",r.status,"type",r.headers.get("Content-Type"),"length",r.headers.get("Content-Length"),"magic",b.hex())
               except Exception as e:
+                  failed=True
                   print("SEC_BULK_FAIL",u,type(e).__name__,str(e))
+          if failed:
+              raise SystemExit("SEC bulk archives unavailable from this runner")
           PY
       - name: Observe fundamentals (no strategy effect)
         timeout-minutes: 8
