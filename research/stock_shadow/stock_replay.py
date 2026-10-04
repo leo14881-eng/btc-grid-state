@@ -129,6 +129,9 @@ def main():
     out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","strategy_effect":False,
          "target_session":target,"exchange_session":{"date":session["date"],"open":str(session["open"]),"close":str(session["close"]),"source":session["source"]},"surge_threshold_pct":SURGE_PCT,"universe_discovered":len(symbols),"universe_with_daily_bars":len(daily),
          "large_movers":len(results),"pre_high_discovered":sum(x["discovered_before_high"] for x in results),
+         "actual_buy_before_high":sum(x["actual_buy_before_high"] for x in results),
+         "early_before_high":sum(bool(x["first_early_signal"] and x["high_at"] and x["first_early_signal"]["at"]<=x["high_at"]) for x in results),
+         "missed_before_high":sum(not x["discovered_before_high"] for x in results),
          "future_data_prohibited":True,"benchmark_daily_explicit":True,"future_leakage_detected":any(x["future_leakage_detected"] for x in results),"errors":errors,"discovery_errors":discovery_errors,"results":results}
     OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
     print(json.dumps({k:v for k,v in out.items() if k!="results"}))
