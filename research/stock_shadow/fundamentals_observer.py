@@ -299,17 +299,62 @@ def sec_submission(cik):
 def sec_companyfacts(cik):
     return _sec_json_with_readonly_fallback(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
 
+def sec_filing_text(cik, accession, primary_document):
+    if not accession or not primary_document: raise ValueError("filing_document_identity_missing")
+    acc=str(accession).replace("-","")
+    url=f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{primary_document}"
+    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"text/html,text/plain","Accept-Encoding":"identity"})
+    try:
+        with urllib.request.urlopen(req,timeout=25) as r: return r.read().decode("utf-8","replace"),"SEC_DIRECT"
+    except urllib.error.HTTPError as e:
+        if e.code not in (403,429): raise
+    # Read-only fallback for SEC edge blocks on GitHub-hosted runners.
+    proxy="https://r.jina.ai/"+url
+    with _proxy_rate_lock:
+        global _proxy_next_start
+        wait=max(0.0,_proxy_next_start-time.monotonic())
+        if wait: time.sleep(wait)
+        _proxy_next_start=time.monotonic()+1.0
+    req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-filing-observer/1.0","Accept":"text/plain"})
+    with urllib.request.urlopen(req,timeout=35) as r: return r.read().decode("utf-8","replace"),"SEC_VIA_READONLY_PROXY"
+
+def semantic_risk_evidence(reviewed_docs):
+    """Tri-state text evidence. VERIFIED_ABSENT means absent from the explicitly reviewed document scope only."""
+    patterns={
+      "going_concern":("going concern","substantial doubt about our ability","substantial doubt about the company"),
+      "bankruptcy_restructuring":("bankruptcy","chapter 11","restructuring support agreement","debtor-in-possession"),
+      "delisting_risk":("delisting","delist","noncompliance with the listing","listing deficiency"),
+      "material_8k_risk":("material definitive agreement","event of default","termination of a material definitive agreement",
+                          "bankruptcy or receivership","impairment","notice of delisting"),
+    }
+    if not reviewed_docs:
+        return {"material_8k_present":None,"going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,
+                "material_8k_risk":None,"semantic_review_status":"NOT_YET_TEXT_VERIFIED",
+                "semantic_risk_state":"UNKNOWN_PENDING_TEXT_REVIEW","reviewed_documents":[]}
+    joined="\n".join(str(x.get("text") or "").lower() for x in reviewed_docs)
+    forms=[str(x.get("form") or "") for x in reviewed_docs]
+    out={"material_8k_present":"VERIFIED_PRESENT" if any(x.startswith("8-K") for x in forms) else "VERIFIED_ABSENT"}
+    for key,needles in patterns.items():
+        scope=joined if key!="material_8k_risk" else "\n".join(str(x.get("text") or "").lower() for x in reviewed_docs if str(x.get("form") or "").startswith("8-K"))
+        out[key]="VERIFIED_PRESENT" if scope and any(n in scope for n in needles) else "VERIFIED_ABSENT"
+    out["semantic_review_status"]="TEXT_VERIFIED"
+    out["semantic_risk_state"]="VERIFIED_PRESENT" if any(out[k]=="VERIFIED_PRESENT" for k in patterns) else "VERIFIED_ABSENT"
+    out["reviewed_documents"]=[{k:x.get(k) for k in ("form","filing_date","accession","primary_document","transport")} for x in reviewed_docs]
+    return out
+
 def _fact_series(facts, concepts, units=("USD","shares")):
-    usgaap=(facts.get("facts") or {}).get("us-gaap") or {}
+    namespaces=[(facts.get("facts") or {}).get("us-gaap") or {},(facts.get("facts") or {}).get("ifrs-full") or {}]
     for concept in concepts:
-        node=usgaap.get(concept) or {}
+        node={}
+        for ns in namespaces:
+            if concept in ns: node=ns.get(concept) or {}; break
         unit_map=node.get("units") or {}
         rows=[]
         for unit in units:
             rows.extend(unit_map.get(unit) or [])
         if rows:
             # Prefer filed annual/quarterly facts; de-duplicate amended/repeated facts by end date.
-            good=[r for r in rows if r.get("end") and r.get("val") is not None and r.get("form") in {"10-K","10-Q","10-K/A","10-Q/A"}]
+            good=[r for r in rows if r.get("end") and r.get("val") is not None and r.get("form") in {"10-K","10-Q","10-K/A","10-Q/A","20-F","20-F/A","6-K","6-K/A"}]
             by_end={}
             for r in good:
                 prev=by_end.get(r["end"])
@@ -464,24 +509,34 @@ def main():
     ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("gap_refresh_at") or (companies.get(sym) or {}).get("updated_at") or ""))
     refresh_budget=4
     refresh_set=set(ranked[:refresh_budget])
+    # Semantic filing review rotates independently from financial gaps so complete financial evidence
+    # never prevents 10-K/10-Q/8-K/20-F/6-K text verification from eventually covering the cohort.
+    semantic_ranked=sorted(symbol_cik,key=lambda sym:str((companies.get(sym) or {}).get("semantic_refresh_at") or ""))
+    semantic_refresh_budget=4
+    semantic_refresh_set=set(semantic_ranked[:semantic_refresh_budget])
     facts_by_cik={}; subs_by_cik={}
     def fetch_sec_pair(item):
         sym,cik=item
-        facts=facts_t=None; errs=[]
-        try: facts,facts_t=sec_companyfacts(cik)
-        except Exception as e: errs.append({"symbol":sym,"stage":"COMPANYFACTS","type":type(e).__name__,"message":str(e)[:120]})
-        return sym,cik,facts,facts_t,errs
+        facts=facts_t=sub=sub_t=None; errs=[]
+        if sym in refresh_set:
+            try: facts,facts_t=sec_companyfacts(cik)
+            except Exception as e: errs.append({"symbol":sym,"stage":"COMPANYFACTS","type":type(e).__name__,"message":str(e)[:120]})
+        if sym in semantic_refresh_set:
+            try: sub,sub_t=sec_submission(cik)
+            except Exception as e: errs.append({"symbol":sym,"stage":"SUBMISSIONS","type":type(e).__name__,"message":str(e)[:120]})
+        return sym,cik,facts,facts_t,sub,sub_t,errs
     with ThreadPoolExecutor(max_workers=2) as ex:
-        futures=[ex.submit(fetch_sec_pair,(sym,symbol_cik[sym])) for sym in refresh_set]
+        futures=[ex.submit(fetch_sec_pair,(sym,symbol_cik[sym])) for sym in (refresh_set|semantic_refresh_set)]
         for fut in as_completed(futures):
-            sym,cik,facts,facts_t,errs=fut.result()
+            sym,cik,facts,facts_t,sub,sub_t,errs=fut.result()
             if facts is not None: facts_by_cik[cik]=(facts,facts_t)
+            if sub is not None: subs_by_cik[cik]=(sub,sub_t)
             errors.extend(errs)
-    subs_by_cik={}
     sec_transport={"provider":"FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL","attempted":True,
                    "refresh_budget":refresh_budget,"requested_symbols":len(refresh_set),
-                   "companyfacts_ok":len(facts_by_cik),"frames_matched_ciks":len(frames_by_cik),
-                   "fmp_matched_symbols":len(fmp_by_symbol)}
+                   "companyfacts_ok":len(facts_by_cik),"submissions_ok":len(subs_by_cik),
+                   "semantic_refresh_budget":semantic_refresh_budget,"semantic_requested_symbols":len(semantic_refresh_set),
+                   "frames_matched_ciks":len(frames_by_cik),"fmp_matched_symbols":len(fmp_by_symbol)}
     refreshed=0; fallback_requests=0
     for s,cik in symbol_cik.items():
         meta=ticker_map_data.get(s) or {}
@@ -505,19 +560,32 @@ def main():
                 continue
             recent=((sub or {}).get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
+            docs=recent.get("primaryDocument") or []
             latest=[]
-            for form,date,an in zip(forms,dates,acc):
-                if form in {"10-K","10-Q","8-K","10-K/A","10-Q/A","8-K/A"}:
-                    latest.append({"form":form,"filing_date":date,"accession":an})
+            for form,date,an,doc in zip(forms,dates,acc,docs):
+                if form in {"10-K","10-Q","8-K","10-K/A","10-Q/A","8-K/A","20-F","20-F/A","6-K","6-K/A"}:
+                    latest.append({"form":form,"filing_date":date,"accession":an,"primary_document":doc})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
             sec_ev=financial_evidence(facts) if facts is not None else None
             evidence=merge_financial_evidence(merge_financial_evidence(merge_financial_evidence(prior_ev,fmp_ev),frame_ev),sec_ev)
-            risk_flags=filing_risk_evidence(latest)
+            prior_risk=(companies.get(s) or {}).get("risk_evidence") or filing_risk_evidence([])
+            risk_flags=prior_risk
+            semantic_refresh_at=(companies.get(s) or {}).get("semantic_refresh_at")
+            if s in semantic_refresh_set and sub is not None:
+                reviewed=[]
+                for item in latest[:3]:
+                    try:
+                        text_body,text_transport=sec_filing_text(cik,item.get("accession"),item.get("primary_document"))
+                        reviewed.append({**item,"text":text_body,"transport":text_transport})
+                    except Exception as e:
+                        errors.append({"symbol":s,"stage":"FILING_TEXT","form":item.get("form"),"type":type(e).__name__,"message":str(e)[:120]})
+                risk_flags=semantic_risk_evidence(reviewed)
+                semantic_refresh_at=now()
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("FMP_BULK+SEC_XBRL_FRAMES" if fmp_ev and frame_ev else ("FMP_BULK" if fmp_ev else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")))),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
-                "recent_8k_count":len(risk_forms),"updated_at":now(),"gap_refresh_at":(now() if s in refresh_set else (companies.get(s) or {}).get("gap_refresh_at")),
+                "recent_8k_count":len(risk_forms),"updated_at":now(),"gap_refresh_at":(now() if s in refresh_set else (companies.get(s) or {}).get("gap_refresh_at")),"semantic_refresh_at":semantic_refresh_at,
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
                 "note":"Observation-only fundamentals evidence; no automatic BUY/ADD/SELL effect."}
             refreshed+=1
@@ -529,7 +597,9 @@ def main():
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
-         "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols)) else "PARTIAL","companies":companies}
+         "semantic_verified":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED"),
+         "semantic_pending":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")!="TEXT_VERIFIED"),
+         "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols) and all(((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED" for s in symbols)) else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
 
