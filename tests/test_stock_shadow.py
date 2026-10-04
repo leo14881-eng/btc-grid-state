@@ -352,3 +352,30 @@ def test_monitor_rejects_manual_reset_and_guards_off_session_continuity():
     assert "starting_positions" in src
     assert "off_session_position_count_changed" in src
     assert "off_session_event_count_changed" in src
+
+
+def test_forward_cohort_fingerprint_detects_same_count_symbol_replacement():
+    state={"positions":{
+      "AAA":{"opened_at":"x","tranches":[{"at":"x","price":10,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"}]},
+      "BBB":{"opened_at":"y","tranches":[{"at":"y","price":20,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"}]}
+    },"closed":[]}
+    events=[
+      {"type":"BUY","symbol":"AAA","at":"x","price":10,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"},
+      {"type":"BUY","symbol":"BBB","at":"y","price":20,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"}]
+    before=ss.continuity_fingerprint(state,events)
+    mutated={"positions":dict(state["positions"]),"closed":[]}
+    mutated["positions"].pop("BBB")
+    mutated["positions"]["CCC"]={"opened_at":"y","tranches":[{"at":"y","price":20,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"}]}
+    assert len(mutated["positions"])==len(state["positions"])
+    assert ss.continuity_fingerprint(mutated,events)!=before
+
+def test_monitor_forward_cohort_fingerprint_allows_quote_updates_but_detects_identity_change():
+    m=_load_position_monitor()
+    state={"positions":{"AAA":{"opened_at":"x","last_price":10,"tranches":[{"at":"x","price":10,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"}]}},"closed":[]}
+    events=[{"type":"BUY","symbol":"AAA","at":"x","price":10,"notional":1000,"reason":"SELECTIVE_ENTRY_V1"}]
+    before=m.continuity_fingerprint(state,events)
+    state["positions"]["AAA"]["last_price"]=11
+    state["positions"]["AAA"]["net_pnl_usdt"]=96
+    assert m.continuity_fingerprint(state,events)==before
+    state["positions"]["AAA"]["tranches"][0]["price"]=9
+    assert m.continuity_fingerprint(state,events)!=before
