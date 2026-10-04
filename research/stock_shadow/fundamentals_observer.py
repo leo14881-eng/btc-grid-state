@@ -285,19 +285,20 @@ def classify_evidence(ev, risk_flags):
     # Observation-only heuristic classification; never consumed by trading code.
     bad=sum(ev.get(k,{}).get("trend")=="DETERIORATING" for k in ("revenue","net_income","operating_cash_flow","free_cash_flow"))
     dilution=ev.get("share_dilution_pct_latest")
-    severe=any(risk_flags.get(k) is True for k in ("bankruptcy_restructuring","going_concern","delisting_risk"))
+    severe=any(risk_flags.get(k)=="VERIFIED_PRESENT" for k in ("bankruptcy_restructuring","going_concern","delisting_risk"))
     if severe: return "CRITICAL"
     if bad>=2 or (dilution is not None and dilution>=10): return "DETERIORATING"
-    if bad==1 or (dilution is not None and dilution>=5) or risk_flags.get("material_8k_present"): return "WATCH"
+    if bad==1 or (dilution is not None and dilution>=5) or risk_flags.get("material_8k_present")=="VERIFIED_PRESENT": return "WATCH"
     available=sum(bool(ev.get(k,{}).get("values")) for k in ("revenue","net_income","operating_cash_flow","cash","total_debt"))
     return "HEALTHY" if available>=3 else "UNKNOWN"
 
 def filing_risk_evidence(latest):
-    # Form presence is evidence, not semantic proof of a severe event. Text review can enrich these later.
-    return {"material_8k_present":any(x["form"].startswith("8-K") for x in latest),
-            # Unknown is intentional: absence of semantic filing-text verification is NOT evidence of absence.
-            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,"material_8k_risk":None,
-            "semantic_review_status":"NOT_YET_TEXT_VERIFIED",
+    # Tri-state evidence: metadata can verify form presence, but semantic risks remain unknown until filing text is reviewed.
+    has_metadata=bool(latest)
+    has_8k=any(x["form"].startswith("8-K") for x in latest)
+    return {"material_8k_present":"VERIFIED_PRESENT" if has_8k else ("VERIFIED_ABSENT" if has_metadata else "NOT_VERIFIED"),
+            "going_concern":"NOT_VERIFIED","bankruptcy_restructuring":"NOT_VERIFIED","delisting_risk":"NOT_VERIFIED",
+            "material_8k_risk":"NOT_VERIFIED","semantic_review_status":"NOT_YET_TEXT_VERIFIED",
             "semantic_risk_state":"UNKNOWN_PENDING_TEXT_REVIEW"}
 
 def main():
