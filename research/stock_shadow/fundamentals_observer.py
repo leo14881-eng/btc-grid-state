@@ -13,6 +13,8 @@ BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfa
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
 FRAME_REQUEST_BUDGET=64
+MARKET_BATCH_SCHEMA_VERSION=2
+PROXY_START_INTERVAL_SECONDS=2.0
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
@@ -31,7 +33,7 @@ def proxy_json(url):
     with _proxy_rate_lock:
         wait=max(0.0,_proxy_next_start-time.monotonic())
         if wait: time.sleep(wait)
-        _proxy_next_start=time.monotonic()+1.0
+        _proxy_next_start=time.monotonic()+PROXY_START_INTERVAL_SECONDS
     proxy="https://r.jina.ai/"+url
     req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-fundamental-observer/1.0","Accept":"text/plain"})
     with urllib.request.urlopen(req,timeout=35) as r: raw=r.read().decode("utf-8","replace").strip()
@@ -167,6 +169,9 @@ def frame_evidence_by_cik():
       # Foreign private issuers such as XP can report IFRS rather than US-GAAP.
       ("revenue","ifrs-full","Revenue","USD",["CY2024","CY2025"]),
       ("net_income","ifrs-full","ProfitLoss","USD",["CY2024","CY2025"]),
+      ("operating_cash_flow","ifrs-full","CashFlowsFromUsedInOperatingActivities","USD",["CY2024","CY2025"]),
+      ("cash","ifrs-full","CashAndCashEquivalents","USD",["CY2024I","CY2025I"]),
+      ("total_debt","ifrs-full","Borrowings","USD",["CY2024I","CY2025I"]),
     ]
     raw={}; transport=set(); request_errors=[]
     all_tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
@@ -381,9 +386,9 @@ def financial_evidence(facts):
     specs={
       "revenue":(["RevenueFromContractWithCustomerExcludingAssessedTax","Revenues","SalesRevenueNet"],("USD",)),
       "net_income":(["NetIncomeLoss","ProfitLoss"],("USD",)),
-      "operating_cash_flow":(["NetCashProvidedByUsedInOperatingActivities"],("USD",)),
-      "cash":(["CashAndCashEquivalentsAtCarryingValue","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],("USD",)),
-      "total_debt":(["LongTermDebtAndFinanceLeaseObligationsCurrent","LongTermDebtCurrent","LongTermDebt"],("USD",)),
+      "operating_cash_flow":(["NetCashProvidedByUsedInOperatingActivities","CashFlowsFromUsedInOperatingActivities"],("USD",)),
+      "cash":(["CashAndCashEquivalentsAtCarryingValue","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents","CashAndCashEquivalents"],("USD",)),
+      "total_debt":(["LongTermDebtAndFinanceLeaseObligationsCurrent","LongTermDebtCurrent","LongTermDebt","Borrowings","LongtermBorrowings"],("USD",)),
       "shares":(["CommonStocksIncludingAdditionalPaidInCapitalMember","CommonStockSharesOutstanding","EntityCommonStockSharesOutstanding"],("shares",)),
     }
     out={}
@@ -472,6 +477,8 @@ def main():
             batch_due=True
     # Migration/acceptance rule: a fresh SEC Frames cache must not suppress the first real FMP bulk run.
     if not fmp_refreshed_at:
+        batch_due=True
+    if old.get("market_batch_schema_version") != MARKET_BATCH_SCHEMA_VERSION:
         batch_due=True
     market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
@@ -593,7 +600,7 @@ def main():
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
     complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
     pending_symbols=[s for s in symbols if not evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {})]
-    out={"updated_at":now(),"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
+    out={"updated_at":now(),"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
