@@ -21,14 +21,15 @@ concurrency:
 jobs:
   shadow:
     runs-on: ubuntu-latest
-    env:
-      STOCK_SHADOW_SOURCE_COMMIT: ${{ github.sha }}
-      STOCK_SHADOW_RUN_ID: ${{ github.run_id }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: main
+      - name: Bind execution version
+        run: |
+          echo "STOCK_SHADOW_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "STOCK_SHADOW_RUN_ID=${{ github.run_id }}" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
