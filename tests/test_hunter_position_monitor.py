@@ -81,7 +81,7 @@ class ClosedOpportunityMonitorTests(unittest.TestCase):
   self.assertEqual(m.assets(states),["CLOSED_PENDING","OPEN"])
 
  def test_closed_observation_is_updated_without_creating_trade(self):
-  state,market,review,liq,supply=self.fixture(price=120)
+  state,market,review,liq,supply=PositionMonitorTests().fixture(price=120)
   pos=state["open_positions"].pop()
   pos.update({"closed_at_utc":"2026-10-05T01:00:00+00:00","exit_reference_price":103.0,
               "net_return_pct":2.0,"holding_mfe_pct":5.0,"holding_peak_price":105.0,
