@@ -92,19 +92,27 @@ def _parse_price(v):
     except Exception: return None
 
 def alpaca_snapshot_quotes(symbols):
-    """Batch latest SIP trades for held symbols; no Yahoo/Nasdaq fallback."""
+    """Batch delayed SIP 5m bars for all held symbols using maximum practical GET batches."""
     if not symbols: return {},[],0,0
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
     if not key or not secret: return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0,0
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow-position-monitor/3.0"}
     prices={}; errors=[]; requests=0
-    # Historical SIP latest-trades is entitlement-safe outside the 15-minute real-time window.
-    # Use latest bars with an end delayed 20m; during market hours this remains near-real-time enough
-    # for the 5m shadow monitor without requiring a paid real-time subscription.
     end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=20)
     start=end-__import__("datetime").timedelta(days=3)
-    for i in range(0,len(symbols),BATCH_SIZE):
-        batch=symbols[i:i+BATCH_SIZE]
+    batches=[]; batch=[]
+    for sym in symbols:
+        candidate=batch+[sym]
+        probe={"symbols":",".join(s.replace("-",".") for s in candidate),"timeframe":"5Min",
+               "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
+               "limit":10000,"feed":"sip","adjustment":"all"}
+        target="/v2/stocks/bars?"+urllib.parse.urlencode(probe)
+        if batch and len(target)>MAX_REQUEST_TARGET_CHARS:
+            batches.append(batch); batch=[sym]
+        else:
+            batch=candidate
+    if batch: batches.append(batch)
+    for batch_index,batch in enumerate(batches):
         params={"symbols":",".join(s.replace("-",".") for s in batch),"timeframe":"5Min",
                 "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
                 "limit":10000,"feed":"sip","adjustment":"all"}
@@ -113,6 +121,7 @@ def alpaca_snapshot_quotes(symbols):
             latest={}
             while True:
                 if token: params["page_token"]=token
+                else: params.pop("page_token",None)
                 req=urllib.request.Request("https://data.alpaca.markets/v2/stocks/bars?"+urllib.parse.urlencode(params),headers=headers)
                 with urllib.request.urlopen(req,timeout=35) as r: body=json.load(r)
                 requests+=1
