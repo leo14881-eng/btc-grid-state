@@ -320,7 +320,17 @@ def main():
         # This full scan uses daily bars that may be stale intraday/weekends.
         exit_reason=None
         if ps["state"]=="BROKEN":
-            exit_reason="STRUCTURE_BROKEN_V3"
+            if r > 0:
+                exit_reason="STRUCTURE_BROKEN_PROFIT_EXIT_V3"
+                p.pop("rebound_exit_pending_v3",None)
+            else:
+                # Hard rule: never realize a loss into a breakdown. Wait for a rebound.
+                p["rebound_exit_pending_v3"]={"armed_at":p.get("rebound_exit_pending_v3",{}).get("armed_at",now()),
+                    "reason":"FUNDAMENTAL_OR_STRUCTURE_DETERIORATION","lowest_net_return_pct":round(min(r,(p.get("rebound_exit_pending_v3") or {}).get("lowest_net_return_pct",r)),6)}
+        elif p.get("rebound_exit_pending_v3"):
+            # Rebound exits are profit-only too. A losing rebound remains pending.
+            if r > 0:
+                exit_reason="REBOUND_PROFIT_EXIT_AFTER_DETERIORATION_V3"
         if exit_reason:
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
             closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":exit_reason,

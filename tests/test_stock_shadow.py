@@ -120,10 +120,19 @@ def test_monitor_executes_v3_profit_protection_sell():
     assert '"source":"POSITION_MONITOR_5M"' in src
     assert "profit_protection_signal" in src
 
-def test_profit_protection_survives_gap_through_zero():
+def test_profit_protection_never_sells_at_a_loss():
     import inspect
-    assert "r>0 and r<=floor" not in inspect.getsource(ss.main)
-    assert "r>0 and r<=floor" not in inspect.getsource(_load_position_monitor().main)
+    monitor_src=inspect.getsource(_load_position_monitor().main)
+    assert "r>0 and r<=floor" in monitor_src
+    assert 'if p["profit_protection_signal"]' in monitor_src
+
+def test_broken_position_waits_for_profitable_rebound_exit():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert 'if r > 0:' in src
+    assert '"rebound_exit_pending_v3"' in src
+    assert '"REBOUND_PROFIT_EXIT_AFTER_DETERIORATION_V3"' in src
+    assert '"STRUCTURE_BROKEN_PROFIT_EXIT_V3"' in src
 
 def test_position_state_separates_market_strength_from_trade_drawdown():
     market={"state":"STRONG"}

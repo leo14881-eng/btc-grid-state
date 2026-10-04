@@ -107,7 +107,7 @@ def main(force=False):
         # as the full lifecycle. It never discovers BUY/ADD candidates.
         floor=profit_floor_net_pct(mfe)
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
-        p["profit_protection_signal"]=bool(floor is not None and r<=floor)
+        p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
         p["profit_giveback_pct_points"]=round(giveback,6)
         if p["profit_protection_signal"]:
             closed_at=now()
