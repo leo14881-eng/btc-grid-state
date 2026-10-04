@@ -93,21 +93,7 @@ jobs:
               [ -s "/tmp/$(basename "$p")" ] || { echo "POST_PUSH_EMPTY $p"; return 1; }
               python -c "import json,sys; json.load(open(sys.argv[1]))" "/tmp/$(basename "$p")" || return 1
             done
-            python - <<'PY'
-import json
-v1=json.load(open('/tmp/hunter-shadow-portfolio.json'))
-v2=json.load(open('/tmp/hunter-shadow-v2-portfolio.json'))
-s1=json.load(open('/tmp/hunter-shadow-summary.json'))
-s2=json.load(open('/tmp/hunter-shadow-v2-summary.json'))
-m=json.load(open('/tmp/hunter-position-monitor.json'))
-lanes={x.get('lane'):x for x in m.get('results') or []}
-assert lanes['SHADOW_V1']['open']==len(v1.get('open_positions') or [])
-assert lanes['SHADOW_V2']['open']==len(v2.get('open_positions') or [])
-assert s1.get('open_positions')==len(v1.get('open_positions') or []) and s1.get('closed_positions')==len(v1.get('closed_positions') or [])
-assert s2.get('open_positions')==len(v2.get('open_positions') or []) and s2.get('closed_positions')==len(v2.get('closed_positions') or [])
-assert s1.get('as_of_utc')==v1.get('updated_at_utc') and s2.get('as_of_utc')==v2.get('updated_at_utc')
-print('POST_PUSH_SHADOW_STATE_VERIFIED',lanes['SHADOW_V1']['open'],lanes['SHADOW_V2']['open'])
-PY
+            python -c "import json; v1=json.load(open('/tmp/hunter-shadow-portfolio.json')); v2=json.load(open('/tmp/hunter-shadow-v2-portfolio.json')); s1=json.load(open('/tmp/hunter-shadow-summary.json')); s2=json.load(open('/tmp/hunter-shadow-v2-summary.json')); m=json.load(open('/tmp/hunter-position-monitor.json')); lanes={x.get('lane'):x for x in m.get('results') or []}; assert lanes['SHADOW_V1']['open']==len(v1.get('open_positions') or []); assert lanes['SHADOW_V2']['open']==len(v2.get('open_positions') or []); assert s1.get('open_positions')==len(v1.get('open_positions') or []) and s1.get('closed_positions')==len(v1.get('closed_positions') or []); assert s2.get('open_positions')==len(v2.get('open_positions') or []) and s2.get('closed_positions')==len(v2.get('closed_positions') or []); assert s1.get('as_of_utc')==v1.get('updated_at_utc') and s2.get('as_of_utc')==v2.get('updated_at_utc'); print('POST_PUSH_SHADOW_STATE_VERIFIED',lanes['SHADOW_V1']['open'],lanes['SHADOW_V2']['open'])"
           }
           if git diff --cached --quiet; then
             echo NO_POSITION_STATE_CHANGE
@@ -115,8 +101,6 @@ PY
             exit $?
           fi
           git commit -m 'state: five-minute Hunter position monitor'
-          # Fail closed on a concurrent writer. Never rebase a stale computed JSON state
-          # onto a newer main revision: a fresh monitor run must recompute from that revision.
           git fetch origin main
           [ "$(git rev-parse HEAD^)" = "$(git rev-parse origin/main)" ] || { echo "SHADOW_STATE_REVISION_CHANGED_BEFORE_PUSH"; exit 1; }
           git push origin HEAD:main
