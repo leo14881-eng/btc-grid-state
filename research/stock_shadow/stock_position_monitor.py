@@ -11,6 +11,8 @@ FEE_RATE=0.002; BATCH_SIZE=40; MAX_BATCHES=12
 ARM_NET_PCT=1.0
 PROFIT_FLOOR_NET_PCT=0.10
 PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
+SOURCE_COMMIT=os.getenv("STOCK_SHADOW_SOURCE_COMMIT","LOCAL")
+RUN_ID=os.getenv("STOCK_SHADOW_RUN_ID","LOCAL")
 NY=ZoneInfo("America/New_York")
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -18,7 +20,20 @@ def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
     except Exception: return d
 def save(p,o):
-    p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
+    p.parent.mkdir(parents=True,exist_ok=True)
+    tmp=p.with_suffix(p.suffix+".tmp")
+    tmp.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
+    tmp.replace(p)
+
+def validate_ledger(state, events):
+    positions=state.get("positions",{})
+    if any(len((p or {}).get("tranches",[]))>5 for p in positions.values()):
+        raise RuntimeError("ledger_invariant:max_tranches_exceeded")
+    if any(float(x.get("realized_net_pnl_usdt",0))<=0 for x in state.get("closed",[])):
+        raise RuntimeError("ledger_invariant:losing_sell_present")
+    if any(x.get("type")=="SELL" and float(x.get("net_pnl_usdt",0))<=0 for x in events):
+        raise RuntimeError("ledger_invariant:nonpositive_sell_event")
+    return True
 def _alpaca_exchange_session(ts=None):
     t=(ts or datetime.now(timezone.utc)).astimezone(NY)
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
@@ -103,7 +118,7 @@ def main(force=False):
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
     positions=state.get("positions",{}); symbols=sorted(positions)
     if not force and not market_open():
-        save(HEALTH,{"updated_at":now(),"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
+        save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
     prices,errors,requests=alpaca_snapshot_quotes(symbols)
     trade_actions_enabled=market_open()
@@ -144,6 +159,8 @@ def main(force=False):
                 "USER_ALERT_REQUIRED":True,"source":"POSITION_MONITOR_5M"})
             sells+=1
     state["updated_at"]=now(); state["simulation_only"]=True
+    state["source_commit"]=SOURCE_COMMIT; state["run_id"]=RUN_ID
+    validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
     save(HEALTH,{"updated_at":now(),"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"batch_size":BATCH_SIZE,"errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
