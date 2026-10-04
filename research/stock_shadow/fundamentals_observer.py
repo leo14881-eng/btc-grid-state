@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
 # FINAL_ACCEPTANCE_20261004
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +22,16 @@ def get(url):
     req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Accept-Encoding":"identity"})
     with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
 
+_proxy_rate_lock=threading.Lock()
+_proxy_next_start=0.0
+
 def proxy_json(url):
+    # Global pacing controls request START rate while allowing network I/O to overlap.
+    global _proxy_next_start
+    with _proxy_rate_lock:
+        wait=max(0.0,_proxy_next_start-time.monotonic())
+        if wait: time.sleep(wait)
+        _proxy_next_start=time.monotonic()+1.0
     proxy="https://r.jina.ai/"+url
     req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-fundamental-observer/1.0","Accept":"text/plain"})
     with urllib.request.urlopen(req,timeout=35) as r: raw=r.read().decode("utf-8","replace").strip()
@@ -156,8 +165,6 @@ def frame_evidence_by_cik():
     tasks=all_tasks
     def fetch_one(task):
         key,tax,concept,unit,p=task
-        # GitHub-hosted runner may need the read-only proxy; pace market-wide calls to avoid proxy 429.
-        time.sleep(0.8)
         last=None
         for attempt in range(3):
             try:
@@ -172,7 +179,7 @@ def frame_evidence_by_cik():
         raise last
     # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
     # below workflow timeout without creating per-symbol request storms.
-    with ThreadPoolExecutor(max_workers=1) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         futures=[ex.submit(fetch_one,t) for t in tasks]
         for fut in as_completed(futures):
             try:
@@ -412,11 +419,10 @@ def main():
     def fetch_sec_pair(item):
         sym,cik=item
         facts=facts_t=None; sub=sub_t=None; errs=[]
-        time.sleep(1.0)
         try: facts,facts_t=sec_companyfacts(cik)
         except Exception as e: errs.append({"symbol":sym,"stage":"COMPANYFACTS","type":type(e).__name__,"message":str(e)[:120]})
         return sym,cik,facts,facts_t,None,None,errs
-    with ThreadPoolExecutor(max_workers=1) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures=[ex.submit(fetch_sec_pair,(sym,symbol_cik[sym])) for sym in refresh_set]
         for fut in as_completed(futures):
             sym,cik,facts,facts_t,sub,sub_t,errs=fut.result()
