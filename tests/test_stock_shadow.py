@@ -423,3 +423,20 @@ def test_fundamentals_main_migrates_legacy_unverified_false_flags():
     assert 'UNKNOWN_PENDING_TEXT_REVIEW' in src
 
 
+
+
+def test_fmp_bulk_fundamentals_provider_is_observation_only(monkeypatch):
+    m=_load_fundamentals_observer()
+    def fake(endpoint,year,period,key):
+        if endpoint=="income-statement-bulk":
+            return [{"symbol":"AAA","date":f"{year}-01-01","filingDate":f"{year}-02-01","period":period,"revenue":"100","netIncome":"10","weightedAverageShsOut":"50"}]
+        if endpoint=="balance-sheet-statement-bulk":
+            return [{"symbol":"AAA","date":f"{year}-01-01","filingDate":f"{year}-02-01","period":period,"cashAndCashEquivalents":"20","totalDebt":"5"}]
+        return [{"symbol":"AAA","date":f"{year}-01-01","filingDate":f"{year}-02-01","period":period,"operatingCashFlow":"15","freeCashFlow":"12"}]
+    monkeypatch.setattr(m,"fmp_bulk_csv",fake)
+    out,status=m.fmp_bulk_evidence(["AAA"],"test-key")
+    assert status["provider"]=="FMP_BULK"
+    assert status["matched_symbols"]==1
+    assert m.evidence_sufficient(out["AAA"])
+    assert out["AAA"]["revenue"]["concept"]=="FMP_NORMALIZED"
+    assert "strategy" not in status
