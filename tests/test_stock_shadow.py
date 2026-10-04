@@ -314,3 +314,5 @@ def test_result_writers_are_atomic_and_versioned():
     assert "SOURCE_COMMIT" in inspect.getsource(pm.main)
 
 # CLEAN_V3_BASELINE_REARMED_20261004: workflow trigger after audited state reset.
+
+# SERIALIZED_STATE_ACCEPTANCE_20261004
