@@ -341,3 +341,14 @@ def test_off_session_main_has_state_continuity_guard():
     assert "off_session_position_count_changed" in src
     assert "off_session_event_count_changed" in src
     assert "off_session_closed_count_changed" in src
+
+
+def test_monitor_rejects_manual_reset_and_guards_off_session_continuity():
+    import inspect
+    m=_load_position_monitor()
+    with __import__("pytest").raises(RuntimeError, match="manual_reset_marker_present"):
+        m.validate_ledger({"positions":{},"closed":[],"reset_reason":"BAD_RESET"},[])
+    src=inspect.getsource(m.main)
+    assert "starting_positions" in src
+    assert "off_session_position_count_changed" in src
+    assert "off_session_event_count_changed" in src
