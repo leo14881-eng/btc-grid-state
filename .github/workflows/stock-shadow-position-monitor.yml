@@ -66,12 +66,30 @@ jobs:
           fi
           git config user.name "stock-shadow-bot"
           git config user.email "stock-shadow-bot@users.noreply.github.com"
-          git add research/results/stock-shadow/
+          # Preserve only files actually produced by this monitor, then rebase the result
+          # write on the latest main. This prevents portfolio-v1.json conflicts with a
+          # just-finished full Stock Shadow run without overwriting unrelated fresh results.
+          mapfile -t changed < <(git diff --name-only -- research/results/stock-shadow/)
+          if [ "${#changed[@]}" -eq 0 ]; then exit 0; fi
+          rm -rf /tmp/stock-shadow-monitor-results
+          mkdir -p /tmp/stock-shadow-monitor-results
+          for file in "${changed[@]}"; do
+            mkdir -p "/tmp/stock-shadow-monitor-results/$(dirname "$file")"
+            cp "$file" "/tmp/stock-shadow-monitor-results/$file"
+          done
+          git reset --hard origin/main
+          for file in "${changed[@]}"; do
+            mkdir -p "$(dirname "$file")"
+            cp "/tmp/stock-shadow-monitor-results/$file" "$file"
+          done
+          git add "${changed[@]}"
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "data: update stock shadow position monitor"
           for attempt in 1 2 3; do
-            git pull --rebase origin main
             if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git reset --soft origin/main
+            git commit --amend --no-edit
             sleep $((attempt * 2))
           done
           echo "Failed to persist Stock Shadow monitor results after retries"
