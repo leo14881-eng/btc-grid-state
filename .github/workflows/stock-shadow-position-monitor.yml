@@ -35,6 +35,9 @@ jobs:
       - name: Test isolated Stock Shadow
         run: python -m pytest -q tests/test_stock_shadow.py
       - name: Position-only 5m monitor
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
             python research/stock_shadow/stock_position_monitor.py
