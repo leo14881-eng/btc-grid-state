@@ -389,9 +389,9 @@ def test_unverified_semantic_risks_are_unknown_not_false():
     spec=importlib.util.spec_from_file_location("fundamentals_observer_test",path)
     mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     r=mod.filing_risk_evidence([])
-    assert r["going_concern"]=="NOT_VERIFIED"
-    assert r["bankruptcy_restructuring"]=="NOT_VERIFIED"
-    assert r["delisting_risk"]=="NOT_VERIFIED"
+    assert r["going_concern"] is None
+    assert r["bankruptcy_restructuring"] is None
+    assert r["delisting_risk"] is None
     assert r["semantic_risk_state"]=="UNKNOWN_PENDING_TEXT_REVIEW"
     assert r["semantic_review_status"]=="NOT_YET_TEXT_VERIFIED"
 
@@ -410,7 +410,7 @@ def test_unverified_filing_risks_are_unknown_not_false():
     assert r["going_concern"] is None
     assert r["bankruptcy_restructuring"] is None
     assert r["delisting_risk"] is None
-    assert r["material_8k_risk"]=="NOT_VERIFIED"
+    assert r["material_8k_risk"] is None
     assert r["semantic_risk_state"]=="UNKNOWN_PENDING_TEXT_REVIEW"
     assert m.classify_evidence({},r)=="WATCH"
 
