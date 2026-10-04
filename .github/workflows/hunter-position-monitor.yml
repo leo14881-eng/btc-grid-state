@@ -11,6 +11,9 @@ on:
       - 'tests/test_hunter_shadow_trader_v2.py'
       - '.github/workflows/hunter-position-monitor.yml'
       - '.github/hunter-position-monitor-trigger'
+  workflow_run:
+    workflows: ['Hunter Potential Research Pipeline']
+    types: [completed]
   schedule:
     - cron: '*/5 * * * *'
 permissions:
@@ -20,6 +23,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   monitor:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -50,6 +54,13 @@ jobs:
               assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           m=json.load(open('research/results/hunter-position-monitor.json'))
           assert m.get('batch_endpoint')=='/api/v3/ticker/24hr' or m.get('status')=='NO_OPEN_POSITIONS'
+          lanes={x.get('lane'):x for x in m.get('results') or []}
+          for lane,p in [('SHADOW_V1','research/results/hunter-shadow-portfolio.json'),('SHADOW_V2','research/results/hunter-shadow-v2-portfolio.json')]:
+              raw=open(p).read().strip()
+              if not raw: continue
+              d=json.loads(raw)
+              assert lane in lanes, f'MONITOR_LANE_MISSING {lane}'
+              assert int(lanes[lane].get('open') or 0)==len(d.get('open_positions') or []), f'MONITOR_OPEN_MISMATCH {lane}'
           print('FAST_POSITION_MONITOR_OK')
           PY
       - name: Persist monitored shadow state
