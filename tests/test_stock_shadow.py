@@ -494,3 +494,12 @@ def test_replay_reports_early_actual_buy_and_missed_gates():
     assert '"remaining_upside_after_early_pct"' in src
     assert '"missed_gate_reasons"' in src
     assert 'e.get("type")=="BUY"' in src
+
+
+def test_fmp_first_real_refresh_cannot_be_hidden_by_frames_cache():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m.main)
+    assert 'fmp_refreshed_at=old.get("fmp_refreshed_at")' in src
+    assert "if not fmp_refreshed_at:" in src
+    assert "fmp_refreshed_at=now()" in src
