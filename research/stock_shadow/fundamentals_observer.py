@@ -261,13 +261,18 @@ def resolve_cik_efts(symbol):
             if ciks: return int(str(ciks[0]).lstrip("0") or "0")
     return None
 
+def _sec_json_with_readonly_fallback(url):
+    try:
+        return get(url),"SEC_DIRECT"
+    except urllib.error.HTTPError as e:
+        if e.code not in (403,429): raise
+        return proxy_json(url),"SEC_VIA_READONLY_PROXY"
+
 def sec_submission(cik):
-    url=f"https://data.sec.gov/submissions/CIK{cik:010d}.json"
-    return get(url),"SEC_DIRECT"
+    return _sec_json_with_readonly_fallback(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
 
 def sec_companyfacts(cik):
-    url=f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
-    return get(url),"SEC_DIRECT"
+    return _sec_json_with_readonly_fallback(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
 
 def _fact_series(facts, concepts, units=("USD","shares")):
     usgaap=(facts.get("facts") or {}).get("us-gaap") or {}
