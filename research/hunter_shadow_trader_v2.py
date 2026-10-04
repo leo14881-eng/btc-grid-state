@@ -274,6 +274,9 @@ def initial_buy_price(pos):
 def capture_ratio(realized,mfe):
  r=finite(realized);m=finite(mfe)
  if r is None or m is None or m<=0:return None
+ # Profit capture is a [0,+inf) research ratio: a losing/breakeven exit captured
+ # none of a positive opportunity. Preserve the loss separately in net_return_pct.
+ if r<=0:return 0.0
  return round(r/m,6)
 
 def ensure_opportunity_observation(pos,p=None,now=None,provenance="LIVE_OBSERVATION"):
