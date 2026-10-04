@@ -522,3 +522,23 @@ def test_replay_cutoff_excludes_post_high_bars_from_decisions():
     m=_load_replay(); fn=inspect.getsource(m.chronological_trace)
     assert 'if cutoff_at and bar["t"]>cutoff_at: break' in fn
     assert fn.index('if cutoff_at and bar["t"]>cutoff_at: break') < fn.index('seen.append(bar)')
+
+
+def test_replay_excludes_pre_and_post_market_using_exchange_calendar():
+    from datetime import time
+    m=_load_replay()
+    session={"date":"2026-10-02","open":time(9,30),"close":time(16,0),"source":"TEST"}
+    bars=[
+      {"t":"2026-10-02T12:00:00Z","c":1},  # 08:00 NY, premarket
+      {"t":"2026-10-02T13:30:00Z","c":2},  # 09:30 NY
+      {"t":"2026-10-02T19:55:00Z","c":3},  # 15:55 NY
+      {"t":"2026-10-02T20:00:00Z","c":4},  # 16:00 NY, post-session
+    ]
+    kept=m.regular_session_bars(bars,session)
+    assert [x["c"] for x in kept]==[2,3]
+
+def test_replay_uses_dynamic_exchange_calendar_not_hardcoded_weekday_hours():
+    import inspect
+    m=_load_replay(); src=inspect.getsource(m.main)
+    assert "ss._alpaca_exchange_session" in src
+    assert '"exchange_session"' in src
