@@ -421,7 +421,7 @@ def stock_universe():
                 if rows:
                     try:
                         first_dt=datetime.fromisoformat(str(rows[0].get("t") or "").replace("Z","+00:00"))
-                        classification=("NEW_LISTING_INSUFFICIENT_HISTORY" if (end-first_dt).days<40 else "SOURCE_HISTORY_GAP")
+                        classification=("RECENT_SOURCE_HISTORY_POSSIBLE_NEW_LISTING" if (end-first_dt).days<40 else "SOURCE_HISTORY_GAP")
                     except Exception: classification="SOURCE_HISTORY_GAP"
                 else: classification="SOURCE_HISTORY_GAP"
             failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_DAILY_CACHE","history_gap_classification":classification}})
@@ -549,8 +549,8 @@ def main():
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
-    "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":discovery.get("api_usage"),
-    "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in ("NEW_LISTING_INSUFFICIENT_HISTORY","SOURCE_HISTORY_GAP")},
+    "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":json.loads(json.dumps(API_USAGE)),
+    "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in ("RECENT_SOURCE_HISTORY_POSSIBLE_NEW_LISTING","SOURCE_HISTORY_GAP")},
     "failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
