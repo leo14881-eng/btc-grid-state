@@ -271,15 +271,17 @@ def test_severe_risk_evidence_can_flag_critical_without_strategy_effect():
     assert m.classify_evidence({},{"bankruptcy_restructuring":"VERIFIED_PRESENT"})=="CRITICAL"
 
 
-def test_fundamentals_hourly_uses_bounded_sec_per_company_json_not_multigb_bulk():
+def test_fundamentals_hourly_uses_frames_then_bounded_sec_json_not_multigb_bulk():
     import inspect
     m=_load_fundamentals_observer()
     src=inspect.getsource(m.main)
     assert "download_bulk_zip(BULK_COMPANYFACTS)" not in src
     assert "download_bulk_zip(BULK_SUBMISSIONS)" not in src
+    assert "frame_evidence_by_cik()" in src
     assert "sec_companyfacts" in src and "sec_submission" in src
     assert "refresh_budget=24" in src
     assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
+    assert "SEC_FRAMES_PLUS_BOUNDED_PER_COMPANY_JSON" in src
     assert '"evidence_complete"' in src and '"evidence_pending"' in src
 
 def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
