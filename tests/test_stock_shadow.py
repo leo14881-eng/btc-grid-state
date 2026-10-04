@@ -105,6 +105,11 @@ def test_position_monitor_parses_public_snapshot_price():
     m=_load_position_monitor()
     assert m._parse_price("$123.45") == 123.45
     assert m._parse_price("N/A") is None
+    import inspect
+    src=inspect.getsource(m.alpaca_snapshot_quotes)
+    assert "data.alpaca.markets" in src
+    assert "query1.finance.yahoo.com" not in src
+    assert "api.nasdaq.com" not in src
 
 def test_position_monitor_market_hours_gate():
     m=_load_position_monitor()
@@ -198,3 +203,15 @@ def test_hourly_daily_bar_engine_does_not_execute_intraday_profit_sell():
     src=inspect.getsource(ss.main)
     assert 'if p["profit_protection_signal"]' not in src
     assert 'exit_reason="STRUCTURE_BROKEN_PROFIT_EXIT_V3"' in src
+
+
+def test_trade_actions_are_gated_to_us_regular_session():
+    from datetime import datetime, timezone
+    assert ss.trade_action_window(datetime(2026,10,5,14,0,tzinfo=timezone.utc)) is True
+    assert ss.trade_action_window(datetime(2026,10,4,14,0,tzinfo=timezone.utc)) is False
+
+def test_main_benchmarks_no_longer_use_yahoo():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert '_alpaca_batch_bars(["SPY","QQQ"])' in src
+    assert "_stock_snapshot(idx)" not in src
