@@ -22,6 +22,16 @@ def alpaca(symbols,timeframe,start,end):
         token=body.get("next_page_token")
         if not token: return out
 
+def regular_session_bars(bars, session):
+    """Keep only bars inside the exchange-calendar session; excludes pre/post-market data."""
+    if not session: raise RuntimeError("replay_exchange_calendar_unavailable")
+    out=[]
+    for bar in bars:
+        t=datetime.fromisoformat(str(bar["t"]).replace("Z","+00:00")).astimezone(ss.NY)
+        if t.date().isoformat()==session["date"] and session["open"]<=t.time()<session["close"]:
+            out.append(bar)
+    return out
+
 def partial_day(bars):
     return {"t":bars[-1]["t"],"o":bars[0]["o"],"h":max(x["h"] for x in bars),"l":min(x["l"] for x in bars),
             "c":bars[-1]["c"],"v":sum(float(x.get("v") or 0) for x in bars)}
@@ -80,10 +90,13 @@ def main():
             if gain>=SURGE_PCT: movers.append((sym,gain,day))
     movers.sort(key=lambda x:x[1],reverse=True)
     d0=datetime.fromisoformat(target+"T00:00:00+00:00"); d1=d0+timedelta(days=1)
+    session=ss._alpaca_exchange_session(d0+timedelta(hours=16))
+    if not session or session.get("date")!=target: raise RuntimeError("replay_exchange_calendar_unavailable")
     wanted=list(dict.fromkeys([x[0] for x in movers]+["SPY","QQQ"])); intra={}
     for i in range(0,len(wanted),200):
         try: intra.update(alpaca(wanted[i:i+200],"5Min",d0.isoformat().replace("+00:00","Z"),d1.isoformat().replace("+00:00","Z")))
         except Exception as e: errors.append({"stage":"INTRADAY","batch_start":i,"type":type(e).__name__,"message":str(e)[:120]})
+    intra={sym:regular_session_bars(rows,session) for sym,rows in intra.items()}
     try: trades=json.loads(TRADES.read_text()) if TRADES.exists() else []
     except Exception: trades=[]
     results=[]
@@ -114,7 +127,7 @@ def main():
                         "future_leakage_detected":False,
                         "miss_reason":None if before else "NO_PRE_HIGH_ENTRY_SIGNAL"})
     out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","strategy_effect":False,
-         "target_session":target,"surge_threshold_pct":SURGE_PCT,"universe_discovered":len(symbols),"universe_with_daily_bars":len(daily),
+         "target_session":target,"exchange_session":{"date":session["date"],"open":str(session["open"]),"close":str(session["close"]),"source":session["source"]},"surge_threshold_pct":SURGE_PCT,"universe_discovered":len(symbols),"universe_with_daily_bars":len(daily),
          "large_movers":len(results),"pre_high_discovered":sum(x["discovered_before_high"] for x in results),
          "future_data_prohibited":True,"benchmark_daily_explicit":True,"future_leakage_detected":any(x["future_leakage_detected"] for x in results),"errors":errors,"discovery_errors":discovery_errors,"results":results}
     OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
