@@ -703,12 +703,18 @@ def main():
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
     complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
     pending_symbols=[s for s in symbols if not evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {})]
+    pending_details={s:{"missing_fields":sorted(missing_financial_fields((companies.get(s) or {}).get("financial_evidence") or {})),
+                        "available_fields":sorted(k for k in ("revenue","net_income","operating_cash_flow","free_cash_flow","cash","total_debt","shares")
+                                                  if (((companies.get(s) or {}).get("financial_evidence") or {}).get(k) or {}).get("values")),
+                        "concepts":{k:(((companies.get(s) or {}).get("financial_evidence") or {}).get(k) or {}).get("concept")
+                                    for k in ("revenue","net_income","operating_cash_flow","cash","total_debt","shares")}}
+                     for s in pending_symbols}
     if "stockfit_refreshed_at" not in locals(): stockfit_refreshed_at=old.get("stockfit_refreshed_at")
     if "stockfit_quota_day" not in locals(): stockfit_quota_day=old.get("stockfit_quota_day")
     if "stockfit_requests_today" not in locals(): stockfit_requests_today=old.get("stockfit_requests_today",0)
     out={"updated_at":now(),"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"stockfit_refreshed_at":stockfit_refreshed_at,"stockfit_quota_day":stockfit_quota_day,"stockfit_requests_today":stockfit_requests_today,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
-         "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
+         "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"pending_details":pending_details,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"stockfit_transport":stockfit_status,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
          "semantic_verified":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED"),
          "semantic_pending":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")!="TEXT_VERIFIED"),
