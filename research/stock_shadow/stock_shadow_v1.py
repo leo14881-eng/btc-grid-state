@@ -18,6 +18,8 @@ PROFIT_FLOOR_NET_PCT=0.10
 # Swing book: once a trade has meaningful net profit, protect a positive net exit.
 # Allowed giveback shrinks as MFE grows; all values are AFTER buy/sell fees.
 PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
+SOURCE_COMMIT=os.getenv("STOCK_SHADOW_SOURCE_COMMIT","LOCAL")
+RUN_ID=os.getenv("STOCK_SHADOW_RUN_ID","LOCAL")
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def _alpaca_exchange_session(ts=None):
@@ -57,7 +59,20 @@ def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
     except Exception: return d
 def save(p,o):
-    p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
+    p.parent.mkdir(parents=True,exist_ok=True)
+    tmp=p.with_suffix(p.suffix+".tmp")
+    tmp.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
+    tmp.replace(p)
+
+def validate_ledger(state, events):
+    positions=state.get("positions",{})
+    if any(len((p or {}).get("tranches",[]))>MAX_TRANCHES for p in positions.values()):
+        raise RuntimeError("ledger_invariant:max_tranches_exceeded")
+    if any(float(x.get("realized_net_pnl_usdt",0))<=0 for x in state.get("closed",[])):
+        raise RuntimeError("ledger_invariant:losing_sell_present")
+    if any(x.get("type")=="SELL" and float(x.get("net_pnl_usdt",0))<=0 for x in events):
+        raise RuntimeError("ledger_invariant:nonpositive_sell_event")
+    return True
 
 NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
@@ -399,8 +414,10 @@ def main():
     wins=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)>0]; losses=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)<=0]
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
+    state["source_commit"]=SOURCE_COMMIT; state["run_id"]=RUN_ID
+    validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"transport_status":("OK" if market and not any((x.get("error") or {}).get("type")=="HTTPError" for x in failed_symbols) else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("message")=="insufficient_history"),"http_error_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("type")=="HTTPError"),"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"transport_status":("OK" if market and not any((x.get("error") or {}).get("type")=="HTTPError" for x in failed_symbols) else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("message")=="insufficient_history"),"http_error_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("type")=="HTTPError"),"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
