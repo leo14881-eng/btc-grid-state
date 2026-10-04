@@ -278,7 +278,7 @@ def test_fundamentals_hourly_uses_frames_then_bounded_sec_json_not_multigb_bulk(
     assert "download_bulk_zip(BULK_COMPANYFACTS)" not in src
     assert "download_bulk_zip(BULK_SUBMISSIONS)" not in src
     assert "frame_evidence_by_cik()" in src
-    assert "sec_companyfacts" not in src and "sec_submission" in src
+    assert "sec_companyfacts" in src and "sec_submission" in src
     assert "refresh_budget=4" in src
     assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
     assert "SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA" in src
