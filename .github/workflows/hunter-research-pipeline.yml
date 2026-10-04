@@ -147,6 +147,8 @@ jobs:
           assert state.get('events'), 'V1_EVENTS_EMPTY'
           assert len(state.get('decisions') or []) <= 1500, 'V1_DECISION_HISTORY_UNBOUNDED'
           assert len(state.get('events') or []) <= 5000, 'V1_EVENT_HISTORY_UNBOUNDED'
+          active_assets=set(actual)|{x.get('asset') for x in state.get('closed_positions') or []}|{x.get('asset') for x in state.get('events') or []}|{x.get('asset') for x in state.get('decisions') or []}|set(state.get('ever_entered_assets') or [])
+          assert not (active_assets & excluded), f'V1_ACTIVE_BSTOCK_HISTORY {sorted(active_assets & excluded)}'
           summary=json.load(open('research/results/hunter-shadow-summary.json'))
           assert int(summary.get('open_positions') or 0)==len(opens), 'V1_SUMMARY_OPEN_MISMATCH'
           assert int(summary.get('closed_positions') or 0)==len(state.get('closed_positions') or []), 'V1_SUMMARY_CLOSED_MISMATCH'
@@ -174,6 +176,9 @@ jobs:
           import json
           state=json.load(open('research/results/hunter-shadow-v2-portfolio.json'))
           review=json.load(open('research/results/hunter-tactical-capital-review.json'))
+          universe=json.load(open('research/results/hunter-cex-universe-run.json'))
+          excluded=set((((universe.get('venue_status') or {}).get('binance') or {}).get('excluded_bstocks') or []))
+          assert excluded, 'CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING'
           assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           assert state.get('schema')=='hunter_shadow_v2_portfolio_v2'
           opens=state.get('open_positions') or []
@@ -188,6 +193,8 @@ jobs:
           assert all(x.get('trade_action') in ('BUY','WAIT','REJECT','SYSTEM_BLOCKED') for x in review.get('candidates') or []), 'V2_FINAL_ACTION_MISSING'
           assert len(state.get('decisions') or []) <= 1500, 'V2_DECISION_HISTORY_UNBOUNDED'
           assert len(state.get('events') or []) <= 5000, 'V2_EVENT_HISTORY_UNBOUNDED'
+          active_assets=set(assets)|{x.get('asset') for x in state.get('closed_positions') or []}|{x.get('asset') for x in state.get('events') or []}|{x.get('asset') for x in state.get('decisions') or []}|set(state.get('ever_entered_assets') or [])
+          assert not (active_assets & excluded), f'V2_ACTIVE_BSTOCK_HISTORY {sorted(active_assets & excluded)}'
           assert buyset=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}, 'V2_EXECUTABLE_BUY_MISMATCH'
           print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} executable_buy={sorted(buyset)} decisions={len(state.get("decisions") or [])}')
           PY
@@ -329,7 +336,8 @@ jobs:
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
-              python -c "import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; assert scan.get('generation_id')==expected, f'MAIN_READBACK_GENERATION_MISMATCH expected={expected} actual={scan.get("generation_id")}'; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))"
+              git show origin/main:research/results/hunter-shadow-v2-summary.json > /tmp/shadow-v2-summary.json
+              python -c "import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; assert scan.get('generation_id')==expected, f'MAIN_READBACK_GENERATION_MISMATCH expected={expected} actual={scan.get("generation_id")}'; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); sa=json.load(open('/tmp/shadow-summary.json')); b=json.load(open('/tmp/shadow-v2.json')); sb=json.load(open('/tmp/shadow-v2-summary.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); assert sa.get('open_positions')==len(a.get('open_positions') or []) and sa.get('closed_positions')==len(a.get('closed_positions') or []); assert sb.get('open_positions')==len(b.get('open_positions') or []) and sb.get('closed_positions')==len(b.get('closed_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))"
           exit 0
 
 # activate downstream pipeline
