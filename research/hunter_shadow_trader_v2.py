@@ -552,7 +552,7 @@ def build_summary(state,now,guard_status="NORMAL"):
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard_status},
    "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL"},
    "position_lifecycle":{"degrade_confirm_cycles":DEGRADE_CONFIRM_CYCLES,"ordinary_thesis_invalidation_loss_exit":False,"hard_invalidation_may_exit_at_loss":True,"profit_stagnation_exit":True,"reentry_requires_new_move":True,"max_hot_closed_positions":MAX_CLOSED_HOT}},
-  "capital_authority":"NONE_SHADOW_ONLY"}
+  "opportunity_evaluation":cohorts,"capital_authority":"NONE_SHADOW_ONLY"}
 
 def main():
  if SHADOW_FREEZE:
