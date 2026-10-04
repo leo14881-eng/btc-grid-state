@@ -379,3 +379,21 @@ def test_monitor_forward_cohort_fingerprint_allows_quote_updates_but_detects_ide
     assert m.continuity_fingerprint(state,events)==before
     state["positions"]["AAA"]["tranches"][0]["price"]=9
     assert m.continuity_fingerprint(state,events)!=before
+
+
+def test_unverified_semantic_risks_are_unknown_not_false():
+    import importlib.util
+    path=ROOT/"research"/"stock_shadow"/"fundamentals_observer.py"
+    spec=importlib.util.spec_from_file_location("fundamentals_observer_test",path)
+    mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    r=mod.filing_risk_evidence([])
+    assert r["going_concern"] is None
+    assert r["bankruptcy_restructuring"] is None
+    assert r["delisting_risk"] is None
+    assert r["semantic_risk_state"]=="UNKNOWN"
+    assert r["semantic_review_status"]=="NOT_YET_TEXT_VERIFIED"
+
+def test_market_health_separates_transport_from_insufficient_history():
+    src=(ROOT/"research"/"stock_shadow"/"stock_shadow_v1.py").read_text()
+    assert 'history_coverage_status=("COMPLETE" if insufficient_history_count==0 else "PARTIAL_HISTORY")' in src
+    assert '"market_data_status":data_status,"history_coverage_status":history_coverage_status' in src
