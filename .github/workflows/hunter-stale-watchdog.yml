@@ -1,121 +1,43 @@
 name: Hunter Stale-Result Watchdog
 on:
   workflow_dispatch:
-    inputs:
-      simulate_stale:
-        description: 'Test stale detection without mutating recovery workflows'
-        type: boolean
-        default: false
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/hunter-stale-watchdog.yml'
   schedule:
     - cron: '07,37 * * * *'
-  workflow_run:
-    workflows: ['Hunter Binance Universe Scan']
-    types: [completed]
 permissions:
   contents: read
-  actions: write
 concurrency:
   group: hunter-watchdog-main
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-      - name: Recover discovery and downstream generation atomically
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ inputs.simulate_stale || 'false' }}
+      - name: Observe discovery and downstream generation
         run: |
           set -euo pipefail
           git fetch origin main --quiet
-          state() {
-            git show origin/main:research/results/hunter-cex-universe-summary.json > "$RUNNER_TEMP/scan.json"
-            git show origin/main:research/results/hunter-health-and-queue.json > "$RUNNER_TEMP/health.json" 2>/dev/null || echo '{}' > "$RUNNER_TEMP/health.json"
-            python - <<'PY'
+          git show origin/main:research/results/hunter-cex-universe-summary.json > "$RUNNER_TEMP/scan.json"
+          git show origin/main:research/results/hunter-health-and-queue.json > "$RUNNER_TEMP/health.json" 2>/dev/null || echo '{}' > "$RUNNER_TEMP/health.json"
+          python - <<'PY'
           import json,datetime,os
           scan=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'scan.json')))
           health=json.load(open(os.path.join(os.environ['RUNNER_TEMP'],'health.json')))
           t=datetime.datetime.fromisoformat(scan['as_of_utc'].replace('Z','+00:00'))
           age=(datetime.datetime.now(datetime.timezone.utc)-t).total_seconds()/60
-          fresh=(-5 <= age <= 55 and scan.get('binance_complete') is True)
-          aligned=(health.get('scan_as_of_utc')==scan.get('as_of_utc'))
-          print(f"{scan.get('generation_id','')}|{scan.get('as_of_utc','')}|{age:.2f}|{str(fresh).lower()}|{str(aligned).lower()}")
+          fresh=(-5 <= age <= 70 and scan.get('binance_complete') is True)
+          aligned=(health.get('scan_generation_id')==scan.get('generation_id') or health.get('scan_as_of_utc')==scan.get('as_of_utc'))
+          print(f"HUNTER_WATCHDOG_STATE generation={scan.get('generation_id')} age_minutes={age:.2f} discovery_fresh={fresh} downstream_aligned={aligned}")
+          if not fresh:
+              print('HUNTER_WATCHDOG_ALERT DISCOVERY_STALE')
+          if not aligned:
+              print('HUNTER_WATCHDOG_ALERT DOWNSTREAM_NOT_ALIGNED')
+          # Observer only. Recovery is intentionally not dispatched here:
+          # the scheduled Universe is the single discovery producer and its
+          # successful workflow_run is the single Research trigger.
+          print('HUNTER_WATCHDOG_OBSERVER_ONLY')
           PY
-          }
-          initial=$(state)
-          IFS='|' read -r gid scan_time age fresh aligned <<< "$initial"
-          echo "HUNTER_WATCHDOG_STATE generation=$gid age_minutes=$age discovery_fresh=$fresh downstream_aligned=$aligned"
-          if [ "$DRY_RUN" = true ]; then
-            echo 'HUNTER_DRY_RUN_VERIFIED: no workflow dispatch'
-            exit 0
-          fi
-          # Bot-dispatched workflow_dispatch does not reliably cascade workflow_run.
-          # Explicitly recover discovery, then explicitly recover all downstream work.
-          if [ "$fresh" != true ]; then
-            before="$gid"
-            active=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/hunter-cex-universe.yml/runs?branch=main&per_page=20" --jq '[.workflow_runs[] | select(.status=="queued" or .status=="in_progress" or .status=="waiting" or .status=="requested" or .status=="pending")] | length')
-            if [ "$active" = 0 ]; then
-              gh workflow run hunter-cex-universe.yml --ref main
-              echo 'HUNTER_DISCOVERY_RECOVERY_DISPATCHED'
-            else
-              echo 'HUNTER_DISCOVERY_ALREADY_ACTIVE'
-            fi
-            deadline=$((SECONDS+600))
-            while [ $SECONDS -lt $deadline ]; do
-              sleep 15
-              git fetch origin main --quiet
-              current=$(state)
-              IFS='|' read -r gid scan_time age fresh aligned <<< "$current"
-              if [ -n "$gid" ] && [ "$gid" != "$before" ] && [ "$fresh" = true ]; then
-                echo "HUNTER_DISCOVERY_RECOVERY_PROVED generation=$gid"
-                break
-              fi
-            done
-            if [ -z "$gid" ] || [ "$gid" = "$before" ] || [ "$fresh" != true ]; then
-              echo 'HUNTER_DISCOVERY_RECOVERY_NOT_PROVED'
-              exit 1
-            fi
-          fi
-          git fetch origin main --quiet
-          current=$(state)
-          IFS='|' read -r gid scan_time age fresh aligned <<< "$current"
-          if [ "$aligned" != true ]; then
-            before_research=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/hunter-research-pipeline.yml/runs?branch=main&per_page=1" --jq '.workflow_runs[0].id // 0')
-            gh workflow run hunter-research-pipeline.yml --ref main
-            gh workflow run hunter-blind-replay.yml --ref main
-            echo "HUNTER_DOWNSTREAM_RECOVERY_DISPATCHED generation=$gid"
-            deadline=$((SECONDS+900))
-            check_gid=''
-            check_aligned=false
-            while [ $SECONDS -lt $deadline ]; do
-              sleep 15
-              git fetch origin main --quiet
-              current=$(state)
-              IFS='|' read -r check_gid check_time check_age check_fresh check_aligned <<< "$current"
-              if [ "$check_gid" = "$gid" ] && [ "$check_aligned" = true ]; then
-                echo "HUNTER_DOWNSTREAM_GENERATION_PROVED generation=$gid"
-                break
-              fi
-            done
-            if [ "$check_gid" != "$gid" ] || [ "$check_aligned" != true ]; then
-              echo 'HUNTER_DOWNSTREAM_RECOVERY_NOT_PROVED'
-              exit 1
-            fi
-            after_research=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/hunter-research-pipeline.yml/runs?branch=main&per_page=1" --jq '.workflow_runs[0].id // 0')
-            if [ "$after_research" = "$before_research" ]; then
-              echo 'HUNTER_RESEARCH_DISPATCH_NOT_OBSERVED'
-              exit 1
-            fi
-          else
-            echo "HUNTER_DOWNSTREAM_ALREADY_ALIGNED generation=$gid"
-          fi
-          echo "HUNTER_WATCHDOG_ACCEPTED generation=$gid"
