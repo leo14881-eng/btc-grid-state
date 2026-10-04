@@ -312,3 +312,5 @@ def test_result_writers_are_atomic_and_versioned():
     pm=_load_position_monitor()
     assert ".tmp" in inspect.getsource(pm.save)
     assert "SOURCE_COMMIT" in inspect.getsource(pm.main)
+
+# CLEAN_V3_BASELINE_REARMED_20261004: workflow trigger after audited state reset.
