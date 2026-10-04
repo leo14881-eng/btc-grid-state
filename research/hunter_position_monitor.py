@@ -13,7 +13,11 @@ def load(p):
 def get(url):
  req=urllib.request.Request(url,headers={"User-Agent":"hunter-position-monitor/3.0","Accept":"application/json"})
  with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
-def assets(states):return sorted({p.get("asset") for s in states for p in (s.get("open_positions") or []) if p.get("asset")})
+def assets(states):
+ # Observe open positions plus closed positions whose 72h opportunity window is
+ # incomplete. This is observation-only and cannot create entries or alter exits.
+ return sorted({p.get("asset") for s in states for p in ((s.get("open_positions") or [])+(s.get("closed_positions") or []))
+                if p.get("asset") and (not p.get("closed_at_utc") or not p.get("observation_complete"))})
 def batch_market(wanted):
  rows=get(BN+"/api/v3/ticker/24hr");by={x.get("symbol"):x for x in rows if isinstance(x,dict)};out={}
  for a in sorted(set(wanted)|{"BTC"}):
@@ -41,6 +45,14 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  configure_lane(v1_mode)
  scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc)
+ # Closed positions remain observation subjects through SELL+72h. Live marks may
+ # extend the all-time opportunity peak; exact horizon peaks are reconstructed by
+ # the bounded historical backfill, never inferred from a late current price.
+ for pos in state.get("closed_positions") or []:
+  if pos.get("observation_complete"):continue
+  p=(market.get(pos.get("asset")) or {}).get("reference_price")
+  if p:eng.update_post_exit(pos,p,now)
+  eng.backfill_opportunity_history(pos,now)
  if len(state.get("decisions") or [])>eng.MAX_DECISION_HISTORY:
   n=len(state["decisions"])-eng.MAX_DECISION_HISTORY;state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+n;state["decisions"]=state["decisions"][-eng.MAX_DECISION_HISTORY:]
  if len(state.get("events") or [])>eng.MAX_EVENT_HISTORY:
