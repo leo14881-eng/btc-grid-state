@@ -269,3 +269,24 @@ def test_financial_evidence_extracts_trends_and_dilution():
 def test_severe_risk_evidence_can_flag_critical_without_strategy_effect():
     m=_load_fundamentals_observer()
     assert m.classify_evidence({},{"bankruptcy_restructuring":True})=="CRITICAL"
+
+
+def test_fundamentals_bulk_architecture_replaces_twelve_stock_rotation():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m.main)
+    assert not hasattr(m,"MAX_REFRESH")
+    assert "download_bulk_zip(BULK_COMPANYFACTS)" in src
+    assert "download_bulk_zip(BULK_SUBMISSIONS)" in src
+    assert '"evidence_complete"' in src
+    assert '"evidence_pending"' in src
+    assert '"fallback_requests"' in src
+
+def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
+    import io,zipfile,json
+    m=_load_fundamentals_observer()
+    buf=io.BytesIO()
+    with zipfile.ZipFile(buf,"w") as z:
+        z.writestr("CIK0000000123.json",json.dumps({"cik":123}))
+    with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as z:
+        assert m.bulk_json_by_cik(z,{123})[123]["cik"]==123
