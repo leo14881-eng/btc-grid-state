@@ -94,7 +94,7 @@ OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
 MAX_REQUEST_TARGET_CHARS = 7000
-DAILY_CACHE_KEEP_BARS = 35
+DAILY_CACHE_KEEP_BARS = 24
 API_USAGE={"alpaca_daily_bars":{"http_requests":0,"pages":0,"logical_batches":0}}
 NY=ZoneInfo("America/New_York")
 
@@ -362,9 +362,13 @@ def stock_universe():
         by_t={str(x.get("t")):x for x in (cached.get(s) or []) if x.get("t")}
         for x in fetched.get(s,[]): by_t[str(x.get("t"))]=x
         rows=sorted(by_t.values(),key=lambda x:str(x.get("t") or ""))[-DAILY_CACHE_KEEP_BARS:]
-        if rows: cached[s]=rows
-    save(MARKET_CACHE,{"updated_at":now(),"pit_cutoff":end.isoformat(),"feed":"sip","adjustment":"all",
-                       "bootstrap":bootstrap,"bars":cached})
+        if rows:
+            cached[s]=[{k:x.get(k) for k in ("t","o","h","l","c","v") if x.get(k) is not None} for x in rows]
+    MARKET_CACHE.parent.mkdir(parents=True,exist_ok=True)
+    tmp=MARKET_CACHE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"updated_at":now(),"pit_cutoff":end.isoformat(),"feed":"sip","adjustment":"all",
+                               "bootstrap":bootstrap,"bars":cached},separators=(",",":"))+"\n")
+    tmp.replace(MARKET_CACHE)
     out={}; failed=[]
     failed_symbols_from_batches={s for item in failed_batches for s in item["symbols"]}
     for s in symbols:
