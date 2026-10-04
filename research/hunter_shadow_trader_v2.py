@@ -643,6 +643,7 @@ def main():
   print(json.dumps({"status":"SHADOW_STRATEGY_FREEZE","strategy":STRATEGY_ID,"writes":0,"capital_pool_usdt":CAPITAL_POOL_USDT}))
   return
  now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW);liq=load(LIQ);supply=load(SUPPLY);bybit=load(BYBIT,{})
+ if review.get("policy_version")!=VERSION:raise SystemExit("SHADOW_INPUT_POLICY_MISMATCH")
  if not scan.get("binance_complete") or review.get("scan_generation_id")!=scan.get("generation_id"):raise SystemExit("V2_INPUT_GENERATION_MISMATCH")
  btc=price(scan,"BTC")
  if not btc:raise SystemExit("BTC_PRICE_MISSING")

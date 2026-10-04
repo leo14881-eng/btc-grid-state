@@ -18,6 +18,11 @@ except ModuleNotFoundError as exc:
         raise
     from hunter_execution_cost import estimate
 
+try:
+ from research.hunter_policy import C,VERSION
+except ModuleNotFoundError as exc:
+ if exc.name != 'research':raise
+ from hunter_policy import C,VERSION
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 DOSSIERS=ROOT/"hunter-candidate-dossiers.json"
@@ -108,7 +113,7 @@ def build(scan,dossiers,fetch,now,early=None):
         except Exception as exc:
             failures[sym]=type(exc).__name__+": "+str(exc)[:160]
     return {"schema":"hunter_liquidity_probe_v1","as_of_utc":now.isoformat(),
-            "scan_generation_id":scan.get("generation_id"),
+            "scan_generation_id":scan.get("generation_id"),"policy_version":VERSION,
             "scan_as_of_utc":scan["as_of_utc"],
             "requested_count":len(targets(dossiers,scan,early)),
             "successful_count":len(records),"failures":failures,

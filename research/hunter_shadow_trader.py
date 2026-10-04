@@ -28,6 +28,7 @@ def configure_v1():
 def load_early_into_review():
     root=pathlib.Path("research/results")
     early=json.loads((root/"hunter-early-signals.json").read_text())
+    if early.get("policy_version")!=engine.VERSION:raise RuntimeError("V1_EARLY_POLICY_MISMATCH")
     universe=json.loads((root/"hunter-cex-universe-run.json").read_text())
     excluded=set((((universe.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
     if not excluded:

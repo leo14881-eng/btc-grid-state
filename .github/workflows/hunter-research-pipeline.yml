@@ -284,6 +284,9 @@ jobs:
           assert identity.get('scan_as_of_utc')==at
           assert supply.get('scan_as_of_utc')==at
           assert review.get('scan_generation_id')==expected
+          from research.hunter_policy import VERSION
+          for name in ('hunter-early-signals.json','hunter-liquidity-probe.json','hunter-health-and-queue.json','hunter-tactical-capital-review.json','hunter-shadow-summary.json','hunter-shadow-v2-summary.json'):
+              assert json.load(open('research/results/'+name)).get('policy_version')==VERSION, f'POLICY_VERSION_MISMATCH {name}'
           actions={x.get('trade_action') for x in review.get('candidates') or []}
           assert actions <= {'BUY','WAIT','REJECT','SYSTEM_BLOCKED'}
           buy={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}

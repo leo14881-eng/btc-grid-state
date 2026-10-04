@@ -4,6 +4,11 @@ import datetime as dt
 import json
 import pathlib
 
+try:
+ from research.hunter_policy import C,VERSION
+except ModuleNotFoundError as exc:
+ if exc.name != 'research':raise
+ from hunter_policy import C,VERSION
 ROOT=pathlib.Path("research/results")
 PATHS={"scan":"hunter-cex-universe-run.json",
        "research":"hunter-forward-research.json",
@@ -54,9 +59,9 @@ def build(data,now):
             blockers.append("LIVE_ORDERBOOK_NOT_IN_TOP_16")
         else:
             age=(now-parse(book["as_of_utc"])).total_seconds()/3600
-            if age<0 or age>1:
+            if age<0 or age>C["MAX_EVIDENCE_AGE_SECONDS"]/3600:
                 blockers.append("ORDERBOOK_STALE")
-            if book["spread_bps"]>50:
+            if book["spread_bps"]>C["MAX_SPREAD_BPS"]:
                 blockers.append("SPREAD_GT_50_BPS")
             if min(book["bid_depth_2pct_usdt"],book["ask_depth_2pct_usdt"])<10000:
                 blockers.append("TWO_SIDED_VISIBLE_DEPTH_LT_10000_USDT")
@@ -109,7 +114,7 @@ def build(data,now):
     elif health["capital_ready"]==0:
         health["status"]="RESEARCH_RUNNING_CAPITAL_GATES_UNRESOLVED"
     else:health["status"]="REVIEW_ELIGIBLE_CANDIDATES_PRESENT"
-    return {"schema":"hunter_health_queue_v1","as_of_utc":now.isoformat(),
+    return {"schema":"hunter_health_queue_v1","as_of_utc":now.isoformat(),"policy_version":VERSION,
             "scan_generation_id":scan.get("generation_id"),
             "scan_as_of_utc":stamp,"health":health,
             "research_priority_queue":priority,
