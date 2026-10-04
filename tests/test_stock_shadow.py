@@ -542,3 +542,9 @@ def test_replay_uses_dynamic_exchange_calendar_not_hardcoded_weekday_hours():
     m=_load_replay(); src=inspect.getsource(m.main)
     assert "ss._alpaca_exchange_session" in src
     assert '"exchange_session"' in src
+
+
+def test_replay_output_has_acceptance_metrics():
+    src=(Path(__file__).parents[1]/"research"/"stock_shadow"/"stock_replay.py").read_text()
+    for key in ('"actual_buy_before_high"','"early_before_high"','"missed_before_high"','"future_data_prohibited"'):
+        assert key in src
