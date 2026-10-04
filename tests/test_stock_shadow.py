@@ -582,3 +582,32 @@ def test_replay_output_contract_matches_acceptance_design():
                 '"buy_detection_rate"','"late_early_count"','"missed_by_gate"','"decision_clock"',
                 '"strategy_version"','"gain_before_early_pct"','"lookahead_check"','"gate_trace"'):
         assert key in src
+
+
+def test_semantic_filing_risk_is_tri_state_and_text_verified():
+    m=_load_fundamentals_observer()
+    r=m.semantic_risk_evidence([{"form":"10-K","filing_date":"2026-02-01","accession":"x","primary_document":"a.htm",
+        "transport":"TEST","text":"Management concluded there is substantial doubt about our ability to continue as a going concern."}])
+    assert r["going_concern"]=="VERIFIED_PRESENT"
+    assert r["bankruptcy_restructuring"]=="VERIFIED_ABSENT"
+    assert r["semantic_review_status"]=="TEXT_VERIFIED"
+    assert r["semantic_risk_state"]=="VERIFIED_PRESENT"
+
+def test_semantic_review_rotates_independently_from_financial_gap_backfill():
+    import inspect
+    m=_load_fundamentals_observer(); src=inspect.getsource(m.main)
+    assert "semantic_refresh_set" in src
+    assert "semantic_refresh_budget=4" in src
+    assert "refresh_set|semantic_refresh_set" in src
+    assert "sec_submission(cik)" in src
+    assert "sec_filing_text" in src
+    assert '"semantic_verified"' in src and '"semantic_pending"' in src
+
+def test_foreign_issuer_forms_and_ifrs_are_supported():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m._fact_series)
+    assert '"20-F"' in src and '"6-K"' in src
+    assert '"ifrs-full"' in src
+    main_src=inspect.getsource(m.main)
+    assert '"20-F"' in main_src and '"6-K"' in main_src
