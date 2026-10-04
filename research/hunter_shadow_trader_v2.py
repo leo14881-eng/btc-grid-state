@@ -5,7 +5,7 @@ ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
 STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"; GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"; BYBIT=ROOT/"hunter-bybit-availability.json"
-FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(1.,6.,24.,48.,72.); DISCOVERY_MIN_SCORE=6.; DISCOVERY_MIN_INDEPENDENT=2
+FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(1.,6.,24.,48.,72.); NEW_VERSION_CUTOFF_UTC=dt.datetime(2026,10,4,17,0,0,tzinfo=dt.timezone.utc); DISCOVERY_MIN_SCORE=6.; DISCOVERY_MIN_INDEPENDENT=2
 MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
 PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
 MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
@@ -180,6 +180,56 @@ def scenario_returns(pos,p):
   out[f"{n}_tranche"]={"notional_usdt":notion,"weighted_entry_price":weighted_entry(q),"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4)}
  return out
 
+def sample_cohort(pos):
+ try:return "NEW_VERSION_SAMPLE" if parse(pos.get("opened_at_utc"))>=NEW_VERSION_CUTOFF_UTC else "MIGRATION_SAMPLE"
+ except Exception:return "UNKNOWN"
+
+def initial_buy_price(pos):
+ ts=pos.get("tranches") or []
+ return finite(ts[0].get("price")) if ts else finite(pos.get("weighted_entry_price"))
+
+def capture_ratio(realized,mfe):
+ r=finite(realized);m=finite(mfe)
+ if r is None or m is None or m<=0:return None
+ return round(r/m,6)
+
+def ensure_opportunity_observation(pos,p=None,now=None,provenance="LIVE_OBSERVATION"):
+ now=now or dt.datetime.now(dt.timezone.utc);buy=initial_buy_price(pos)
+ pos.setdefault("sample_cohort",sample_cohort(pos))
+ if pos.get("holding_mfe_pct") is None and pos.get("mfe_pct") is not None:pos["holding_mfe_pct"]=finite(pos.get("mfe_pct"))
+ if pos.get("holding_peak_price") is None and buy and pos.get("holding_mfe_pct") is not None:
+  pos["holding_peak_price"]=round(buy*(1+float(pos["holding_mfe_pct"])/100),12)
+ if pos.get("holding_peak_at_utc") is None and pos.get("holding_peak_price") is not None:pos["holding_peak_at_utc"]=pos.get("last_marked_at_utc") or pos.get("opened_at_utc")
+ if pos.get("full_opportunity_peak_price") is None:
+  seed=max([x for x in (buy,finite(pos.get("holding_peak_price")),finite(pos.get("exit_reference_price"))) if x is not None],default=None)
+  pos["full_opportunity_peak_price"]=seed
+  pos["full_opportunity_peak_at_utc"]=pos.get("holding_peak_at_utc") or pos.get("opened_at_utc")
+ if p and buy:
+  if not pos.get("closed_at_utc"):
+   if p>(finite(pos.get("holding_peak_price")) or 0):
+    pos["holding_peak_price"]=p;pos["holding_peak_at_utc"]=now.isoformat()
+   pos["holding_mfe_pct"]=round((pos["holding_peak_price"]/buy-1)*100,4)
+  if p>(finite(pos.get("full_opportunity_peak_price")) or 0):
+   pos["full_opportunity_peak_price"]=p;pos["full_opportunity_peak_at_utc"]=now.isoformat()
+  pos["full_opportunity_mfe_pct"]=round((pos["full_opportunity_peak_price"]/buy-1)*100,4)
+ pos.setdefault("data_provenance",provenance)
+ if pos.get("closed_at_utc"):
+  elapsed=(now-parse(pos["closed_at_utc"])).total_seconds()/3600
+  pos["observation_complete"]=bool(elapsed>=max(REVIEW_HOURS))
+ else:pos["observation_complete"]=False
+ return pos
+
+def exit_evaluation(pos):
+ if not pos.get("closed_at_utc"):return "OBSERVING"
+ if not pos.get("observation_complete"):return "OBSERVING"
+ full=finite(pos.get("full_opportunity_mfe_pct"));hold=finite(pos.get("holding_mfe_pct"));net=finite(pos.get("net_return_pct"));t=pos.get("post_exit_observation") or {}
+ cont=max([finite((t.get(f"{int(h)}h") or {}).get("max_return_from_sell_pct")) for h in REVIEW_HOURS if finite((t.get(f"{int(h)}h") or {}).get("max_return_from_sell_pct")) is not None] or [0])
+ if full is None or hold is None or net is None:return "INSUFFICIENT_DATA"
+ if net>0 and full>=10 and cont>=8 and (capture_ratio(net,full) or 1)<.4:return "POTENTIAL_PREMATURE_EXIT"
+ if hold>=2 and net<=0:return "PROFIT_GIVEBACK"
+ if net>0 and (capture_ratio(net,hold) or 0)>=.6:return "GOOD_PROFIT_CAPTURE"
+ return "NORMAL_EXIT"
+
 def exit_analysis(pos,p,reason):
  scenarios=scenario_returns(pos,p); final=scenarios.get(f"{len(pos.get('tranches',[]))}_tranche",{})
  net=final.get("net_return_pct",0)
@@ -187,22 +237,35 @@ def exit_analysis(pos,p,reason):
  elif reason=="THESIS_INVALIDATION":failure="THESIS_OR_SELECTION_FAILURE"
  elif reason=="PROFIT_PROTECTION":failure="PROFIT_GIVEBACK_FAILURE"
  else:failure="EXIT_OR_SELECTION_REVIEW"
+ ensure_opportunity_observation(pos,p)
  return {"tranche_scenarios_at_exit":scenarios,"failure_attribution":failure,
-  "post_exit_tracking":{"hours":list(REVIEW_HOURS),"max_rebound_from_exit_pct":0.,"potential_premature_exit":False,"marks":[]}}
+  "post_exit_tracking":{"hours":list(REVIEW_HOURS),"max_rebound_from_exit_pct":0.,"potential_premature_exit":False,"marks":[]},
+  "post_exit_observation":{}}
 
 def update_post_exit(pos,p,now):
- t=pos.get("post_exit_tracking")
- if not t or not pos.get("closed_at_utc") or not p:return
+ ensure_opportunity_observation(pos,p,now)
+ if not pos.get("closed_at_utc") or not p:return
+ t=pos.setdefault("post_exit_tracking",{"hours":list(REVIEW_HOURS),"max_rebound_from_exit_pct":0.,"potential_premature_exit":False,"marks":[]})
+ obs=pos.setdefault("post_exit_observation",{})
  hours=(now-parse(pos["closed_at_utc"])).total_seconds()/3600
- if hours<0 or hours>max(REVIEW_HOURS):return
- rebound=(p/(finite(pos.get("exit_reference_price")) or p)-1)*100
- t["max_rebound_from_exit_pct"]=round(max(finite(t.get("max_rebound_from_exit_pct")) or 0,rebound),4)
- t["potential_premature_exit"]=bool(t["max_rebound_from_exit_pct"]>=8)
- # Keep bounded forward marks near the requested review horizons.
+ if hours<0:return
+ sell=finite(pos.get("exit_reference_price"));buy=initial_buy_price(pos)
+ rebound=(p/sell-1)*100 if sell else None
+ if rebound is not None:t["max_rebound_from_exit_pct"]=round(max(finite(t.get("max_rebound_from_exit_pct")) or 0,rebound),4)
  for target in REVIEW_HOURS:
   key=f"{int(target)}h"
-  if hours>=target and not any(x.get("horizon")==key for x in t["marks"]):
-   t["marks"].append({"horizon":key,"observed_hours":round(hours,2),"price":p,"rebound_from_exit_pct":round(rebound,4)})
+  if hours>=target and key not in obs:
+   peak=finite(pos.get("full_opportunity_peak_price"))
+   obs[key]={"observed_at_utc":now.isoformat(),"max_price":peak,
+    "max_return_from_initial_buy_pct":round((peak/buy-1)*100,4) if peak and buy else None,
+    "max_return_from_sell_pct":round((peak/sell-1)*100,4) if peak and sell else None,
+    "data_provenance":pos.get("data_provenance") or "LIVE_OBSERVATION"}
+   t["marks"].append({"horizon":key,"observed_hours":round(hours,2),"price":p,"rebound_from_exit_pct":round(rebound,4) if rebound is not None else None})
+ if hours>=max(REVIEW_HOURS):pos["observation_complete"]=True
+ pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
+ pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
+ pos["exit_evaluation"]=exit_evaluation(pos)
+ t["potential_premature_exit"]=pos["exit_evaluation"]=="POTENTIAL_PREMATURE_EXIT"
 
 def profit_protection(pos,p):
  raw=raw_return(pos,p); mfe=finite(pos.get("mfe_pct")) or 0.
@@ -277,7 +340,7 @@ def compact_closed_history(state):
  archive=state.setdefault("closed_trade_archive",[])
  for x in closed[:-MAX_CLOSED_HOT]:
   archive.append({"shadow_id":x.get("shadow_id"),"asset":x.get("asset"),"opened_at_utc":x.get("opened_at_utc"),"closed_at_utc":x.get("closed_at_utc"),
-   "exit_reason":x.get("exit_reason"),"net_pnl_usdt":x.get("net_pnl_usdt"),"net_return_pct":x.get("net_return_pct"),"mfe_pct":x.get("mfe_pct"),"mae_pct":x.get("mae_pct")})
+   "exit_reason":x.get("exit_reason"),"net_pnl_usdt":x.get("net_pnl_usdt"),"net_return_pct":x.get("net_return_pct"),"mfe_pct":x.get("mfe_pct"),"mae_pct":x.get("mae_pct"),"holding_mfe_pct":x.get("holding_mfe_pct"),"full_opportunity_mfe_pct":x.get("full_opportunity_mfe_pct"),"holding_profit_capture_ratio":x.get("holding_profit_capture_ratio"),"full_opportunity_capture_ratio":x.get("full_opportunity_capture_ratio"),"observation_complete":x.get("observation_complete"),"sample_cohort":x.get("sample_cohort"),"exit_evaluation":x.get("exit_evaluation"),"data_provenance":x.get("data_provenance")})
  state["closed_positions"]=closed[-MAX_CLOSED_HOT:]
  # Keep a compact permanent ledger in the authoritative state; no 5-minute scan needs full old position blobs.
  if len(archive)>5000:state["closed_trade_archive"]=archive[-5000:]
@@ -330,7 +393,7 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
  guard.update({"as_of_utc":now.isoformat(),"consecutive_zero_buy_cycles":zero,"recent_safe_missed_assets":sorted(recent_misses),
   "status":"OVER_FILTERING" if over else "NORMAL",
   "optimizer_action":"RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST" if over else "NONE",
-  "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
+  "live_capital_rules_changed":False,"opportunity_evaluation":cohorts,"capital_authority":"NONE_SHADOW_ONLY"})
  atomic_json_write(GUARD,guard);return guard
 def quarantine_non_crypto_history(state,excluded):
  excluded=set(excluded or [])
@@ -361,7 +424,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
  for pos in state["open_positions"]:
   p=price(scan,pos["asset"])
   if not p:record(state,pos,"HOLD",now,["CURRENT_PRICE_MISSING"],{},pos.get("last_price"));still.append(pos);continue
-  c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4)
+  c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
   health,health_reasons=position_health(pos,e)
@@ -390,10 +453,36 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   still.append(pos)
  state["open_positions"]=still;compact_closed_history(state);return state
 
+def opportunity_summary(rows):
+ def vals(k):return [float(x[k]) for x in rows if finite(x.get(k)) is not None]
+ def avg(v):return round(sum(v)/len(v),4) if v else None
+ def med(v):
+  if not v:return None
+  z=sorted(v);n=len(z);return round(z[n//2],4) if n%2 else round((z[n//2-1]+z[n//2])/2,4)
+ full=vals("full_opportunity_mfe_pct");holding=vals("holding_mfe_pct")
+ dist={"lt_0":0,"0_3":0,"3_5":0,"5_10":0,"10_20":0,"gt_20":0}
+ for v in full:
+  if v<0:dist["lt_0"]+=1
+  elif v<3:dist["0_3"]+=1
+  elif v<5:dist["3_5"]+=1
+  elif v<10:dist["5_10"]+=1
+  elif v<=20:dist["10_20"]+=1
+  else:dist["gt_20"]+=1
+ return {"evaluated_positions":len(rows),"completed_72h_observations":sum(bool(x.get("observation_complete")) for x in rows),
+  "avg_holding_mfe_pct":avg(holding),"median_holding_mfe_pct":med(holding),"avg_full_opportunity_mfe_pct":avg(full),"median_full_opportunity_mfe_pct":med(full),
+  "avg_realized_net_return_pct":avg(vals("net_return_pct")),"avg_holding_profit_capture_ratio":avg(vals("holding_profit_capture_ratio")),
+  "avg_full_opportunity_capture_ratio":avg(vals("full_opportunity_capture_ratio")),
+  "potential_premature_exit_count":sum(x.get("exit_evaluation")=="POTENTIAL_PREMATURE_EXIT" for x in rows),
+  "profit_giveback_count":sum(x.get("exit_evaluation")=="PROFIT_GIVEBACK" for x in rows),"full_opportunity_mfe_distribution":dist}
+
 def build_summary(state,now,guard_status="NORMAL"):
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
- return {"schema":"hunter_shadow_v2_summary_v2","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
+ for x in state.get("open_positions") or []:ensure_opportunity_observation(x,x.get("last_price"),now)
+ for x in closed:ensure_opportunity_observation(x,None,now)
+ cohorts={"all_samples":opportunity_summary(all_closed),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"]),
+  "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"])}
+ return {"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy":STRATEGY_ID,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
   "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in all_closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":False,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),
@@ -440,7 +529,7 @@ def main():
    else: reject_reasons=reasons
    dummy={"asset":a,"tranches":[]};record(state,dummy,act if act in ("WAIT","SYSTEM_BLOCKED") else "REJECT",now,reject_reasons,e,p);continue
   pos={"shadow_id":ID_PREFIX+"-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
-   "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"last_price":p,
+   "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"holding_mfe_pct":0.,"holding_peak_price":p,"holding_peak_at_utc":now.isoformat(),"full_opportunity_mfe_pct":0.,"full_opportunity_peak_price":p,"full_opportunity_peak_at_utc":now.isoformat(),"observation_complete":False,"sample_cohort":("NEW_VERSION_SAMPLE" if now>=NEW_VERSION_CUTOFF_UTC else "MIGRATION_SAMPLE"),"data_provenance":"LIVE_OBSERVATION","last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
