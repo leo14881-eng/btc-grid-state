@@ -427,7 +427,8 @@ def stock_universe():
                 # Purely factual classification: never infer IPO/listing/security age from
                 # the first bar in our cache. Corporate actions, uplists, resumptions and
                 # provider identity changes can all create a short current-source history.
-                # Classification is observability-only; it must never alter V3 eligibility thresholds.\n                classification="SOURCE_HISTORY_LT_22_AFTER_120D_RECOVERY"
+                # Classification is observability-only; it must never alter V3 eligibility thresholds.
+                classification="SOURCE_HISTORY_LT_22_AFTER_120D_RECOVERY"
             first_bar_at=str(rows[0].get("t")) if rows else None
             last_bar_at=str(rows[-1].get("t")) if rows else None
             failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],
