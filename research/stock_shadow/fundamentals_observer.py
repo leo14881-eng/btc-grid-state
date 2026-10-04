@@ -13,7 +13,7 @@ BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfa
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
 FRAME_REQUEST_BUDGET=12
-MARKET_BATCH_SCHEMA_VERSION=5
+MARKET_BATCH_SCHEMA_VERSION=6
 PROXY_START_INTERVAL_SECONDS=2.0
 
 def now(): return datetime.now(timezone.utc).isoformat()
