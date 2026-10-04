@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"
-FEE_RATE=0.002; BATCH_SIZE=40; MAX_BATCHES=12
+FEE_RATE=0.002; MAX_REQUEST_TARGET_CHARS=7000
 ARM_NET_PCT=1.0
 PROFIT_FLOOR_NET_PCT=0.10
 PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
@@ -122,9 +122,9 @@ def alpaca_snapshot_quotes(symbols):
                 if not token: break
             prices.update(latest)
         except urllib.error.HTTPError as e:
-            requests+=1; errors.append({"batch":i//BATCH_SIZE,"reason":f"HTTP_{e.code}","detail":str(e.reason)})
+            requests+=1; errors.append({"batch":batch_index,"reason":f"HTTP_{e.code}","detail":str(e.reason)})
         except Exception as e:
-            requests+=1; errors.append({"batch":i//BATCH_SIZE,"reason":type(e).__name__,"detail":str(e)[:120]})
+            requests+=1; errors.append({"batch":batch_index,"reason":type(e).__name__,"detail":str(e)[:120]})
     return prices,errors,requests
 
 def main(force=False):
@@ -134,11 +134,11 @@ def main(force=False):
     positions=state.get("positions",{}); symbols=sorted(positions)
     starting_positions=len(symbols); starting_events=len(events); starting_closed=len(state.get("closed",[]))
     starting_fingerprint=continuity_fingerprint(state,events)
-    if not force and not market_open():
+    session=_alpaca_exchange_session()\n    is_open=market_open(session=session)\n    if not force and not is_open:
         save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
     prices,errors,requests=alpaca_snapshot_quotes(symbols)
-    trade_actions_enabled=market_open()
+    trade_actions_enabled=is_open
     sells=0; updated=0
     for s in list(symbols):
         price=prices.get(s)
@@ -189,6 +189,6 @@ def main(force=False):
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
-    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"batch_size":BATCH_SIZE,"errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
+    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":len(batches) if symbols else 0,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
