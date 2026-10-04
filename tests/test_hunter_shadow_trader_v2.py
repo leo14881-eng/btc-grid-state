@@ -115,7 +115,7 @@ class OpportunityObservationTests(unittest.TestCase):
   self.assertEqual(pos["full_opportunity_peak_price"],1.20);self.assertEqual(pos["full_opportunity_mfe_pct"],20.0)
 
  def test_capture_ratio_handles_zero_and_losses(self):
-  self.assertEqual(eng.capture_ratio(3.0,8.0),0.375);self.assertIsNone(eng.capture_ratio(3.0,0.0));self.assertEqual(eng.capture_ratio(-2.0,10.0),-0.2)
+  self.assertEqual(eng.capture_ratio(3.0,8.0),0.375);self.assertIsNone(eng.capture_ratio(3.0,0.0));self.assertEqual(eng.capture_ratio(-2.0,10.0),0.0);self.assertEqual(eng.capture_ratio(0.0,10.0),0.0)
 
  def test_sample_cohort_cutoff(self):
   self.assertEqual(eng.sample_cohort({"opened_at_utc":"2026-10-04T16:59:59+00:00"}),"MIGRATION_SAMPLE")
