@@ -180,59 +180,63 @@ def scenario_returns(pos,p):
   out[f"{n}_tranche"]={"notional_usdt":notion,"weighted_entry_price":weighted_entry(q),"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4)}
  return out
 
-def binance_kline_peak(asset,start,end,interval="5m"):
- """Observation-only historical high. Failure never changes trading decisions."""
+def binance_kline_bars(asset,start,end,interval="5m"):
+ """Observation-only historical bars. Failure never changes trading decisions."""
  if not asset or not start or not end or end<=start:return None
- symbol=str(asset).upper()+"USDT";cursor=int(start.timestamp()*1000);stop=int(end.timestamp()*1000);peak=None;peak_at=None
+ symbol=str(asset).upper()+"USDT";cursor=int(start.timestamp()*1000);stop=int(end.timestamp()*1000);out=[]
  try:
   while cursor<=stop:
    q=urllib.parse.urlencode({"symbol":symbol,"interval":interval,"startTime":cursor,"endTime":stop,"limit":1000})
    req=urllib.request.Request("https://api.binance.com/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
    with urllib.request.urlopen(req,timeout=12) as r:rows=json.loads(r.read().decode())
    if not rows:break
-   for row in rows:
-    h=finite(row[2])
-    if h is not None and (peak is None or h>peak):peak=h;peak_at=dt.datetime.fromtimestamp(int(row[0])/1000,dt.timezone.utc).isoformat()
+   out.extend((int(row[0]),finite(row[2])) for row in rows if finite(row[2]) is not None)
    nxt=int(rows[-1][0])+1
    if nxt<=cursor or len(rows)<1000:break
    cursor=nxt
-  return {"peak_price":peak,"peak_at_utc":peak_at,"source":"BINANCE_SPOT_KLINES_5M"} if peak is not None else None
+  return out or None
  except Exception:return None
 
+def peak_from_bars(bars,end=None):
+ if not bars:return None
+ stop=int(end.timestamp()*1000) if end else None;eligible=[x for x in bars if stop is None or x[0]<=stop]
+ if not eligible:return None
+ ts,p=max(eligible,key=lambda x:x[1])
+ return {"peak_price":p,"peak_at_utc":dt.datetime.fromtimestamp(ts/1000,dt.timezone.utc).isoformat(),"source":"BINANCE_SPOT_KLINES_5M"}
+
 def backfill_opportunity_history(pos,now):
- """Recover real candle highs without allowing them into BUY/ADD/SELL decisions."""
+ """One historical fetch per trade; evaluation data never enters trade decisions."""
  try:opened=parse(pos.get("opened_at_utc"))
  except Exception:return pos
  closed=parse(pos["closed_at_utc"]) if pos.get("closed_at_utc") else None
- end=min(now,closed+dt.timedelta(hours=max(REVIEW_HOURS))) if closed else now
+ if not closed:return pos
+ end=min(now,closed+dt.timedelta(hours=max(REVIEW_HOURS)))
  last=pos.get("opportunity_backfill_at_utc")
  if last:
   try:
-   if (now-parse(last)).total_seconds()<3300 and not (closed and now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and not pos.get("observation_complete")):return pos
+   if (now-parse(last)).total_seconds()<3300 and not (now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and not pos.get("observation_complete")):return pos
   except Exception:pass
- full=binance_kline_peak(pos.get("asset"),opened,end)
- hold=binance_kline_peak(pos.get("asset"),opened,min(closed or now,end))
- buy=initial_buy_price(pos)
- if not full or not hold or not buy:
+ bars=binance_kline_bars(pos.get("asset"),opened,end);buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
+ full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed)
+ if not bars or not full or not hold or not buy:
   if pos.get("data_provenance")!="HISTORICAL_BACKFILL":pos["data_provenance"]="INSUFFICIENT_HISTORY"
   pos["opportunity_backfill_at_utc"]=now.isoformat();return pos
  pos["holding_peak_price"]=hold["peak_price"];pos["holding_peak_at_utc"]=hold["peak_at_utc"];pos["holding_mfe_pct"]=round((hold["peak_price"]/buy-1)*100,4)
  pos["full_opportunity_peak_price"]=full["peak_price"];pos["full_opportunity_peak_at_utc"]=full["peak_at_utc"];pos["full_opportunity_mfe_pct"]=round((full["peak_price"]/buy-1)*100,4)
  pos["data_provenance"]="HISTORICAL_BACKFILL";pos["opportunity_backfill_source"]=full["source"];pos["opportunity_backfill_at_utc"]=now.isoformat()
- if closed:
-  sell=finite(pos.get("exit_reference_price"));obs=pos.setdefault("post_exit_observation",{})
-  for target in REVIEW_HOURS:
-   horizon_end=closed+dt.timedelta(hours=target)
-   if now<horizon_end:continue
-   h=binance_kline_peak(pos.get("asset"),closed,horizon_end)
-   if h:
-    obs[f"{int(target)}h"]={"observed_at_utc":now.isoformat(),"max_price":h["peak_price"],
-     "max_return_from_initial_buy_pct":round((h["peak_price"]/buy-1)*100,4),
-     "max_return_from_sell_pct":round((h["peak_price"]/sell-1)*100,4) if sell else None,"data_provenance":"HISTORICAL_BACKFILL"}
-  pos["observation_complete"]=bool(now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and obs.get("72h"))
-  pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
-  pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
-  pos["exit_evaluation"]=exit_evaluation(pos)
+ obs=pos.setdefault("post_exit_observation",{})
+ for target in REVIEW_HOURS:
+  horizon_end=closed+dt.timedelta(hours=target)
+  if now<horizon_end:continue
+  h=peak_from_bars([x for x in bars if x[0]>=int(closed.timestamp()*1000)],horizon_end)
+  if h:
+   obs[f"{int(target)}h"]={"observed_at_utc":now.isoformat(),"max_price":h["peak_price"],
+    "max_return_from_initial_buy_pct":round((h["peak_price"]/buy-1)*100,4),
+    "max_return_from_sell_pct":round((h["peak_price"]/sell-1)*100,4) if sell else None,"data_provenance":"HISTORICAL_BACKFILL"}
+ pos["observation_complete"]=bool(now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and obs.get("72h"))
+ pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
+ pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
+ pos["exit_evaluation"]=exit_evaluation(pos)
  return pos
 
 def sample_cohort(pos):
