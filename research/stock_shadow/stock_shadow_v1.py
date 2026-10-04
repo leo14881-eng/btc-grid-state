@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Independent Stock Shadow V2 clean-sample final run. Broad paper sampling only; never places orders."""
-import json, math, urllib.request, concurrent.futures
+import json, math, urllib.request, urllib.error, concurrent.futures
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -249,8 +249,14 @@ def stock_universe():
     symbols, discovery_errors=discover_us_common_stocks()
     out={}; failed=[]
     def one(symbol):
-        try: return symbol, _stock_snapshot(symbol), None
-        except Exception as e: return symbol, None, type(e).__name__
+        try:
+            return symbol, _stock_snapshot(symbol), None
+        except urllib.error.HTTPError as e:
+            # Diagnostics only: preserve the real upstream HTTP status/reason.
+            # Do not retry, throttle, or alter trading/selection behavior here.
+            return symbol, None, {"type":"HTTPError","status":e.code,"reason":str(e.reason),"url":e.geturl()}
+        except Exception as e:
+            return symbol, None, {"type":type(e).__name__,"message":str(e)[:160]}
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_MARKET_WORKERS) as ex:
         for symbol,snapshot,error in ex.map(one,symbols):
             if snapshot is not None: out[symbol]=snapshot
