@@ -38,7 +38,10 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False):
  return {"lane":label,"open":len(after),"added":added,"closed":closed}
 def main():
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
- if not wanted:\n  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False});print(json.dumps({"assets":[],"status":"NO_OPEN_POSITIONS"}));return
+ if not wanted:
+  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False})
+  print(json.dumps({"assets":[],"status":"NO_OPEN_POSITIONS"}))
+  return
  market=batch_market(wanted);missing=sorted(set(wanted)-set(market))
  if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW)
