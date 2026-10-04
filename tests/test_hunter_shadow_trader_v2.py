@@ -142,3 +142,30 @@ class OpportunityObservationTests(unittest.TestCase):
   out=eng.opportunity_summary(rows)
   self.assertEqual(out["evaluated_positions"],1);self.assertEqual(out["completed_72h_observations"],1)
   self.assertEqual(out["full_opportunity_mfe_distribution"]["10_20"],1)
+
+ def test_migration_mfe_is_not_inferred_from_weighted_entry_legacy_metric(self):
+  import datetime as dt
+  pos={"opened_at_utc":"2026-10-04T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0},{"price":0.8,"notional_usdt":1000.0}],
+       "mfe_pct":12.0,"holding_mfe_pct":None,"holding_peak_price":None}
+  eng.ensure_opportunity_observation(pos,None,dt.datetime(2026,10,5,tzinfo=dt.timezone.utc))
+  self.assertIsNone(pos.get("holding_mfe_pct"));self.assertIsNone(pos.get("holding_peak_price"))
+
+ def test_late_monitor_tick_does_not_backfill_1h_with_6h_peak(self):
+  import datetime as dt
+  pos={"opened_at_utc":"2026-10-05T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
+       "holding_mfe_pct":5.0,"holding_peak_price":1.05,"closed_at_utc":"2026-10-05T01:00:00+00:00",
+       "exit_reference_price":1.03,"net_return_pct":2.0,"full_opportunity_peak_price":1.20,"full_opportunity_mfe_pct":20.0,"post_exit_observation":{}}
+  eng.update_post_exit(pos,1.20,dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc))
+  self.assertNotIn("1h",pos["post_exit_observation"])
+  self.assertTrue(any(x.get("status")=="HISTORICAL_BACKFILL_REQUIRED" for x in pos["post_exit_tracking"]["marks"]))
+
+ def test_open_migration_can_be_reconstructed_from_historical_bars(self):
+  import datetime as dt
+  old=eng.binance_kline_bars
+  try:
+   eng.binance_kline_bars=lambda asset,start,end,interval="5m":[(int(start.timestamp()*1000),1.0),(int(end.timestamp()*1000),1.25)]
+   pos={"asset":"ABC","opened_at_utc":"2026-10-04T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}]}
+   eng.backfill_opportunity_history(pos,dt.datetime(2026,10,5,tzinfo=dt.timezone.utc))
+   self.assertEqual(pos["holding_mfe_pct"],25.0);self.assertEqual(pos["full_opportunity_mfe_pct"],25.0)
+   self.assertEqual(pos["data_provenance"],"HISTORICAL_BACKFILL");self.assertFalse(pos["observation_complete"])
+  finally:eng.binance_kline_bars=old
