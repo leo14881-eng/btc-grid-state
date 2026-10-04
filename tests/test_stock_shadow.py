@@ -397,3 +397,17 @@ def test_market_health_separates_transport_from_insufficient_history():
     src=(ROOT/"research"/"stock_shadow"/"stock_shadow_v1.py").read_text()
     assert 'history_coverage_status=("COMPLETE" if insufficient_history_count==0 else "PARTIAL_HISTORY")' in src
     assert '"market_data_status":data_status,"history_coverage_status":history_coverage_status' in src
+
+
+def test_unverified_filing_risks_are_unknown_not_false():
+    import importlib.util
+    path=ROOT/"research"/"stock_shadow"/"fundamentals_observer.py"
+    spec=importlib.util.spec_from_file_location("fund_obs_test",path)
+    m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    r=m.filing_risk_evidence([{"form":"8-K"}])
+    assert r["going_concern"] is None
+    assert r["bankruptcy_restructuring"] is None
+    assert r["delisting_risk"] is None
+    assert r["material_8k_risk"] is None
+    assert r["semantic_risk_state"]=="UNKNOWN_PENDING_TEXT_REVIEW"
+    assert m.classify_evidence({},r)=="WATCH"
