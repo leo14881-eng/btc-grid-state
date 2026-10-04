@@ -456,7 +456,8 @@ def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
     # Per-company reads are restricted to the tiny true-gap queue, never the full 308 cohort.
     worker=src[src.index("def fetch_sec_pair"):src.index("with ThreadPoolExecutor",src.index("def fetch_sec_pair"))]
     assert "sec_companyfacts(" in worker
-    assert "sec_submission(" not in worker
+    assert "sec_submission(" in worker
+    assert "if sym in semantic_refresh_set" in worker
     assert "refresh_budget=4" in src
 
 
@@ -520,8 +521,9 @@ def test_replay_fetches_benchmarks_explicitly_and_reports_early_lateness():
 def test_replay_cutoff_excludes_post_high_bars_from_decisions():
     import inspect
     m=_load_replay(); fn=inspect.getsource(m.chronological_trace)
-    assert 'if cutoff_at and bar["t"]>cutoff_at: break' in fn
-    assert fn.index('if cutoff_at and bar["t"]>cutoff_at: break') < fn.index('seen.append(bar)')
+    assert "for clock in decision_clocks(session)" in fn
+    assert "if cutoff_at and clock>_dt(cutoff_at): break" in fn
+    assert "_decision(" in fn
 
 
 def test_replay_excludes_pre_and_post_market_using_exchange_calendar():
@@ -563,7 +565,7 @@ def test_replay_uses_live_hourly_decision_clock_and_20m_delay():
     ]
     usable,cutoff=m.bars_available_at(bars,__import__("datetime").datetime(2026,10,2,14,23,tzinfo=__import__("datetime").timezone.utc))
     assert cutoff.isoformat().startswith("2026-10-02T14:03")
-    assert [x["c"] for x in usable]==[1]
+    assert usable==[]  # 14:00-14:05 bar is not closed by the delayed 14:03 cutoff
 
 def test_replay_future_mutation_invariance_is_real_not_hardcoded():
     import inspect
