@@ -16,6 +16,7 @@ BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 BB=os.getenv("HUNTER_BYBIT_API","https://api.bytick.com")
 EXCLUDE={"USDC","USDT","BUSD","FDUSD","TUSD","USDP","DAI","USDE","PYUSD","EUR","TRY","BRL","GBP","AUD","UST","USTC"}
 LEVERAGED=("UP","DOWN","BULL","BEAR")
+BSTOCK_API="https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/market/token/rwa/stock/detail/list/ai?type=3"
 
 def fetch(url):
     error=None
@@ -36,6 +37,21 @@ def fetch(url):
 def valid(base):
     return bool(base) and base not in EXCLUDE
 
+def bstock_bases():
+    """Authoritative Binance type=3 tokenized-security symbols. Crypto Hunter excludes them."""
+    payload=fetch(BSTOCK_API); out=set()
+    def walk(x):
+        if isinstance(x,dict):
+            for k,v in x.items():
+                if str(k).lower() in ("symbol","ticker") and isinstance(v,str) and v:
+                    out.add(v.upper().replace("/USDT","").replace("USDT",""))
+                walk(v)
+        elif isinstance(x,list):
+            for v in x: walk(v)
+    walk(payload)
+    if not out: raise RuntimeError("BINANCE_BSTOCK_CLASSIFICATION_EMPTY")
+    return out
+
 def number(x):
     try:
         v=float(x)
@@ -43,10 +59,12 @@ def number(x):
     except (TypeError,ValueError,OverflowError):return None
 
 def binance():
+    bstocks=bstock_bases()
     meta=fetch(BN+"/api/v3/exchangeInfo")
     active={p["symbol"]:p["baseAsset"] for p in meta["symbols"]
             if p.get("quoteAsset")=="USDT" and p.get("status")=="TRADING"
-            and p.get("isSpotTradingAllowed",True) and valid(p.get("baseAsset",""))}
+            and p.get("isSpotTradingAllowed",True) and valid(p.get("baseAsset",""))
+            and p.get("baseAsset","").upper() not in bstocks}
     ticks=fetch(BN+"/api/v3/ticker/24hr")
     if not isinstance(ticks,list):raise RuntimeError("Binance ticker response not list")
     quotes={p["symbol"]:p for p in ticks if isinstance(p,dict) and "symbol" in p}
@@ -57,7 +75,7 @@ def binance():
         if price is None or price<=0 or vol is None or vol<0 or change is None:
             missing.append(symbol);continue
         rows.append(dict(venue="binance",pair=symbol,base=base,price=price,volume_24h_usdt=vol,change_24h_pct=change))
-    return rows,dict(active_pairs=len(active),valid_pairs=len(rows),missing_or_invalid=missing)
+    return rows,dict(active_pairs=len(active),valid_pairs=len(rows),missing_or_invalid=missing,excluded_bstocks=sorted(bstocks))
 
 def bybit(base_url=None):
     base_url=base_url or BB
@@ -171,7 +189,7 @@ def build(results,previous,at):
     leads.sort(key=lambda r:r["base"])
     generation_id=dt.datetime.fromisoformat(at).strftime("%Y%m%dT%H%M%S%fZ")
     return dict(schema="hunter_cex_universe_v2",generation_id=generation_id,source_head_sha=os.getenv("HUNTER_SOURCE_HEAD_SHA"),as_of_utc=at,
-                scope="ALL active Binance USDT spot pairs, excluding stablecoin bases; leveraged-like tickers retained for separate risk classification",
+                scope="Crypto-only active Binance USDT spot pairs; stablecoins and Binance type=3 bStocks/tokenized securities excluded",
                 limitations="Ticker dedup is provisional until contract IDs verified; venue 24h volumes overlap and must not be summed as unique demand.",
                 unique_base_tickers=len(coins),venue_counts={k:len(v) for k,v in results.items()},
                 coins=coins,research_leads=leads,capital_authority="NONE_RESEARCH_ONLY",
