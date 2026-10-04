@@ -323,7 +323,7 @@ def test_result_writers_are_atomic_and_versioned():
 
 def test_fundamental_frame_budget_and_merge():
     m=_load_fundamentals_observer()
-    assert m.FRAME_REQUEST_BUDGET >= 43
+    assert m.FRAME_REQUEST_BUDGET == 12
     prior={"revenue":{"values":[{"val":100}],"trend":"STABLE"},"cash":{"values":[{"val":20}],"trend":"STABLE"}}
     cur={"net_income":{"values":[{"val":5}],"trend":"IMPROVING"},"share_dilution_pct_latest":None}
     merged=m.merge_financial_evidence(prior,cur)
@@ -449,7 +449,7 @@ def test_fmp_bulk_fundamentals_provider_is_observation_only(monkeypatch):
 
 def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
     src=(Path(__file__).parents[1]/"research"/"stock_shadow"/"fundamentals_observer.py").read_text()
-    assert "tasks=all_tasks" in src
+    assert "tasks=all_tasks[start:start+FRAME_REQUEST_BUDGET]" in src
     assert "refresh_budget=4" in src
     assert 'provider":"FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL"' in src
     assert "fmp_bulk_evidence(symbols,api_key)" in src
@@ -620,7 +620,7 @@ def test_frames_pacing_and_ifrs_market_batch_coverage():
     m=_load_fundamentals_observer()
     src=inspect.getsource(m.frame_evidence_by_cik)
     assert m.PROXY_START_INTERVAL_SECONDS >= 2.0
-    assert m.FRAME_REQUEST_BUDGET >= 49
+    assert m.FRAME_REQUEST_BUDGET == 12
     assert '"CashFlowsFromUsedInOperatingActivities"' in src
     assert '"CashAndCashEquivalents"' in src
     assert '"Borrowings"' in src
