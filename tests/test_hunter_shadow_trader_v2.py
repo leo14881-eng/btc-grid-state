@@ -111,17 +111,18 @@ class OpportunityObservationTests(unittest.TestCase):
 
  def test_backfill_updates_real_peaks_without_trade_decision(self):
   import datetime as dt
-  old=eng.binance_kline_peak
+  old=eng.binance_kline_bars
   def fake(asset,start,end,interval="5m"):
-   return {"peak_price":1.15 if start.hour==2 else 1.20,"peak_at_utc":"2026-10-05T04:00:00+00:00","source":"BINANCE_SPOT_KLINES_5M"}
+   base=int(start.timestamp()*1000);closed=int(dt.datetime(2026,10,5,2,tzinfo=dt.timezone.utc).timestamp()*1000)
+   return [(base,1.0),(closed-1,1.08),(closed+1,1.05),(closed+3600*1000,1.15),(closed+70*3600*1000,1.20)]
   try:
-   eng.binance_kline_peak=fake
+   eng.binance_kline_bars=fake
    pos={"asset":"ABC","opened_at_utc":"2026-10-05T00:00:00+00:00","closed_at_utc":"2026-10-05T02:00:00+00:00",
         "exit_reference_price":1.05,"net_return_pct":4.0,"tranches":[{"price":1.0,"notional_usdt":1000.0}],"post_exit_observation":{}}
    eng.backfill_opportunity_history(pos,dt.datetime(2026,10,8,3,tzinfo=dt.timezone.utc))
    self.assertEqual(pos["data_provenance"],"HISTORICAL_BACKFILL");self.assertEqual(pos["full_opportunity_mfe_pct"],20.0)
-   self.assertEqual(pos["holding_mfe_pct"],20.0);self.assertTrue(pos["observation_complete"]);self.assertIn("72h",pos["post_exit_observation"])
-  finally:eng.binance_kline_peak=old
+   self.assertEqual(pos["holding_mfe_pct"],8.0);self.assertTrue(pos["observation_complete"]);self.assertIn("72h",pos["post_exit_observation"])
+  finally:eng.binance_kline_bars=old
 
  def test_opportunity_summary_separates_distribution(self):
   rows=[{"holding_mfe_pct":8.0,"full_opportunity_mfe_pct":20.0,"net_return_pct":3.0,"holding_profit_capture_ratio":.375,
