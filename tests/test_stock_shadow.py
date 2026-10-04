@@ -440,6 +440,7 @@ def test_fmp_bulk_fundamentals_provider_is_observation_only(monkeypatch):
     out,status=m.fmp_bulk_evidence(["AAA"],"test-key")
     assert status["provider"]=="FMP_BULK"
     assert status["matched_symbols"]==1
+    assert "max_workers=3" in inspect.getsource(m.fmp_bulk_evidence)
     assert m.evidence_sufficient(out["AAA"])
     assert out["AAA"]["revenue"]["concept"]=="FMP_NORMALIZED"
     assert "strategy" not in status
