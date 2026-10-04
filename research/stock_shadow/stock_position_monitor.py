@@ -99,7 +99,9 @@ def alpaca_snapshot_quotes(symbols):
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow-position-monitor/3.0"}
     prices={}; errors=[]; requests=0
     end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=20)
-    start=end-__import__("datetime").timedelta(days=3)
+    # We only need the latest entitlement-safe closed 5m bar, not three days of history.
+    # A 90-minute window covers normal intraday gaps while cutting response pagination dramatically.
+    start=end-__import__("datetime").timedelta(minutes=90)
     batches=[]; batch=[]
     for sym in symbols:
         candidate=batch+[sym]
