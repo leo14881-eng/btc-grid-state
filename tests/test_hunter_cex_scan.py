@@ -56,16 +56,19 @@ class CexUniverseTests(unittest.TestCase):
     def test_binance_excludes_authoritative_bstocks_but_keeps_crypto_ending_b(self):
         metadata={"symbols":[
             {"symbol":"MSFTBUSDT","baseAsset":"MSFTB","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":True},
-            {"symbol":"ARBUSDT","baseAsset":"ARB","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":True}]}
+            {"symbol":"ARBUSDT","baseAsset":"ARB","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":True},
+            {"symbol":"QNTUSDT","baseAsset":"QNT","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":True}]}
         ticks=[
             {"symbol":"MSFTBUSDT","lastPrice":"500","quoteVolume":"100000","priceChangePercent":"1"},
-            {"symbol":"ARBUSDT","lastPrice":"0.2","quoteVolume":"100000","priceChangePercent":"2"}]
-        bstock={"data":[{"ticker":"MSFT","symbol":"MSFTB"}]}
+            {"symbol":"ARBUSDT","lastPrice":"0.2","quoteVolume":"100000","priceChangePercent":"2"},
+            {"symbol":"QNTUSDT","lastPrice":"80","quoteVolume":"100000","priceChangePercent":"2"}]
+        bstock={"data":[{"ticker":"MSFT","symbol":"MSFTB"},{"ticker":"QNT","symbol":"QNTB"}]}
         with patch.object(scan,"fetch",side_effect=[bstock,metadata,ticks]):
             rows,status=scan.binance()
-        self.assertEqual([r["base"] for r in rows],["ARB"])
+        self.assertEqual([r["base"] for r in rows],["ARB","QNT"])
         self.assertIn("MSFTB",status["excluded_bstocks"])
         self.assertNotIn("ARB",status["excluded_bstocks"])
+        self.assertNotIn("QNT",status["excluded_bstocks"])
 
     def test_bybit_spot_and_negative_price_change(self):
         instruments={"retCode":0,"result":{"list":[
