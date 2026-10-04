@@ -170,7 +170,7 @@ def frame_evidence_by_cik():
         raise last
     # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
     # below workflow timeout without creating per-symbol request storms.
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures=[ex.submit(fetch_one,t) for t in tasks]
         for fut in as_completed(futures):
             try:
@@ -391,20 +391,22 @@ def main():
         frames_by_cik={}; frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
     fmp_status={"provider":"FMP_BULK","attempted":False,"reason":"NOT_REQUIRED_SEC_FRAMES_PRIMARY"}
     # Financial evidence comes from market-wide Frames + persisted local evidence.
-    # Per-company JSON is NOT a financial backfill path; it is a tiny metadata/risk refresh only.
+    # Only genuine coverage gaps enter a small per-company backfill queue.
     ranked=[]
     for sym,cik in symbol_cik.items():
         prior=companies.get(sym) or {}
-        risk=prior.get("risk_evidence") or {}
-        if not prior.get("latest_material_filings") or risk.get("semantic_review_status")=="NOT_YET_TEXT_VERIFIED":
+        merged=merge_financial_evidence(prior.get("financial_evidence"),frames_by_cik.get(cik))
+        if not evidence_sufficient(merged):
             ranked.append(sym)
-    ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("filing_metadata_updated_at") or (companies.get(sym) or {}).get("updated_at") or ""))
+    ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("gap_refresh_at") or (companies.get(sym) or {}).get("updated_at") or ""))
     refresh_budget=4
     refresh_set=set(ranked[:refresh_budget])
     facts_by_cik={}; subs_by_cik={}
     def fetch_sec_pair(item):
         sym,cik=item
         facts=facts_t=None; sub=sub_t=None; errs=[]
+        try: facts,facts_t=sec_companyfacts(cik)
+        except Exception as e: errs.append({"symbol":sym,"stage":"COMPANYFACTS","type":type(e).__name__,"message":str(e)[:120]})
         try: sub,sub_t=sec_submission(cik)
         except Exception as e: errs.append({"symbol":sym,"stage":"SUBMISSION","type":type(e).__name__,"message":str(e)[:120]})
         return sym,cik,facts,facts_t,sub,sub_t,errs
@@ -416,15 +418,15 @@ def main():
             if sub is not None: subs_by_cik[cik]=(sub,sub_t)
             errors.extend(errs)
     sec_transport={"provider":"SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA","attempted":True,"refresh_budget":refresh_budget,
-                   "requested_symbols":len(refresh_set),"companyfacts_ok":0,"submissions_ok":len(subs_by_cik),
+                   "requested_symbols":len(refresh_set),"companyfacts_ok":len(facts_by_cik),"submissions_ok":len(subs_by_cik),
                    "frames_matched_ciks":len(frames_by_cik)}
     refreshed=0; fallback_requests=0
     for s,cik in symbol_cik.items():
         meta=ticker_map_data.get(s) or {}
         try:
-            sub_pair=subs_by_cik.get(cik)
+            sub_pair=subs_by_cik.get(cik); facts_pair=facts_by_cik.get(cik)
             sub=sub_pair[0] if sub_pair else None; transport=sub_pair[1] if sub_pair else None
-            facts=None; facts_transport=None
+            facts=facts_pair[0] if facts_pair else None; facts_transport=facts_pair[1] if facts_pair else None
             frame_ev=frames_by_cik.get(cik); fmp_ev=None
             prior_ev=(companies.get(s) or {}).get("financial_evidence")
             # Filing metadata is optional here. Never turn frame-wide financial evidence
@@ -447,10 +449,11 @@ def main():
                     latest.append({"form":form,"filing_date":date,"accession":an})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
-            evidence=merge_financial_evidence(prior_ev,frame_ev)
+            sec_ev=financial_evidence(facts) if facts is not None else None
+            evidence=merge_financial_evidence(merge_financial_evidence(prior_ev,frame_ev),sec_ev)
             risk_flags=filing_risk_evidence(latest)
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
-                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE"),
+                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
