@@ -144,9 +144,12 @@ def main():
     session=ss._alpaca_exchange_session(d0+timedelta(hours=16))
     if not session or session.get("date")!=target: raise RuntimeError("replay_exchange_calendar_unavailable")
     wanted=list(dict.fromkeys([x[0] for x in movers]+["SPY","QQQ"])); intra={}
-    for i in range(0,len(wanted),200):
-        try: intra.update(alpaca(wanted[i:i+200],"5Min",d0.isoformat().replace("+00:00","Z"),d1.isoformat().replace("+00:00","Z")))
-        except Exception as e: errors.append({"stage":"INTRADAY","batch_start":i,"type":type(e).__name__,"message":str(e)[:120]})
+    replay_batches=ss._pack_alpaca_symbol_batches(wanted,"5Min",d0,d1)
+    for batch_index,batch in enumerate(replay_batches):
+        try:
+            intra.update(alpaca(batch,"5Min",d0.isoformat().replace("+00:00","Z"),d1.isoformat().replace("+00:00","Z")))
+        except Exception as e:
+            errors.append({"stage":"INTRADAY","batch_index":batch_index,"type":type(e).__name__,"message":str(e)[:120]})
     intra={sym:regular_session_bars(rows,session) for sym,rows in intra.items()}
     try: trades=json.loads(TRADES.read_text()) if TRADES.exists() else []
     except Exception: trades=[]
