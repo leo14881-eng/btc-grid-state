@@ -293,12 +293,10 @@ def classify_evidence(ev, risk_flags):
     return "HEALTHY" if available>=3 else "UNKNOWN"
 
 def filing_risk_evidence(latest):
-    # Tri-state evidence: metadata can verify form presence, but semantic risks remain unknown until filing text is reviewed.
-    has_metadata=bool(latest)
-    has_8k=any(x["form"].startswith("8-K") for x in latest)
-    return {"material_8k_present":True if has_8k else (False if has_metadata else None),
-            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,
-            "material_8k_risk":None,"semantic_review_status":"NOT_YET_TEXT_VERIFIED",
+    # None means semantically unverified; never treat missing text verification as evidence of absence.
+    return {"material_8k_present":any(x["form"].startswith("8-K") for x in latest),
+            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,"material_8k_risk":None,
+            "semantic_review_status":"NOT_YET_TEXT_VERIFIED",
             "semantic_risk_state":"UNKNOWN_PENDING_TEXT_REVIEW"}
 
 def main():
