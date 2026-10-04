@@ -11,9 +11,6 @@ on:
       - 'tests/test_hunter_shadow_trader_v2.py'
       - '.github/workflows/hunter-position-monitor.yml'
       - '.github/hunter-position-monitor-trigger'
-  workflow_run:
-    workflows: ['Hunter Potential Research Pipeline']
-    types: [completed]
   schedule:
     - cron: '*/5 * * * *'
 permissions:
@@ -24,7 +21,6 @@ concurrency:
   queue: max
 jobs:
   monitor:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
