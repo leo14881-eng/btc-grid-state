@@ -91,15 +91,22 @@ def fmp_bulk_evidence(symbols, api_key):
     requests=0; errors=[]
     periods=[(2025,"Q4"),(2026,"Q1"),(2026,"Q2"),(2026,"Q3")]
     endpoints=[("income-statement-bulk","income"),("balance-sheet-statement-bulk","balance"),("cash-flow-statement-bulk","cashflow")]
-    for endpoint,bucket in endpoints:
-        for year,period in periods:
-            requests+=1
+    tasks=[(endpoint,bucket,year,period) for endpoint,bucket in endpoints for year,period in periods]
+    requests=len(tasks)
+    def fetch_bulk(task):
+        endpoint,bucket,year,period=task
+        return task,fmp_bulk_csv(endpoint,year,period,api_key)
+    # Fixed market-wide request count; bounded parallelism avoids a slow endpoint serialising all 12 calls.
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futures=[ex.submit(fetch_bulk,t) for t in tasks]
+        for fut in as_completed(futures):
             try:
-                for row in fmp_bulk_csv(endpoint,year,period,api_key):
+                (endpoint,bucket,year,period),rows=fut.result()
+                for row in rows:
                     sym=str(row.get("symbol") or "").upper()
                     if sym in wanted: raw[sym][bucket].append(row)
             except Exception as e:
-                errors.append({"endpoint":endpoint,"year":year,"period":period,"type":type(e).__name__,"message":str(e)[:120]})
+                errors.append({"type":type(e).__name__,"message":str(e)[:120]})
     out={}
     def series(rows,field):
         vals=[]
