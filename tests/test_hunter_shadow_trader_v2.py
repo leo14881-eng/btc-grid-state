@@ -171,6 +171,17 @@ class OpportunityObservationTests(unittest.TestCase):
   finally:eng.binance_kline_bars=old
 
 
+class OpportunityWindowBoundaryTests(unittest.TestCase):
+ def test_tick_after_72h_cannot_raise_full_opportunity_peak(self):
+  import datetime as dt
+  pos={"opened_at_utc":"2026-10-01T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
+       "closed_at_utc":"2026-10-01T01:00:00+00:00","exit_reference_price":1.05,
+       "holding_peak_price":1.08,"holding_mfe_pct":8.0,
+       "full_opportunity_peak_price":1.20,"full_opportunity_mfe_pct":20.0,"post_exit_observation":{}}
+  eng.update_post_exit(pos,1.50,dt.datetime(2026,10,4,2,0,1,tzinfo=dt.timezone.utc))
+  self.assertEqual(pos["full_opportunity_peak_price"],1.20)
+  self.assertEqual(pos["full_opportunity_mfe_pct"],20.0)
+
 class OpportunityCompletionTruthTests(unittest.TestCase):
 
  def test_elapsed_72h_without_horizon_does_not_complete(self):
