@@ -78,6 +78,7 @@ def main():
   vd=[x for x in v2.get("deferred_buy_opportunities",[]) if x.get("asset")==a]
   vd.sort(key=lambda x:x.get("at_utc") or ""); deferred=vd[0] if vd else None
   r=by_review.get(a) or {}
+  pd=post_detection(s,h,v1buy);s.pop("_candles",None)
   rows.append({"rank":len(rows)+1,"asset":a,"pair":sym,"day":s,
    "universe":{"present":a in (scan.get("coins") or {}),"first_seen_at_utc":u.get("first_seen_at_utc"),"first_seen_price":u.get("first_seen_price"),"first_generation_id":u.get("first_generation_id"),"current_scan_seen_at_utc":universe_time(scan,a),"status":"RECORDED" if u.get("first_seen_at_utc") else ("HISTORICAL_FIRST_SEEN_UNKNOWN" if a in (scan.get("coins") or {}) else "NOT_PRESENT")},
    "early":{"ever_recorded":bool(h),"first_at_utc":h.get("first_early_at_utc"),"first_price":h.get("first_early_price"),"first_generation_id":h.get("first_generation_id")},
@@ -85,7 +86,7 @@ def main():
    "capital_review":{"current_trade_action":r.get("trade_action"),"entry_stage":r.get("entry_stage"),"reference_price":r.get("reference_price"),"estimated_rr":(r.get("execution_scenario") or {}).get("estimated_rr")},
    "v2":{"buy_generated":bool(v2buy),"first_buy":v2buy,"first_deferred":deferred,"first_decision":first_decision(v2,a),
          "why_not_bought":None if v2buy else ((deferred or {}).get("reason") or ((first_decision(v2,a) or {}).get("reasons") or ["NO_DURABLE_V2_DECISION_EVIDENCE"]))},
-   "post_detection":post_detection(s,h,v1buy)})
+   "post_detection":pd})
  out={"schema":"hunter_missed_opportunity_replay_v1","generated_at_utc":now.isoformat(),"date_local":local_date,"timezone":"Asia/Ho_Chi_Minh","mode":"READ_ONLY_NO_TRADING","top_n":TOP_N,
   "selection":"All current Binance crypto-only USDT Universe assets ranked by Ho Chi Minh local-day open-to-intraday-high gain; no current-24h top-N prefilter",
   "limitations":["Universe first-seen is durable from hunter-universe-history deployment onward; older membership is never backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
