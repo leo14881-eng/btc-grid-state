@@ -278,10 +278,10 @@ def test_fundamentals_hourly_uses_frames_then_bounded_sec_json_not_multigb_bulk(
     assert "download_bulk_zip(BULK_COMPANYFACTS)" not in src
     assert "download_bulk_zip(BULK_SUBMISSIONS)" not in src
     assert "frame_evidence_by_cik()" in src
-    assert "sec_companyfacts" in src and "sec_submission" in src
+    assert "sec_companyfacts" in src
     assert "refresh_budget=4" in src
     assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
-    assert "SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA" in src
+    assert "SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FINANCIAL_GAP_BACKFILL" in src
     assert '"evidence_complete"' in src and '"evidence_pending"' in src
 
 def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
@@ -452,5 +452,5 @@ def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
     # Per-company reads are restricted to the tiny true-gap queue, never the full 308 cohort.
     worker=src[src.index("def fetch_sec_pair"):src.index("with ThreadPoolExecutor",src.index("def fetch_sec_pair"))]
     assert "sec_companyfacts(" in worker
-    assert "sec_submission(" in worker
+    assert "sec_submission(" not in worker
     assert "refresh_budget=4" in src
