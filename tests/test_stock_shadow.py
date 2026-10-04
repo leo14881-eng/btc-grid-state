@@ -281,7 +281,8 @@ def test_fundamentals_hourly_uses_frames_then_bounded_sec_json_not_multigb_bulk(
     assert "sec_companyfacts" in src
     assert "refresh_budget=4" in src
     assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
-    assert "SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FINANCIAL_GAP_BACKFILL" in src
+    assert "FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL" in src
+    assert "fmp_bulk_evidence(symbols,api_key)" in src
     assert '"evidence_complete"' in src and '"evidence_pending"' in src
 
 def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
