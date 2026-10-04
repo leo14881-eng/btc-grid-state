@@ -544,6 +544,9 @@ def main():
         batch_due=True
     if old.get("market_batch_schema_version") != MARKET_BATCH_SCHEMA_VERSION:
         batch_due=True
+    # StockFit has its own daily quota; force the first authenticated acceptance even when SEC cache is fresh.
+    if not old.get("stockfit_refreshed_at"):
+        batch_due=True
     market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
     frames_by_cik={}; fmp_by_symbol={}; stockfit_by_symbol={}
@@ -553,12 +556,21 @@ def main():
     if batch_due:
         stockfit_key=os.getenv("STOCKFIT_API_KEY")
         if stockfit_key:
-            # At most 75 symbols x 3 statement calls = 225/day. Rotate oldest StockFit evidence first.
-            sf_ranked=sorted(symbols,key=lambda x:str((companies.get(x) or {}).get("stockfit_refresh_at") or ""))[:STOCKFIT_SYMBOL_BUDGET]
+            # Persist a UTC-day quota ledger so repeated hourly/push workflows cannot consume >225 of 300 free calls.
+            today=datetime.now(timezone.utc).date().isoformat()
+            prior_day=old.get("stockfit_quota_day"); prior_used=int(old.get("stockfit_requests_today") or 0) if prior_day==today else 0
+            allowed_symbols=min(STOCKFIT_SYMBOL_BUDGET,max(0,(STOCKFIT_DAILY_BUDGET-prior_used)//3))
+            sf_ranked=sorted(symbols,key=lambda x:str((companies.get(x) or {}).get("stockfit_refresh_at") or ""))[:allowed_symbols]
             stockfit_by_symbol,stockfit_status=stockfit_batch_evidence(sf_ranked,stockfit_key)
             stockfit_status["status"]="OK" if not stockfit_status.get("errors") else "PARTIAL"
+            stockfit_status["quota_day"]=today; stockfit_status["prior_requests_today"]=prior_used
+            stockfit_status["requests_today"]=prior_used+int(stockfit_status.get("requests") or 0)
+            stockfit_status["daily_safety_budget"]=STOCKFIT_DAILY_BUDGET
+            stockfit_refreshed_at=now() if stockfit_status.get("requests") else old.get("stockfit_refreshed_at")
+            stockfit_quota_day=today; stockfit_requests_today=stockfit_status["requests_today"]
         else:
             stockfit_status={"provider":"STOCKFIT_FREE","attempted":False,"status":"NO_API_KEY"}
+            stockfit_refreshed_at=old.get("stockfit_refreshed_at"); stockfit_quota_day=old.get("stockfit_quota_day"); stockfit_requests_today=old.get("stockfit_requests_today",0)
         api_key=os.getenv("FMP_API_KEY")
         if api_key:
             try:
@@ -676,7 +688,10 @@ def main():
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
     complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
     pending_symbols=[s for s in symbols if not evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {})]
-    out={"updated_at":now(),"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
+    if "stockfit_refreshed_at" not in locals(): stockfit_refreshed_at=old.get("stockfit_refreshed_at")
+    if "stockfit_quota_day" not in locals(): stockfit_quota_day=old.get("stockfit_quota_day")
+    if "stockfit_requests_today" not in locals(): stockfit_requests_today=old.get("stockfit_requests_today",0)
+    out={"updated_at":now(),"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"stockfit_refreshed_at":stockfit_refreshed_at,"stockfit_quota_day":stockfit_quota_day,"stockfit_requests_today":stockfit_requests_today,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"stockfit_transport":stockfit_status,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
