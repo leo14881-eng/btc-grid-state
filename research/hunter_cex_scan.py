@@ -197,6 +197,30 @@ def build(results,previous,at):
                 research_mandate="MAXIMIZE_CREDIBLE_FUTURE_UPSIDE_FROM_CURRENT_ENTRY_PRICE_REGARDLESS_OF_PRIOR_RALLY",
                 research_coverage_count=len(leads))
 
+def persist_universe_history(report):
+    try:
+        history=json.loads(HISTORY.read_text()) if HISTORY.exists() else {}
+    except (ValueError,OSError):
+        history={}
+    if history.get("schema") not in (None,"hunter_universe_history_v1"):
+        raise RuntimeError("UNIVERSE_HISTORY_SCHEMA_MISMATCH")
+    assets=history.setdefault("assets",{})
+    at=report["as_of_utc"]; generation=report["generation_id"]
+    for base,coin in (report.get("coins") or {}).items():
+        price=coin.get("reference_price"); item=assets.get(base)
+        if item is None:
+            assets[base]={"first_seen_at_utc":at,"first_seen_price":price,"first_generation_id":generation,
+                          "observations":1,"last_seen_at_utc":at,"last_seen_price":price,"last_generation_id":generation}
+        else:
+            item["observations"]=int(item.get("observations",0))+1
+            item["last_seen_at_utc"]=at; item["last_seen_price"]=price; item["last_generation_id"]=generation
+    history["schema"]="hunter_universe_history_v1"; history["updated_at_utc"]=at
+    tmp=HISTORY.with_suffix(".tmp")
+    tmp.write_text(json.dumps(history,ensure_ascii=False,indent=2)+"\n")
+    check=json.loads(tmp.read_text())
+    if not isinstance(check.get("assets"),dict): raise RuntimeError("UNIVERSE_HISTORY_INVALID")
+    tmp.replace(HISTORY)
+
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
     baseline=OUT/"hunter-cex-universe-latest.json"
@@ -220,7 +244,7 @@ def main():
                   coverage_status="BINANCE_COMPLETE" if binance_complete else "BINANCE_INCOMPLETE")
     (OUT/"hunter-cex-universe-run.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     # Only a fully valid Binance scan may replace the last usable baseline.
-    if binance_complete:baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    if binance_complete:\n        baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\\n")\n        persist_universe_history(report)
     summary={k:v for k,v in report.items() if k!="coins"}
     (OUT/"hunter-cex-universe-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps(dict(complete=report["complete"],unique_base_tickers=report["unique_base_tickers"],
