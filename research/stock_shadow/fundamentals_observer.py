@@ -321,7 +321,7 @@ def main():
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
             evidence=financial_evidence(facts) if facts is not None else frame_ev; risk_flags=filing_risk_evidence(latest)
-            companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or meta.get("title"),
+            companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),
