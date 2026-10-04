@@ -96,16 +96,22 @@ def stockfit_get(path, api_key):
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.load(r),{k.lower():v for k,v in r.headers.items()}
 
-def stockfit_evidence(symbol, api_key):
-    """Three free-tier statement reads per symbol; filing metadata is retained for PIT/audit use."""
-    endpoints=[
-      ("income","/api/financials/income-statement?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})),
-      ("balance","/api/financials/balance-sheet?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})),
-      ("cashflow","/api/financials/cash-flow-statement?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})),
-    ]
-    rows={}; headers={}; requests=0
-    for bucket,path in endpoints:
-        data,h=stockfit_get(path,api_key); requests+=1; headers=h
+def missing_financial_fields(ev):
+    ev=ev or {}
+    return {k for k in ("revenue","net_income","operating_cash_flow","free_cash_flow","cash","total_debt","shares")
+            if not ((ev.get(k) or {}).get("values"))}
+
+def stockfit_evidence(symbol, api_key, missing_fields):
+    """Read only statement families required by residual cached/SEC gaps."""
+    need=set(missing_fields or ())
+    bucket_fields={"income":{"revenue","net_income","shares"},"balance":{"cash","total_debt"},"cashflow":{"operating_cash_flow","free_cash_flow"}}
+    paths={"income":"/api/financials/income-statement?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2}),
+      "balance":"/api/financials/balance-sheet?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2}),
+      "cashflow":"/api/financials/cash-flow-statement?"+urllib.parse.urlencode({"symbol":symbol,"period":"annual","limit":2})}
+    rows={}; headers={}; requests=0; called=[]
+    for bucket,fields in bucket_fields.items():
+        if not (need & fields): continue
+        data,h=stockfit_get(paths[bucket],api_key); requests+=1; headers=h; called.append(bucket)
         rows[bucket]=data if isinstance(data,list) else (data.get("data") or [])
     def values(bucket, fields):
         out=[]
@@ -113,43 +119,35 @@ def stockfit_evidence(symbol, api_key):
             facts=row.get("facts") or {}
             val=next((facts.get(k) for k in fields if facts.get(k) is not None),None)
             if val is not None:
-                out.append({"end":row.get("period"),"val":val,"form":"STOCKFIT_NORMALIZED",
-                            "filed":row.get("dateFiled"),"accession":next(iter((row.get("sources") or {}).keys()),None)})
-        out.sort(key=lambda x:str(x.get("end") or ""))
-        return out[-5:]
-    mapping={
-      "revenue":("income",("revenue","revenues","salesRevenueNet")),
-      "net_income":("income",("netIncome","netIncomeLoss","profitLoss")),
+                out.append({"end":row.get("period"),"val":val,"form":"STOCKFIT_NORMALIZED","filed":row.get("dateFiled"),
+                            "accession":next(iter((row.get("sources") or {}).keys()),None)})
+        out.sort(key=lambda x:str(x.get("end") or "")); return out[-5:]
+    mapping={"revenue":("income",("revenue","revenues","salesRevenueNet")),"net_income":("income",("netIncome","netIncomeLoss","profitLoss")),
       "operating_cash_flow":("cashflow",("operatingCashFlow","netCashProvidedByOperatingActivities","netCashProvidedByUsedInOperatingActivities")),
-      "free_cash_flow":("cashflow",("freeCashFlow",)),
-      "cash":("balance",("cashAndCashEquivalents","cashAndShortTermInvestments","cash")),
-      "total_debt":("balance",("totalDebt","longTermDebt","debt")),
-      "shares":("income",("weightedAverageShares","weightedAverageShsOut","weightedAverageSharesOutstanding")),
-    }
+      "free_cash_flow":("cashflow",("freeCashFlow",)),"cash":("balance",("cashAndCashEquivalents","cashAndShortTermInvestments","cash")),
+      "total_debt":("balance",("totalDebt","longTermDebt","debt")),"shares":("income",("weightedAverageShares","weightedAverageShsOut","weightedAverageSharesOutstanding"))}
     ev={}
     for key,(bucket,fields) in mapping.items():
         vals=values(bucket,fields); ev[key]={"concept":"STOCKFIT_NORMALIZED","values":vals,"trend":_trend(vals)}
     sh=ev["shares"]["values"]; dilution=None
     if len(sh)>=2 and float(sh[-2]["val"]): dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
     ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
-    return ev,{"requests":requests,"remaining_day":headers.get("x-ratelimit-remaining-day"),
-               "remaining_minute":headers.get("x-ratelimit-remaining-minute")}
+    return ev,{"requests":requests,"called_buckets":called,"remaining_day":headers.get("x-ratelimit-remaining-day"),"remaining_minute":headers.get("x-ratelimit-remaining-minute")}
 
-def stockfit_batch_evidence(symbols, api_key):
-    out={}; errors=[]; requests=0; remaining_day=None
-    for sym in symbols:
-        if requests+3>STOCKFIT_DAILY_BUDGET: break
+def stockfit_gap_evidence(gaps_by_symbol, api_key):
+    """Small residual fallback only; systemic gaps must be solved by bulk concept coverage."""
+    out={}; errors=[]; requests=0; remaining_day=None; endpoint_requests={"income":0,"balance":0,"cashflow":0}
+    for sym,missing in gaps_by_symbol.items():
         try:
-            ev,meta=stockfit_evidence(sym,api_key); requests+=meta["requests"]; remaining_day=meta.get("remaining_day")
-            if any((ev[k]["values"] for k in ("revenue","net_income","operating_cash_flow","cash","total_debt"))): out[sym]=ev
+            ev,meta=stockfit_evidence(sym,api_key,missing); requests+=meta["requests"]; remaining_day=meta.get("remaining_day")
+            for bucket in meta.get("called_buckets") or []: endpoint_requests[bucket]+=1
+            if any(ev[k]["values"] for k in ("revenue","net_income","operating_cash_flow","free_cash_flow","cash","total_debt","shares")): out[sym]=ev
         except urllib.error.HTTPError as e:
-            requests+=1
             errors.append({"symbol":sym,"type":"HTTPError","status":e.code,"message":str(e.reason)[:100]})
-            if e.code==429: break
         except Exception as e:
             errors.append({"symbol":sym,"type":type(e).__name__,"message":str(e)[:120]})
-    return out,{"provider":"STOCKFIT_FREE","attempted":True,"requests":requests,"matched_symbols":len(out),
-                "remaining_day":remaining_day,"errors":errors}
+    return out,{"provider":"STOCKFIT_FREE_RESIDUAL_GAP","attempted":bool(gaps_by_symbol),"requests":requests,"endpoint_requests":endpoint_requests,
+                "matched_symbols":len(out),"remaining_day":remaining_day,"errors":errors}
 
 def fmp_bulk_evidence(symbols, api_key):
     """FMP bulk financial statements. Observation-only; no trading decisions consume this output."""
@@ -539,13 +537,7 @@ def main():
             batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 55*60
         except Exception:
             batch_due=True
-    # Migration/acceptance rule: a fresh SEC Frames cache must not suppress the first real FMP bulk run.
-    if not fmp_refreshed_at:
-        batch_due=True
     if old.get("market_batch_schema_version") != MARKET_BATCH_SCHEMA_VERSION:
-        batch_due=True
-    # StockFit has its own daily quota; force the first authenticated acceptance even when SEC cache is fresh.
-    if not old.get("stockfit_refreshed_at"):
         batch_due=True
     market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
@@ -554,33 +546,9 @@ def main():
     frames_status={"attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
     fmp_status={"provider":"FMP_BULK","attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
     if batch_due:
-        stockfit_key=os.getenv("STOCKFIT_API_KEY")
-        if stockfit_key:
-            # Persist a UTC-day quota ledger so repeated hourly/push workflows cannot consume >225 of 300 free calls.
-            today=datetime.now(timezone.utc).date().isoformat()
-            prior_day=old.get("stockfit_quota_day"); prior_used=int(old.get("stockfit_requests_today") or 0) if prior_day==today else 0
-            allowed_symbols=min(STOCKFIT_SYMBOL_BUDGET,max(0,(STOCKFIT_DAILY_BUDGET-prior_used)//3))
-            sf_ranked=sorted(symbols,key=lambda x:str((companies.get(x) or {}).get("stockfit_refresh_at") or ""))[:allowed_symbols]
-            stockfit_by_symbol,stockfit_status=stockfit_batch_evidence(sf_ranked,stockfit_key)
-            stockfit_status["status"]="OK" if not stockfit_status.get("errors") else "PARTIAL"
-            stockfit_status["quota_day"]=today; stockfit_status["prior_requests_today"]=prior_used
-            stockfit_status["requests_today"]=prior_used+int(stockfit_status.get("requests") or 0)
-            stockfit_status["daily_safety_budget"]=STOCKFIT_DAILY_BUDGET
-            stockfit_refreshed_at=now() if stockfit_status.get("requests") else old.get("stockfit_refreshed_at")
-            stockfit_quota_day=today; stockfit_requests_today=stockfit_status["requests_today"]
-        else:
-            stockfit_status={"provider":"STOCKFIT_FREE","attempted":False,"status":"NO_API_KEY"}
-            stockfit_refreshed_at=old.get("stockfit_refreshed_at"); stockfit_quota_day=old.get("stockfit_quota_day"); stockfit_requests_today=old.get("stockfit_requests_today",0)
-        api_key=os.getenv("FMP_API_KEY")
-        if api_key:
-            try:
-                fmp_by_symbol,fmp_status=fmp_bulk_evidence(symbols,api_key)
-                fmp_status["status"]="OK" if not fmp_status.get("errors") else "PARTIAL"
-                fmp_refreshed_at=now()
-            except Exception as e:
-                fmp_status={"provider":"FMP_BULK","attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
-        else:
-            fmp_status={"provider":"FMP_BULK","attempted":False,"status":"NO_API_KEY"}
+        # Known account capability: FMP bulk returns HTTP 402. Do not repeat doomed production calls.
+        fmp_status={"provider":"FMP_BULK","attempted":False,"status":"FMP_FREE_BULK_UNAVAILABLE","requests":0}
+        fmp_refreshed_at=old.get("fmp_refreshed_at")
         try:
             previous_batch_index=int(((old.get("frames_transport") or {}).get("batch_index") or -1))
             frames_by_cik,frames_status=frame_evidence_by_cik(previous_batch_index+1)
@@ -589,15 +557,37 @@ def main():
             frames_refreshed_at=now()
         except Exception as e:
             frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
+        preliminary={sym:merge_financial_evidence((companies.get(sym) or {}).get("financial_evidence"),frames_by_cik.get(cik))
+                     for sym,cik in symbol_cik.items()}
+        field_missing={field:[s for s in symbols if field in missing_financial_fields(preliminary.get(s))]
+                       for field in ("revenue","net_income","operating_cash_flow","free_cash_flow","cash","total_debt","shares")}
+        systemic_fields={field for field,syms in field_missing.items() if len(syms)>max(12,int(len(symbols)*0.10))}
+        residual_gaps={}
+        for sym in symbols:
+            miss=missing_financial_fields(preliminary.get(sym))-systemic_fields
+            if miss: residual_gaps[sym]=miss
+        residual_gaps=dict(list(sorted(residual_gaps.items()))[:12])
+        stockfit_key=os.getenv("STOCKFIT_API_KEY")
+        if stockfit_key and residual_gaps:
+            stockfit_by_symbol,stockfit_status=stockfit_gap_evidence(residual_gaps,stockfit_key)
+            stockfit_status["status"]="OK" if not stockfit_status.get("errors") else "PARTIAL"
+            stockfit_status["systemic_fields"]=sorted(systemic_fields); stockfit_status["residual_symbols"]=sorted(residual_gaps)
+            stockfit_refreshed_at=now() if stockfit_status.get("requests") else old.get("stockfit_refreshed_at")
+        else:
+            stockfit_status={"provider":"STOCKFIT_FREE_RESIDUAL_GAP","attempted":False,
+                             "status":"NO_RESIDUAL_GAPS" if not residual_gaps else "NO_API_KEY","requests":0,
+                             "systemic_fields":sorted(systemic_fields),"residual_symbols":sorted(residual_gaps)}
+            stockfit_refreshed_at=old.get("stockfit_refreshed_at")
+        stockfit_quota_day=old.get("stockfit_quota_day")
+        stockfit_requests_today=int(old.get("stockfit_requests_today") or 0)+int(stockfit_status.get("requests") or 0)
         market_batch_refreshed_at=now()
 
-    # Rank only residual gaps after cached + FMP bulk + SEC Frames have been merged.
+    # Rank only residual gaps after cached + SEC Frames + precise StockFit fallback have been merged.
     ranked=[]
     for sym,cik in symbol_cik.items():
         prior=companies.get(sym) or {}
-        merged=merge_financial_evidence(prior.get("financial_evidence"),stockfit_by_symbol.get(sym))
-        merged=merge_financial_evidence(merged,fmp_by_symbol.get(sym))
-        merged=merge_financial_evidence(merged,frames_by_cik.get(cik))
+        merged=merge_financial_evidence(prior.get("financial_evidence"),frames_by_cik.get(cik))
+        merged=merge_financial_evidence(merged,stockfit_by_symbol.get(sym))
         if not evidence_sufficient(merged):
             ranked.append(sym)
     ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("gap_refresh_at") or (companies.get(sym) or {}).get("updated_at") or ""))
@@ -626,7 +616,7 @@ def main():
             if facts is not None: facts_by_cik[cik]=(facts,facts_t)
             if sub is not None: subs_by_cik[cik]=(sub,sub_t)
             errors.extend(errs)
-    sec_transport={"provider":"FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL","attempted":True,
+    sec_transport={"provider":"SEC_FRAMES_PLUS_RESIDUAL_GAP_BACKFILL","attempted":True,
                    "refresh_budget":refresh_budget,"requested_symbols":len(refresh_set),
                    "companyfacts_ok":len(facts_by_cik),"submissions_ok":len(subs_by_cik),
                    "semantic_refresh_budget":semantic_refresh_budget,"semantic_requested_symbols":len(semantic_refresh_set),
