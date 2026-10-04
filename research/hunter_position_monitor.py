@@ -29,6 +29,10 @@ def crypto_exclusions():
  u=load(UNIVERSE);xs=(((u.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or [])
  if not xs: raise RuntimeError("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
  return set(xs)
+def configure_lane(v1_mode):
+ if v1_mode:
+  v1.configure_v1();return
+ eng.STATE=V2;eng.CAPITAL_POOL_USDT=20000.;eng.ENTRY_MODE="EXECUTABLE";eng.DISCOVERY_MIN_SCORE=6;eng.DISCOVERY_MIN_INDEPENDENT=2;eng.STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2";eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
 def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None):
  state=load(path);excluded=set(excluded or [])
  quarantined=[p for p in (state.get("open_positions") or []) if p.get("asset") in excluded]
@@ -36,9 +40,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
   state["open_positions"]=[p for p in state.get("open_positions") or [] if p.get("asset") not in excluded]
   state.setdefault("excluded_non_crypto_positions",[]).extend(quarantined)
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
- if v1_mode:v1.configure_v1()
- else:
-  eng.STATE=V2;eng.CAPITAL_POOL_USDT=20000.;eng.ENTRY_MODE="EXECUTABLE";eng.STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2";eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
+ configure_lane(v1_mode)
  scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc)
  after={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
