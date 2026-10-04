@@ -454,3 +454,29 @@ def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
     assert "sec_companyfacts(" in worker
     assert "sec_submission(" not in worker
     assert "refresh_budget=4" in src
+
+
+def _load_replay():
+    p=Path("research/stock_shadow/stock_replay.py")
+    spec=importlib.util.spec_from_file_location("stock_replay",p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
+
+def test_replay_is_chronological_and_observation_only():
+    import inspect
+    m=_load_replay(); src=inspect.getsource(m)
+    assert '"mode":"REPLAY_OBSERVATION_ONLY"' in src
+    assert '"strategy_effect":False' in src
+    assert '"future_data_prohibited":True' in src
+    fn=inspect.getsource(m.chronological_signal)
+    assert "for bar in sorted(intra" in fn
+    assert "seen.append(bar)" in fn
+    assert "partial_day(seen)" in fn
+    assert "entry_decision" in fn
+
+def test_replay_full_universe_screen_then_intraday_only_movers():
+    import inspect
+    m=_load_replay(); src=inspect.getsource(m.main)
+    assert "discover_us_common_stocks()" in src
+    assert '"1Day"' in src
+    assert "gain>=SURGE_PCT" in src
+    assert 'wanted=list(dict.fromkeys([x[0] for x in movers]+["SPY","QQQ"]))' in src
+    assert '"5Min"' in src
