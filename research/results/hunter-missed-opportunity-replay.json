@@ -1,10 +1,11 @@
 {
   "schema": "hunter_missed_opportunity_replay_v1",
-  "generated_at_utc": "2026-10-04T12:20:46.699555+00:00",
-  "date_utc": "2026-10-04",
+  "generated_at_utc": "2026-10-04T12:55:16.180725+00:00",
+  "date_local": "2026-10-04",
+  "timezone": "Asia/Ho_Chi_Minh",
   "mode": "READ_ONLY_NO_TRADING",
   "top_n": 10,
-  "selection": "Binance spot USDT assets preselected by current 24h change then ranked by UTC-day open-to-intraday-high gain",
+  "selection": "All current Binance crypto-only USDT Universe assets ranked by Ho Chi Minh local-day open-to-intraday-high gain; no current-24h top-N prefilter",
   "limitations": [
     "Universe first-seen is durable from hunter-universe-history deployment onward; older membership is never backdated.",
     "EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."
@@ -15,12 +16,12 @@
       "asset": "BEAMX",
       "pair": "BEAMXUSDT",
       "day": {
-        "day_open": 0.002138,
+        "day_open": 0.002109,
         "day_high": 0.00305,
-        "day_low": 0.002127,
-        "last": 0.002793,
-        "day_high_gain_pct": 42.6567,
-        "last_gain_pct": 30.6361,
+        "day_low": 0.002106,
+        "last": 0.002758,
+        "day_high_gain_pct": 44.6183,
+        "last_gain_pct": 30.7729,
         "high_at_utc": "2026-10-04T08:45:00+00:00"
       },
       "universe": {
@@ -28,7 +29,7 @@
         "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
         "first_seen_price": 0.002808,
         "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
         "status": "RECORDED"
       },
       "early": {
@@ -53,15 +54,15 @@
       "capital_review": {
         "current_trade_action": "SYSTEM_BLOCKED",
         "entry_stage": "SYSTEM_BLOCKED",
-        "reference_price": 0.002785,
-        "estimated_rr": 1.771
+        "reference_price": 0.002808,
+        "estimated_rr": 1.801
       },
       "v2": {
         "buy_generated": false,
         "first_buy": null,
         "first_deferred": null,
         "first_decision": {
-          "at": "2026-10-03T23:29:25.520908+00:00",
+          "at": "2026-10-03T23:32:44.190892+00:00",
           "shadow_id": null,
           "asset": "BEAMX",
           "action": "SYSTEM_BLOCKED",
@@ -71,16 +72,16 @@
           ],
           "evidence": {
             "asset": "BEAMX",
-            "score": 2.2739,
+            "score": 2.5631,
             "independent": 2,
-            "btc_rel_1h": 0.0841,
-            "btc_rel_4h": 0.8328,
-            "rel_accel": -0.1241,
-            "spread_bps": 14.075,
-            "bid_depth_2pct_usdt": 34931.53,
-            "ask_depth_2pct_usdt": 27310.74,
-            "buy_slippage_bps": 13.458,
-            "estimated_rr": 1.751,
+            "btc_rel_1h": 0.1607,
+            "btc_rel_4h": 0.9096,
+            "rel_accel": -0.0667,
+            "spread_bps": 9.368,
+            "bid_depth_2pct_usdt": 28899.04,
+            "ask_depth_2pct_usdt": 27912.13,
+            "buy_slippage_bps": 8.509,
+            "estimated_rr": 1.745,
             "supply_verified": false,
             "supply_status": "UNKNOWN",
             "blockers": [
@@ -96,20 +97,114 @@
         ]
       },
       "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 10.8688
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T11:40:31.184177+00:00",
+        "max_gain_after_first_early_pct": 4.1803,
+        "post_early_high_at_utc": "2026-10-04T12:30:00+00:00"
       }
     },
     {
       "rank": 2,
+      "asset": "GLMR",
+      "pair": "GLMRUSDT",
+      "day": {
+        "day_open": 0.011673,
+        "day_high": 0.014355,
+        "day_low": 0.01115,
+        "last": 0.011999,
+        "day_high_gain_pct": 22.9761,
+        "last_gain_pct": 2.7928,
+        "high_at_utc": "2026-10-03T18:30:00+00:00"
+      },
+      "universe": {
+        "present": true,
+        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "first_seen_price": 0.011629,
+        "first_generation_id": "20261004T121923703269Z",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
+        "status": "RECORDED"
+      },
+      "early": {
+        "ever_recorded": false,
+        "first_at_utc": null,
+        "first_price": null,
+        "first_generation_id": null
+      },
+      "v1": {
+        "buy_generated": true,
+        "first_buy": {
+          "type": "SHADOW_V1_BUY",
+          "at": "2026-10-04T10:49:45.110847+00:00",
+          "asset": "GLMR",
+          "shadow_id": "SHV1-20261004T104945-GLMR-ac13c9",
+          "price": 0.012283,
+          "tranches": 1,
+          "notional_usdt": 1000.0,
+          "reason": "DISCOVERY_ENTRY"
+        }
+      },
+      "capital_review": {
+        "current_trade_action": null,
+        "entry_stage": null,
+        "reference_price": null,
+        "estimated_rr": null
+      },
+      "v2": {
+        "buy_generated": false,
+        "first_buy": null,
+        "first_deferred": null,
+        "first_decision": {
+          "at": "2026-10-04T10:49:49.838178+00:00",
+          "shadow_id": null,
+          "asset": "GLMR",
+          "action": "REJECT",
+          "price": 0.012283,
+          "reasons": [
+            "DISCOVERY_SCORE_WEAK"
+          ],
+          "evidence": {
+            "asset": "GLMR",
+            "score": 5.0809,
+            "independent": 3,
+            "btc_rel_1h": 0.6847,
+            "btc_rel_4h": -6.1733,
+            "rel_accel": 2.228,
+            "spread_bps": 23.567,
+            "bid_depth_2pct_usdt": 35666.69,
+            "ask_depth_2pct_usdt": 19038.61,
+            "buy_slippage_bps": 20.794,
+            "estimated_rr": 1.636,
+            "supply_verified": false,
+            "supply_status": "UNKNOWN",
+            "supply_confirmed_major_risk": false,
+            "blockers": [
+              "DEPTH_BELOW_30K_USDT"
+            ]
+          },
+          "tranches": 0,
+          "notional_usdt": 0
+        },
+        "why_not_bought": [
+          "DISCOVERY_SCORE_WEAK"
+        ]
+      },
+      "post_detection": {
+        "eligibility_status": "FIRST_EARLY_EXACT_UNKNOWN_BUT_AT_OR_BEFORE_V1_BUY",
+        "first_eligibility_evidence_at": "2026-10-04T10:49:45.110847+00:00",
+        "max_gain_after_first_early_pct": null
+      }
+    },
+    {
+      "rank": 3,
       "asset": "AXS",
       "pair": "AXSUSDT",
       "day": {
         "day_open": 1.198,
         "day_high": 1.456,
-        "day_low": 1.197,
-        "last": 1.372,
+        "day_low": 1.193,
+        "last": 1.374,
         "day_high_gain_pct": 21.5359,
-        "last_gain_pct": 14.5242,
+        "last_gain_pct": 14.6912,
         "high_at_utc": "2026-10-04T07:00:00+00:00"
       },
       "universe": {
@@ -117,7 +212,7 @@
         "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
         "first_seen_price": 1.373,
         "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
         "status": "RECORDED"
       },
       "early": {
@@ -196,20 +291,23 @@
         "why_not_bought": "BUY_BUT_NO_CAPITAL"
       },
       "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 4.5226
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T11:40:31.184177+00:00",
+        "max_gain_after_first_early_pct": -0.1436,
+        "post_early_high_at_utc": "2026-10-04T11:45:00+00:00"
       }
     },
     {
-      "rank": 3,
+      "rank": 4,
       "asset": "NOM",
       "pair": "NOMUSDT",
       "day": {
-        "day_open": 0.002383,
+        "day_open": 0.00233,
         "day_high": 0.00279,
-        "day_low": 0.002366,
-        "last": 0.00267,
-        "day_high_gain_pct": 17.0793,
-        "last_gain_pct": 12.0436,
+        "day_low": 0.002313,
+        "last": 0.002689,
+        "day_high_gain_pct": 19.7425,
+        "last_gain_pct": 15.4077,
         "high_at_utc": "2026-10-04T11:00:00+00:00"
       },
       "universe": {
@@ -217,7 +315,7 @@
         "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
         "first_seen_price": 0.002665,
         "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
         "status": "RECORDED"
       },
       "early": {
@@ -242,15 +340,15 @@
       "capital_review": {
         "current_trade_action": "SYSTEM_BLOCKED",
         "entry_stage": "SYSTEM_BLOCKED",
-        "reference_price": 0.00262,
-        "estimated_rr": 1.753
+        "reference_price": 0.002665,
+        "estimated_rr": 1.719
       },
       "v2": {
         "buy_generated": false,
         "first_buy": null,
         "first_deferred": null,
         "first_decision": {
-          "at": "2026-10-03T23:29:25.520908+00:00",
+          "at": "2026-10-03T23:32:44.190892+00:00",
           "shadow_id": null,
           "asset": "NOM",
           "action": "SYSTEM_BLOCKED",
@@ -260,16 +358,16 @@
           ],
           "evidence": {
             "asset": "NOM",
-            "score": 4.0757,
+            "score": 4.0191,
             "independent": 2,
-            "btc_rel_1h": -0.8435,
-            "btc_rel_4h": 3.6295,
-            "rel_accel": -1.7508,
-            "spread_bps": 4.178,
-            "bid_depth_2pct_usdt": 64436.45,
-            "ask_depth_2pct_usdt": 46115.53,
-            "buy_slippage_bps": 15.072,
-            "estimated_rr": 1.766,
+            "btc_rel_1h": -0.8965,
+            "btc_rel_4h": 3.5728,
+            "rel_accel": -1.7898,
+            "spread_bps": 8.354,
+            "bid_depth_2pct_usdt": 67536.49,
+            "ask_depth_2pct_usdt": 45481.92,
+            "buy_slippage_bps": 13.151,
+            "estimated_rr": 1.765,
             "supply_verified": false,
             "supply_status": "UNKNOWN",
             "blockers": [
@@ -284,20 +382,302 @@
         ]
       },
       "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 5.3228
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T11:40:31.184177+00:00",
+        "max_gain_after_first_early_pct": 3.6618,
+        "post_early_high_at_utc": "2026-10-04T12:15:00+00:00"
       }
     },
     {
-      "rank": 4,
+      "rank": 5,
+      "asset": "TOWNS",
+      "pair": "TOWNSUSDT",
+      "day": {
+        "day_open": 0.002161,
+        "day_high": 0.002576,
+        "day_low": 0.002161,
+        "last": 0.00223,
+        "day_high_gain_pct": 19.2041,
+        "last_gain_pct": 3.193,
+        "high_at_utc": "2026-10-04T09:30:00+00:00"
+      },
+      "universe": {
+        "present": true,
+        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "first_seen_price": 0.002218,
+        "first_generation_id": "20261004T121923703269Z",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
+        "status": "RECORDED"
+      },
+      "early": {
+        "ever_recorded": false,
+        "first_at_utc": null,
+        "first_price": null,
+        "first_generation_id": null
+      },
+      "v1": {
+        "buy_generated": true,
+        "first_buy": {
+          "type": "SHADOW_V1_BUY",
+          "at": "2026-10-04T09:53:51.698787+00:00",
+          "asset": "TOWNS",
+          "shadow_id": "SHV1-20261004T095351-TOWNS-64c566",
+          "price": 0.002411,
+          "tranches": 1,
+          "notional_usdt": 1000.0,
+          "reason": "DISCOVERY_ENTRY"
+        }
+      },
+      "capital_review": {
+        "current_trade_action": null,
+        "entry_stage": null,
+        "reference_price": null,
+        "estimated_rr": null
+      },
+      "v2": {
+        "buy_generated": false,
+        "first_buy": null,
+        "first_deferred": null,
+        "first_decision": {
+          "at": "2026-10-03T23:32:44.190892+00:00",
+          "shadow_id": null,
+          "asset": "TOWNS",
+          "action": "REJECT",
+          "price": 0.002213,
+          "reasons": [
+            "DISCOVERY_SCORE_WEAK"
+          ],
+          "evidence": {
+            "asset": "TOWNS",
+            "score": 2.9983,
+            "independent": 2,
+            "btc_rel_1h": 0.3363,
+            "btc_rel_4h": 1.6257,
+            "rel_accel": -0.0701,
+            "spread_bps": 9.054,
+            "bid_depth_2pct_usdt": 35184.92,
+            "ask_depth_2pct_usdt": 6404.87,
+            "buy_slippage_bps": 16.432,
+            "estimated_rr": 1.641,
+            "supply_verified": false,
+            "supply_status": "UNKNOWN",
+            "blockers": [
+              "DEPTH_BELOW_30K_USDT"
+            ]
+          },
+          "tranches": 0,
+          "notional_usdt": 0
+        },
+        "why_not_bought": [
+          "DISCOVERY_SCORE_WEAK"
+        ]
+      },
+      "post_detection": {
+        "eligibility_status": "FIRST_EARLY_EXACT_UNKNOWN_BUT_AT_OR_BEFORE_V1_BUY",
+        "first_eligibility_evidence_at": "2026-10-04T09:53:51.698787+00:00",
+        "max_gain_after_first_early_pct": null
+      }
+    },
+    {
+      "rank": 6,
+      "asset": "ESP",
+      "pair": "ESPUSDT",
+      "day": {
+        "day_open": 0.10076,
+        "day_high": 0.11836,
+        "day_low": 0.10013,
+        "last": 0.10841,
+        "day_high_gain_pct": 17.4672,
+        "last_gain_pct": 7.5923,
+        "high_at_utc": "2026-10-04T02:15:00+00:00"
+      },
+      "universe": {
+        "present": true,
+        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "first_seen_price": 0.10965,
+        "first_generation_id": "20261004T121923703269Z",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
+        "status": "RECORDED"
+      },
+      "early": {
+        "ever_recorded": true,
+        "first_at_utc": "2026-10-04T11:40:31.184177+00:00",
+        "first_price": 0.10777,
+        "first_generation_id": "20261004T113837912928Z"
+      },
+      "v1": {
+        "buy_generated": true,
+        "first_buy": {
+          "type": "SHADOW_V1_BUY",
+          "at": "2026-10-04T11:07:36.300032+00:00",
+          "asset": "ESP",
+          "shadow_id": "SHV1-20261004T110736-ESP-93018c",
+          "price": 0.1077,
+          "tranches": 1,
+          "notional_usdt": 1000.0,
+          "reason": "DISCOVERY_ENTRY"
+        }
+      },
+      "capital_review": {
+        "current_trade_action": "REJECT",
+        "entry_stage": "BLOCKED",
+        "reference_price": 0.10965,
+        "estimated_rr": 1.753
+      },
+      "v2": {
+        "buy_generated": false,
+        "first_buy": null,
+        "first_deferred": null,
+        "first_decision": {
+          "at": "2026-10-04T11:07:38.879889+00:00",
+          "shadow_id": null,
+          "asset": "ESP",
+          "action": "REJECT",
+          "price": 0.1077,
+          "reasons": [
+            "DISCOVERY_SCORE_WEAK"
+          ],
+          "evidence": {
+            "asset": "ESP",
+            "score": 1.8737,
+            "independent": 2,
+            "btc_rel_1h": -0.0423,
+            "btc_rel_4h": -4.881,
+            "rel_accel": 1.1779,
+            "spread_bps": 4.647,
+            "bid_depth_2pct_usdt": 138057.64,
+            "ask_depth_2pct_usdt": 134703.96,
+            "buy_slippage_bps": 19.08,
+            "estimated_rr": 1.761,
+            "supply_verified": false,
+            "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+            "supply_confirmed_major_risk": false,
+            "blockers": [
+              "ASSET_IDENTITY_NOT_CORROBORATED"
+            ]
+          },
+          "tranches": 0,
+          "notional_usdt": 0
+        },
+        "why_not_bought": [
+          "DISCOVERY_SCORE_WEAK"
+        ]
+      },
+      "post_detection": {
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T11:40:31.184177+00:00",
+        "max_gain_after_first_early_pct": 1.8651,
+        "post_early_high_at_utc": "2026-10-04T12:15:00+00:00"
+      }
+    },
+    {
+      "rank": 7,
+      "asset": "ALPINE",
+      "pair": "ALPINEUSDT",
+      "day": {
+        "day_open": 0.353,
+        "day_high": 0.414,
+        "day_low": 0.35,
+        "last": 0.361,
+        "day_high_gain_pct": 17.2805,
+        "last_gain_pct": 2.2663,
+        "high_at_utc": "2026-10-04T05:30:00+00:00"
+      },
+      "universe": {
+        "present": true,
+        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "first_seen_price": 0.359,
+        "first_generation_id": "20261004T121923703269Z",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
+        "status": "RECORDED"
+      },
+      "early": {
+        "ever_recorded": true,
+        "first_at_utc": "2026-10-04T12:10:11.451756+00:00",
+        "first_price": 0.359,
+        "first_generation_id": "20261004T120929525280Z"
+      },
+      "v1": {
+        "buy_generated": true,
+        "first_buy": {
+          "type": "SHADOW_V1_BUY",
+          "at": "2026-10-04T09:53:51.698787+00:00",
+          "asset": "ALPINE",
+          "shadow_id": "SHV1-20261004T095351-ALPINE-5a72e7",
+          "price": 0.356,
+          "tranches": 1,
+          "notional_usdt": 1000.0,
+          "reason": "DISCOVERY_ENTRY"
+        }
+      },
+      "capital_review": {
+        "current_trade_action": "WAIT",
+        "entry_stage": "WATCH",
+        "reference_price": 0.359,
+        "estimated_rr": 1.765
+      },
+      "v2": {
+        "buy_generated": false,
+        "first_buy": null,
+        "first_deferred": null,
+        "first_decision": {
+          "at": "2026-10-03T23:32:44.190892+00:00",
+          "shadow_id": null,
+          "asset": "ALPINE",
+          "action": "REJECT",
+          "price": 0.362,
+          "reasons": [
+            "SCORE_WEAK",
+            "DEPTH_INSUFFICIENT",
+            "SUPPLY_RISK_UNVERIFIED",
+            "BLOCKER:DEPTH_BELOW_30K_USDT"
+          ],
+          "evidence": {
+            "asset": "ALPINE",
+            "score": 6.7227,
+            "independent": 4,
+            "btc_rel_1h": 1.3736,
+            "btc_rel_4h": 2.5094,
+            "rel_accel": 0.7462,
+            "spread_bps": 27.586,
+            "bid_depth_2pct_usdt": 19835.33,
+            "ask_depth_2pct_usdt": 21439.87,
+            "buy_slippage_bps": 13.793,
+            "estimated_rr": 1.621,
+            "supply_verified": false,
+            "supply_status": "UNKNOWN",
+            "blockers": [
+              "DEPTH_BELOW_30K_USDT"
+            ]
+          },
+          "tranches": 0,
+          "notional_usdt": 0
+        },
+        "why_not_bought": [
+          "SCORE_WEAK",
+          "DEPTH_INSUFFICIENT",
+          "SUPPLY_RISK_UNVERIFIED",
+          "BLOCKER:DEPTH_BELOW_30K_USDT"
+        ]
+      },
+      "post_detection": {
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T12:10:11.451756+00:00",
+        "max_gain_after_first_early_pct": 0.5571,
+        "post_early_high_at_utc": "2026-10-04T12:30:00+00:00"
+      }
+    },
+    {
+      "rank": 8,
       "asset": "PHA",
       "pair": "PHAUSDT",
       "day": {
-        "day_open": 0.0695,
+        "day_open": 0.0689,
         "day_high": 0.0808,
-        "day_low": 0.069,
-        "last": 0.0757,
-        "day_high_gain_pct": 16.259,
-        "last_gain_pct": 8.9209,
+        "day_low": 0.0685,
+        "last": 0.0737,
+        "day_high_gain_pct": 17.2714,
+        "last_gain_pct": 6.9666,
         "high_at_utc": "2026-10-04T05:30:00+00:00"
       },
       "universe": {
@@ -305,7 +685,7 @@
         "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
         "first_seen_price": 0.0757,
         "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
         "status": "RECORDED"
       },
       "early": {
@@ -371,44 +751,47 @@
         ]
       },
       "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 5.6209
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T11:40:31.184177+00:00",
+        "max_gain_after_first_early_pct": 0.1307,
+        "post_early_high_at_utc": "2026-10-04T11:45:00+00:00"
       }
     },
     {
-      "rank": 5,
-      "asset": "ESP",
-      "pair": "ESPUSDT",
+      "rank": 9,
+      "asset": "S",
+      "pair": "SUSDT",
       "day": {
-        "day_open": 0.10204,
-        "day_high": 0.11836,
-        "day_low": 0.1009,
-        "last": 0.10971,
-        "day_high_gain_pct": 15.9937,
-        "last_gain_pct": 7.5167,
-        "high_at_utc": "2026-10-04T02:15:00+00:00"
+        "day_open": 0.03815,
+        "day_high": 0.04409,
+        "day_low": 0.03815,
+        "last": 0.04103,
+        "day_high_gain_pct": 15.5701,
+        "last_gain_pct": 7.5491,
+        "high_at_utc": "2026-10-04T00:00:00+00:00"
       },
       "universe": {
         "present": true,
         "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "first_seen_price": 0.10965,
+        "first_seen_price": 0.04087,
         "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
         "status": "RECORDED"
       },
       "early": {
         "ever_recorded": true,
-        "first_at_utc": "2026-10-04T11:40:31.184177+00:00",
-        "first_price": 0.10777,
-        "first_generation_id": "20261004T113837912928Z"
+        "first_at_utc": "2026-10-04T12:10:11.451756+00:00",
+        "first_price": 0.04093,
+        "first_generation_id": "20261004T120929525280Z"
       },
       "v1": {
         "buy_generated": true,
         "first_buy": {
           "type": "SHADOW_V1_BUY",
-          "at": "2026-10-04T11:07:36.300032+00:00",
-          "asset": "ESP",
-          "shadow_id": "SHV1-20261004T110736-ESP-93018c",
-          "price": 0.1077,
+          "at": "2026-10-04T12:11:47.361777+00:00",
+          "asset": "S",
+          "shadow_id": "SHV1-20261004T121147-S-b7bae1",
+          "price": 0.04093,
           "tranches": 1,
           "notional_usdt": 1000.0,
           "reason": "DISCOVERY_ENTRY"
@@ -417,63 +800,73 @@
       "capital_review": {
         "current_trade_action": "REJECT",
         "entry_stage": "BLOCKED",
-        "reference_price": 0.10923,
-        "estimated_rr": 1.801
+        "reference_price": 0.04087,
+        "estimated_rr": 1.763
       },
       "v2": {
-        "buy_generated": false,
-        "first_buy": null,
+        "buy_generated": true,
+        "first_buy": {
+          "type": "SHADOW_V2_BUY",
+          "at": "2026-10-03T22:56:08.654510+00:00",
+          "asset": "S",
+          "shadow_id": "SHV2-20261003T225608-S-6105bb",
+          "price": 0.04038,
+          "tranches": 1,
+          "notional_usdt": 1000.0,
+          "reason": "EXECUTABLE_ENTRY"
+        },
         "first_deferred": null,
         "first_decision": {
-          "at": "2026-10-04T11:07:38.879889+00:00",
-          "shadow_id": null,
-          "asset": "ESP",
-          "action": "REJECT",
-          "price": 0.1077,
+          "at": "2026-10-03T23:32:44.190892+00:00",
+          "shadow_id": "SHV2-20261003T225608-S-6105bb",
+          "asset": "S",
+          "action": "HOLD",
+          "price": 0.04258,
           "reasons": [
-            "DISCOVERY_SCORE_WEAK"
+            "SUPPLY_RISK_UNVERIFIED",
+            "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED"
           ],
           "evidence": {
-            "asset": "ESP",
-            "score": 1.8737,
-            "independent": 2,
-            "btc_rel_1h": -0.0423,
-            "btc_rel_4h": -4.881,
-            "rel_accel": 1.1779,
-            "spread_bps": 4.647,
-            "bid_depth_2pct_usdt": 138057.64,
-            "ask_depth_2pct_usdt": 134703.96,
-            "buy_slippage_bps": 19.08,
-            "estimated_rr": 1.761,
+            "asset": "S",
+            "score": 34.1207,
+            "independent": 5,
+            "btc_rel_1h": 7.3991,
+            "btc_rel_4h": 11.558,
+            "rel_accel": 4.5096,
+            "spread_bps": 11.766,
+            "bid_depth_2pct_usdt": 72734.21,
+            "ask_depth_2pct_usdt": 49792.22,
+            "buy_slippage_bps": 17.48,
+            "estimated_rr": 1.744,
             "supply_verified": false,
             "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-            "supply_confirmed_major_risk": false,
             "blockers": [
               "ASSET_IDENTITY_NOT_CORROBORATED"
             ]
           },
-          "tranches": 0,
-          "notional_usdt": 0
+          "tranches": 1,
+          "notional_usdt": 1000.0
         },
-        "why_not_bought": [
-          "DISCOVERY_SCORE_WEAK"
-        ]
+        "why_not_bought": null
       },
       "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 9.8265
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T12:10:11.451756+00:00",
+        "max_gain_after_first_early_pct": 0.5619,
+        "post_early_high_at_utc": "2026-10-04T12:45:00+00:00"
       }
     },
     {
-      "rank": 6,
+      "rank": 10,
       "asset": "BAT",
       "pair": "BATUSDT",
       "day": {
-        "day_open": 0.0947,
+        "day_open": 0.0953,
         "day_high": 0.1097,
         "day_low": 0.0934,
-        "last": 0.1084,
-        "day_high_gain_pct": 15.8395,
-        "last_gain_pct": 14.4667,
+        "last": 0.1069,
+        "day_high_gain_pct": 15.1102,
+        "last_gain_pct": 12.1721,
         "high_at_utc": "2026-10-04T08:15:00+00:00"
       },
       "universe": {
@@ -481,7 +874,7 @@
         "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
         "first_seen_price": 0.1082,
         "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
+        "current_scan_seen_at_utc": "2026-10-04T12:54:46.747705+00:00",
         "status": "RECORDED"
       },
       "early": {
@@ -506,8 +899,8 @@
       "capital_review": {
         "current_trade_action": "REJECT",
         "entry_stage": "BLOCKED",
-        "reference_price": 0.1083,
-        "estimated_rr": 1.753
+        "reference_price": 0.1082,
+        "estimated_rr": 1.771
       },
       "v2": {
         "buy_generated": false,
@@ -550,381 +943,10 @@
         ]
       },
       "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 3.393
-      }
-    },
-    {
-      "rank": 7,
-      "asset": "IOTA",
-      "pair": "IOTAUSDT",
-      "day": {
-        "day_open": 0.0543,
-        "day_high": 0.0621,
-        "day_low": 0.0543,
-        "last": 0.0591,
-        "day_high_gain_pct": 14.3646,
-        "last_gain_pct": 8.8398,
-        "high_at_utc": "2026-10-04T09:00:00+00:00"
-      },
-      "universe": {
-        "present": true,
-        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "first_seen_price": 0.0592,
-        "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "status": "RECORDED"
-      },
-      "early": {
-        "ever_recorded": true,
-        "first_at_utc": "2026-10-04T11:40:31.184177+00:00",
-        "first_price": 0.0601,
-        "first_generation_id": "20261004T113837912928Z"
-      },
-      "v1": {
-        "buy_generated": true,
-        "first_buy": {
-          "type": "SHADOW_V1_BUY",
-          "at": "2026-10-04T09:53:51.698787+00:00",
-          "asset": "IOTA",
-          "shadow_id": "SHV1-20261004T095351-IOTA-dc0b2c",
-          "price": 0.0593,
-          "tranches": 1,
-          "notional_usdt": 1000.0,
-          "reason": "DISCOVERY_ENTRY"
-        }
-      },
-      "capital_review": {
-        "current_trade_action": "WAIT",
-        "entry_stage": "WATCH",
-        "reference_price": 0.0599,
-        "estimated_rr": 1.799
-      },
-      "v2": {
-        "buy_generated": true,
-        "first_buy": {
-          "type": "SHADOW_V2_BUY",
-          "at": "2026-10-04T09:53:55.997247+00:00",
-          "asset": "IOTA",
-          "shadow_id": "SHV2-20261004T095355-IOTA-d4a2cd",
-          "price": 0.0593,
-          "tranches": 1,
-          "notional_usdt": 1000.0,
-          "reason": "EXECUTABLE_ENTRY"
-        },
-        "first_deferred": null,
-        "first_decision": {
-          "at": "2026-10-03T23:29:25.520908+00:00",
-          "shadow_id": null,
-          "asset": "IOTA",
-          "action": "WAIT",
-          "price": 0.0543,
-          "reasons": [
-            "DISCOVERY_SCORE_WEAK"
-          ],
-          "evidence": {
-            "asset": "IOTA",
-            "score": 1.5677,
-            "independent": 2,
-            "btc_rel_1h": 0.313,
-            "btc_rel_4h": -0.3295,
-            "rel_accel": 0.3954,
-            "spread_bps": 18.433,
-            "bid_depth_2pct_usdt": 106273.51,
-            "ask_depth_2pct_usdt": 130142.72,
-            "buy_slippage_bps": 9.217,
-            "estimated_rr": 1.696,
-            "supply_verified": false,
-            "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-            "blockers": []
-          },
-          "tranches": 0,
-          "notional_usdt": 0
-        },
-        "why_not_bought": null
-      },
-      "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 3.3278
-      }
-    },
-    {
-      "rank": 8,
-      "asset": "GMT",
-      "pair": "GMTUSDT",
-      "day": {
-        "day_open": 0.00879,
-        "day_high": 0.00968,
-        "day_low": 0.00871,
-        "last": 0.00937,
-        "day_high_gain_pct": 10.1251,
-        "last_gain_pct": 6.5984,
-        "high_at_utc": "2026-10-04T12:00:00+00:00"
-      },
-      "universe": {
-        "present": true,
-        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "first_seen_price": 0.00936,
-        "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "status": "RECORDED"
-      },
-      "early": {
-        "ever_recorded": true,
-        "first_at_utc": "2026-10-04T11:40:31.184177+00:00",
-        "first_price": 0.00928,
-        "first_generation_id": "20261004T113837912928Z"
-      },
-      "v1": {
-        "buy_generated": true,
-        "first_buy": {
-          "type": "SHADOW_V1_BUY",
-          "at": "2026-10-04T10:49:45.110847+00:00",
-          "asset": "GMT",
-          "shadow_id": "SHV1-20261004T104945-GMT-9903a1",
-          "price": 0.00919,
-          "tranches": 1,
-          "notional_usdt": 1000.0,
-          "reason": "DISCOVERY_ENTRY"
-        }
-      },
-      "capital_review": {
-        "current_trade_action": "BUY",
-        "entry_stage": "EXECUTABLE_BUY",
-        "reference_price": 0.0096,
-        "estimated_rr": 1.769
-      },
-      "v2": {
-        "buy_generated": false,
-        "first_buy": null,
-        "first_deferred": {
-          "at_utc": "2026-10-04T12:01:53.307535+00:00",
-          "asset": "GMT",
-          "price": 0.00938,
-          "reason": "BUY_BUT_NO_CAPITAL",
-          "trade_action": "BUY",
-          "score": 11.8107,
-          "independent_signal_count": 5,
-          "btc_relative_1h_pct": 2.759,
-          "btc_relative_4h_pct": 3.057,
-          "estimated_rr": 1.769,
-          "used_capital_usdt": 20000.0,
-          "capital_pool_usdt": 20000.0,
-          "loss_making_positions_are_not_rotated": true
-        },
-        "first_decision": {
-          "at": "2026-10-04T10:49:49.838178+00:00",
-          "shadow_id": null,
-          "asset": "GMT",
-          "action": "WAIT",
-          "price": 0.00919,
-          "reasons": [
-            "DISCOVERY_SCORE_WEAK"
-          ],
-          "evidence": {
-            "asset": "GMT",
-            "score": 1.5878,
-            "independent": 2,
-            "btc_rel_1h": -2.6904,
-            "btc_rel_4h": 1.5146,
-            "rel_accel": -3.069,
-            "spread_bps": 10.899,
-            "bid_depth_2pct_usdt": 54438.21,
-            "ask_depth_2pct_usdt": 36833.78,
-            "buy_slippage_bps": 10.419,
-            "estimated_rr": 1.751,
-            "supply_verified": false,
-            "supply_status": "UNKNOWN",
-            "supply_confirmed_major_risk": false,
-            "blockers": []
-          },
-          "tranches": 0,
-          "notional_usdt": 0
-        },
-        "why_not_bought": "BUY_BUT_NO_CAPITAL"
-      },
-      "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 4.3103
-      }
-    },
-    {
-      "rank": 9,
-      "asset": "W",
-      "pair": "WUSDT",
-      "day": {
-        "day_open": 0.0138,
-        "day_high": 0.01519,
-        "day_low": 0.01375,
-        "last": 0.0146,
-        "day_high_gain_pct": 10.0725,
-        "last_gain_pct": 5.7971,
-        "high_at_utc": "2026-10-04T08:30:00+00:00"
-      },
-      "universe": {
-        "present": true,
-        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "first_seen_price": 0.01461,
-        "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "status": "RECORDED"
-      },
-      "early": {
-        "ever_recorded": true,
-        "first_at_utc": "2026-10-04T11:40:31.184177+00:00",
-        "first_price": 0.01452,
-        "first_generation_id": "20261004T113837912928Z"
-      },
-      "v1": {
-        "buy_generated": true,
-        "first_buy": {
-          "type": "SHADOW_V1_BUY",
-          "at": "2026-10-04T11:07:36.300032+00:00",
-          "asset": "W",
-          "shadow_id": "SHV1-20261004T110736-W-a934c0",
-          "price": 0.0145,
-          "tranches": 1,
-          "notional_usdt": 1000.0,
-          "reason": "DISCOVERY_ENTRY"
-        }
-      },
-      "capital_review": {
-        "current_trade_action": "REJECT",
-        "entry_stage": "BLOCKED",
-        "reference_price": 0.01457,
-        "estimated_rr": 1.782
-      },
-      "v2": {
-        "buy_generated": false,
-        "first_buy": null,
-        "first_deferred": null,
-        "first_decision": {
-          "at": "2026-10-03T23:29:25.520908+00:00",
-          "shadow_id": null,
-          "asset": "W",
-          "action": "REJECT",
-          "price": 0.01378,
-          "reasons": [
-            "DISCOVERY_SCORE_WEAK"
-          ],
-          "evidence": {
-            "asset": "W",
-            "score": 3.1051,
-            "independent": 3,
-            "btc_rel_1h": 0.3809,
-            "btc_rel_4h": -0.4294,
-            "rel_accel": 0.4883,
-            "spread_bps": 7.26,
-            "bid_depth_2pct_usdt": 47062.06,
-            "ask_depth_2pct_usdt": 37712.98,
-            "buy_slippage_bps": 14.751,
-            "estimated_rr": 1.787,
-            "supply_verified": false,
-            "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-            "blockers": [
-              "ASSET_IDENTITY_NOT_CORROBORATED"
-            ]
-          },
-          "tranches": 0,
-          "notional_usdt": 0
-        },
-        "why_not_bought": [
-          "DISCOVERY_SCORE_WEAK"
-        ]
-      },
-      "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 4.6143
-      }
-    },
-    {
-      "rank": 10,
-      "asset": "NMR",
-      "pair": "NMRUSDT",
-      "day": {
-        "day_open": 11.41,
-        "day_high": 12.49,
-        "day_low": 11.37,
-        "last": 12.2,
-        "day_high_gain_pct": 9.4654,
-        "last_gain_pct": 6.9238,
-        "high_at_utc": "2026-10-04T11:15:00+00:00"
-      },
-      "universe": {
-        "present": true,
-        "first_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "first_seen_price": 12.2,
-        "first_generation_id": "20261004T121923703269Z",
-        "current_scan_seen_at_utc": "2026-10-04T12:19:23.703269+00:00",
-        "status": "RECORDED"
-      },
-      "early": {
-        "ever_recorded": true,
-        "first_at_utc": "2026-10-04T11:40:31.184177+00:00",
-        "first_price": 12.22,
-        "first_generation_id": "20261004T113837912928Z"
-      },
-      "v1": {
-        "buy_generated": true,
-        "first_buy": {
-          "type": "SHADOW_V1_BUY",
-          "at": "2026-10-04T09:53:51.698787+00:00",
-          "asset": "NMR",
-          "shadow_id": "SHV1-20261004T095351-NMR-ab8d32",
-          "price": 11.96,
-          "tranches": 1,
-          "notional_usdt": 1000.0,
-          "reason": "DISCOVERY_ENTRY"
-        }
-      },
-      "capital_review": {
-        "current_trade_action": "BUY",
-        "entry_stage": "EXECUTABLE_BUY",
-        "reference_price": 12.15,
-        "estimated_rr": 1.826
-      },
-      "v2": {
-        "buy_generated": true,
-        "first_buy": {
-          "type": "SHADOW_V2_BUY",
-          "at": "2026-10-04T09:53:55.997247+00:00",
-          "asset": "NMR",
-          "shadow_id": "SHV2-20261004T095355-NMR-97f9cc",
-          "price": 11.96,
-          "tranches": 1,
-          "notional_usdt": 1000.0,
-          "reason": "EXECUTABLE_ENTRY"
-        },
-        "first_deferred": null,
-        "first_decision": {
-          "at": "2026-10-04T09:53:55.997247+00:00",
-          "shadow_id": "SHV2-20261004T095355-NMR-97f9cc",
-          "asset": "NMR",
-          "action": "BUY",
-          "price": 11.96,
-          "reasons": [
-            "FULL_EVIDENCE_VALIDATED"
-          ],
-          "evidence": {
-            "asset": "NMR",
-            "score": 14.8953,
-            "independent": 5,
-            "btc_rel_1h": 3.3799,
-            "btc_rel_4h": 3.3053,
-            "rel_accel": 2.5535,
-            "spread_bps": 8.379,
-            "bid_depth_2pct_usdt": 78980.95,
-            "ask_depth_2pct_usdt": 68430.98,
-            "buy_slippage_bps": 6.977,
-            "estimated_rr": 1.75,
-            "supply_verified": false,
-            "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-            "supply_confirmed_major_risk": false,
-            "blockers": []
-          },
-          "tranches": 1,
-          "notional_usdt": 1000.0
-        },
-        "why_not_bought": null
-      },
-      "post_detection": {
-        "max_gain_from_first_early_to_day_high_pct": 2.2095
+        "eligibility_status": "EXACT_EARLY_RECORDED",
+        "first_eligibility_evidence_at": "2026-10-04T11:40:31.184177+00:00",
+        "max_gain_after_first_early_pct": 2.4505,
+        "post_early_high_at_utc": "2026-10-04T12:00:00+00:00"
       }
     }
   ]
