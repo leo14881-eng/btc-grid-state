@@ -232,6 +232,7 @@ def build_report(scan,previous,market,now,get_candles=True,early_symbols=None):
         if sym not in results and sym in coins:results[sym]=item
     current_count=sum(1 for x in results.values() if x.get("researched_at_utc")==now.isoformat())
     return {"schema":"hunter_forward_research_v1","as_of_utc":now.isoformat(),
+            "scan_generation_id":scan.get("generation_id"),
             "universe_scan_as_of_utc":scan.get("as_of_utc"),
             "universe_coverage_status":scan.get("coverage_status"),
             "universe_size":len(coins),"lightweight_universe_review_count":len(coins),
