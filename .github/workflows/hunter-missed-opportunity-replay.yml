@@ -1,0 +1,53 @@
+name: Hunter Missed Opportunity Replay
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '55 16 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: hunter-missed-opportunity-replay
+  cancel-in-progress: false
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run read-only missed opportunity replay
+        run: python research/hunter_missed_opportunity_replay.py
+      - name: Validate replay output
+        run: |
+          python - <<'PY'
+          import json
+          p='research/results/hunter-missed-opportunity-replay.json'
+          d=json.load(open(p))
+          assert d['schema']=='hunter_missed_opportunity_replay_v1'
+          assert d['mode']=='READ_ONLY_NO_TRADING'
+          assert d['rows'], 'REPLAY_ROWS_EMPTY'
+          assert all('early' in x and 'v1' in x and 'capital_review' in x and 'v2' in x and 'post_detection' in x for x in d['rows'])
+          print('MISSED_OPPORTUNITY_REPLAY_ACCEPTED',len(d['rows']))
+          PY
+      - name: Persist replay only
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cp research/results/hunter-missed-opportunity-replay.json /tmp/replay.json
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git checkout -B replay-persist origin/main
+            cp /tmp/replay.json research/results/hunter-missed-opportunity-replay.json
+            git add -f research/results/hunter-missed-opportunity-replay.json
+            if git diff --cached --quiet; then echo REPLAY_NO_CHANGE; exit 0; fi
+            git commit -m 'research: daily missed opportunity replay'
+            if git push origin HEAD:main; then echo MISSED_OPPORTUNITY_REPLAY_PERSISTED; exit 0; fi
+            sleep $attempt
+          done
+          exit 1
