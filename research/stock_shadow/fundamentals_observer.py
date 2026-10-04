@@ -226,7 +226,8 @@ def _trend(values):
     if len(vals)<2: return "INSUFFICIENT"
     a,b=vals[-2],vals[-1]
     if abs(a)<1e-12: return "IMPROVING" if b>0 else ("DETERIORATING" if b<0 else "FLAT")
-    pct=(b/a-1)*100
+    # Preserve direction across negative values: -43 -> -55 is deterioration, not improvement.
+    pct=((b-a)/abs(a))*100
     if pct>5: return "IMPROVING"
     if pct<-5: return "DETERIORATING"
     return "STABLE"
