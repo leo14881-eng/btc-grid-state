@@ -78,8 +78,12 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           BASE_SHA=$(git rev-parse HEAD)
           git fetch origin main
-          REMOTE_SHA=$(git rev-parse origin/main)
-          [ "$BASE_SHA" = "$REMOTE_SHA" ] || { echo "SHADOW_STATE_REVISION_CONFLICT base=$BASE_SHA remote=$REMOTE_SHA"; exit 1; }
+          CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter|research/results/hunter-|\.github/workflows/hunter-)'; then
+            echo "SHADOW_STATE_REVISION_CONFLICT"
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
           git add -f research/results/hunter-position-monitor.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json
           for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json; do
             [ -s "$p" ] || { echo "REFUSE_EMPTY_PORTFOLIO $p"; exit 1; }
@@ -102,6 +106,13 @@ jobs:
           fi
           git commit -m 'state: five-minute Hunter position monitor'
           git fetch origin main
-          [ "$(git rev-parse HEAD^)" = "$(git rev-parse origin/main)" ] || { echo "SHADOW_STATE_REVISION_CHANGED_BEFORE_PUSH"; exit 1; }
+          BASE_PARENT=$(git rev-parse HEAD^)
+          CHANGED=$(git diff --name-only "$BASE_PARENT"..origin/main || true)
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter|research/results/hunter-|\.github/workflows/hunter-)'; then
+            echo "SHADOW_STATE_REVISION_CHANGED_BEFORE_PUSH"
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
+          git rebase origin/main
           git push origin HEAD:main
           verify_main
