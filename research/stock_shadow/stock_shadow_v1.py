@@ -27,7 +27,9 @@ def now(): return datetime.now(timezone.utc).isoformat()
 def _alpaca_exchange_session(ts=None):
     """Resolve the authoritative Alpaca session, reusing only a same-day persisted cache."""
     t=(ts or datetime.now(timezone.utc)).astimezone(NY); day=t.date().isoformat()
-    cached=load(CALENDAR_CACHE,{})
+    current_day=datetime.now(timezone.utc).astimezone(NY).date().isoformat()
+    cacheable=(day==current_day)
+    cached=load(CALENDAR_CACHE,{}) if cacheable else {}
     if cached.get("date")==day:
         if cached.get("closed") is True:
             API_USAGE["alpaca_calendar"]["cache_hits"]+=1
@@ -48,10 +50,10 @@ def _alpaca_exchange_session(ts=None):
         API_USAGE["alpaca_calendar"]["http_requests"]+=1
         with urllib.request.urlopen(req,timeout=15) as r: rows=json.load(r)
         if not rows:
-            save(CALENDAR_CACHE,{"date":day,"closed":True,"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
+            if cacheable: save(CALENDAR_CACHE,{"date":day,"closed":True,"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
             return None
         row=rows[0]; oh,om=map(int,row["open"].split(":")); ch,cm=map(int,row["close"].split(":"))
-        save(CALENDAR_CACHE,{"date":day,"open":row["open"],"close":row["close"],"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
+        if cacheable: save(CALENDAR_CACHE,{"date":day,"open":row["open"],"close":row["close"],"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
         return {"date":day,"open":dtime(oh,om),"close":dtime(ch,cm),"source":"ALPACA_EXCHANGE_CALENDAR"}
     except Exception:
         API_USAGE["alpaca_calendar"]["errors"]+=1; return None
