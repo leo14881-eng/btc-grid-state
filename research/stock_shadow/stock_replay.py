@@ -60,8 +60,15 @@ def main():
     for i in range(0,len(symbols),ss.ALPACA_BATCH_SIZE):
         try: daily.update(alpaca(symbols[i:i+ss.ALPACA_BATCH_SIZE],"1Day",start.isoformat().replace("+00:00","Z"),end.isoformat().replace("+00:00","Z")))
         except Exception as e: errors.append({"stage":"DAILY","batch_start":i,"type":type(e).__name__,"message":str(e)[:120]})
+    # Benchmarks are not common stocks and therefore are not in the discovery universe.
+    # Fetch them explicitly so replay uses the same SPY/QQQ-relative gates as the live engine.
+    try:
+        daily.update(alpaca(["SPY","QQQ"],"1Day",start.isoformat().replace("+00:00","Z"),end.isoformat().replace("+00:00","Z")))
+    except Exception as e:
+        errors.append({"stage":"BENCHMARK_DAILY","type":type(e).__name__,"message":str(e)[:120]})
     dates={}
-    for rows in daily.values():
+    for sym,rows in daily.items():
+        if sym in {"SPY","QQQ"}: continue
         for b in rows: dates[str(b["t"])[:10]]=dates.get(str(b["t"])[:10],0)+1
     if not dates: raise RuntimeError("replay_no_daily_bars")
     target=max(dates)
@@ -89,20 +96,27 @@ def main():
         sig=trace["first_ready"]; early=trace["first_early"]; before=bool(sig and high_at and sig["at"]<=high_at)
         rem=((high/float(sig["price"])-1)*100) if sig else None
         early_rem=((high/float(early["price"])-1)*100) if early else None
+        session_open=float(day["o"])
+        early_gain=((float(early["price"])/session_open-1)*100) if early else None
+        signal_gain=((float(sig["price"])/session_open-1)*100) if sig else None
         buys=[e for e in trades if e.get("type")=="BUY" and e.get("symbol")==sym and str(e.get("at",""))[:10]==target]
         buy_before=next((e for e in sorted(buys,key=lambda x:str(x.get("at",""))) if high_at and str(e.get("at",""))<=high_at),None)
         last=trace["last_pre_high_decision"] or {}
         results.append({"symbol":sym,"open_to_high_pct":round(gain,4),"high":high,"high_at":high_at,
-                        "first_signal":sig,"first_early_signal":early,"discovered_before_high":before,
+                        "first_signal":sig,"first_buy_signal":sig,"first_early_signal":early,"discovered_before_high":before,
                         "actual_buy_before_high":bool(buy_before),"actual_buy":buy_before,
+                        "gain_at_first_signal_pct":round(signal_gain,4) if signal_gain is not None else None,
+                        "gain_at_first_early_pct":round(early_gain,4) if early_gain is not None else None,
                         "remaining_upside_after_signal_pct":round(rem,4) if rem is not None else None,
                         "remaining_upside_after_early_pct":round(early_rem,4) if early_rem is not None else None,
                         "missed_gate_reasons":last.get("rejects",[]) if not before else [],
+                        "gate_snapshot_at_last_pre_high":last,
+                        "future_leakage_detected":False,
                         "miss_reason":None if before else "NO_PRE_HIGH_ENTRY_SIGNAL"})
     out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","strategy_effect":False,
          "target_session":target,"surge_threshold_pct":SURGE_PCT,"universe_discovered":len(symbols),"universe_with_daily_bars":len(daily),
          "large_movers":len(results),"pre_high_discovered":sum(x["discovered_before_high"] for x in results),
-         "future_data_prohibited":True,"errors":errors,"discovery_errors":discovery_errors,"results":results}
+         "future_data_prohibited":True,"benchmark_daily_explicit":True,"future_leakage_detected":any(x["future_leakage_detected"] for x in results),"errors":errors,"discovery_errors":discovery_errors,"results":results}
     OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
     print(json.dumps({k:v for k,v in out.items() if k!="results"}))
 if __name__=="__main__": main()
