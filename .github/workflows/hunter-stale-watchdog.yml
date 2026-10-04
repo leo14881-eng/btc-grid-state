@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '07,37 * * * *'
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: hunter-watchdog-main
   cancel-in-progress: true
@@ -18,6 +18,7 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: Observe discovery and downstream generation
+        id: observe
         run: |
           set -euo pipefail
           git fetch origin main --quiet
@@ -32,12 +33,28 @@ jobs:
           fresh=(-5 <= age <= 70 and scan.get('binance_complete') is True)
           aligned=(health.get('scan_generation_id')==scan.get('generation_id') or health.get('scan_as_of_utc')==scan.get('as_of_utc'))
           print(f"HUNTER_WATCHDOG_STATE generation={scan.get('generation_id')} age_minutes={age:.2f} discovery_fresh={fresh} downstream_aligned={aligned}")
-          if not fresh:
+          stale = not fresh
+          if stale:
               print('HUNTER_WATCHDOG_ALERT DISCOVERY_STALE')
           if not aligned:
               print('HUNTER_WATCHDOG_ALERT DOWNSTREAM_NOT_ALIGNED')
-          # Observer only. Recovery is intentionally not dispatched here:
-          # the scheduled Universe is the single discovery producer and its
-          # successful workflow_run is the single Research trigger.
-          print('HUNTER_WATCHDOG_OBSERVER_ONLY')
+          out=os.environ.get('GITHUB_OUTPUT')
+          if out:
+              with open(out,'a') as fh:
+                  print('discovery_stale='+('true' if stale else 'false'), file=fh)
+          print('HUNTER_WATCHDOG_SELF_HEAL_ARMED')
+          PY
+      - name: Self-heal stale discovery by touching dedicated trigger
+        if: ${{ steps.observe.outputs.discovery_stale == 'true' }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B main origin/main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > .github/hunter-discovery-recovery-trigger
+          git add .github/hunter-discovery-recovery-trigger
+          git commit -m 'ops: self-heal stale Hunter discovery'
+          git push origin HEAD:main
+          echo 'HUNTER_WATCHDOG_RECOVERY_TRIGGER_PUSHED'
           PY
