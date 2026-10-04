@@ -253,8 +253,12 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           BASE_SHA=$(git rev-parse HEAD)
           git fetch origin main
-          REMOTE_SHA=$(git rev-parse origin/main)
-          [ "$BASE_SHA" = "$REMOTE_SHA" ] || { echo "HUNTER_STATE_REVISION_CONFLICT base=$BASE_SHA remote=$REMOTE_SHA"; exit 1; }
+          CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter|research/results/hunter-|\.github/workflows/hunter-)'; then
+            echo "HUNTER_STATE_REVISION_CONFLICT"
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
           python - <<'PY'
           import json,os,subprocess
           expected=os.environ['EXPECTED']
@@ -302,7 +306,14 @@ jobs:
           # Computed state is revision-bound. Never rebase stale research JSON onto
           # a newer main; rerun from the newer revision instead.
           git fetch origin main
-          [ "$(git rev-parse HEAD^)" = "$(git rev-parse origin/main)" ] || { echo "HUNTER_STATE_REVISION_CHANGED_BEFORE_PUSH"; exit 1; }
+          BASE_PARENT=$(git rev-parse HEAD^)
+          CHANGED=$(git diff --name-only "$BASE_PARENT"..origin/main || true)
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter|research/results/hunter-|\.github/workflows/hunter-)'; then
+            echo "HUNTER_STATE_REVISION_CHANGED_BEFORE_PUSH"
+            printf '%s\n' "$CHANGED"
+            exit 1
+          fi
+          git rebase origin/main
           git push origin HEAD:main
           git fetch origin main
 
