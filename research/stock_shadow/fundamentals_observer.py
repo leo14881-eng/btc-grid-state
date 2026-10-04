@@ -303,6 +303,15 @@ def filing_risk_evidence(latest):
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
     companies=old.get("companies",{})
+    # Migrate legacy observer output: old runs encoded unverified severe risks as False.
+    # False must be reserved for VERIFIED_ABSENT; until text review exists these are unknown.
+    for _company in companies.values():
+        _risk=_company.get("risk_evidence")
+        if isinstance(_risk,dict) and _risk.get("semantic_review_status")=="NOT_YET_TEXT_VERIFIED":
+            for _key in ("going_concern","bankruptcy_restructuring","delisting_risk","material_8k_risk"):
+                if _risk.get(_key) is False:
+                    _risk[_key]=None
+            _risk["semantic_risk_state"]="UNKNOWN_PENDING_TEXT_REVIEW"
     symbols=sorted(state.get("positions",{}))
     if not symbols:
         out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":0,"tracked":0,
