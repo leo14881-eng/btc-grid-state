@@ -703,3 +703,14 @@ def test_stock_shadow_daily_market_cache_is_incremental_and_benchmarks_are_share
     assert 'symbols+["SPY","QQQ"]' in src
     assert 'cached.get(idx,[])' in src
     assert "DAILY_CACHE_KEEP_BARS = 24" in inspect.getsource(ss)
+
+
+def test_ifrs_companyfacts_functional_currency_mapping_is_supported():
+    import inspect
+    m=_load_fundamentals_observer()
+    fact_src=inspect.getsource(m._fact_series)
+    evidence_src=inspect.getsource(m.financial_evidence)
+    assert 'unit not in {"shares","pure"}' in fact_src
+    assert '"Revenue"' in evidence_src
+    assert '"PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"' in evidence_src
+    assert m.MARKET_BATCH_SCHEMA_VERSION >= 5
