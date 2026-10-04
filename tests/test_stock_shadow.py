@@ -316,3 +316,14 @@ def test_result_writers_are_atomic_and_versioned():
 # CLEAN_V3_BASELINE_REARMED_20261004: workflow trigger after audited state reset.
 
 # SERIALIZED_STATE_ACCEPTANCE_20261004
+
+
+def test_fundamental_frame_budget_and_merge():
+    m=_load_fundamentals_observer()
+    assert m.FRAME_REQUEST_BUDGET <= 12
+    prior={"revenue":{"values":[{"val":100}],"trend":"STABLE"},"cash":{"values":[{"val":20}],"trend":"STABLE"}}
+    cur={"net_income":{"values":[{"val":5}],"trend":"IMPROVING"},"share_dilution_pct_latest":None}
+    merged=m.merge_financial_evidence(prior,cur)
+    assert merged["revenue"]["values"][-1]["val"]==100
+    assert merged["net_income"]["values"][-1]["val"]==5
+    assert m.evidence_sufficient({"revenue":{"values":[1]},"net_income":{"values":[1]},"cash":{"values":[1]}}) is True
