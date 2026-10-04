@@ -23,6 +23,9 @@ def proxy_json(url):
     with urllib.request.urlopen(req,timeout=35) as r: raw=r.read().decode("utf-8","replace").strip()
     # Read-only transport fallback; payload remains SEC JSON.
     if raw.startswith("Markdown Content:"): raw=raw.split("Markdown Content:",1)[1].strip()
+    # Proxy may wrap JSON in prose/fences.
+    a=raw.find("{"); b=raw.rfind("}")
+    if a>=0 and b>a: raw=raw[a:b+1]
     return json.loads(raw)
 
 def ticker_map():
