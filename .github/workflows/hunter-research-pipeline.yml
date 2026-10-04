@@ -367,7 +367,24 @@ jobs:
             exit 1
           fi
           git rebase origin/main
-          git push origin HEAD:main
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "HUNTER_STATE_PUSH_VERIFIED attempt=$attempt"
+              break
+            fi
+            echo "HUNTER_STATE_PUSH_RACE attempt=$attempt"
+            PRE_REBASE_PARENT=$(git rev-parse HEAD^)
+            git fetch origin main
+            CHANGED=$(git diff --name-only "$PRE_REBASE_PARENT"..origin/main || true)
+            if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
+              echo "HUNTER_STATE_CAS_REJECTED_STALE_WRITER"
+              printf '%s\n' "$CHANGED"
+              exit 1
+            fi
+            git rebase origin/main
+            sleep $attempt
+            [ "$attempt" -lt 5 ] || { echo "HUNTER_STATE_PUSH_RETRY_EXHAUSTED"; exit 1; }
+          done
           git fetch origin main
 
               git fetch origin main
