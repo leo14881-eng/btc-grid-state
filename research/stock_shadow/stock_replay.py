@@ -196,7 +196,7 @@ def main():
       "early_before_high":sum(bool(x["first_early_signal"] and x["high_at"] and _dt(x["first_early_signal"]["at"])<=_dt(x["high_at"])) for x in results),
       "missed_before_high":sum(not x["discovered_before_high"] for x in results),"benchmark_daily_explicit":True,"benchmark_daily_source":"UNIFIED_MARKET_CACHE",
       "future_data_prohibited":True,"future_mutation_invariance":True,"lookahead_violations":lookahead_violations,
-      "future_leakage_detected":bool(lookahead_violations),"errors":errors,"discovery_errors":discovery_errors,"results":results}
+      "future_leakage_detected":bool(lookahead_violations),"replay_intraday_logical_batches":len(replay_batches),"errors":errors,"discovery_errors":discovery_errors,"results":results}
     OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
     print(json.dumps({k:v for k,v in out.items() if k!="results"}))
     if lookahead_violations: raise LookaheadViolation(f"{len(lookahead_violations)} replay lookahead violations")
