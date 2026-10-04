@@ -387,7 +387,7 @@ def main():
             _risk["semantic_risk_state"]="UNKNOWN_PENDING_TEXT_REVIEW"
     symbols=sorted(state.get("positions",{}))
     if not symbols:
-        out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":0,"tracked":0,
+        out={"updated_at":now(),"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":0,"tracked":0,
              "evidence_complete":0,"evidence_pending":0,"pending_symbols":[],"refreshed_this_run":0,
              "bulk_transport":{"attempted":False,"reason":"NO_POSITIONS"},"frames_transport":{"attempted":False},
              "fallback_requests":0,"fallback_request_cap":FALLBACK_MAX_REQUESTS,"errors":[],"mapping_errors":[],
@@ -407,11 +407,27 @@ def main():
         except Exception as e:
             errors.append({"symbol":sym,"stage":"CIK_RESOLUTION","type":type(e).__name__})
     bulk={"attempted":False,"reason":"DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE","ciks_requested":len(set(symbol_cik.values()))}
-    try:
-        frames_by_cik,frames_status=frame_evidence_by_cik()
-        frames_status["attempted"]=True
-    except Exception as e:
-        frames_by_cik={}; frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
+    # Financial statements are not minute data. Reuse persisted evidence hourly and refresh
+    # the market-wide Frames set at most once every six hours.
+    last_frames_at=old.get("frames_refreshed_at") or old.get("updated_at")
+    frames_due=True
+    if last_frames_at:
+        try:
+            last_dt=datetime.fromisoformat(str(last_frames_at).replace("Z","+00:00"))
+            frames_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 6*3600
+        except Exception:
+            frames_due=True
+    frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
+    if frames_due:
+        try:
+            frames_by_cik,frames_status=frame_evidence_by_cik()
+            frames_status["attempted"]=True
+            frames_refreshed_at=now()
+        except Exception as e:
+            frames_by_cik={}; frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
+    else:
+        frames_by_cik={}
+        frames_status={"attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE","last_refresh_at":frames_refreshed_at}
     fmp_status={"provider":"FMP_BULK","attempted":False,"reason":"NOT_REQUIRED_SEC_FRAMES_PRIMARY"}
     # Financial evidence comes from market-wide Frames + persisted local evidence.
     # Only genuine coverage gaps enter a small per-company backfill queue.
@@ -476,7 +492,7 @@ def main():
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
-                "recent_8k_count":len(risk_forms),"updated_at":now(),
+                "recent_8k_count":len(risk_forms),"updated_at":now(),"gap_refresh_at":(now() if s in refresh_set else (companies.get(s) or {}).get("gap_refresh_at")),
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
                 "note":"Observation-only fundamentals evidence; no automatic BUY/ADD/SELL effect."}
             refreshed+=1
