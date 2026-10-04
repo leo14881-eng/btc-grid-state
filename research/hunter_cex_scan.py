@@ -11,7 +11,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-OUT=pathlib.Path("research/results")\nHISTORY=OUT/"hunter-universe-history.json"
+OUT=pathlib.Path("research/results")
+HISTORY=OUT/"hunter-universe-history.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 BB=os.getenv("HUNTER_BYBIT_API","https://api.bytick.com")
 EXCLUDE={"USDC","USDT","BUSD","FDUSD","TUSD","USDP","DAI","USDE","PYUSD","EUR","TRY","BRL","GBP","AUD","UST","USTC"}
@@ -217,11 +218,14 @@ def main():
                   binance_complete=binance_complete,
                   bybit_required=False,
                   coverage_status="BINANCE_COMPLETE" if binance_complete else "BINANCE_INCOMPLETE")
-    (OUT/"hunter-cex-universe-run.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    (OUT/"hunter-cex-universe-run.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"
+")
     # Only a fully valid Binance scan may replace the last usable baseline.
-    if binance_complete:baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    if binance_complete:baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"
+")
     summary={k:v for k,v in report.items() if k!="coins"}
-    (OUT/"hunter-cex-universe-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
+    (OUT/"hunter-cex-universe-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"
+")
     print(json.dumps(dict(complete=report["complete"],unique_base_tickers=report["unique_base_tickers"],
                           venue_status=statuses,errors=errors,leads=report["research_leads"][:10]),ensure_ascii=False))
     return 0 if report["binance_complete"] else 2
