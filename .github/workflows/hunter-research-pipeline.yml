@@ -12,15 +12,18 @@ concurrency:
   cancel-in-progress: false
   queue: max
 jobs:
-  research:
+  bind:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    outputs:
+      should_run: ${{ steps.bind.outputs.should_run }}
+      generation: ${{ steps.bind.outputs.generation }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Bind exact published discovery generation
+      - id: bind
+        name: Admit only the authoritative discovery generation
         env:
           TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
           TRIGGER_EVENT: ${{ github.event_name }}
@@ -32,17 +35,37 @@ jobs:
           d=json.load(open('research/results/hunter-cex-universe-run.json'))
           assert d.get('generation_id') and d.get('binance_complete') is True
           trigger_sha=os.environ.get('TRIGGER_SHA')
-          trigger_event=os.environ.get('TRIGGER_EVENT')
-          # Never silently consume a newer generation from main. workflow_run
-          # is accepted only when the persisted discovery explicitly records
-          # the source SHA that caused that Universe run.
-          source_sha=d.get('source_head_sha')
-          if trigger_event == 'workflow_run':
-              assert trigger_sha and source_sha == trigger_sha, (
-                  f'GENERATION_TRIGGER_MISMATCH trigger={trigger_sha} source={source_sha} '
-                  f'generation={d.get("generation_id")}'
-              )
-          print('DOWNSTREAM_BOUND_GENERATION',d['generation_id'],'source_head_sha',source_sha)
+          event=os.environ.get('TRIGGER_EVENT')
+          source=d.get('source_head_sha')
+          admitted=(event=='workflow_dispatch' or (bool(trigger_sha) and source==trigger_sha))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              print('should_run='+('true' if admitted else 'false'),file=f)
+              print('generation='+str(d.get('generation_id')),file=f)
+          if admitted:
+              print('HUNTER_GENERATION_ADMITTED',d['generation_id'],source)
+          else:
+              print('HUNTER_STALE_TRIGGER_SKIPPED',trigger_sha,'authoritative_source',source,'generation',d['generation_id'])
+          PY
+  research:
+    needs: bind
+    if: ${{ needs.bind.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Refresh admitted generation baseline
+        env:
+          EXPECTED: ${{ needs.bind.outputs.generation }}
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          python - <<'PY'
+          import json,os
+          d=json.load(open('research/results/hunter-cex-universe-run.json'))
+          assert d.get('generation_id')==os.environ['EXPECTED'], f"ADMITTED_GENERATION_SUPERSEDED expected={os.environ['EXPECTED']} actual={d.get('generation_id')}"
+          print('DOWNSTREAM_BOUND_GENERATION',d['generation_id'])
           PY
       - uses: actions/setup-python@v5
         with:
