@@ -424,11 +424,16 @@ def stock_universe():
         except Exception as e:
             rows=cached.get(s,[]); classification=None
             if str(e)=="insufficient_history":
-                # Do not infer listing age from our cache's first bar. After a targeted
-                # 120-day source read, <22 bars means source history is still insufficient.
-                # Listing/uplist/suspension identity requires separate authoritative evidence.
-                classification="SOURCE_HISTORY_INSUFFICIENT_UNVERIFIED_IDENTITY"
-            failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_DAILY_CACHE","history_gap_classification":classification}})
+                # Purely factual classification: never infer IPO/listing/security age from
+                # the first bar in our cache. Corporate actions, uplists, resumptions and
+                # provider identity changes can all create a short current-source history.
+                classification="SOURCE_HISTORY_LT_22_AFTER_120D_RECOVERY"
+            first_bar_at=str(rows[0].get("t")) if rows else None
+            last_bar_at=str(rows[-1].get("t")) if rows else None
+            failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],
+                "source":"ALPACA_SIP_DAILY_CACHE","history_gap_classification":classification,
+                "bars_available":len(rows),"first_bar_at":first_bar_at,"last_bar_at":last_bar_at,
+                "recovery_window_days":120 if classification else None}})
     for s in failed_symbols_from_batches:
         if not any(x["symbol"]==s for x in failed):
             failed.append({"symbol":s,"error":{"type":"BatchRefreshError","message":"incremental_refresh_failed","source":"ALPACA_BATCH"}})
