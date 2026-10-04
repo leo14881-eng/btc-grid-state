@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Chronological Stock Shadow Replay; observation-only, no future-data leakage."""
-import json, os, urllib.request, urllib.parse
+import json, os, sys, urllib.request, urllib.parse
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 import stock_shadow_v1 as ss
 OUT=Path("research/results/stock-shadow/replay-v1.json"); SURGE_PCT=8.0
 
