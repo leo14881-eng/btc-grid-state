@@ -245,7 +245,7 @@ def main():
     (OUT/"hunter-cex-universe-run.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     # Only a fully valid Binance scan may replace the last usable baseline.
     if binance_complete:
-        baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\\n")
+        baseline.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
         persist_universe_history(report)
     summary={k:v for k,v in report.items() if k!="coins"}
     (OUT/"hunter-cex-universe-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
