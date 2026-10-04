@@ -64,6 +64,17 @@ def save(p,o):
     tmp.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
     tmp.replace(p)
 
+def continuity_fingerprint(state, events):
+    """Immutable identity of the forward cohort; ignores quotes/P&L/state fields."""
+    positions=state.get("positions",{})
+    cohort=[]
+    for symbol,p in sorted(positions.items()):
+        tranches=tuple((str(t.get("at","")), round(float(t.get("price",0)),8), round(float(t.get("notional",0)),8), str(t.get("reason",""))) for t in p.get("tranches",[]))
+        cohort.append((symbol,str(p.get("opened_at","")),tranches))
+    trade_ids=tuple((str(e.get("type","")),str(e.get("symbol","")),str(e.get("at","")),round(float(e.get("price",0)),8),round(float(e.get("notional",0) or 0),8),str(e.get("reason",""))) for e in events)
+    closed_ids=tuple((str(x.get("symbol","")),str(x.get("closed_at","")),str(x.get("exit_reason",""))) for x in state.get("closed",[]))
+    return (tuple(cohort),trade_ids,closed_ids)
+
 def validate_ledger(state, events):
     positions=state.get("positions",{})
     # State continuity is a hard invariant: a reset marker is never a valid runtime state.
@@ -343,6 +354,7 @@ def main():
     starting_positions=len(state.get("positions",{}))
     starting_events=len(events)
     starting_closed=len(state.get("closed",[]))
+    starting_fingerprint=continuity_fingerprint(state,events)
     if state.get("reset_reason") or state.get("reset_at"):
         raise RuntimeError("state_continuity:manual_reset_marker_present")
     market, failed_symbols, discovery=stock_universe()
@@ -431,6 +443,8 @@ def main():
             raise RuntimeError(f"state_continuity:off_session_event_count_changed:{starting_events}->{len(events)}")
         if len(state.get("closed",[])) != starting_closed:
             raise RuntimeError(f"state_continuity:off_session_closed_count_changed:{starting_closed}->{len(state.get('closed',[]))}")
+        if continuity_fingerprint(state,events) != starting_fingerprint:
+            raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"transport_status":("OK" if market and not any((x.get("error") or {}).get("type")=="HTTPError" for x in failed_symbols) else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("message")=="insufficient_history"),"http_error_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("type")=="HTTPError"),"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
