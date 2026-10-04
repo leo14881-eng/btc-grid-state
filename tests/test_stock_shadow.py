@@ -429,13 +429,13 @@ def test_filing_risk_unknown_is_not_false_negative():
     spec=importlib.util.spec_from_file_location("fundamentals_observer_test",path)
     m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
     r=m.filing_risk_evidence([])
-    assert r["going_concern"]=="NOT_VERIFIED"
-    assert r["bankruptcy_restructuring"]=="NOT_VERIFIED"
-    assert r["delisting_risk"]=="NOT_VERIFIED"
-    assert r["material_8k_present"]=="NOT_VERIFIED"
+    assert r["going_concern"] is None
+    assert r["bankruptcy_restructuring"] is None
+    assert r["delisting_risk"] is None
+    assert r["material_8k_present"] is None
     assert m.classify_evidence({},r)=="UNKNOWN"
     r2=m.filing_risk_evidence([{"form":"8-K","filing_date":"2026-10-01","accession":"x"}])
-    assert r2["material_8k_present"]=="VERIFIED_PRESENT"
+    assert r2["material_8k_present"] is True
     assert m.classify_evidence({},r2)=="WATCH"
 
 def test_market_data_health_separates_transport_from_history_eligibility():
