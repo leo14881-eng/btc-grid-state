@@ -17,6 +17,14 @@ def get(url):
     req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Accept-Encoding":"identity"})
     with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
 
+def proxy_json(url):
+    proxy="https://r.jina.ai/"+url
+    req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-fundamental-observer/1.0","Accept":"text/plain"})
+    with urllib.request.urlopen(req,timeout=35) as r: raw=r.read().decode("utf-8","replace").strip()
+    # Read-only transport fallback; payload remains SEC JSON.
+    if raw.startswith("Markdown Content:"): raw=raw.split("Markdown Content:",1)[1].strip()
+    return json.loads(raw)
+
 def ticker_map():
     urls=["https://www.sec.gov/files/company_tickers.json","https://www.sec.gov/files/company_tickers_exchange.json"]
     errs=[]
@@ -28,6 +36,13 @@ def ticker_map():
             return {str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()},errs
         except urllib.error.HTTPError as e: errs.append({"url":url,"type":"HTTPError","status":e.code,"reason":str(e.reason)})
         except Exception as e: errs.append({"url":url,"type":type(e).__name__,"message":str(e)[:120]})
+    # GitHub-hosted runners can be blocked by SEC edge policy. Try a read-only
+    # transport proxy for the same SEC JSON; never use proxy-derived trading data.
+    try:
+        raw=proxy_json("https://www.sec.gov/files/company_tickers.json")
+        return {str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()},errs
+    except Exception as e:
+        errs.append({"url":"SEC_TICKER_MAP_VIA_READONLY_PROXY","type":type(e).__name__,"message":str(e)[:120]})
     return {},errs
 
 def resolve_cik_efts(symbol):
@@ -43,6 +58,13 @@ def resolve_cik_efts(symbol):
             ciks=src.get("ciks") or []
             if ciks: return int(str(ciks[0]).lstrip("0") or "0")
     return None
+
+def sec_submission(cik):
+    url=f"https://data.sec.gov/submissions/CIK{cik:010d}.json"
+    try: return get(url),"SEC_DIRECT"
+    except urllib.error.HTTPError as e:
+        if e.code!=403: raise
+        return proxy_json(url),"SEC_VIA_READONLY_PROXY"
 
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
@@ -63,7 +85,7 @@ def main():
         if not cik:
             companies[s]={"symbol":s,"status":"NO_SEC_MAPPING","updated_at":now()}; continue
         try:
-            sub=get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
+            sub,transport=sec_submission(cik)
             recent=(sub.get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
             latest=[]
@@ -73,7 +95,7 @@ def main():
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
             companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or meta.get("title"),
-                "status":"OBSERVED","latest_material_filings":latest,
+                "status":"OBSERVED","transport":transport,"latest_material_filings":latest,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),
                 "fundamental_state":"UNKNOWN_OBSERVATION_ONLY",
                 "note":"Filings collected for evidence; no automatic strategy decision yet."}
