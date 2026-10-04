@@ -28,13 +28,17 @@ def configure_v1():
 def load_early_into_review():
     root=pathlib.Path("research/results")
     early=json.loads((root/"hunter-early-signals.json").read_text())
+    universe=json.loads((root/"hunter-cex-universe-run.json").read_text())
+    excluded=set((((universe.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
+    if not excluded:
+        raise RuntimeError("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
     review_path=root/"hunter-tactical-capital-review.json"
     review=json.loads(review_path.read_text())
     by={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
     candidates=[]
     for s in early.get("early") or []:
         a=s.get("base")
-        if not a: continue
+        if not a or a in excluded: continue
         c=dict(by.get(a) or {})
         c["asset"]=a
         c["signal"]=s
@@ -45,6 +49,7 @@ def load_early_into_review():
     review["candidates"]=candidates
     review["v1_source"]="hunter-early-signals.json"
     review["v1_early_count"]=len(candidates)
+    review["v1_excluded_bstocks"]=sorted(excluded)
     return review_path,review
 
 def main():
