@@ -505,3 +505,20 @@ def test_fmp_first_real_refresh_cannot_be_hidden_by_frames_cache():
     assert 'fmp_refreshed_at=old.get("fmp_refreshed_at")' in src
     assert "if not fmp_refreshed_at:" in src
     assert "fmp_refreshed_at=now()" in src
+
+
+def test_replay_fetches_benchmarks_explicitly_and_reports_early_lateness():
+    import inspect
+    m=_load_replay(); src=inspect.getsource(m.main)
+    assert 'alpaca(["SPY","QQQ"],"1Day"' in src
+    assert '"benchmark_daily_explicit":True' in src
+    assert '"gain_at_first_early_pct"' in src
+    assert '"first_buy_signal"' in src
+    assert '"gate_snapshot_at_last_pre_high"' in src
+    assert '"future_leakage_detected":False' in src
+
+def test_replay_cutoff_excludes_post_high_bars_from_decisions():
+    import inspect
+    m=_load_replay(); fn=inspect.getsource(m.chronological_trace)
+    assert 'if cutoff_at and bar["t"]>cutoff_at: break' in fn
+    assert fn.index('if cutoff_at and bar["t"]>cutoff_at: break') < fn.index('seen.append(bar)')
