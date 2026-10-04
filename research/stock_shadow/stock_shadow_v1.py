@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Independent Stock Shadow V2 clean-sample final run. Broad paper sampling only; never places orders."""
 import json, math, os, urllib.request, urllib.error, urllib.parse
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time as dtime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
@@ -19,6 +20,9 @@ PROFIT_FLOOR_NET_PCT=0.10
 PROFIT_GIVEBACK_BANDS=((30.0,0.20),(15.0,0.25),(8.0,0.35),(1.0,0.50))
 
 def now(): return datetime.now(timezone.utc).isoformat()
+def trade_action_window(ts=None):
+    t=(ts or datetime.now(timezone.utc)).astimezone(NY)
+    return t.weekday()<5 and dtime(9,30)<=t.time()<dtime(16,0)
 def get_json(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=25) as r: return json.load(r)
@@ -40,6 +44,7 @@ OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
 ALPACA_BATCH_SIZE = 200  # batch daily bars; SIP end is delayed outside real-time entitlement window
+NY=ZoneInfo("America/New_York")
 
 def get_text(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"text/plain,*/*"})
@@ -299,9 +304,13 @@ def main():
     events=load(EVENTS,[])
     market, failed_symbols, discovery=stock_universe()
     bench={}
-    for idx in ("SPY","QQQ"):
-        try: bench[idx]=_stock_snapshot(idx)
-        except Exception: pass
+    try:
+        bb=_alpaca_batch_bars(["SPY","QQQ"])
+        for idx in ("SPY","QQQ"):
+            if idx in bb: bench[idx]=_snapshot_from_bars(idx,bb[idx],"ALPACA_SIP_BATCH_1D")
+    except Exception:
+        pass
+    actions_enabled=trade_action_window()
     candidates=[]; rejection_counts={}
     for s,m in market.items():
         d=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
@@ -315,7 +324,7 @@ def main():
     # Selective V1: scan the whole market, but BUY only candidates that pass every gate.
     newly_opened=set()
     for s,m,d in candidates:
-        if s not in state["positions"]:
+        if actions_enabled and s not in state["positions"]:
             tr={"at":now(),"price":m["price"],"notional":NOTIONAL,"reason":"SELECTIVE_ENTRY_V1","score":d["score"],"entry_structure":d["entry_structure"],"selection_reasons":d["reasons"],"selection_metrics":d["metrics"],"snapshot":m}
             state["positions"][s]={"symbol":s,"opened_at":tr["at"],"tranches":[tr],"entry_score":d["score"],"entry_structure":d["entry_structure"],"mfe_net_pct":net_pct({"tranches":[tr]},m["price"]),"mae_net_pct":net_pct({"tranches":[tr]},m["price"])}
             events.append({"type":"BUY","symbol":s,**tr}); newly_opened.add(s)
@@ -337,7 +346,7 @@ def main():
         floor=profit_floor_net_pct(mfe)
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
         p["profit_protection_signal"]=bool(floor is not None and r<=floor)
-        if s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
+        if actions_enabled and s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
             tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
             p["pullback_seen"]=False; p["pullback_low_price"]=None
@@ -356,7 +365,7 @@ def main():
             # Rebound exits are profit-only too. A losing rebound remains pending.
             if r > 0:
                 exit_reason="REBOUND_PROFIT_EXIT_AFTER_DETERIORATION_V3"
-        if exit_reason:
+        if exit_reason and actions_enabled:
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
             closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":exit_reason,
                 "realized_net_pnl_usdt":round(final_pnl,6),"realized_net_return_pct":round(final_r,6),
@@ -371,7 +380,7 @@ def main():
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"transport_status":("OK" if market and not any((x.get("error") or {}).get("type")=="HTTPError" for x in failed_symbols) else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("message")=="insufficient_history"),"http_error_count":sum(1 for x in failed_symbols if (x.get("error") or {}).get("type")=="HTTPError"),"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
