@@ -1,4 +1,5 @@
 import unittest
+import research.hunter_shadow_trader_v2 as eng
 from research.hunter_shadow_trader_v2 import decision,discovery_decision,bybit_channel,market_shock,weighted_entry,add,profit_protection,scenario_returns,position_health,reentry_allowed,REVIEW_HOURS
 class V2CapitalDecisionTests(unittest.TestCase):
  def base(self):
@@ -82,60 +83,49 @@ class V2CapitalDecisionTests(unittest.TestCase):
 if __name__=="__main__":unittest.main()
 
 
-def test_opportunity_observation_separates_holding_and_full_mfe():
-    import datetime as dt
-    pos={"opened_at_utc":"2026-10-05T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
-         "mfe_pct":8.0,"holding_mfe_pct":8.0,"holding_peak_price":1.08,"holding_peak_at_utc":"2026-10-05T01:00:00+00:00",
-         "closed_at_utc":"2026-10-05T02:00:00+00:00","exit_reference_price":1.03,"net_return_pct":3.0,
-         "full_opportunity_peak_price":1.08,"full_opportunity_mfe_pct":8.0,"post_exit_observation":{}}
-    eng.update_post_exit(pos,1.20,dt.datetime(2026,10,5,8,tzinfo=dt.timezone.utc))
-    assert pos["holding_mfe_pct"]==8.0
-    assert pos["holding_peak_price"]==1.08
-    assert pos["full_opportunity_mfe_pct"]==20.0
-    assert pos["full_opportunity_peak_price"]==1.20
+class OpportunityObservationTests(unittest.TestCase):
+ def test_opportunity_observation_separates_holding_and_full_mfe(self):
+  import datetime as dt
+  pos={"opened_at_utc":"2026-10-05T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
+       "mfe_pct":8.0,"holding_mfe_pct":8.0,"holding_peak_price":1.08,"holding_peak_at_utc":"2026-10-05T01:00:00+00:00",
+       "closed_at_utc":"2026-10-05T02:00:00+00:00","exit_reference_price":1.03,"net_return_pct":3.0,
+       "full_opportunity_peak_price":1.08,"full_opportunity_mfe_pct":8.0,"post_exit_observation":{}}
+  eng.update_post_exit(pos,1.20,dt.datetime(2026,10,5,8,tzinfo=dt.timezone.utc))
+  self.assertEqual(pos["holding_mfe_pct"],8.0);self.assertEqual(pos["holding_peak_price"],1.08)
+  self.assertEqual(pos["full_opportunity_mfe_pct"],20.0);self.assertEqual(pos["full_opportunity_peak_price"],1.20)
 
-def test_opportunity_peak_never_decreases_after_exit():
-    import datetime as dt
-    pos={"opened_at_utc":"2026-10-05T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
-         "holding_mfe_pct":5.0,"holding_peak_price":1.05,"closed_at_utc":"2026-10-05T01:00:00+00:00",
-         "exit_reference_price":1.03,"net_return_pct":2.0,"full_opportunity_peak_price":1.20,"full_opportunity_mfe_pct":20.0,
-         "post_exit_observation":{}}
-    eng.update_post_exit(pos,0.90,dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc))
-    assert pos["full_opportunity_peak_price"]==1.20
-    assert pos["full_opportunity_mfe_pct"]==20.0
+ def test_opportunity_peak_never_decreases_after_exit(self):
+  import datetime as dt
+  pos={"opened_at_utc":"2026-10-05T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
+       "holding_mfe_pct":5.0,"holding_peak_price":1.05,"closed_at_utc":"2026-10-05T01:00:00+00:00",
+       "exit_reference_price":1.03,"net_return_pct":2.0,"full_opportunity_peak_price":1.20,"full_opportunity_mfe_pct":20.0,"post_exit_observation":{}}
+  eng.update_post_exit(pos,0.90,dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc))
+  self.assertEqual(pos["full_opportunity_peak_price"],1.20);self.assertEqual(pos["full_opportunity_mfe_pct"],20.0)
 
-def test_capture_ratio_handles_zero_and_losses():
-    assert eng.capture_ratio(3.0,8.0)==0.375
-    assert eng.capture_ratio(3.0,0.0) is None
-    assert eng.capture_ratio(-2.0,10.0)==-0.2
+ def test_capture_ratio_handles_zero_and_losses(self):
+  self.assertEqual(eng.capture_ratio(3.0,8.0),0.375);self.assertIsNone(eng.capture_ratio(3.0,0.0));self.assertEqual(eng.capture_ratio(-2.0,10.0),-0.2)
 
-def test_sample_cohort_cutoff():
-    assert eng.sample_cohort({"opened_at_utc":"2026-10-04T16:59:59+00:00"})=="MIGRATION_SAMPLE"
-    assert eng.sample_cohort({"opened_at_utc":"2026-10-04T17:00:00+00:00"})=="NEW_VERSION_SAMPLE"
+ def test_sample_cohort_cutoff(self):
+  self.assertEqual(eng.sample_cohort({"opened_at_utc":"2026-10-04T16:59:59+00:00"}),"MIGRATION_SAMPLE")
+  self.assertEqual(eng.sample_cohort({"opened_at_utc":"2026-10-04T17:00:00+00:00"}),"NEW_VERSION_SAMPLE")
 
-def test_backfill_updates_real_peaks_without_trade_decision(monkeypatch):
-    import datetime as dt
-    calls=[]
-    def fake(asset,start,end,interval="5m"):
-        calls.append((asset,start,end))
-        if start.hour==2:return {"peak_price":1.15,"peak_at_utc":"2026-10-05T03:00:00+00:00","source":"BINANCE_SPOT_KLINES_5M"}
-        return {"peak_price":1.20,"peak_at_utc":"2026-10-05T04:00:00+00:00","source":"BINANCE_SPOT_KLINES_5M"}
-    monkeypatch.setattr(eng,"binance_kline_peak",fake)
-    pos={"asset":"ABC","opened_at_utc":"2026-10-05T00:00:00+00:00","closed_at_utc":"2026-10-05T02:00:00+00:00",
-         "exit_reference_price":1.05,"net_return_pct":4.0,"tranches":[{"price":1.0,"notional_usdt":1000.0}],
-         "post_exit_observation":{}}
-    eng.backfill_opportunity_history(pos,dt.datetime(2026,10,8,3,tzinfo=dt.timezone.utc))
-    assert pos["data_provenance"]=="HISTORICAL_BACKFILL"
-    assert pos["full_opportunity_mfe_pct"]==20.0
-    assert pos["holding_mfe_pct"]==20.0 or pos["holding_mfe_pct"]==15.0
-    assert pos["observation_complete"] is True
-    assert "72h" in pos["post_exit_observation"]
+ def test_backfill_updates_real_peaks_without_trade_decision(self):
+  import datetime as dt
+  old=eng.binance_kline_peak
+  def fake(asset,start,end,interval="5m"):
+   return {"peak_price":1.15 if start.hour==2 else 1.20,"peak_at_utc":"2026-10-05T04:00:00+00:00","source":"BINANCE_SPOT_KLINES_5M"}
+  try:
+   eng.binance_kline_peak=fake
+   pos={"asset":"ABC","opened_at_utc":"2026-10-05T00:00:00+00:00","closed_at_utc":"2026-10-05T02:00:00+00:00",
+        "exit_reference_price":1.05,"net_return_pct":4.0,"tranches":[{"price":1.0,"notional_usdt":1000.0}],"post_exit_observation":{}}
+   eng.backfill_opportunity_history(pos,dt.datetime(2026,10,8,3,tzinfo=dt.timezone.utc))
+   self.assertEqual(pos["data_provenance"],"HISTORICAL_BACKFILL");self.assertEqual(pos["full_opportunity_mfe_pct"],20.0)
+   self.assertEqual(pos["holding_mfe_pct"],20.0);self.assertTrue(pos["observation_complete"]);self.assertIn("72h",pos["post_exit_observation"])
+  finally:eng.binance_kline_peak=old
 
-def test_opportunity_summary_separates_distribution():
-    rows=[{"holding_mfe_pct":8.0,"full_opportunity_mfe_pct":20.0,"net_return_pct":3.0,
-           "holding_profit_capture_ratio":.375,"full_opportunity_capture_ratio":.15,"observation_complete":True,
-           "exit_evaluation":"POTENTIAL_PREMATURE_EXIT"}]
-    out=eng.opportunity_summary(rows)
-    assert out["evaluated_positions"]==1
-    assert out["completed_72h_observations"]==1
-    assert out["full_opportunity_mfe_distribution"]["10_20"]==1
+ def test_opportunity_summary_separates_distribution(self):
+  rows=[{"holding_mfe_pct":8.0,"full_opportunity_mfe_pct":20.0,"net_return_pct":3.0,"holding_profit_capture_ratio":.375,
+         "full_opportunity_capture_ratio":.15,"observation_complete":True,"exit_evaluation":"POTENTIAL_PREMATURE_EXIT"}]
+  out=eng.opportunity_summary(rows)
+  self.assertEqual(out["evaluated_positions"],1);self.assertEqual(out["completed_72h_observations"],1)
+  self.assertEqual(out["full_opportunity_mfe_distribution"]["10_20"],1)
