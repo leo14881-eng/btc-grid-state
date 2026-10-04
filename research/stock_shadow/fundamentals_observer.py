@@ -57,6 +57,69 @@ def bulk_json_by_cik(zf, ciks):
             with zf.open(hit) as fp: out[cik]=json.load(fp)
     return out
 
+
+def frame_json(taxonomy, concept, unit, period):
+    url=f"https://data.sec.gov/api/xbrl/frames/{taxonomy}/{concept}/{unit}/{period}.json"
+    try:
+        return get(url),"SEC_FRAMES_DIRECT"
+    except urllib.error.HTTPError as e:
+        if e.code!=403: raise
+        return proxy_json(url),"SEC_FRAMES_VIA_READONLY_PROXY"
+
+def frame_evidence_by_cik():
+    # Market-wide SEC XBRL Frames: one request returns one concept for all reporting entities.
+    # Two completed quarters are enough for direction/trend evidence without per-company HTTP loops.
+    periods=["CY2026Q1","CY2026Q2"]
+    instant=["CY2026Q1I","CY2026Q2I"]
+    specs=[
+      ("revenue","us-gaap","RevenueFromContractWithCustomerExcludingAssessedTax","USD",periods),
+      ("revenue_alt","us-gaap","Revenues","USD",periods),
+      ("net_income","us-gaap","NetIncomeLoss","USD",periods),
+      ("operating_cash_flow","us-gaap","NetCashProvidedByUsedInOperatingActivities","USD",periods),
+      ("capex","us-gaap","PaymentsToAcquirePropertyPlantAndEquipment","USD",periods),
+      ("cash","us-gaap","CashAndCashEquivalentsAtCarryingValue","USD",instant),
+      ("total_debt","us-gaap","LongTermDebt","USD",instant),
+      ("shares","dei","EntityCommonStockSharesOutstanding","shares",instant),
+    ]
+    raw={}; transport=set(); request_errors=[]
+    for key,tax,concept,unit,ps in specs:
+        for p in ps:
+            try:
+                d,t=frame_json(tax,concept,unit,p); transport.add(t)
+                for row in d.get("data") or []:
+                    cik=int(row.get("cik") or 0)
+                    if not cik: continue
+                    raw.setdefault(cik,{}).setdefault(key,[]).append(
+                        {"end":row.get("end"),"val":row.get("val"),"form":row.get("form"),"filed":row.get("filed"),"period":p})
+            except Exception as e:
+                request_errors.append({"concept":concept,"period":p,"type":type(e).__name__,"message":str(e)[:120]})
+    out={}
+    for cik,x in raw.items():
+        def vals(primary,alt=None):
+            rows=x.get(primary) or (x.get(alt) if alt else []) or []
+            rows=[r for r in rows if r.get("val") is not None]
+            rows.sort(key=lambda r:(str(r.get("end") or ""),str(r.get("filed") or "")))
+            return rows[-5:]
+        ev={}
+        for key,primary,alt in [
+            ("revenue","revenue","revenue_alt"),("net_income","net_income",None),
+            ("operating_cash_flow","operating_cash_flow",None),("cash","cash",None),
+            ("total_debt","total_debt",None),("shares","shares",None)]:
+            v=vals(primary,alt)
+            ev[key]={"concept":"SEC_XBRL_FRAME","values":v,"trend":_trend(v)}
+        cap={r.get("end"):r for r in vals("capex")}
+        fcf=[]
+        for r in ev["operating_cash_flow"]["values"]:
+            if r.get("end") in cap:
+                fcf.append({"end":r["end"],"val":float(r["val"])-float(cap[r["end"]]["val"])})
+        ev["free_cash_flow"]={"values":fcf,"trend":_trend(fcf)}
+        sh=ev["shares"]["values"]; dilution=None
+        if len(sh)>=2 and float(sh[-2]["val"]):
+            dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
+        ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
+        out[cik]=ev
+    return out,{"requests":len(specs)*2,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
+
 def ticker_map():
     urls=["https://www.sec.gov/files/company_tickers.json","https://www.sec.gov/files/company_tickers_exchange.json"]
     errs=[]
@@ -199,13 +262,19 @@ def main():
             errors.append({"symbol":s,"stage":"CIK_RESOLUTION","type":type(e).__name__})
 
     bulk={"attempted":True,"companyfacts":"NOT_RUN","submissions":"NOT_RUN","ciks_requested":len(set(symbol_cik.values()))}
-    facts_by_cik={}; subs_by_cik={}
+    facts_by_cik={}; subs_by_cik={}; frames_by_cik={}; frames_status={"attempted":False}
     try:
         z=download_bulk_zip(BULK_COMPANYFACTS)
         facts_by_cik=bulk_json_by_cik(z,set(symbol_cik.values()))
         bulk["companyfacts"]="OK"; bulk["companyfacts_matched"]=len(facts_by_cik)
     except Exception as e:
         bulk["companyfacts"]="FAILED"; bulk["companyfacts_error"]=f"{type(e).__name__}:{str(e)[:160]}"
+        frames_status["attempted"]=True
+        try:
+            frames_by_cik,frames_status=frame_evidence_by_cik()
+            frames_status["attempted"]=True
+        except Exception as fe:
+            frames_status={"attempted":True,"status":"FAILED","error":f"{type(fe).__name__}:{str(fe)[:160]}"}
     try:
         z=download_bulk_zip(BULK_SUBMISSIONS)
         subs_by_cik=bulk_json_by_cik(z,set(symbol_cik.values()))
@@ -223,14 +292,19 @@ def main():
             facts_transport="SEC_BULK_COMPANYFACTS" if facts else None
             if sub is None and fallback_requests < FALLBACK_MAX_REQUESTS:
                 sub,transport=sec_submission(cik); fallback_requests+=1
-            if facts is None and fallback_requests < FALLBACK_MAX_REQUESTS:
+            frame_ev=frames_by_cik.get(cik)
+            if facts is None and frame_ev is None and fallback_requests < FALLBACK_MAX_REQUESTS:
                 facts,facts_transport=sec_companyfacts(cik); fallback_requests+=1
-            if sub is None or facts is None:
+            if facts is None and frame_ev is not None:
+                facts_transport="SEC_XBRL_FRAMES_MARKET_BATCH"
+            if sub is None and fallback_requests < FALLBACK_MAX_REQUESTS:
+                sub,transport=sec_submission(cik); fallback_requests+=1
+            if facts is None and frame_ev is None:
                 companies[s]={"symbol":s,"cik":cik,"company":meta.get("title"),"status":"BULK_MISSING",
                     "transport":transport,"companyfacts_transport":facts_transport,"updated_at":now(),
-                    "strategy_effect":False,"note":"Bulk archive did not contain complete evidence; bounded fallback only."}
+                    "strategy_effect":False,"note":"Bulk/frame evidence missing; bounded fallback only."}
                 continue
-            recent=(sub.get("filings") or {}).get("recent") or {}
+            recent=((sub or {}).get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
             latest=[]
             for form,date,an in zip(forms,dates,acc):
@@ -238,7 +312,7 @@ def main():
                     latest.append({"form":form,"filing_date":date,"accession":an})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
-            evidence=financial_evidence(facts); risk_flags=filing_risk_evidence(latest)
+            evidence=financial_evidence(facts) if facts is not None else frame_ev; risk_flags=filing_risk_evidence(latest)
             companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
@@ -252,7 +326,7 @@ def main():
     out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"refreshed_this_run":refreshed,
-         "bulk_transport":bulk,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
+         "bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
          "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols) and bulk.get("companyfacts")=="OK" and bulk.get("submissions")=="OK") else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
