@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
+MARKET_CACHE=ROOT/"market-daily-cache-v1.json"
 NOTIONAL=1000.0; MAX_TRANCHES=5
 LOW_PRICE_REFERENCE=2.0; MIN_DOLLAR_VOLUME=10_000_000.0; LOW_PRICE_MIN_DOLLAR_VOLUME=25_000_000.0; MIN_SCORE=68.0
 MAX_5D_RETURN=18.0; MAX_20D_RETURN=45.0; MAX_SMA20_EXTENSION=18.0; MIN_20D_RETURN=-8.0
@@ -92,7 +93,9 @@ NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
-ALPACA_BATCH_SIZE = 200  # batch daily bars; SIP end is delayed outside real-time entitlement window
+MAX_REQUEST_TARGET_CHARS = 7000
+DAILY_CACHE_KEEP_BARS = 35
+API_USAGE={"alpaca_daily_bars":{"http_requests":0,"pages":0,"logical_batches":0}}
 NY=ZoneInfo("America/New_York")
 
 def get_text(url):
@@ -164,20 +167,40 @@ def _stock_snapshot(symbol):
     bars=[{"c":p,"v":v,"h":h,"l":l} for p,v,h,l in zip(q["close"],q["volume"],q.get("high",[]),q.get("low",[])) if p is not None]
     return _snapshot_from_bars(symbol,bars,"FREE_PUBLIC_CHART_1D")
 
-def _alpaca_batch_bars(symbols):
+def _pack_alpaca_symbol_batches(symbols, timeframe, start, end):
+    """Pack the largest practical GET batches by encoded request-target size, not an arbitrary symbol count."""
+    batches=[]; batch=[]
+    for sym in symbols:
+        candidate=batch+[sym]
+        params={"symbols":",".join(s.replace("-",".") for s in candidate),"timeframe":timeframe,
+                "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
+                "limit":10000,"feed":"sip","adjustment":"all"}
+        target="/v2/stocks/bars?"+urllib.parse.urlencode(params)
+        if batch and len(target)>MAX_REQUEST_TARGET_CHARS:
+            batches.append(batch); batch=[sym]
+        else:
+            batch=candidate
+    if batch: batches.append(batch)
+    return batches
+
+def _alpaca_batch_bars(symbols, start=None, end=None):
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
     if not key or not secret: raise RuntimeError("missing_alpaca_secrets")
+    end=end or (datetime.now(timezone.utc)-timedelta(minutes=20))
+    start=start or (end-timedelta(days=45))
     api_symbols=[s.replace("-",".") for s in symbols]
-    end=datetime.now(timezone.utc)-timedelta(minutes=20); start=end-timedelta(days=110)
     params={"symbols":",".join(api_symbols),"timeframe":"1Day","start":start.isoformat().replace("+00:00","Z"),
             "end":end.isoformat().replace("+00:00","Z"),"limit":10000,"feed":"sip","adjustment":"all"}
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow/3.0"}
-    merged={}; token=None
+    merged={}; token=None; API_USAGE["alpaca_daily_bars"]["logical_batches"]+=1
     while True:
         if token: params["page_token"]=token
+        else: params.pop("page_token",None)
         url=ALPACA_BARS_URL+"?"+urllib.parse.urlencode(params)
         req=urllib.request.Request(url,headers=headers)
+        API_USAGE["alpaca_daily_bars"]["http_requests"]+=1
         with urllib.request.urlopen(req,timeout=45) as resp: body=json.load(resp)
+        API_USAGE["alpaca_daily_bars"]["pages"]+=1
         for sym, rows in (body.get("bars") or {}).items(): merged.setdefault(sym.replace(".","-"),[]).extend(rows)
         token=body.get("next_page_token")
         if not token: break
@@ -316,24 +339,50 @@ def position_state_v3(p, market_state, net_return_pct):
             "market_state":market_state.get("state")}
 
 def stock_universe():
-    """Discover full US common-stock universe and fetch daily bars in Alpaca batches."""
+    """Full US common-stock universe backed by a persisted daily-bar cache plus incremental refresh."""
     symbols, discovery_errors=discover_us_common_stocks()
-    out={}; failed=[]
-    for i in range(0,len(symbols),ALPACA_BATCH_SIZE):
-        batch=symbols[i:i+ALPACA_BATCH_SIZE]
+    requested=list(dict.fromkeys(symbols+["SPY","QQQ"]))
+    cache=load(MARKET_CACHE,{"bars":{}})
+    cached=cache.get("bars") or {}
+    end=datetime.now(timezone.utc)-timedelta(minutes=20)
+    covered=sum(1 for s in symbols if len(cached.get(s) or [])>=22)
+    bootstrap=(covered < max(1,int(len(symbols)*0.90)))
+    start=end-timedelta(days=45 if bootstrap else 7)
+    fetched={}; failed_batches=[]
+    for batch in _pack_alpaca_symbol_batches(requested,"1Day",start,end):
         try:
-            bars_by_symbol=_alpaca_batch_bars(batch)
+            got=_alpaca_batch_bars(batch,start=start,end=end)
+            for s,rows in got.items(): fetched.setdefault(s,[]).extend(rows)
         except urllib.error.HTTPError as e:
-            err={"type":"HTTPError","status":e.code,"reason":str(e.reason),"source":"ALPACA_BATCH"}
-            failed.extend({"symbol":s,"error":err} for s in batch); continue
+            failed_batches.append({"symbols":batch,"error":{"type":"HTTPError","status":e.code,"reason":str(e.reason),"source":"ALPACA_BATCH"}})
         except Exception as e:
-            err={"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_BATCH"}
-            failed.extend({"symbol":s,"error":err} for s in batch); continue
-        for s in batch:
-            rows=bars_by_symbol.get(s,[])
-            try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_SIP_BATCH_1D")
-            except Exception as e: failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_BATCH"}})
-    return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors}
+            failed_batches.append({"symbols":batch,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_BATCH"}})
+    # Merge by bar timestamp so an intraday forming 1Day bar is replaced on each hourly refresh.
+    for s in requested:
+        by_t={str(x.get("t")):x for x in (cached.get(s) or []) if x.get("t")}
+        for x in fetched.get(s,[]): by_t[str(x.get("t"))]=x
+        rows=sorted(by_t.values(),key=lambda x:str(x.get("t") or ""))[-DAILY_CACHE_KEEP_BARS:]
+        if rows: cached[s]=rows
+    save(MARKET_CACHE,{"updated_at":now(),"pit_cutoff":end.isoformat(),"feed":"sip","adjustment":"all",
+                       "bootstrap":bootstrap,"bars":cached})
+    out={}; failed=[]
+    failed_symbols_from_batches={s for item in failed_batches for s in item["symbols"]}
+    for s in symbols:
+        rows=cached.get(s,[])
+        try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_SIP_DAILY_CACHE")
+        except Exception as e:
+            failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_DAILY_CACHE"}})
+    for s in failed_symbols_from_batches:
+        if not any(x["symbol"]==s for x in failed):
+            failed.append({"symbol":s,"error":{"type":"BatchRefreshError","message":"incremental_refresh_failed","source":"ALPACA_BATCH"}})
+    bench={}
+    for idx in ("SPY","QQQ"):
+        try: bench[idx]=_snapshot_from_bars(idx,cached.get(idx,[]),"ALPACA_SIP_DAILY_CACHE")
+        except Exception: pass
+    return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors,
+                         "cache_mode":"BOOTSTRAP_45D" if bootstrap else "INCREMENTAL_7D",
+                         "cache_covered_before":covered,"benchmarks":bench,"api_usage":dict(API_USAGE["alpaca_daily_bars"])}
+
 
 
 def avg(p):
@@ -451,7 +500,9 @@ def main():
             raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
+    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
+    "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":discovery.get("api_usage"),
+    "failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
