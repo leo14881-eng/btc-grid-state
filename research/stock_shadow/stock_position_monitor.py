@@ -27,6 +27,8 @@ def save(p,o):
 
 def validate_ledger(state, events):
     positions=state.get("positions",{})
+    if state.get("reset_reason") or state.get("reset_at"):
+        raise RuntimeError("ledger_invariant:manual_reset_marker_present")
     if any(len((p or {}).get("tranches",[]))>5 for p in positions.values()):
         raise RuntimeError("ledger_invariant:max_tranches_exceeded")
     if any(float(x.get("realized_net_pnl_usdt",0))<=0 for x in state.get("closed",[])):
@@ -116,7 +118,10 @@ def alpaca_snapshot_quotes(symbols):
 
 def main(force=False):
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
+    if state.get("reset_reason") or state.get("reset_at"):
+        raise RuntimeError("state_continuity:manual_reset_marker_present")
     positions=state.get("positions",{}); symbols=sorted(positions)
+    starting_positions=len(symbols); starting_events=len(events); starting_closed=len(state.get("closed",[]))
     if not force and not market_open():
         save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
@@ -160,6 +165,13 @@ def main(force=False):
             sells+=1
     state["updated_at"]=now(); state["simulation_only"]=True
     state["source_commit"]=SOURCE_COMMIT; state["run_id"]=RUN_ID
+    if not trade_actions_enabled:
+        if len(positions)!=starting_positions:
+            raise RuntimeError(f"state_continuity:off_session_position_count_changed:{starting_positions}->{len(positions)}")
+        if len(events)!=starting_events:
+            raise RuntimeError(f"state_continuity:off_session_event_count_changed:{starting_events}->{len(events)}")
+        if len(state.get("closed",[]))!=starting_closed:
+            raise RuntimeError(f"state_continuity:off_session_closed_count_changed:{starting_closed}->{len(state.get('closed',[]))}")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
