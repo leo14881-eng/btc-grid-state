@@ -39,7 +39,7 @@ NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
-ALPACA_BATCH_SIZE = 50
+ALPACA_BATCH_SIZE = 50  # verified: 49-symbol SIP probe=200; 200-symbol request=403
 
 def get_text(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"text/plain,*/*"})
