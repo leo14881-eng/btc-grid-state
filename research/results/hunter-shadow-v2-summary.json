@@ -1,6 +1,6 @@
 {
   "schema": "hunter_shadow_v2_summary_v2",
-  "as_of_utc": "2026-10-04T12:24:40.890373+00:00",
+  "as_of_utc": "2026-10-04T12:52:12.792173+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
   "open_positions": 10,
@@ -62,6 +62,14 @@
       "loss_making_position_rotation_allowed": false,
       "profitable_exit_may_release_capital_for_new_buy": true,
       "full_pool_buy_status": "BUY_BUT_NO_CAPITAL"
+    },
+    "position_lifecycle": {
+      "degrade_confirm_cycles": 3,
+      "ordinary_thesis_invalidation_loss_exit": false,
+      "hard_invalidation_may_exit_at_loss": true,
+      "profit_stagnation_exit": true,
+      "reentry_requires_new_move": true,
+      "max_hot_closed_positions": 250
     }
   },
   "capital_authority": "NONE_SHADOW_ONLY"
