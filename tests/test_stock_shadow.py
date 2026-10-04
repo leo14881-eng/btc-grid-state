@@ -99,8 +99,8 @@ def test_position_monitor_has_no_buy_or_discovery_capability():
     m=_load_position_monitor()
     assert not hasattr(m,"stock_universe")
     assert not hasattr(m,"entry_decision")
-    assert m.BATCH_SIZE >= 20
-    assert m.MAX_BATCHES <= 12
+    assert m.MAX_REQUEST_TARGET_CHARS == 7000
+    assert not hasattr(m,"BATCH_SIZE")
 
 def test_position_monitor_parses_public_snapshot_price():
     m=_load_position_monitor()
@@ -484,7 +484,7 @@ def test_replay_full_universe_screen_then_intraday_only_movers():
     import inspect
     m=_load_replay(); src=inspect.getsource(m.main)
     assert "discover_us_common_stocks()" in src
-    assert '"1Day"' in src
+    assert "ss.MARKET_CACHE" in src
     assert "gain>=SURGE_PCT" in src
     assert 'wanted=list(dict.fromkeys([x[0] for x in movers]+["SPY","QQQ"]))' in src
     assert '"5Min"' in src
