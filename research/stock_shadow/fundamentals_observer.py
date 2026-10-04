@@ -253,7 +253,7 @@ def main():
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"refreshed_this_run":refreshed,
          "bulk_transport":bulk,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
-         "errors":errors,"mapping_errors":map_errors,"status":"OK" if not errors else "PARTIAL","companies":companies}
+         "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols) and bulk.get("companyfacts")=="OK" and bulk.get("submissions")=="OK") else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
 
