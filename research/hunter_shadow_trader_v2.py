@@ -26,6 +26,8 @@ ID_PREFIX="SHV2"
 EVENT_PREFIX="SHADOW_V2"
 SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"
 BINANCE_DATA_API=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
+OPPORTUNITY_BACKFILL_BUDGET=int(os.getenv("HUNTER_OPPORTUNITY_BACKFILL_BUDGET","8"))
+_opportunity_backfill_requests=0
 
 def entry_allowed(mode,broad,current_price,executable_action):
  return broad=="BUY" and current_price is not None and (mode=="DISCOVERY" or executable_action=="BUY")
@@ -183,13 +185,16 @@ def scenario_returns(pos,p):
 
 def binance_kline_bars(asset,start,end,interval="5m"):
  """Observation-only historical bars. Failure never changes trading decisions."""
+ global _opportunity_backfill_requests
  if not asset or not start or not end or end<=start:return None
+ if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:return None
+ _opportunity_backfill_requests+=1
  symbol=str(asset).upper()+"USDT";cursor=int(start.timestamp()*1000);stop=int(end.timestamp()*1000);out=[]
  try:
   while cursor<=stop:
    q=urllib.parse.urlencode({"symbol":symbol,"interval":interval,"startTime":cursor,"endTime":stop,"limit":1000})
    req=urllib.request.Request(BINANCE_DATA_API+"/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
-   with urllib.request.urlopen(req,timeout=12) as r:rows=json.loads(r.read().decode())
+   with urllib.request.urlopen(req,timeout=4) as r:rows=json.loads(r.read().decode())
    if not rows:break
    out.extend((int(row[0]),finite(row[2])) for row in rows if finite(row[2]) is not None)
    nxt=int(rows[-1][0])+1
@@ -217,6 +222,8 @@ def backfill_opportunity_history(pos,now):
   try:
    if (now-parse(last)).total_seconds()<3300 and not (now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and not pos.get("observation_complete")):return pos
   except Exception:pass
+ if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
+  pos["data_provenance"]="BACKFILL_PENDING";return pos
  bars=binance_kline_bars(pos.get("asset"),opened,end);buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
  full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed)
  if not bars or not full or not hold or not buy:
