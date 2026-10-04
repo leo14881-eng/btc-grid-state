@@ -83,6 +83,18 @@ class V2CapitalDecisionTests(unittest.TestCase):
 if __name__=="__main__":unittest.main()
 
 
+class ObservationIntegrationRegressionTests(unittest.TestCase):
+ def test_overfilter_guard_does_not_depend_on_summary_cohorts(self):
+  import datetime as dt,tempfile,pathlib
+  old=eng.GUARD
+  try:
+   with tempfile.TemporaryDirectory() as d:
+    eng.GUARD=pathlib.Path(d)/"guard.json"
+    out=eng.update_overfilter_guard({},{"coins":{}},{"candidates":[]},{},{},dt.datetime(2026,10,5,tzinfo=dt.timezone.utc),0)
+    self.assertIn(out["status"],("NORMAL","OVER_FILTERING"))
+    self.assertNotIn("opportunity_evaluation",out)
+  finally:eng.GUARD=old
+
 class OpportunityObservationTests(unittest.TestCase):
  def test_opportunity_observation_separates_holding_and_full_mfe(self):
   import datetime as dt
