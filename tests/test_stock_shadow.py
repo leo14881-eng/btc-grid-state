@@ -180,3 +180,10 @@ def test_fresh_buy_cannot_add_in_same_run():
     src=inspect.getsource(ss.main)
     assert "newly_opened=set()" in src
     assert "s not in newly_opened" in src
+
+
+def test_hourly_daily_bar_engine_does_not_execute_intraday_profit_sell():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert 'if p["profit_protection_signal"]' not in src
+    assert 'exit_reason="STRUCTURE_BROKEN_V3"' in src

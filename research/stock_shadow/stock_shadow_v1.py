@@ -316,10 +316,10 @@ def main():
             tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
             p["pullback_seen"]=False; p["pullback_low_price"]=None
+        # Intraday profit-protection SELL belongs exclusively to the 5m monitor.
+        # This full scan uses daily bars that may be stale intraday/weekends.
         exit_reason=None
-        if p["profit_protection_signal"]:
-            exit_reason="NET_PROFIT_GIVEBACK_V3"
-        elif ps["state"]=="BROKEN":
+        if ps["state"]=="BROKEN":
             exit_reason="STRUCTURE_BROKEN_V3"
         if exit_reason:
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
