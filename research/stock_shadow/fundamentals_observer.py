@@ -11,7 +11,7 @@ STATE=ROOT/"portfolio-v1.json"; OUT=ROOT/"fundamentals-observer-v1.json"
 UA="stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com"
 BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
-FALLBACK_MAX_REQUESTS=12
+FALLBACK_MAX_REQUESTS=40
 FRAME_REQUEST_BUDGET=12
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -261,17 +261,11 @@ def resolve_cik_efts(symbol):
 
 def sec_submission(cik):
     url=f"https://data.sec.gov/submissions/CIK{cik:010d}.json"
-    try: return get(url),"SEC_DIRECT"
-    except urllib.error.HTTPError as e:
-        if e.code!=403: raise
-        return proxy_json(url),"SEC_VIA_READONLY_PROXY"
+    return get(url),"SEC_DIRECT"
 
 def sec_companyfacts(cik):
     url=f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
-    try: return get(url),"SEC_DIRECT"
-    except urllib.error.HTTPError as e:
-        if e.code!=403: raise
-        return proxy_json(url),"SEC_VIA_READONLY_PROXY"
+    return get(url),"SEC_DIRECT"
 
 def _fact_series(facts, concepts, units=("USD","shares")):
     usgaap=(facts.get("facts") or {}).get("us-gaap") or {}
