@@ -130,7 +130,10 @@ jobs:
           import json
           early=json.load(open('research/results/hunter-early-signals.json'))
           state=json.load(open('research/results/hunter-shadow-portfolio.json'))
-          expected={x['base'] for x in early.get('early',[]) if x.get('base')}
+          universe=json.load(open('research/results/hunter-cex-universe-run.json'))
+          excluded=set((((universe.get('venue_status') or {}).get('binance') or {}).get('excluded_bstocks') or []))
+          assert excluded, 'CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING'
+          expected={x['base'] for x in early.get('early',[]) if x.get('base') and x.get('base') not in excluded}
           opens=state.get('open_positions') or []
           actual=[x.get('asset') for x in opens if x.get('asset')]
           duplicates=sorted({a for a in actual if actual.count(a)>1})
@@ -139,7 +142,7 @@ jobs:
           missing=sorted(expected-(set(actual)|entered))
           assert not duplicates, f'V1_DUPLICATE_OPEN_ASSETS {duplicates}'
           assert not missing, f'V1_EARLY_COVERAGE_MISSING_NEVER_ENTERED count={len(missing)} sample={missing[:20]}'
-          assert len(expected)==int(early.get('early_count') or 0), 'V1_EARLY_COUNT_MISMATCH'
+          assert len(expected)<=int(early.get('early_count') or 0), 'V1_EARLY_COUNT_MISMATCH'
           assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           assert state.get('events'), 'V1_EVENTS_EMPTY'
           assert len(state.get('decisions') or []) <= 1500, 'V1_DECISION_HISTORY_UNBOUNDED'
