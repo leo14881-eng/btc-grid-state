@@ -1,6 +1,11 @@
 name: Hunter Potential Research Pipeline
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force rerun even when current generation is already aligned'
+        type: boolean
+        default: false
   workflow_run:
     workflows: ['Hunter Binance Universe Scan']
     types: [completed]
@@ -27,6 +32,7 @@ jobs:
         env:
           TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
           TRIGGER_EVENT: ${{ github.event_name }}
+          FORCE: ${{ inputs.force || 'false' }}
         run: |
           git fetch origin main
           git checkout -B main origin/main
@@ -37,14 +43,24 @@ jobs:
           trigger_sha=os.environ.get('TRIGGER_SHA')
           event=os.environ.get('TRIGGER_EVENT')
           source=d.get('source_head_sha')
-          admitted=(event=='workflow_dispatch' or (bool(trigger_sha) and source==trigger_sha))
+          force=os.environ.get('FORCE','false').lower()=='true'
+          aligned=False
+          try:
+              h=json.load(open('research/results/hunter-health-and-queue.json'))
+              aligned=(h.get('scan_generation_id')==d.get('generation_id') or h.get('scan_as_of_utc')==d.get('as_of_utc'))
+          except Exception:
+              pass
+          if event=='workflow_dispatch':
+              admitted=(force or not aligned)
+          else:
+              admitted=(bool(trigger_sha) and source==trigger_sha)
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               print('should_run='+('true' if admitted else 'false'),file=f)
               print('generation='+str(d.get('generation_id')),file=f)
           if admitted:
               print('HUNTER_GENERATION_ADMITTED',d['generation_id'],source)
           else:
-              print('HUNTER_STALE_TRIGGER_SKIPPED',trigger_sha,'authoritative_source',source,'generation',d['generation_id'])
+              print('HUNTER_TRIGGER_SKIPPED',trigger_sha,'authoritative_source',source,'generation',d['generation_id'],'already_aligned',aligned,'force',force)
           PY
   research:
     needs: bind
