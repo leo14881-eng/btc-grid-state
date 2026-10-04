@@ -394,8 +394,9 @@ def main():
              "status":"OK_EMPTY","companies":{}}
         OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
         print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
-    # SEC XBRL Frames are the market-wide batch primary path. Avoid multi-GB bulk archives in hourly CI.
-    # Existing evidence is cached in OUT. Per-company SEC JSON is only a bounded gap-filler.
+    # Market-wide batch first: FMP bulk CSV covers the requested symbols in a small fixed
+    # number of requests. SEC XBRL Frames is the independent market-wide supplement.
+    # Never download multi-GB SEC bulk archives in hourly CI.
     ticker_map_data,map_errors=ticker_map()
     symbol_cik={}; errors=[]
     for sym in symbols:
@@ -407,34 +408,45 @@ def main():
         except Exception as e:
             errors.append({"symbol":sym,"stage":"CIK_RESOLUTION","type":type(e).__name__})
     bulk={"attempted":False,"reason":"DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE","ciks_requested":len(set(symbol_cik.values()))}
-    # Financial statements are not minute data. Reuse persisted evidence hourly and refresh
-    # the market-wide Frames set at most once every six hours.
-    last_frames_at=old.get("frames_refreshed_at") or old.get("updated_at")
-    frames_due=True
-    if last_frames_at:
+
+    last_batch_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
+    batch_due=True
+    if last_batch_at:
         try:
-            last_dt=datetime.fromisoformat(str(last_frames_at).replace("Z","+00:00"))
-            frames_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 6*3600
+            last_dt=datetime.fromisoformat(str(last_batch_at).replace("Z","+00:00"))
+            batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 6*3600
         except Exception:
-            frames_due=True
+            batch_due=True
+    market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
-    if frames_due:
+    frames_by_cik={}; fmp_by_symbol={}
+    frames_status={"attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
+    fmp_status={"provider":"FMP_BULK","attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
+    if batch_due:
+        api_key=os.getenv("FMP_API_KEY")
+        if api_key:
+            try:
+                fmp_by_symbol,fmp_status=fmp_bulk_evidence(symbols,api_key)
+                fmp_status["status"]="OK" if not fmp_status.get("errors") else "PARTIAL"
+            except Exception as e:
+                fmp_status={"provider":"FMP_BULK","attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
+        else:
+            fmp_status={"provider":"FMP_BULK","attempted":False,"status":"NO_API_KEY"}
         try:
             frames_by_cik,frames_status=frame_evidence_by_cik()
             frames_status["attempted"]=True
+            frames_status["status"]="OK" if not frames_status.get("errors") else "PARTIAL"
             frames_refreshed_at=now()
         except Exception as e:
-            frames_by_cik={}; frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
-    else:
-        frames_by_cik={}
-        frames_status={"attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE","last_refresh_at":frames_refreshed_at}
-    fmp_status={"provider":"FMP_BULK","attempted":False,"reason":"NOT_REQUIRED_SEC_FRAMES_PRIMARY"}
-    # Financial evidence comes from market-wide Frames + persisted local evidence.
-    # Only genuine coverage gaps enter a small per-company backfill queue.
+            frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
+        market_batch_refreshed_at=now()
+
+    # Rank only residual gaps after cached + FMP bulk + SEC Frames have been merged.
     ranked=[]
     for sym,cik in symbol_cik.items():
         prior=companies.get(sym) or {}
-        merged=merge_financial_evidence(prior.get("financial_evidence"),frames_by_cik.get(cik))
+        merged=merge_financial_evidence(prior.get("financial_evidence"),fmp_by_symbol.get(sym))
+        merged=merge_financial_evidence(merged,frames_by_cik.get(cik))
         if not evidence_sufficient(merged):
             ranked.append(sym)
     ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("gap_refresh_at") or (companies.get(sym) or {}).get("updated_at") or ""))
@@ -443,20 +455,21 @@ def main():
     facts_by_cik={}; subs_by_cik={}
     def fetch_sec_pair(item):
         sym,cik=item
-        facts=facts_t=None; sub=sub_t=None; errs=[]
+        facts=facts_t=None; errs=[]
         try: facts,facts_t=sec_companyfacts(cik)
         except Exception as e: errs.append({"symbol":sym,"stage":"COMPANYFACTS","type":type(e).__name__,"message":str(e)[:120]})
-        return sym,cik,facts,facts_t,None,None,errs
+        return sym,cik,facts,facts_t,errs
     with ThreadPoolExecutor(max_workers=2) as ex:
         futures=[ex.submit(fetch_sec_pair,(sym,symbol_cik[sym])) for sym in refresh_set]
         for fut in as_completed(futures):
-            sym,cik,facts,facts_t,sub,sub_t,errs=fut.result()
+            sym,cik,facts,facts_t,errs=fut.result()
             if facts is not None: facts_by_cik[cik]=(facts,facts_t)
-            if sub is not None: subs_by_cik[cik]=(sub,sub_t)
             errors.extend(errs)
-    sec_transport={"provider":"SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FINANCIAL_GAP_BACKFILL","attempted":True,"refresh_budget":refresh_budget,
-                   "requested_symbols":len(refresh_set),"companyfacts_ok":len(facts_by_cik),"submissions_ok":len(subs_by_cik),
-                   "frames_matched_ciks":len(frames_by_cik)}
+    subs_by_cik={}
+    sec_transport={"provider":"FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL","attempted":True,
+                   "refresh_budget":refresh_budget,"requested_symbols":len(refresh_set),
+                   "companyfacts_ok":len(facts_by_cik),"frames_matched_ciks":len(frames_by_cik),
+                   "fmp_matched_symbols":len(fmp_by_symbol)}
     refreshed=0; fallback_requests=0
     for s,cik in symbol_cik.items():
         meta=ticker_map_data.get(s) or {}
@@ -464,11 +477,11 @@ def main():
             sub_pair=subs_by_cik.get(cik); facts_pair=facts_by_cik.get(cik)
             sub=sub_pair[0] if sub_pair else None; transport=sub_pair[1] if sub_pair else None
             facts=facts_pair[0] if facts_pair else None; facts_transport=facts_pair[1] if facts_pair else None
-            frame_ev=frames_by_cik.get(cik); fmp_ev=None
+            frame_ev=frames_by_cik.get(cik); fmp_ev=fmp_by_symbol.get(s)
             prior_ev=(companies.get(s) or {}).get("financial_evidence")
             # Filing metadata is optional here. Never turn frame-wide financial evidence
             # back into hundreds of per-company submissions requests.
-            if facts is None and not prior_ev and not frame_ev:
+            if facts is None and not prior_ev and not frame_ev and not fmp_ev:
                 prev=companies.get(s) or {}
                 if prev.get("financial_evidence"):
                     prev["status"]="OBSERVED_STALE_FALLBACK"; prev["updated_at"]=now(); prev["strategy_effect"]=False
@@ -487,10 +500,10 @@ def main():
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
             sec_ev=financial_evidence(facts) if facts is not None else None
-            evidence=merge_financial_evidence(merge_financial_evidence(prior_ev,frame_ev),sec_ev)
+            evidence=merge_financial_evidence(merge_financial_evidence(merge_financial_evidence(prior_ev,fmp_ev),frame_ev),sec_ev)
             risk_flags=filing_risk_evidence(latest)
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
-                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")),
+                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("FMP_BULK+SEC_XBRL_FRAMES" if fmp_ev and frame_ev else ("FMP_BULK" if fmp_ev else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")))),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),"gap_refresh_at":(now() if s in refresh_set else (companies.get(s) or {}).get("gap_refresh_at")),
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
@@ -500,7 +513,7 @@ def main():
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
     complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
     pending_symbols=[s for s in symbols if not evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {})]
-    out={"updated_at":now(),"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
+    out={"updated_at":now(),"market_batch_refreshed_at":market_batch_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
