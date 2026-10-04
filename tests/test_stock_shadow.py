@@ -750,3 +750,11 @@ def test_position_monitor_reuses_same_calendar_cache_and_reports_usage():
     assert "ALPACA_EXCHANGE_CALENDAR_CACHE" in src
     assert "CALENDAR_USAGE" in src
     assert "calendar_api_usage" in main_src
+
+
+def test_historical_replay_calendar_lookup_does_not_mutate_persisted_today_cache():
+    import inspect
+    src=inspect.getsource(ss._alpaca_exchange_session)
+    assert "current_day=" in src
+    assert "cacheable=(day==current_day)" in src
+    assert "if cacheable: save(CALENDAR_CACHE" in src
