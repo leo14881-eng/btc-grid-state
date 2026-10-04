@@ -72,4 +72,33 @@ class PositionMonitorTests(unittest.TestCase):
 
  def test_monitor_has_no_new_entry_path(self):
   self.assertFalse(hasattr(m,"entry_allowed"));self.assertFalse(hasattr(m,"discovery_decision"))
+
+class ClosedOpportunityMonitorTests(unittest.TestCase):
+ def test_assets_includes_incomplete_closed_observation(self):
+  states=[{"open_positions":[{"asset":"OPEN"}],"closed_positions":[
+   {"asset":"CLOSED_PENDING","closed_at_utc":"2026-10-05T00:00:00+00:00","observation_complete":False},
+   {"asset":"CLOSED_DONE","closed_at_utc":"2026-10-04T00:00:00+00:00","observation_complete":True}]}]
+  self.assertEqual(m.assets(states),["CLOSED_PENDING","OPEN"])
+
+ def test_closed_observation_is_updated_without_creating_trade(self):
+  state,market,review,liq,supply=self.fixture(price=120)
+  pos=state["open_positions"].pop()
+  pos.update({"closed_at_utc":"2026-10-05T01:00:00+00:00","exit_reference_price":103.0,
+              "net_return_pct":2.0,"holding_mfe_pct":5.0,"holding_peak_price":105.0,
+              "full_opportunity_peak_price":105.0,"full_opportunity_mfe_pct":5.0,
+              "post_exit_observation":{},"observation_complete":False})
+  state["closed_positions"]=[pos]
+  now=dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc)
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/"s.json";m.eng.atomic_json_write(p,state)
+   with patch.object(m.v1,"configure_v1",lambda:None), patch.object(m.eng,"backfill_opportunity_history",lambda pos,now:pos):
+    out=m.run_lane(p,"V1",market,review,liq,supply,now,True)
+   saved=m.load(p);closed=saved["closed_positions"][0]
+   self.assertEqual(out["open"],0)
+   self.assertEqual(closed["holding_peak_price"],105.0)
+   self.assertEqual(closed["full_opportunity_peak_price"],120)
+   self.assertEqual(closed["full_opportunity_mfe_pct"],20.0)
+   self.assertFalse(closed["observation_complete"])
+   self.assertEqual(saved.get("events",[]),[])
+
 if __name__=="__main__":unittest.main()
