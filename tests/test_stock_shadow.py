@@ -472,11 +472,11 @@ def test_replay_is_chronological_and_observation_only():
     assert '"strategy_effect":False' in src
     assert '"future_data_prohibited":True' in src
     fn=inspect.getsource(m.chronological_trace)
-    assert "for bar in sorted(intra" in fn
-    assert "if cutoff_at and bar" in fn
-    assert "seen.append(bar)" in fn
-    assert "partial_day(seen)" in fn
-    assert "entry_decision" in fn
+    assert "for clock in decision_clocks(session)" in fn
+    assert "if cutoff_at and clock>_dt(cutoff_at): break" in fn
+    decision_src=inspect.getsource(m._decision)
+    assert "bars_available_at" in decision_src
+    assert "entry_decision" in decision_src
     assert '"EARLY_ACCUMULATION"' in fn
 
 def test_replay_full_universe_screen_then_intraday_only_movers():
@@ -513,7 +513,7 @@ def test_replay_fetches_benchmarks_explicitly_and_reports_early_lateness():
     m=_load_replay(); src=inspect.getsource(m.main)
     assert 'alpaca(["SPY","QQQ"],"1Day"' in src
     assert '"benchmark_daily_explicit":True' in src
-    assert '"gain_at_first_early_pct"' in src
+    assert '"gain_before_early_pct"' in src
     assert '"first_buy_signal"' in src
     assert '"gate_snapshot_at_last_pre_high"' in src
     assert '"future_leakage_detected":False' in src
