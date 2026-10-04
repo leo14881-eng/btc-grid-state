@@ -12,8 +12,8 @@ UA="stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com"
 BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
-FRAME_REQUEST_BUDGET=64
-MARKET_BATCH_SCHEMA_VERSION=2
+FRAME_REQUEST_BUDGET=12
+MARKET_BATCH_SCHEMA_VERSION=3
 PROXY_START_INTERVAL_SECONDS=2.0
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -147,7 +147,7 @@ def frame_json(taxonomy, concept, unit, period):
             with _sec_direct_lock: _sec_direct_blocked=True
     return proxy_json(url),"SEC_FRAMES_VIA_READONLY_PROXY"
 
-def frame_evidence_by_cik():
+def frame_evidence_by_cik(requested_batch_index=0):
     # Market-wide SEC XBRL Frames: one request returns one concept for all reporting entities.
     # Two completed quarters are enough for direction/trend evidence without per-company HTTP loops.
     periods=["CY2025Q4","CY2026Q1","CY2026Q2"]
@@ -175,12 +175,12 @@ def frame_evidence_by_cik():
     ]
     raw={}; transport=set(); request_errors=[]
     all_tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
-    # Every Frames request is market-wide for one concept/period, so execute the full bounded
-    # concept set each run instead of rotating by company/hour. Request count is independent
-    # of the number of held symbols.
-    batches=1
-    batch_index=0
-    tasks=all_tasks
+    # Each request is market-wide, but SEC still rate-limits concept/period endpoints.
+    # Rotate a fixed request budget and merge persisted evidence across runs.
+    batches=max(1,math.ceil(len(all_tasks)/FRAME_REQUEST_BUDGET))
+    batch_index=int(requested_batch_index)%batches
+    start=batch_index*FRAME_REQUEST_BUDGET
+    tasks=all_tasks[start:start+FRAME_REQUEST_BUDGET]
     def fetch_one(task):
         key,tax,concept,unit,p=task
         last=None
@@ -472,7 +472,7 @@ def main():
     if last_batch_at:
         try:
             last_dt=datetime.fromisoformat(str(last_batch_at).replace("Z","+00:00"))
-            batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 6*3600
+            batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 55*60
         except Exception:
             batch_due=True
     # Migration/acceptance rule: a fresh SEC Frames cache must not suppress the first real FMP bulk run.
@@ -497,7 +497,8 @@ def main():
         else:
             fmp_status={"provider":"FMP_BULK","attempted":False,"status":"NO_API_KEY"}
         try:
-            frames_by_cik,frames_status=frame_evidence_by_cik()
+            previous_batch_index=int(((old.get("frames_transport") or {}).get("batch_index") or -1))
+            frames_by_cik,frames_status=frame_evidence_by_cik(previous_batch_index+1)
             frames_status["attempted"]=True
             frames_status["status"]="OK" if not frames_status.get("errors") else "PARTIAL"
             frames_refreshed_at=now()
