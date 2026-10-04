@@ -32,6 +32,20 @@ class PositionMonitorTests(unittest.TestCase):
    self.assertEqual(out["quarantined_non_crypto"],["MSFTB"])
    self.assertEqual(saved["closed_positions"],[])
 
+ def test_bstock_history_is_quarantined_without_fake_sell(self):
+  state,market,review,liq,supply=self.fixture()
+  state["open_positions"]=[];state["decisions"]=[{"asset":"MSFTB","action":"REJECT"}];state["events"]=[{"asset":"MSFTB","type":"SHADOW_V2_BUY"}];state["ever_entered_assets"]=["MSFTB"]
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/"s.json";m.eng.atomic_json_write(p,state)
+   with patch.object(m.v1,"configure_v1",lambda:None):
+    out=m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True,{"MSFTB"})
+   saved=m.load(p)
+   self.assertEqual(saved["decisions"],[]);self.assertEqual(saved["events"],[]);self.assertEqual(saved["ever_entered_assets"],[])
+   self.assertEqual(saved["excluded_non_crypto_decisions"][0]["asset"],"MSFTB")
+   self.assertEqual(saved["excluded_non_crypto_events"][0]["type"],"SHADOW_V2_BUY")
+   self.assertEqual(out["quarantined_non_crypto"],["MSFTB"])
+   self.assertFalse(any(x.get("type","").endswith("_SELL") for x in saved.get("events") or []))
+
  def test_v2_configuration_resets_v1_mutated_globals(self):
   old=(m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE,m.eng.SUMMARY,m.eng.GUARD)
   try:
