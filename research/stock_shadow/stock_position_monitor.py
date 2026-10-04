@@ -163,6 +163,6 @@ def main(force=False):
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
-    save(HEALTH,{"updated_at":now(),"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"batch_size":BATCH_SIZE,"errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
+    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"batch_size":BATCH_SIZE,"errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
