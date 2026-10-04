@@ -25,6 +25,17 @@ def save(p,o):
     tmp.write_text(json.dumps(o,ensure_ascii=False,indent=2,sort_keys=True)+"\n")
     tmp.replace(p)
 
+def continuity_fingerprint(state, events):
+    """Immutable identity of positions/tranches/trade ledger; quote/P&L updates are allowed."""
+    positions=state.get("positions",{})
+    cohort=[]
+    for symbol,p in sorted(positions.items()):
+        tranches=tuple((str(t.get("at","")),round(float(t.get("price",0)),8),round(float(t.get("notional",0)),8),str(t.get("reason",""))) for t in p.get("tranches",[]))
+        cohort.append((symbol,str(p.get("opened_at","")),tranches))
+    trade_ids=tuple((str(e.get("type","")),str(e.get("symbol","")),str(e.get("at","")),round(float(e.get("price",0)),8),round(float(e.get("notional",0) or 0),8),str(e.get("reason",""))) for e in events)
+    closed_ids=tuple((str(x.get("symbol","")),str(x.get("closed_at","")),str(x.get("exit_reason",""))) for x in state.get("closed",[]))
+    return (tuple(cohort),trade_ids,closed_ids)
+
 def validate_ledger(state, events):
     positions=state.get("positions",{})
     if state.get("reset_reason") or state.get("reset_at"):
@@ -122,6 +133,7 @@ def main(force=False):
         raise RuntimeError("state_continuity:manual_reset_marker_present")
     positions=state.get("positions",{}); symbols=sorted(positions)
     starting_positions=len(symbols); starting_events=len(events); starting_closed=len(state.get("closed",[]))
+    starting_fingerprint=continuity_fingerprint(state,events)
     if not force and not market_open():
         save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
@@ -172,6 +184,8 @@ def main(force=False):
             raise RuntimeError(f"state_continuity:off_session_event_count_changed:{starting_events}->{len(events)}")
         if len(state.get("closed",[]))!=starting_closed:
             raise RuntimeError(f"state_continuity:off_session_closed_count_changed:{starting_closed}->{len(state.get('closed',[]))}")
+        if continuity_fingerprint(state,events)!=starting_fingerprint:
+            raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
