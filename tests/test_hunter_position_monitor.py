@@ -32,6 +32,17 @@ class PositionMonitorTests(unittest.TestCase):
    self.assertEqual(out["quarantined_non_crypto"],["MSFTB"])
    self.assertEqual(saved["closed_positions"],[])
 
+ def test_monitor_compacts_decision_history(self):
+  state,market,review,liq,supply=self.fixture()
+  state["decisions"]=[{"asset":"X","action":"HOLD","n":i} for i in range(m.eng.MAX_DECISION_HISTORY)]
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/"s.json";m.eng.atomic_json_write(p,state)
+   with patch.object(m.v1,"configure_v1",lambda:None):
+    m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True)
+   saved=m.load(p)
+   self.assertEqual(len(saved["decisions"]),m.eng.MAX_DECISION_HISTORY)
+   self.assertGreaterEqual(saved.get("decision_history_truncated",0),1)
+
  def test_bstock_history_is_quarantined_without_fake_sell(self):
   state,market,review,liq,supply=self.fixture()
   state["open_positions"]=[];state["decisions"]=[{"asset":"MSFTB","action":"REJECT"}];state["events"]=[{"asset":"MSFTB","type":"SHADOW_V2_BUY"}];state["ever_entered_assets"]=["MSFTB"]
