@@ -516,7 +516,7 @@ def test_replay_fetches_benchmarks_explicitly_and_reports_early_lateness():
     assert '"gain_before_early_pct"' in src
     assert '"first_buy_signal"' in src
     assert '"gate_snapshot_at_last_pre_high"' in src
-    assert '"future_leakage_detected":False' in src
+    assert '"future_leakage_detected":bool(lookahead_violations)' in src
 
 def test_replay_cutoff_excludes_post_high_bars_from_decisions():
     import inspect
