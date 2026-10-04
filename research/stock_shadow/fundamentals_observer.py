@@ -281,8 +281,16 @@ def filing_risk_evidence(latest):
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
     companies=old.get("companies",{})
-    ticker_map_data,map_errors=ticker_map()
     symbols=sorted(state.get("positions",{}))
+    if not symbols:
+        out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":0,"tracked":0,
+             "evidence_complete":0,"evidence_pending":0,"pending_symbols":[],"refreshed_this_run":0,
+             "bulk_transport":{"attempted":False,"reason":"NO_POSITIONS"},"frames_transport":{"attempted":False},
+             "fallback_requests":0,"fallback_request_cap":FALLBACK_MAX_REQUESTS,"errors":[],"mapping_errors":[],
+             "status":"OK_EMPTY","companies":{}}
+        OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
+        print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
+    ticker_map_data,map_errors=ticker_map()
     symbol_cik={}; errors=[]
     for s in symbols:
         meta=ticker_map_data.get(s)
