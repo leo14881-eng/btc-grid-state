@@ -281,8 +281,8 @@ def test_fundamentals_hourly_uses_frames_then_bounded_sec_json_not_multigb_bulk(
     assert "sec_companyfacts" in src
     assert "refresh_budget=4" in src
     assert "DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE" in src
-    assert "FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL" in src
-    assert "fmp_bulk_evidence(symbols,api_key)" in src
+    assert "SEC_FRAMES_PLUS_RESIDUAL_GAP_BACKFILL" in src
+    assert "FMP_FREE_BULK_UNAVAILABLE" in src
     assert '"evidence_complete"' in src and '"evidence_pending"' in src
 
 def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
@@ -451,8 +451,8 @@ def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
     src=(Path(__file__).parents[1]/"research"/"stock_shadow"/"fundamentals_observer.py").read_text()
     assert "tasks=all_tasks[start:start+FRAME_REQUEST_BUDGET]" in src
     assert "refresh_budget=4" in src
-    assert 'provider":"FMP_BULK_PLUS_SEC_FRAMES_PLUS_BOUNDED_GAP_BACKFILL"' in src
-    assert "fmp_bulk_evidence(symbols,api_key)" in src
+    assert 'provider":"SEC_FRAMES_PLUS_RESIDUAL_GAP_BACKFILL"' in src
+    assert "FMP_FREE_BULK_UNAVAILABLE" in src
     # Per-company reads are restricted to the tiny true-gap queue, never the full 308 cohort.
     worker=src[src.index("def fetch_sec_pair"):src.index("with ThreadPoolExecutor",src.index("def fetch_sec_pair"))]
     assert "sec_companyfacts(" in worker
@@ -499,19 +499,19 @@ def test_replay_reports_early_actual_buy_and_missed_gates():
     assert 'e.get("type")=="BUY"' in src
 
 
-def test_fmp_first_real_refresh_cannot_be_hidden_by_frames_cache():
+def test_fmp_unavailable_bulk_is_not_retried_in_production():
     import inspect
     m=_load_fundamentals_observer()
     src=inspect.getsource(m.main)
-    assert 'fmp_refreshed_at=old.get("fmp_refreshed_at")' in src
-    assert "if not fmp_refreshed_at:" in src
-    assert "fmp_refreshed_at=now()" in src
+    assert "FMP_FREE_BULK_UNAVAILABLE" in src
+    assert "fmp_bulk_evidence(symbols,api_key)" not in src
 
 
-def test_replay_fetches_benchmarks_explicitly_and_reports_early_lateness():
+def test_replay_reuses_cached_benchmarks_and_reports_early_lateness():
     import inspect
     m=_load_replay(); src=inspect.getsource(m.main)
-    assert 'alpaca(["SPY","QQQ"],"1Day"' in src
+    assert "ss.MARKET_CACHE" in src
+    assert 'alpaca(["SPY","QQQ"],"1Day"' not in src
     assert '"benchmark_daily_explicit":True' in src
     assert '"gain_before_early_pct"' in src
     assert '"first_buy_signal"' in src
@@ -626,3 +626,43 @@ def test_frames_pacing_and_ifrs_market_batch_coverage():
     assert '"Borrowings"' in src
     main_src=inspect.getsource(m.main)
     assert "MARKET_BATCH_SCHEMA_VERSION" in main_src
+
+
+def test_monitor_batches_by_request_target_and_reuses_one_calendar_session():
+    import inspect
+    m=_load_position_monitor()
+    src=inspect.getsource(m)
+    assert "MAX_REQUEST_TARGET_CHARS=7000" in src
+    assert "BATCH_SIZE=40" not in src
+    main_src=inspect.getsource(m.main)
+    assert "session=_alpaca_exchange_session()" in main_src
+    assert "is_open=market_open(session=session)" in main_src
+    assert "trade_actions_enabled=is_open" in main_src
+
+def test_daily_market_cache_is_incremental_and_benchmarks_are_shared():
+    import inspect
+    src=inspect.getsource(ss)
+    assert "MARKET_CACHE" in src
+    assert "DAILY_CACHE_KEEP_BARS = 35" in src
+    assert "timedelta(days=45 if bootstrap else 7)" in src
+    main_src=inspect.getsource(ss.main)
+    assert 'bench=discovery.get("benchmarks") or {}' in main_src
+    assert '_alpaca_batch_bars(["SPY","QQQ"])' not in main_src
+
+def test_stockfit_is_field_precise_residual_fallback():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m.stockfit_evidence)
+    assert "missing_fields" in src
+    assert "if not (need & fields): continue" in src
+    main_src=inspect.getsource(m.main)
+    assert "systemic_fields" in main_src
+    assert "stockfit_gap_evidence" in main_src
+    assert "stockfit_batch_evidence" not in main_src
+
+def test_semantic_refresh_failure_preserves_prior_verified_evidence():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m.main)
+    assert "if reviewed:" in src
+    assert "risk_flags=prior_risk" in src
