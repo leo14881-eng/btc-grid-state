@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hunter V1 broad-net shadow lane.
 
-V1 samples every EARLY candidate (>=2 independent early signals) directly from
+V1 samples every EARLY candidate (>=2 independent early signals) directly and deterministically from
 hunter-early-signals.json. It deliberately bypasses V2 capital-review gates.
 V2 remains the strict executable/capital lane.
 """
