@@ -313,7 +313,7 @@ def test_result_writers_are_atomic_and_versioned():
     assert ".tmp" in inspect.getsource(pm.save)
     assert "SOURCE_COMMIT" in inspect.getsource(pm.main)
 
-# CLEAN_V3_BASELINE_REARMED_20261004: workflow trigger after audited state reset.
+# State continuity regression coverage: manual reset markers are forbidden.
 
 # SERIALIZED_STATE_ACCEPTANCE_20261004
 
@@ -411,3 +411,13 @@ def test_unverified_filing_risks_are_unknown_not_false():
     assert r["material_8k_risk"] is None
     assert r["semantic_risk_state"]=="UNKNOWN_PENDING_TEXT_REVIEW"
     assert m.classify_evidence({},r)=="WATCH"
+
+
+def test_fundamentals_main_migrates_legacy_unverified_false_flags():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m.main)
+    assert 'semantic_review_status")=="NOT_YET_TEXT_VERIFIED"' in src
+    assert '("going_concern","bankruptcy_restructuring","delisting_risk","material_8k_risk")' in src
+    assert '_risk[_key]=None' in src
+    assert 'UNKNOWN_PENDING_TEXT_REVIEW' in src
