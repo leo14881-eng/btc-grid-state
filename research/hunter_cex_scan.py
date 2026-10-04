@@ -11,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-OUT=pathlib.Path("research/results")
+OUT=pathlib.Path("research/results")\nHISTORY=OUT/"hunter-universe-history.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 BB=os.getenv("HUNTER_BYBIT_API","https://api.bytick.com")
 EXCLUDE={"USDC","USDT","BUSD","FDUSD","TUSD","USDP","DAI","USDE","PYUSD","EUR","TRY","BRL","GBP","AUD","UST","USTC"}
