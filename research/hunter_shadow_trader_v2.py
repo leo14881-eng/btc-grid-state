@@ -13,6 +13,12 @@ OVERFILTER_ZERO_BUY_CYCLES=3; OVERFILTER_LOOKBACK=12; OVERFILTER_MISSED_MOVE_PCT
 MAX_DECISION_HISTORY=1500
 MAX_EVENT_HISTORY=5000
 MAX_DEFERRED_HISTORY=500
+MAX_CLOSED_HOT=250
+DEGRADE_CONFIRM_CYCLES=3
+HARD_SPREAD_BPS=200.
+HARD_MIN_DEPTH_USDT=5000.
+REENTRY_PULLBACK_PCT=3.
+REENTRY_BREAKOUT_PCT=1.
 CAPITAL_POOL_USDT=20000.
 ENTRY_MODE="EXECUTABLE"
 STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
@@ -208,6 +214,74 @@ def profit_protection(pos,p):
  return {"armed":armed,"raw_pct":raw,"mfe_pct":mfe,"giveback_pct":giveback,"protect_floor_pct":protect_floor,
   "exit":bool(armed and (raw<=protect_floor or giveback>=GIVEBACK_MAX_PCT))}
 
+def position_health(pos,e):
+ # Ordinary signal decay is not a stop-loss. It only becomes thesis invalidation
+ # after several consecutive multi-factor weak observations.
+ hard=[]
+ if e.get("supply_confirmed_major_risk"):hard.append("CONFIRMED_MAJOR_NEAR_TERM_SUPPLY_RISK")
+ for b in e.get("blockers") or []:
+  u=str(b).upper()
+  if any(t in u for t in ("MISMATCH","INVALID","WRONG_ASSET","CONFLICT")):hard.append("FATAL_IDENTITY_OR_CONTRACT:"+str(b))
+ sp=e.get("spread_bps");depths=[e.get("bid_depth_2pct_usdt"),e.get("ask_depth_2pct_usdt")]
+ if sp is not None and sp>HARD_SPREAD_BPS:hard.append("CATASTROPHIC_SPREAD")
+ if all(x is not None for x in depths) and min(depths)<HARD_MIN_DEPTH_USDT:hard.append("CATASTROPHIC_DEPTH")
+ if hard:
+  pos["health_state"]="HARD_INVALIDATION";pos["degraded_cycles"]=int(pos.get("degraded_cycles") or 0)+1
+  return "HARD_INVALIDATION",hard
+ weak=[]
+ if e.get("score") is not None and e["score"]<DISCOVERY_MIN_SCORE:weak.append("SCORE_WEAK")
+ if e.get("independent",0)<DISCOVERY_MIN_INDEPENDENT:weak.append("SIGNALS_WEAK")
+ r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");acc=e.get("rel_accel")
+ if r1 is not None and r4 is not None and r1<0 and r4<0:weak.append("BTC_RELATIVE_NEGATIVE")
+ if acc is not None and acc<-1:weak.append("RELATIVE_MOMENTUM_DECELERATING")
+ if len(weak)>=2:
+  n=int(pos.get("degraded_cycles") or 0)+1;pos["degraded_cycles"]=n
+  state="THESIS_INVALIDATED" if n>=DEGRADE_CONFIRM_CYCLES else ("DEGRADED" if n>=2 else "WEAKENING")
+ else:
+  pos["degraded_cycles"]=0;state="STRONG"
+ pos["health_state"]=state;pos["health_reasons"]=weak
+ return state,weak
+
+def update_loss_exit_guard(state,pnl,reason,now):
+ g=state.setdefault("loss_exit_guard",{"loss_exit_count":0,"realized_loss_usdt":0.,"hard_invalidation_loss_exits":0})
+ if pnl<0:
+  g["loss_exit_count"]=int(g.get("loss_exit_count") or 0)+1
+  g["realized_loss_usdt"]=round(float(g.get("realized_loss_usdt") or 0)+abs(pnl),2)
+  if reason=="HARD_INVALIDATION":g["hard_invalidation_loss_exits"]=int(g.get("hard_invalidation_loss_exits") or 0)+1
+ g["updated_at_utc"]=now.isoformat()
+
+def register_exit_for_reentry(state,pos,p,reason,now):
+ reg=state.setdefault("reentry_registry",{})
+ reg[pos["asset"]]={"last_exit_at_utc":now.isoformat(),"last_exit_price":p,"last_exit_reason":reason,
+  "last_exit_pnl_usdt":round(float(pos.get("net_pnl_usdt") or 0),2),"post_exit_low":p,"reset_seen":False,"state":"POST_EXIT_OBSERVATION"}
+
+def reentry_allowed(state,c,p):
+ row=(state.get("reentry_registry") or {}).get((c or {}).get("asset"))
+ if not row:return True,["FIRST_ENTRY"]
+ ep=finite(row.get("last_exit_price"))
+ if not ep:return False,["REENTRY_EXIT_PRICE_MISSING"]
+ row["post_exit_low"]=min(finite(row.get("post_exit_low")) or p,p)
+ s=sig(c);ind=int(s.get("independent_signal_count") or 0);r1=finite(s.get("btc_relative_1h_pct"));r4=finite(s.get("btc_relative_4h_pct"));acc=finite(s.get("relative_acceleration_pct"))
+ if ind<DISCOVERY_MIN_INDEPENDENT or ((r1 is not None and r1<0) and (r4 is not None and r4<0)):row["reset_seen"]=True
+ pullback=(ep-row["post_exit_low"])/ep*100
+ fresh_strength=ind>=DISCOVERY_MIN_INDEPENDENT and acc is not None and acc>0 and ((r1 is not None and r1>0) or (r4 is not None and r4>0))
+ breakout=p>=ep*(1+REENTRY_BREAKOUT_PCT/100)
+ reset=bool(row.get("reset_seen")) or pullback>=REENTRY_PULLBACK_PCT
+ if reset and fresh_strength and breakout:
+  row["state"]="REENTRY_ELIGIBLE";return True,["NEW_MOVE_CONFIRMED","RESET_OR_PULLBACK_SEEN","FRESH_RELATIVE_STRENGTH","BREAKOUT_ABOVE_EXIT"]
+ row["state"]="REENTRY_BLOCKED_SAME_MOVE";return False,["REENTRY_BLOCKED_SAME_MOVE"]
+
+def compact_closed_history(state):
+ closed=state.get("closed_positions") or []
+ if len(closed)<=MAX_CLOSED_HOT:return
+ archive=state.setdefault("closed_trade_archive",[])
+ for x in closed[:-MAX_CLOSED_HOT]:
+  archive.append({"shadow_id":x.get("shadow_id"),"asset":x.get("asset"),"opened_at_utc":x.get("opened_at_utc"),"closed_at_utc":x.get("closed_at_utc"),
+   "exit_reason":x.get("exit_reason"),"net_pnl_usdt":x.get("net_pnl_usdt"),"net_return_pct":x.get("net_return_pct"),"mfe_pct":x.get("mfe_pct"),"mae_pct":x.get("mae_pct")})
+ state["closed_positions"]=closed[-MAX_CLOSED_HOT:]
+ # Keep a compact permanent ledger in the authoritative state; no 5-minute scan needs full old position blobs.
+ if len(archive)>5000:state["closed_trade_archive"]=archive[-5000:]
+
 def record_deferred_buy(state,c,now,p,e):
  state.setdefault("deferred_buy_opportunities",[])
  s=sig(c); row={"at_utc":now.isoformat(),"asset":c.get("asset"),"price":p,"reason":"BUY_BUT_NO_CAPITAL","trade_action":authoritative_entry_action(c,"SYSTEM_BLOCKED"),
@@ -280,9 +354,8 @@ def quarantine_non_crypto_history(state,excluded):
  return report
 
 def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
- """Manage open positions only. Shared by hourly and 5m lanes; never creates a new position."""
- btc=btc or price(scan,"BTC")
- cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
+ """Manage open positions only. Ordinary deterioration never forces a loss exit."""
+ btc=btc or price(scan,"BTC");cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
  still=[]
  for pos in state["open_positions"]:
@@ -291,29 +364,31 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
+  health,health_reasons=position_health(pos,e)
+  if health!="STRONG":act="HOLD"
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
-   if capital_available(state,next_amount):
-    add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
+   if capital_available(state,next_amount):add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_POOL_FULL_ADD_DEFERRED"],e,p)
-  else:record(state,pos,"HOLD",now,reasons,e,p)
-  protection=profit_protection(pos,p)
-  exit_reason=None;exit_reasons=None
-  if protection["exit"]:
-   exit_reason="PROFIT_PROTECTION";exit_reasons=["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"]
+  else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
+  protection=profit_protection(pos,p);pnl=net_pnl(pos,p);exit_reason=None;exit_reasons=None
+  if health=="HARD_INVALIDATION":exit_reason="HARD_INVALIDATION";exit_reasons=health_reasons
+  elif protection["exit"] and pnl>0:exit_reason="PROFIT_PROTECTION";exit_reasons=["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"]
+  elif health=="THESIS_INVALIDATED":
+   if pnl>0:exit_reason="PROFIT_STAGNATION" if pos.get("mfe_pct",0)<TARGET else "THESIS_INVALIDATED_PROFIT_EXIT";exit_reasons=["THESIS_INVALIDATED","NET_PROFIT_AVAILABLE"]
+   else:pos["recovery_state"]="LOSS_RECOVERY";record(state,pos,"HOLD",now,["LOSS_RECOVERY","NO_MECHANICAL_LOSS_EXIT"],e,p)
   elif raw>=TARGET:
-   r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");accel=e.get("rel_accel")
-   runner=r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
+   r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");accel=e.get("rel_accel");runner=r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
    if runner:record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
    else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
   if exit_reason:
-   pnl=net_pnl(pos,p);notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
+   notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":exit_reason,"weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
    if exit_reason=="PROFIT_PROTECTION":pos["profit_protection"]=protection
-   pos.update(exit_analysis(pos,p,exit_reason));record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
+   pos.update(exit_analysis(pos,p,exit_reason));update_loss_exit_guard(state,pnl,exit_reason,now);register_exit_for_reentry(state,pos,p,exit_reason,now)
+   record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
- state["open_positions"]=still
- return state
+ state["open_positions"]=still;compact_closed_history(state);return state
 
 def build_summary(state,now,guard_status="NORMAL"):
  closed=state.get("closed_positions") or []
@@ -327,7 +402,8 @@ def build_summary(state,now,guard_status="NORMAL"):
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
    "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":("AFTER_RESEARCH_DISCOVERY_ADMISSION" if ENTRY_MODE=="DISCOVERY" else "ONLY_AFTER_FULL_EXECUTABLE_DECISION_GATE"),"bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard_status},
-   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL"}},
+   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL"},
+   "position_lifecycle":{"degrade_confirm_cycles":DEGRADE_CONFIRM_CYCLES,"ordinary_thesis_invalidation_loss_exit":False,"hard_invalidation_may_exit_at_loss":True,"profit_stagnation_exit":True,"reentry_requires_new_move":True,"max_hot_closed_positions":MAX_CLOSED_HOT}},
   "capital_authority":"NONE_SHADOW_ONLY"}
 
 def main():
@@ -350,7 +426,11 @@ def main():
  for c in ranked:
   a=c.get("asset")
   if not a or a in open_assets:continue
-  broad,broad_reasons=discovery_decision(c);p=price(scan,a);fallback,reasons,e=decision(c,scan,liq,supply,"ENTRY")
+  p=price(scan,a)
+  re_ok,re_reasons=reentry_allowed(state,c,p) if p else (False,["CURRENT_PRICE_MISSING"])
+  if not re_ok:
+   record(state,{"asset":a,"tranches":[]},"WAIT",now,re_reasons,{},p);continue
+  broad,broad_reasons=discovery_decision(c);fallback,reasons,e=decision(c,scan,liq,supply,"ENTRY")
   act=authoritative_entry_action(c,fallback)
   if not entry_allowed(ENTRY_MODE,broad,p,act):
    if broad!="BUY": reject_reasons=broad_reasons
