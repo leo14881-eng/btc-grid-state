@@ -449,7 +449,8 @@ def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
     assert "tasks=all_tasks" in src
     assert "refresh_budget=4" in src
     assert 'provider":"SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA"' in src
-    # Per-company companyfacts must not be called from the refresh worker.
+    # Per-company reads are restricted to the tiny true-gap queue, never the full 308 cohort.
     worker=src[src.index("def fetch_sec_pair"):src.index("with ThreadPoolExecutor",src.index("def fetch_sec_pair"))]
-    assert "sec_companyfacts(" not in worker
+    assert "sec_companyfacts(" in worker
     assert "sec_submission(" in worker
+    assert "refresh_budget=4" in src
