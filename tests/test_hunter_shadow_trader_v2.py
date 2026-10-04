@@ -67,9 +67,16 @@ class V2CapitalDecisionTests(unittest.TestCase):
   self.assertEqual(bybit_channel({"spot":{"status":"OK","symbols":["X"]},"alpha":{"status":"UNKNOWN"}},"X")["channel"],"BYBIT_SPOT")
  def test_health_requires_persistent_multifactor_decay(self):
   p={};e={"score":4,"independent":1,"btc_rel_1h":-1,"btc_rel_4h":-1,"rel_accel":-2,"spread_bps":10,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000,"supply_confirmed_major_risk":False,"blockers":[]}
-  self.assertEqual(position_health(p,e)[0],"WEAKENING");self.assertEqual(position_health(p,e)[0],"DEGRADED");self.assertEqual(position_health(p,e)[0],"THESIS_INVALIDATED")
+  import datetime as dt
+  now=dt.datetime.now(dt.timezone.utc)
+  for i,expected in enumerate(("WEAKENING","DEGRADED","THESIS_INVALIDATED")):
+   observed=now+dt.timedelta(seconds=i);e["signal_evidence"]=eng.stamp("X",str(i),observed.isoformat())
+   self.assertEqual(position_health(p,e,observed)[0],expected)
+   self.assertEqual(position_health(p,e,observed)[0],"EVIDENCE_PENDING")
  def test_hard_invalidation_is_separate_from_signal_decay(self):
   p={};e={"score":12,"independent":3,"btc_rel_1h":2,"btc_rel_4h":3,"rel_accel":1,"spread_bps":250,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000,"supply_confirmed_major_risk":False,"blockers":[]}
+  import datetime as dt
+  e["book_observed_at_utc"]=dt.datetime.now(dt.timezone.utc).isoformat()
   self.assertEqual(position_health(p,e)[0],"HARD_INVALIDATION")
  def test_reentry_blocks_same_move_and_allows_reset_breakout(self):
   state={"reentry_registry":{"X":{"last_exit_price":100,"post_exit_low":100,"reset_seen":False,"state":"POST_EXIT_OBSERVATION"}}}

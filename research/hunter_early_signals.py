@@ -2,6 +2,11 @@
 """Hunter v4 PRE_MOVE funnel: multi-horizon volume/structure/BTC-relative signals; research only."""
 import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
 from concurrent.futures import ThreadPoolExecutor,as_completed
+try:
+ from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
+except ModuleNotFoundError as exc:
+ if exc.name != 'research':raise
+ from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 OUT=ROOT/"hunter-early-signals.json"
@@ -79,11 +84,11 @@ def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
     m=microdata.get(sym,{}) if microdata else {}
     va=finite(m.get("volume_acceleration")) or 0.; comp=finite(m.get("compression_ratio")) or 0.
     m15=finite(m.get("return_15m_pct")) or 0.; rp=finite(m.get("range_position")) or .5
-    pre_volume=va>=1.35; pre_compression=comp>=1.20; pre_turn=(m15>=0 and rel1>=0.25)
+    pre_volume=va>=C["EARLY_VOLUME_ACCEL"]; pre_compression=comp>=C["EARLY_COMPRESSION"]; pre_turn=(m15>=0 and rel1>=C["EARLY_TURN_REL"])
     # Early attention only: bounded micro evidence supplements, never replaces, BTC-relative evidence.
     score=max(0,rel1)*2+max(0,rel4)+max(0,accel)*1.5 + min(max(va-1,0),2)*.5 + min(max(comp-1,0),2)*.35
-    independent=sum((rel1>=0.8,rel4>=1.5,accel>=0.5,pre_volume,pre_compression,pre_turn))
-    stage="EARLY" if independent>=2 else "WATCH"
+    independent=sum((rel1>=C["MIN_REL_1H"],rel4>=C["MIN_REL_4H"],accel>=C["MIN_ACCEL"],pre_volume,pre_compression,pre_turn))
+    stage="EARLY" if independent>=C["DISCOVERY_MIN_INDEPENDENT"] else "WATCH"
     return {"base":base,"pair":sym,"stage":stage,"score":round(score,4),
       "btc_relative_1h_pct":round(rel1,4),"btc_relative_4h_pct":round(rel4,4),
       "relative_acceleration_pct":round(accel,4),
@@ -104,7 +109,7 @@ def build(scan,r1,r4,microdata,now):
     return {"schema":"hunter_early_signals_v4","as_of_utc":now.isoformat(),
       "scan_generation_id":scan.get("generation_id"),"capital_authority":"NONE_RESEARCH_ONLY",
       "method":"1h/4h BTC-relative strength + relative acceleration; no 24h-gain prerequisite",
-      "early_count":len(early),"early":early,"watch":rows[:30]}
+      "policy_version":VERSION,"early_count":len(early),"early":early,"all_signals":rows,"watch":rows[:30]}
 def persist_first_early(report):
     """Durable first-seen EARLY evidence for lead-time/missed-opportunity audits."""
     try: hist=json.loads(HISTORY.read_text())

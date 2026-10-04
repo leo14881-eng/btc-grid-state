@@ -10,7 +10,8 @@ class PositionMonitorTests(unittest.TestCase):
   state={"mode":"SIMULATION_ONLY_NO_REAL_ORDERS","open_positions":[{"shadow_id":"X1","asset":"X","opened_at_utc":"2026-10-01T00:00:00+00:00","btc_entry_price":100,"tranches":[{"price":100,"notional_usdt":1000,"buy_slippage_bps":0}],"mfe_pct":0,"mae_pct":0}],"closed_positions":[],"events":[],"decisions":[]}
   market={"BTC":{"reference_price":100,"change_24h_pct":0},"X":{"reference_price":price,"change_24h_pct":0}}
   review={"candidates":[{"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},"execution_scenario":{"buy_slippage_bps":10,"estimated_rr":2},"blockers":[]}]}
-  liq={"snapshots":{"X":{"spread_bps":10,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000}}};supply={}
+  review["candidates"][0]["signal_evidence"]=m.eng.stamp("X","fixture","2026-10-04T00:00:00+00:00")
+  liq={"snapshots":{"X":{"as_of_utc":"2026-10-04T00:00:00+00:00","spread_bps":10,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000}}};supply={}
   return state,market,review,liq,supply
  def test_shared_manager_can_add_but_never_create_new_asset(self):
   state,market,review,liq,supply=self.fixture()

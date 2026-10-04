@@ -1,21 +1,75 @@
 {
-  "schema": "hunter_shadow_rules_v1",
-  "active_version": "shadow-v1",
-  "generation": 1,
-  "rules": {
-    "min_score": 8,
-    "min_independent_signals": 2,
-    "min_btc_relative_1h_pct": 0.8,
-    "min_btc_relative_4h_pct": 1.5,
-    "max_change_24h_pct": 20,
-    "max_buy_slippage_bps": 75,
-    "target_pct": 8,
-    "invalidation_pct": -6,
-    "max_hold_hours": 24,
-    "max_open": 3,
-    "notional_usdt": 1000
+  "schema": "hunter_shadow_rules_v2",
+  "active_version": "shadow-consistent-v2",
+  "generation": 2,
+  "common": {
+    "MIN_RR": 1.5,
+    "MAX_SPREAD_BPS": 50.0,
+    "MIN_DEPTH_USDT": 30000.0,
+    "MAX_SLIP_BPS": 75.0,
+    "TARGET": 8.0,
+    "PROTECT_ARM_PCT": 2.0,
+    "GIVEBACK_MAX_PCT": 2.0,
+    "MIN_PROTECTED_NET_PCT": 0.35,
+    "MAX_CHASE_24H_PCT": 20.0,
+    "MAX_CHASE_FROM_DISCOVERY_PCT": 12.0,
+    "MIN_CHASE_RR": 2.0,
+    "MIN_CHASE_REL_1H": 1.5,
+    "MIN_CHASE_REL_4H": 2.5,
+    "OVERFILTER_ZERO_BUY_CYCLES": 3,
+    "OVERFILTER_LOOKBACK": 12,
+    "OVERFILTER_MISSED_MOVE_PCT": 8.0,
+    "OVERFILTER_MIN_SAFE_MISSES": 2,
+    "MAX_DECISION_HISTORY": 500,
+    "MAX_EVENT_HISTORY": 2000,
+    "MAX_DEFERRED_HISTORY": 500,
+    "MAX_CLOSED_HOT": 250,
+    "DEGRADE_CONFIRM_CYCLES": 3,
+    "HARD_SPREAD_BPS": 200.0,
+    "HARD_MIN_DEPTH_USDT": 5000.0,
+    "REENTRY_PULLBACK_PCT": 3.0,
+    "REENTRY_BREAKOUT_PCT": 1.0,
+    "MIN_SCORE": 8.0,
+    "MIN_REL_1H": 0.8,
+    "MIN_REL_4H": 1.5,
+    "MIN_ACCEL": 0.5,
+    "MAX_EVIDENCE_AGE_SECONDS": 3600,
+    "EARLY_VOLUME_ACCEL": 1.35,
+    "EARLY_COMPRESSION": 1.2,
+    "EARLY_TURN_REL": 0.25,
+    "MONITOR_EVIDENCE_BATCH": 80,
+    "FEE_BPS": 10.0,
+    "TRANCHES": [
+      1000.0,
+      1000.0,
+      1000.0
+    ],
+    "REVIEW_HOURS": [
+      1.0,
+      6.0,
+      24.0,
+      48.0,
+      72.0
+    ],
+    "DISCOVERY_MIN_INDEPENDENT": 2
   },
-  "status": "BASELINE",
-  "capital_authority": "NONE_SHADOW_ONLY",
-  "history": []
+  "lanes": {
+    "V1": {
+      "capital_pool_usdt": null,
+      "entry_mode": "DISCOVERY",
+      "discovery_min_score": 0.0,
+      "strategy": "SHARED_DECISION_ENGINE_V1_BROAD_NET"
+    },
+    "V2": {
+      "capital_pool_usdt": 20000.0,
+      "entry_mode": "EXECUTABLE",
+      "discovery_min_score": 6.0,
+      "strategy": "CAPITAL_DECISION_ENGINE_V2"
+    }
+  },
+  "price_only_stop_loss": false,
+  "time_exit_enabled": false,
+  "max_open": null,
+  "optimizer_writes_enabled": false,
+  "capital_authority": "NONE_SHADOW_ONLY"
 }

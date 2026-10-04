@@ -70,7 +70,7 @@ def targets(dossiers,scan,early=None):
     early_names=[x.get("base") for x in ((early or {}).get("early") or []) if x.get("base")]
     for lane,names,quota in (
         ("capital_early_signals",early_names,len(early_names)),
-        ("reviewed_watchlist",dossiers.get("reviewed_watchlist") or [],6),
+        ("reviewed_watchlist",dossiers.get("reviewed_watchlist") or [],len(dossiers.get("reviewed_watchlist") or [])),
         ("early_entry_watchlist",dossiers.get("early_entry_watchlist") or [],PER_LANE),
         ("continuation_watchlist",dossiers.get("continuation_watchlist") or [],PER_LANE),
         ("overflow",[d["asset"] for d in dossiers.get("dossiers") or []],len(dossiers.get("dossiers") or []))):
@@ -121,6 +121,11 @@ def live_fetch(url):
 
 def main():
     scan=read(SCAN);dossiers=read(DOSSIERS);early=read(EARLY)
+    held=set()
+    for lane in ("hunter-shadow-portfolio.json","hunter-shadow-v2-portfolio.json"):
+        try:held.update(x.get("asset") for x in read(ROOT/lane).get("open_positions") or [])
+        except (OSError,ValueError):pass
+    dossiers["reviewed_watchlist"]=sorted(held|set(dossiers.get("reviewed_watchlist") or []))
     report=build(scan,dossiers,live_fetch,dt.datetime.now(dt.timezone.utc),early)
     OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False))
     print(json.dumps({k:report[k] for k in ("as_of_utc","requested_count","successful_count","failures")},ensure_ascii=False))

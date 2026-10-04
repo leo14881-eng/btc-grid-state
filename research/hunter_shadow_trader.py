@@ -16,12 +16,12 @@ def configure_v1():
     engine.STATE=root/"hunter-shadow-portfolio.json"
     engine.SUMMARY=root/"hunter-shadow-summary.json"
     engine.GUARD=root/"hunter-shadow-v1-overfilter-guard.json"
-    engine.CAPITAL_POOL_USDT=None
-    engine.ENTRY_MODE="DISCOVERY"
+    engine.CAPITAL_POOL_USDT=engine.LANES["V1"]["capital_pool_usdt"]
+    engine.ENTRY_MODE=engine.LANES["V1"]["entry_mode"]
     # V1 admission is defined by EARLY membership itself (>=2 independent signals).
     # Do not re-apply the legacy score>=6 gate; V2 keeps its strict score/evidence gates.
-    engine.DISCOVERY_MIN_SCORE=0.
-    engine.STRATEGY_ID="SHARED_DECISION_ENGINE_V1_BROAD_NET"
+    engine.DISCOVERY_MIN_SCORE=engine.LANES["V1"]["discovery_min_score"]
+    engine.STRATEGY_ID=engine.LANES["V1"]["strategy"]
     engine.ID_PREFIX="SHV1"
     engine.EVENT_PREFIX="SHADOW_V1"
 
@@ -36,12 +36,16 @@ def load_early_into_review():
     review=json.loads(review_path.read_text())
     by={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
     candidates=[]
-    for s in early.get("early") or []:
+    held={p.get("asset") for p in (engine.load(root/"hunter-shadow-portfolio.json").get("open_positions") or [])}
+    signals={x.get("base"):x for x in early.get("early") or []}
+    signals.update({x.get("base"):x for x in early.get("all_signals") or [] if x.get("base") in held})
+    for s in signals.values():
         a=s.get("base")
         if not a or a in excluded: continue
         c=dict(by.get(a) or {})
         c["asset"]=a
         c["signal"]=s
+        c["signal_evidence"]=engine.stamp(a,early.get("scan_generation_id"),early.get("as_of_utc"))
         # V1 samples research signals; missing V2 evidence is retained as metadata,
         # never converted into a V1 admission blocker.
         c.setdefault("blockers",[])

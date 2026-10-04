@@ -1,27 +1,59 @@
 #!/usr/bin/env python3
 """Hunter shadow v2 capital-decision engine. Forward simulation only; never places exchange orders."""
 import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request
+try:
+ from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
+except ModuleNotFoundError as exc:
+ if exc.name != 'research':raise
+ from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
 STATE=ROOT/"hunter-shadow-v2-portfolio.json"; SUMMARY=ROOT/"hunter-shadow-v2-summary.json"; GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"; BYBIT=ROOT/"hunter-bybit-availability.json"
-FEE_BPS=10.; TRANCHES=(1000.,1000.,1000.); REVIEW_HOURS=(1.,6.,24.,48.,72.); NEW_VERSION_CUTOFF_UTC=dt.datetime(2026,10,4,17,0,0,tzinfo=dt.timezone.utc); DISCOVERY_MIN_SCORE=6.; DISCOVERY_MIN_INDEPENDENT=2
-MIN_RR=1.5; MAX_SPREAD_BPS=50.; MIN_DEPTH_USDT=30000.; MAX_SLIP_BPS=75.; TARGET=8.
-PROTECT_ARM_PCT=2.; GIVEBACK_MAX_PCT=2.; MIN_PROTECTED_NET_PCT=.35
-MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_CHASE_REL_1H=1.5; MIN_CHASE_REL_4H=2.5
-OVERFILTER_ZERO_BUY_CYCLES=3; OVERFILTER_LOOKBACK=12; OVERFILTER_MISSED_MOVE_PCT=8.; OVERFILTER_MIN_SAFE_MISSES=2
-MAX_DECISION_HISTORY=500
-MAX_EVENT_HISTORY=2000
-MAX_DEFERRED_HISTORY=500
-MAX_CLOSED_HOT=250
-DEGRADE_CONFIRM_CYCLES=3
-HARD_SPREAD_BPS=200.
-HARD_MIN_DEPTH_USDT=5000.
-REENTRY_PULLBACK_PCT=3.
-REENTRY_BREAKOUT_PCT=1.
-CAPITAL_POOL_USDT=20000.
-ENTRY_MODE="EXECUTABLE"
-STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
+NEW_VERSION_CUTOFF_UTC=dt.datetime(2026,10,4,17,0,0,tzinfo=dt.timezone.utc)
+MIN_RR=C["MIN_RR"]
+MAX_SPREAD_BPS=C["MAX_SPREAD_BPS"]
+MIN_DEPTH_USDT=C["MIN_DEPTH_USDT"]
+MAX_SLIP_BPS=C["MAX_SLIP_BPS"]
+TARGET=C["TARGET"]
+PROTECT_ARM_PCT=C["PROTECT_ARM_PCT"]
+GIVEBACK_MAX_PCT=C["GIVEBACK_MAX_PCT"]
+MIN_PROTECTED_NET_PCT=C["MIN_PROTECTED_NET_PCT"]
+MAX_CHASE_24H_PCT=C["MAX_CHASE_24H_PCT"]
+MAX_CHASE_FROM_DISCOVERY_PCT=C["MAX_CHASE_FROM_DISCOVERY_PCT"]
+MIN_CHASE_RR=C["MIN_CHASE_RR"]
+MIN_CHASE_REL_1H=C["MIN_CHASE_REL_1H"]
+MIN_CHASE_REL_4H=C["MIN_CHASE_REL_4H"]
+OVERFILTER_ZERO_BUY_CYCLES=C["OVERFILTER_ZERO_BUY_CYCLES"]
+OVERFILTER_LOOKBACK=C["OVERFILTER_LOOKBACK"]
+OVERFILTER_MISSED_MOVE_PCT=C["OVERFILTER_MISSED_MOVE_PCT"]
+OVERFILTER_MIN_SAFE_MISSES=C["OVERFILTER_MIN_SAFE_MISSES"]
+MAX_DECISION_HISTORY=C["MAX_DECISION_HISTORY"]
+MAX_EVENT_HISTORY=C["MAX_EVENT_HISTORY"]
+MAX_DEFERRED_HISTORY=C["MAX_DEFERRED_HISTORY"]
+MAX_CLOSED_HOT=C["MAX_CLOSED_HOT"]
+DEGRADE_CONFIRM_CYCLES=C["DEGRADE_CONFIRM_CYCLES"]
+HARD_SPREAD_BPS=C["HARD_SPREAD_BPS"]
+HARD_MIN_DEPTH_USDT=C["HARD_MIN_DEPTH_USDT"]
+REENTRY_PULLBACK_PCT=C["REENTRY_PULLBACK_PCT"]
+REENTRY_BREAKOUT_PCT=C["REENTRY_BREAKOUT_PCT"]
+MIN_SCORE=C["MIN_SCORE"]
+MIN_REL_1H=C["MIN_REL_1H"]
+MIN_REL_4H=C["MIN_REL_4H"]
+MIN_ACCEL=C["MIN_ACCEL"]
+MAX_EVIDENCE_AGE_SECONDS=C["MAX_EVIDENCE_AGE_SECONDS"]
+EARLY_VOLUME_ACCEL=C["EARLY_VOLUME_ACCEL"]
+EARLY_COMPRESSION=C["EARLY_COMPRESSION"]
+EARLY_TURN_REL=C["EARLY_TURN_REL"]
+MONITOR_EVIDENCE_BATCH=C["MONITOR_EVIDENCE_BATCH"]
+FEE_BPS=C["FEE_BPS"]
+TRANCHES=tuple(C["TRANCHES"])
+REVIEW_HOURS=tuple(C["REVIEW_HOURS"])
+DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"]
+CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"]
+DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"]
+ENTRY_MODE=LANES["V2"]["entry_mode"]
+STRATEGY_ID=LANES["V2"]["strategy"]
 ID_PREFIX="SHV2"
 EVENT_PREFIX="SHADOW_V2"
 SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"
@@ -80,7 +112,7 @@ def evidence(c,liq,supply):
   "bid_depth_2pct_usdt":finite(l.get("bid_depth_2pct_usdt")),"ask_depth_2pct_usdt":finite(l.get("ask_depth_2pct_usdt")),
   "buy_slippage_bps":finite(ex.get("buy_slippage_bps")),"estimated_rr":finite(ex.get("estimated_rr")),
   "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),"supply_confirmed_major_risk":confirmed_supply_risk(sr),
-  "blockers":hard_blockers(c)}
+  "blockers":hard_blockers(c),"signal_evidence":(c or {}).get("signal_evidence"),"book_observed_at_utc":l.get("as_of_utc")}
 def bybit_channel(bybit,a):
  spot=bybit.get("spot") or {}; alpha=bybit.get("alpha") or {}; a=str(a or "").upper()
  spot_v=(a in set(spot.get("symbols") or [])) if str(spot.get("status") or "").startswith("OK") else None
@@ -122,10 +154,10 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
   # Existing shadow positions wait for fresh evidence instead of being force-sold.
   return ("HOLD" if kind!="ENTRY" else "REJECT"),["CANDIDATE_EVIDENCE_MISSING_REVIEW_ONLY"],{}
  e=evidence(c,liq,supply); reasons=[]
- if e["score"] is None or e["score"]<8:reasons.append("SCORE_WEAK")
+ if e["score"] is None or e["score"]<C["MIN_SCORE"]:reasons.append("SCORE_WEAK")
  if e["independent"]<2:reasons.append("INSUFFICIENT_INDEPENDENT_SIGNALS")
  if e["btc_rel_1h"] is None or e["btc_rel_4h"] is None:reasons.append("BTC_RELATIVE_MISSING")
- elif e["btc_rel_1h"]<.8 and e["btc_rel_4h"]<1.5:reasons.append("BTC_RELATIVE_WEAK")
+ elif e["btc_rel_1h"]<C["MIN_REL_1H"] and e["btc_rel_4h"]<C["MIN_REL_4H"]:reasons.append("BTC_RELATIVE_WEAK")
  if e["rel_accel"] is not None and e["rel_accel"]<-1:reasons.append("RELATIVE_MOMENTUM_DECELERATING")
  if e["spread_bps"] is None or e["spread_bps"]>MAX_SPREAD_BPS:reasons.append("SPREAD_UNACCEPTABLE")
  depths=[e["bid_depth_2pct_usdt"],e["ask_depth_2pct_usdt"]]
@@ -372,7 +404,7 @@ def profit_protection(pos,p):
  return {"armed":armed,"raw_pct":raw,"mfe_pct":mfe,"giveback_pct":giveback,"protect_floor_pct":protect_floor,
   "exit":bool(armed and (raw<=protect_floor or giveback>=GIVEBACK_MAX_PCT))}
 
-def position_health(pos,e):
+def position_health(pos,e,now=None):
  # Ordinary signal decay is not a stop-loss. It only becomes thesis invalidation
  # after several consecutive multi-factor weak observations.
  hard=[]
@@ -381,11 +413,22 @@ def position_health(pos,e):
   u=str(b).upper()
   if any(t in u for t in ("MISMATCH","INVALID","WRONG_ASSET","CONFLICT")):hard.append("FATAL_IDENTITY_OR_CONTRACT:"+str(b))
  sp=e.get("spread_bps");depths=[e.get("bid_depth_2pct_usdt"),e.get("ask_depth_2pct_usdt")]
- if sp is not None and sp>HARD_SPREAD_BPS:hard.append("CATASTROPHIC_SPREAD")
- if all(x is not None for x in depths) and min(depths)<HARD_MIN_DEPTH_USDT:hard.append("CATASTROPHIC_DEPTH")
+ if fresh(e.get("book_observed_at_utc"),now or dt.datetime.now(dt.timezone.utc)) and sp is not None and sp>HARD_SPREAD_BPS:hard.append("CATASTROPHIC_SPREAD")
+ if fresh(e.get("book_observed_at_utc"),now or dt.datetime.now(dt.timezone.utc)) and all(x is not None for x in depths) and min(depths)<HARD_MIN_DEPTH_USDT:hard.append("CATASTROPHIC_DEPTH")
  if hard:
   pos["health_state"]="HARD_INVALIDATION";pos["degraded_cycles"]=int(pos.get("degraded_cycles") or 0)+1
   return "HARD_INVALIDATION",hard
+ meta=e.get("signal_evidence") or {}
+ if not meta.get("evidence_id") or not fresh(meta.get("observed_at_utc"),now or dt.datetime.now(dt.timezone.utc)):
+  return "EVIDENCE_PENDING",["SIGNAL_EVIDENCE_MISSING_OR_STALE"]
+ if pos.get("last_health_evidence_id")==meta["evidence_id"]:
+  return "EVIDENCE_PENDING",["SIGNAL_EVIDENCE_ALREADY_CONSUMED"]
+ # Start a new counter for pre-fix positions; old ticks cannot count as new observations.
+ if not pos.get("last_health_evidence_id"):pos["degraded_cycles"]=0
+ previous=pos.get("last_health_observed_at_utc")
+ if previous and parse(meta["observed_at_utc"])<=parse(previous):return "EVIDENCE_PENDING",["SIGNAL_EVIDENCE_NOT_NEWER"]
+ pos["last_health_evidence_id"]=meta["evidence_id"];pos["last_health_observed_at_utc"]=meta["observed_at_utc"]
+ pos["last_health_generation_id"]=meta.get("generation_id")
  weak=[]
  if e.get("score") is not None and e["score"]<DISCOVERY_MIN_SCORE:weak.append("SCORE_WEAK")
  if e.get("independent",0)<DISCOVERY_MIN_INDEPENDENT:weak.append("SIGNALS_WEAK")
@@ -522,7 +565,10 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
-  health,health_reasons=position_health(pos,e)
+  health,health_reasons=position_health(pos,e,now)
+  signal_fresh=fresh((e.get("signal_evidence") or {}).get("observed_at_utc"),now)
+  book_fresh=fresh(e.get("book_observed_at_utc"),now)
+  if not (signal_fresh and book_fresh):act="HOLD";reasons.append("MANAGEMENT_EVIDENCE_STALE_OR_MISSING")
   if health!="STRONG":act="HOLD"
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
@@ -535,7 +581,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   elif health=="THESIS_INVALIDATED":
    if pnl>0:exit_reason="PROFIT_STAGNATION" if pos.get("mfe_pct",0)<TARGET else "THESIS_INVALIDATED_PROFIT_EXIT";exit_reasons=["THESIS_INVALIDATED","NET_PROFIT_AVAILABLE"]
    else:pos["recovery_state"]="LOSS_RECOVERY";record(state,pos,"HOLD",now,["LOSS_RECOVERY","NO_MECHANICAL_LOSS_EXIT"],e,p)
-  elif raw>=TARGET:
+  elif raw>=TARGET and signal_fresh:
    r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");accel=e.get("rel_accel");runner=r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
    if runner:record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
    else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
@@ -580,9 +626,9 @@ def build_summary(state,now,guard_status="NORMAL"):
  cohorts={"all_samples":opportunity_summary(all_closed),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"]),
   "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"])}
  return {"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
-  "strategy":STRATEGY_ID,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
+  "strategy":STRATEGY_ID,"policy_version":VERSION,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
   "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in all_closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
-  "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":False,"time_exit_enabled":False,"time_review_hours":list(REVIEW_HOURS),
+  "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":POLICY["price_only_stop_loss"],"time_exit_enabled":POLICY["time_exit_enabled"],"time_review_hours":list(REVIEW_HOURS),
    "entry_mode":ENTRY_MODE,"entry_requires_full_execution_validation":ENTRY_MODE=="EXECUTABLE","add_requires_revalidation":True,"fail_closed_on_missing_candidate_evidence":True,"min_estimated_rr":MIN_RR,
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
@@ -651,7 +697,7 @@ def main():
  if len(state["events"])>MAX_EVENT_HISTORY:
   state["event_history_truncated"]=int(state.get("event_history_truncated") or 0)+len(state["events"])-MAX_EVENT_HISTORY
   state["events"]=state["events"][-MAX_EVENT_HISTORY:]
- state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
+ state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
  summary=build_summary(state,now,guard.get("status") or "NORMAL")
  atomic_json_write(STATE,state);atomic_json_write(SUMMARY,summary)
  print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(state.get("closed_positions") or []),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
