@@ -247,6 +247,27 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
   "optimizer_action":"RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST" if over else "NONE",
   "live_capital_rules_changed":False,"capital_authority":"NONE_SHADOW_ONLY"})
  atomic_json_write(GUARD,guard);return guard
+def quarantine_non_crypto_history(state,excluded):
+ excluded=set(excluded or [])
+ if not excluded:return {"assets":[],"open":0,"closed":0,"events":0,"decisions":0,"ever":0}
+ report={"assets":set(),"open":0,"closed":0,"events":0,"decisions":0,"ever":0}
+ for src,dst,key in (
+  ("open_positions","excluded_non_crypto_positions","open"),
+  ("closed_positions","excluded_non_crypto_closed_positions","closed"),
+  ("events","excluded_non_crypto_events","events"),
+  ("decisions","excluded_non_crypto_decisions","decisions")):
+  rows=state.get(src) or []; bad=[x for x in rows if x.get("asset") in excluded]
+  if bad:
+   state[src]=[x for x in rows if x.get("asset") not in excluded]
+   state.setdefault(dst,[]).extend(bad);report[key]=len(bad);report["assets"].update(x.get("asset") for x in bad if x.get("asset"))
+ ever=list(state.get("ever_entered_assets") or []);bad_ever=sorted(set(ever)&excluded)
+ if bad_ever:
+  state["ever_entered_assets"]=sorted(set(ever)-excluded)
+  state["excluded_non_crypto_ever_entered_assets"]=sorted(set(state.get("excluded_non_crypto_ever_entered_assets") or [])|set(bad_ever))
+  report["ever"]=len(bad_ever);report["assets"].update(bad_ever)
+ report["assets"]=sorted(report["assets"])
+ return report
+
 def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
  """Manage open positions only. Shared by hourly and 5m lanes; never creates a new position."""
  btc=btc or price(scan,"BTC")
@@ -307,6 +328,9 @@ def main():
  if not btc:raise SystemExit("BTC_PRICE_MISSING")
  state=load(STATE,{"schema":"hunter_shadow_v2_portfolio_v2","mode":"SIMULATION_ONLY_NO_REAL_ORDERS","open_positions":[],"closed_positions":[],"events":[],"decisions":[]})
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
+ excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
+ if not excluded:raise SystemExit("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
+ quarantine_non_crypto_history(state,excluded)
  for old in state["closed_positions"]:update_post_exit(old,price(scan,old.get("asset")),now)
  manage_existing_positions(state,scan,review,liq,supply,now,btc)
  open_assets={x["asset"] for x in state["open_positions"]};buy_count=0
