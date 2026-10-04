@@ -84,6 +84,37 @@ jobs:
           assert all(x.get('trade_action') in ('BUY','WAIT','REJECT','SYSTEM_BLOCKED') for x in review.get('candidates') or []),'V2_ACTION_TAXONOMY_INVALID'
           print('HUNTER_PERSISTED_STATE_CONTRACT_OK',scan.get('generation_id'),'v1_open',len(data['hunter-shadow-portfolio.json'].get('open_positions') or []),'v2_open',len(v2.get('open_positions') or []),'v2_used',round(used,2))
           PY
+      - name: Audit V1 V2 ledger continuity and crypto-only history
+        run: |
+          python - <<'PY'
+          import collections,json
+          U=json.load(open('research/results/hunter-cex-universe-run.json'))
+          excluded=set((((U.get('venue_status') or {}).get('binance') or {}).get('excluded_bstocks') or []))
+          assert excluded, 'CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING'
+          for label,path,prefix in (
+              ('V1','research/results/hunter-shadow-portfolio.json','SHADOW_V1_'),
+              ('V2','research/results/hunter-shadow-v2-portfolio.json','SHADOW_V2_')):
+              s=json.load(open(path)); opens=s.get('open_positions') or []; closed=s.get('closed_positions') or []
+              events=s.get('events') or []; decisions=s.get('decisions') or []
+              names=[x.get('asset') for x in opens if x.get('asset')]
+              assert len(names)==len(set(names)), f'{label}_DUPLICATE_OPEN'
+              active=set(names)|{x.get('asset') for x in closed}|{x.get('asset') for x in events}|{x.get('asset') for x in decisions}|set(s.get('ever_entered_assets') or [])
+              assert not (active & excluded), f'{label}_ACTIVE_BSTOCK_HISTORY {sorted(active & excluded)}'
+              buys={x.get('asset') for x in events if x.get('type')==prefix+'BUY' and x.get('asset')}
+              sells={x.get('asset') for x in events if x.get('type')==prefix+'SELL' and x.get('asset')}
+              position_assets={x.get('asset') for x in opens+closed if x.get('asset')}
+              if not s.get('event_history_truncated'):
+                  assert position_assets <= buys, f'{label}_POSITION_WITHOUT_BUY_EVENT {sorted(position_assets-buys)}'
+                  assert {x.get('asset') for x in closed if x.get('asset')} <= sells, f'{label}_CLOSED_WITHOUT_SELL_EVENT'
+              for x in opens+closed:
+                  assert x.get('tranches'), f'{label}_POSITION_WITHOUT_TRANCHES {x.get("asset")}'
+                  assert all(float(t.get('notional_usdt') or 0)>0 and float(t.get('price') or 0)>0 for t in x.get('tranches') or []), f'{label}_INVALID_TRANCHE {x.get("asset")}'
+              for x in closed:
+                  assert isinstance(x.get('net_pnl_usdt'),(int,float)), f'{label}_CLOSED_PNL_MISSING {x.get("asset")}'
+              q={k:len(s.get(k) or []) for k in ('excluded_non_crypto_positions','excluded_non_crypto_closed_positions','excluded_non_crypto_events','excluded_non_crypto_decisions','excluded_non_crypto_ever_entered_assets')}
+              counts=collections.Counter(x.get('type') for x in events)
+              print('LEDGER_CONTINUITY_OK',label,'open',len(opens),'closed',len(closed),'events',dict(counts),'quarantine',q,'event_history_truncated',int(s.get('event_history_truncated') or 0))
+          PY
       - name: Require full live pipeline after code change
         run: |
           echo 'STATIC_AND_STATE_REGRESSION_OK'
