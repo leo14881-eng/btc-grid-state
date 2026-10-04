@@ -1,0 +1,58 @@
+name: Stock Shadow Replay
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/stock_shadow/stock_replay.py'
+      - 'tests/test_stock_shadow.py'
+      - '.github/workflows/stock-shadow-replay.yml'
+  schedule:
+    # 22:30 UTC is safely after the regular US close in both EDT and EST.
+    - cron: '30 22 * * 1-5'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stock-shadow-replay
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Test Stock Shadow replay and invariants
+        run: python -m pytest -q tests/test_stock_shadow.py
+      - name: Chronological Replay
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+        run: python research/stock_shadow/stock_replay.py
+      - name: Isolation guard
+        run: |
+          git diff --name-only | grep -Ev '^research/results/stock-shadow/replay-v1.json$' && { echo "Replay isolation violation"; exit 1; } || true
+      - name: Persist replay result only
+        run: |
+          git fetch origin main
+          if ! git diff --quiet HEAD origin/main -- research/stock_shadow/stock_replay.py tests/test_stock_shadow.py .github/workflows/stock-shadow-replay.yml; then
+            echo "Replay code changed during this run; refusing stale-result persistence"
+            exit 42
+          fi
+          git config user.name "stock-shadow-bot"
+          git config user.email "stock-shadow-bot@users.noreply.github.com"
+          git add research/results/stock-shadow/replay-v1.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "data: update stock shadow replay"
+          git pull --rebase origin main
+          git push origin HEAD:main
