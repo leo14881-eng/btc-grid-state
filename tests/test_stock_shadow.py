@@ -113,9 +113,14 @@ def test_position_monitor_parses_public_snapshot_price():
 
 def test_position_monitor_market_hours_gate():
     m=_load_position_monitor()
-    from datetime import datetime, timezone
-    assert m.market_open(datetime(2026,10,5,14,0,tzinfo=timezone.utc)) is True
-    assert m.market_open(datetime(2026,10,4,14,0,tzinfo=timezone.utc)) is False
+    from datetime import datetime, timezone, time
+    regular={"date":"2026-10-05","open":time(9,30),"close":time(16,0)}
+    assert m.market_open(datetime(2026,10,5,14,0,tzinfo=timezone.utc),regular) is True
+    assert m.market_open(datetime(2026,10,5,21,0,tzinfo=timezone.utc),regular) is False
+    early={"date":"2026-11-27","open":time(9,30),"close":time(13,0)}
+    assert m.market_open(datetime(2026,11,27,17,30,tzinfo=timezone.utc),early) is True
+    assert m.market_open(datetime(2026,11,27,18,30,tzinfo=timezone.utc),early) is False
+    assert m.market_open(datetime(2026,10,4,14,0,tzinfo=timezone.utc),None) is False
 
 def test_monitor_executes_v3_profit_protection_sell():
     m=_load_position_monitor()
@@ -205,13 +210,24 @@ def test_hourly_daily_bar_engine_does_not_execute_intraday_profit_sell():
     assert 'exit_reason="STRUCTURE_BROKEN_PROFIT_EXIT_V3"' in src
 
 
-def test_trade_actions_are_gated_to_us_regular_session():
-    from datetime import datetime, timezone
-    assert ss.trade_action_window(datetime(2026,10,5,14,0,tzinfo=timezone.utc)) is True
-    assert ss.trade_action_window(datetime(2026,10,4,14,0,tzinfo=timezone.utc)) is False
+def test_trade_actions_are_gated_to_actual_exchange_session():
+    from datetime import datetime, timezone, time
+    regular={"date":"2026-10-05","open":time(9,30),"close":time(16,0)}
+    assert ss.trade_action_window(datetime(2026,10,5,14,0,tzinfo=timezone.utc),regular) is True
+    early={"date":"2026-11-27","open":time(9,30),"close":time(13,0)}
+    assert ss.trade_action_window(datetime(2026,11,27,18,30,tzinfo=timezone.utc),early) is False
+    assert ss.trade_action_window(datetime(2026,10,4,14,0,tzinfo=timezone.utc),None) is False
 
 def test_main_benchmarks_no_longer_use_yahoo():
     import inspect
     src=inspect.getsource(ss.main)
     assert '_alpaca_batch_bars(["SPY","QQQ"])' in src
     assert "_stock_snapshot(idx)" not in src
+
+
+def test_exchange_calendar_is_dynamic_and_fail_closed():
+    import inspect
+    assert "paper-api.alpaca.markets/v2/calendar" in inspect.getsource(ss._alpaca_exchange_session)
+    assert "weekday()<5" not in inspect.getsource(ss.trade_action_window)
+    m=_load_position_monitor()
+    assert "paper-api.alpaca.markets/v2/calendar" in inspect.getsource(m._alpaca_exchange_session)
