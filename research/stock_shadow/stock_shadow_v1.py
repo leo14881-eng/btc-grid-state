@@ -114,7 +114,7 @@ DAILY_CACHE_KEEP_BARS = 24
 API_USAGE={
     "alpaca_daily_bars":{"http_requests":0,"pages":0,"logical_batches":0},
     "alpaca_calendar":{"http_requests":0,"cache_hits":0,"cache_misses":0,"errors":0},
-    "history_gap_recovery":{"http_requests":0,"logical_batches":0,"recovered":0},
+    "history_gap_recovery":{"http_requests":0,"logical_batches":0,"recovered":0,"deep_window_days":0},
 }
 NY=ZoneInfo("America/New_York")
 
@@ -389,7 +389,11 @@ def stock_universe():
     gap_symbols=[s for s in symbols if len(cached.get(s) or [])<22]
     gap_recovered=set()
     if gap_symbols and not bootstrap:
-        gap_start=end-timedelta(days=45)
+        # 45 calendar days can contain fewer than 22 sessions around holidays/suspensions.
+        # A 120-day residual-only read is cheap (only the gap queue) and distinguishes
+        # genuinely short histories from an undersized recovery window.
+        gap_start=end-timedelta(days=120)
+        API_USAGE["history_gap_recovery"]["deep_window_days"]=120
         for batch in _pack_alpaca_symbol_batches(gap_symbols,"1Day",gap_start,end):
             before=API_USAGE["alpaca_daily_bars"]["http_requests"]
             API_USAGE["history_gap_recovery"]["logical_batches"]+=1
@@ -420,12 +424,10 @@ def stock_universe():
         except Exception as e:
             rows=cached.get(s,[]); classification=None
             if str(e)=="insufficient_history":
-                if rows:
-                    try:
-                        first_dt=datetime.fromisoformat(str(rows[0].get("t") or "").replace("Z","+00:00"))
-                        classification=("RECENT_SOURCE_HISTORY_POSSIBLE_NEW_LISTING" if (end-first_dt).days<40 else "SOURCE_HISTORY_GAP")
-                    except Exception: classification="SOURCE_HISTORY_GAP"
-                else: classification="SOURCE_HISTORY_GAP"
+                # Do not infer listing age from our cache's first bar. After a targeted
+                # 120-day source read, <22 bars means source history is still insufficient.
+                # Listing/uplist/suspension identity requires separate authoritative evidence.
+                classification="SOURCE_HISTORY_INSUFFICIENT_UNVERIFIED_IDENTITY"
             failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_DAILY_CACHE","history_gap_classification":classification}})
     for s in failed_symbols_from_batches:
         if not any(x["symbol"]==s for x in failed):
@@ -552,7 +554,7 @@ def main():
     save(STATE,state); save(EVENTS,events)
     save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
     "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":json.loads(json.dumps(API_USAGE)),
-    "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in ("RECENT_SOURCE_HISTORY_POSSIBLE_NEW_LISTING","SOURCE_HISTORY_GAP")},
+    "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in ("SOURCE_HISTORY_INSUFFICIENT_UNVERIFIED_IDENTITY",)},
     "failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
