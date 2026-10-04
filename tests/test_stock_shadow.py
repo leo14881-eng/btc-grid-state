@@ -429,6 +429,7 @@ def test_fundamentals_main_migrates_legacy_unverified_false_flags():
 
 
 def test_fmp_bulk_fundamentals_provider_is_observation_only(monkeypatch):
+    import inspect
     m=_load_fundamentals_observer()
     def fake(endpoint,year,period,key):
         if endpoint=="income-statement-bulk":
