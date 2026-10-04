@@ -58,7 +58,7 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add research/results/hunter-cex-universe-run.json research/results/hunter-cex-universe-latest.json research/results/hunter-cex-universe-summary.json
+          git add research/results/hunter-cex-universe-run.json research/results/hunter-cex-universe-latest.json research/results/hunter-cex-universe-summary.json research/results/hunter-universe-history.json
           git diff --cached --quiet && { echo 'DISCOVERY_NO_CHANGE'; exit 0; }
           git commit -m 'research: publish verified Hunter discovery generation'
           for attempt in 1 2 3 4 5; do
