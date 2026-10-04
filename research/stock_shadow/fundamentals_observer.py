@@ -69,6 +69,91 @@ def sec_submission(cik):
         if e.code!=403: raise
         return proxy_json(url),"SEC_VIA_READONLY_PROXY"
 
+def sec_companyfacts(cik):
+    url=f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+    try: return get(url),"SEC_DIRECT"
+    except urllib.error.HTTPError as e:
+        if e.code!=403: raise
+        return proxy_json(url),"SEC_VIA_READONLY_PROXY"
+
+def _fact_series(facts, concepts, units=("USD","shares")):
+    usgaap=(facts.get("facts") or {}).get("us-gaap") or {}
+    for concept in concepts:
+        node=usgaap.get(concept) or {}
+        unit_map=node.get("units") or {}
+        rows=[]
+        for unit in units:
+            rows.extend(unit_map.get(unit) or [])
+        if rows:
+            # Prefer filed annual/quarterly facts; de-duplicate amended/repeated facts by end date.
+            good=[r for r in rows if r.get("end") and r.get("val") is not None and r.get("form") in {"10-K","10-Q","10-K/A","10-Q/A"}]
+            by_end={}
+            for r in good:
+                prev=by_end.get(r["end"])
+                if prev is None or str(r.get("filed","")) >= str(prev.get("filed","")): by_end[r["end"]]=r
+            return concept, sorted(by_end.values(),key=lambda r:r["end"])
+    return None,[]
+
+def _latest_values(facts, concepts, limit=5, units=("USD","shares")):
+    concept,rows=_fact_series(facts,concepts,units)
+    return concept,[{"end":r["end"],"val":r["val"],"form":r.get("form"),"filed":r.get("filed")} for r in rows[-limit:]]
+
+def _trend(values):
+    vals=[float(x["val"]) for x in values if x.get("val") is not None]
+    if len(vals)<2: return "INSUFFICIENT"
+    a,b=vals[-2],vals[-1]
+    if abs(a)<1e-12: return "IMPROVING" if b>0 else ("DETERIORATING" if b<0 else "FLAT")
+    pct=(b/a-1)*100
+    if pct>5: return "IMPROVING"
+    if pct<-5: return "DETERIORATING"
+    return "STABLE"
+
+def financial_evidence(facts):
+    specs={
+      "revenue":(["RevenueFromContractWithCustomerExcludingAssessedTax","Revenues","SalesRevenueNet"],("USD",)),
+      "net_income":(["NetIncomeLoss","ProfitLoss"],("USD",)),
+      "operating_cash_flow":(["NetCashProvidedByUsedInOperatingActivities"],("USD",)),
+      "cash":(["CashAndCashEquivalentsAtCarryingValue","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],("USD",)),
+      "total_debt":(["LongTermDebtAndFinanceLeaseObligationsCurrent","LongTermDebtCurrent","LongTermDebt"],("USD",)),
+      "shares":(["CommonStocksIncludingAdditionalPaidInCapitalMember","CommonStockSharesOutstanding","EntityCommonStockSharesOutstanding"],("shares",)),
+    }
+    out={}
+    for name,(concepts,units) in specs.items():
+        concept,values=_latest_values(facts,concepts,units=units)
+        out[name]={"concept":concept,"values":values,"trend":_trend(values)}
+    # FCF is evidence-derived only when both OCF and capex facts are available.
+    _,capex=_latest_values(facts,["PaymentsToAcquirePropertyPlantAndEquipment"],units=("USD",))
+    ocf=out["operating_cash_flow"]["values"]
+    fcf=[]
+    cap_by_end={x["end"]:x for x in capex}
+    for x in ocf:
+        if x["end"] in cap_by_end:
+            fcf.append({"end":x["end"],"val":float(x["val"])-float(cap_by_end[x["end"]]["val"])})
+    out["free_cash_flow"]={"values":fcf[-5:],"trend":_trend(fcf)}
+    sh=out["shares"]["values"]
+    dilution_pct=None
+    if len(sh)>=2 and float(sh[-2]["val"]):
+        dilution_pct=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
+    out["share_dilution_pct_latest"]=round(dilution_pct,4) if dilution_pct is not None else None
+    return out
+
+def classify_evidence(ev, risk_flags):
+    # Observation-only heuristic classification; never consumed by trading code.
+    bad=sum(ev.get(k,{}).get("trend")=="DETERIORATING" for k in ("revenue","net_income","operating_cash_flow","free_cash_flow"))
+    dilution=ev.get("share_dilution_pct_latest")
+    severe=any(risk_flags.get(k) for k in ("bankruptcy_restructuring","going_concern","delisting_risk"))
+    if severe: return "CRITICAL"
+    if bad>=2 or (dilution is not None and dilution>=10): return "DETERIORATING"
+    if bad==1 or (dilution is not None and dilution>=5) or risk_flags.get("material_8k_present"): return "WATCH"
+    available=sum(bool(ev.get(k,{}).get("values")) for k in ("revenue","net_income","operating_cash_flow","cash","total_debt"))
+    return "HEALTHY" if available>=3 else "UNKNOWN"
+
+def filing_risk_evidence(latest):
+    # Form presence is evidence, not semantic proof of a severe event. Text review can enrich these later.
+    return {"material_8k_present":any(x["form"].startswith("8-K") for x in latest),
+            "going_concern":False,"bankruptcy_restructuring":False,"delisting_risk":False,
+            "semantic_review_status":"NOT_YET_TEXT_VERIFIED"}
+
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
     companies=old.get("companies",{})
@@ -89,6 +174,7 @@ def main():
             companies[s]={"symbol":s,"status":"NO_SEC_MAPPING","updated_at":now()}; continue
         try:
             sub,transport=sec_submission(cik)
+            facts,facts_transport=sec_companyfacts(cik)
             recent=(sub.get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
             latest=[]
@@ -97,11 +183,16 @@ def main():
                     latest.append({"form":form,"filing_date":date,"accession":an})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
-            companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or meta.get("title"),
-                "status":"OBSERVED","transport":transport,"latest_material_filings":latest,
+            evidence=financial_evidence(facts)
+            risk_flags=filing_risk_evidence(latest)
+            state_name=classify_evidence(evidence,risk_flags)
+            companies[s]={"symbol":s,"cik":cik,"company":sub.get("name") or (meta or {}).get("title"),
+                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,
+                "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),
-                "fundamental_state":"UNKNOWN_OBSERVATION_ONLY",
-                "note":"Filings collected for evidence; no automatic strategy decision yet."}
+                "fundamental_state":state_name,
+                "strategy_effect":False,
+                "note":"Observation-only SEC evidence; no automatic BUY/ADD/SELL effect."}
             refreshed+=1
         except urllib.error.HTTPError as e:
             errors.append({"symbol":s,"type":"HTTPError","status":e.code})
