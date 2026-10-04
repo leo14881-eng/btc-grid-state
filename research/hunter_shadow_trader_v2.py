@@ -563,7 +563,9 @@ def main():
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
  if not excluded:raise SystemExit("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
  quarantine_non_crypto_history(state,excluded)
- for old in state["closed_positions"]:\n  update_post_exit(old,price(scan,old.get("asset")),now)\n  backfill_opportunity_history(old,now)
+ for old in state["closed_positions"]:
+  update_post_exit(old,price(scan,old.get("asset")),now)
+  backfill_opportunity_history(old,now)
  manage_existing_positions(state,scan,review,liq,supply,now,btc)
  open_assets={x["asset"] for x in state["open_positions"]};buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
