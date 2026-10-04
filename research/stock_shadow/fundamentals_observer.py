@@ -296,9 +296,9 @@ def filing_risk_evidence(latest):
     # Form presence is evidence, not semantic proof of a severe event. Text review can enrich these later.
     return {"material_8k_present":any(x["form"].startswith("8-K") for x in latest),
             # Unknown is intentional: absence of semantic filing-text verification is NOT evidence of absence.
-            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,
+            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,"material_8k_risk":None,
             "semantic_review_status":"NOT_YET_TEXT_VERIFIED",
-            "semantic_risk_state":"UNKNOWN"}
+            "semantic_risk_state":"UNKNOWN_PENDING_TEXT_REVIEW"}
 
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
