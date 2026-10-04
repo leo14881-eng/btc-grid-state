@@ -18,8 +18,9 @@ def get(path,params):
  with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
 def iso(ms):return dt.datetime.fromtimestamp(ms/1000,dt.timezone.utc).isoformat()
 def today_bounds():
- now=dt.datetime.now(dt.timezone.utc); start=now.replace(hour=0,minute=0,second=0,microsecond=0)
- return start,now
+ tz=ZoneInfo("Asia/Ho_Chi_Minh"); local_now=dt.datetime.now(tz)
+ local_start=local_now.replace(hour=0,minute=0,second=0,microsecond=0)
+ return local_start.astimezone(dt.timezone.utc),local_now.astimezone(dt.timezone.utc),local_start.date().isoformat()
 def day_stats(sym,start,now):
  rows=get("/api/v3/klines",{"symbol":sym,"interval":"15m","startTime":int(start.timestamp()*1000),"endTime":int(now.timestamp()*1000),"limit":1000})
  if not rows:return None
