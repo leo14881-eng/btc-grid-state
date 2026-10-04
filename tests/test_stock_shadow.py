@@ -714,3 +714,39 @@ def test_ifrs_companyfacts_functional_currency_mapping_is_supported():
     assert '"Revenue"' in evidence_src
     assert '"PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities"' in evidence_src
     assert m.MARKET_BATCH_SCHEMA_VERSION >= 5
+
+
+def test_history_gap_recovery_is_residual_only_and_classified():
+    import inspect
+    src=inspect.getsource(ss.stock_universe)
+    assert "gap_symbols=[s for s in symbols if len(cached.get(s) or [])<22]" in src
+    assert "gap_start=end-timedelta(days=45)" in src
+    assert "history_gap_recovery" in src
+    assert "NEW_LISTING_INSUFFICIENT_HISTORY" in src
+    assert "SOURCE_HISTORY_GAP" in src
+    # The deep read must target only the residual queue, never the whole discovered universe.
+    assert '_pack_alpaca_symbol_batches(gap_symbols,"1Day",gap_start,end)' in src
+
+
+def test_exchange_calendar_uses_same_day_persisted_cache_and_fail_closed():
+    import inspect
+    src=inspect.getsource(ss._alpaca_exchange_session)
+    assert "CALENDAR_CACHE" in src
+    assert 'cached.get("date")==day' in src
+    assert 'cached.get("closed") is True' in src
+    assert "ALPACA_EXCHANGE_CALENDAR_CACHE" in src
+    assert 'API_USAGE["alpaca_calendar"]["http_requests"]+=1' in src
+    # No weekday/hard-coded session fallback is allowed.
+    assert "weekday()" not in src
+
+
+def test_position_monitor_reuses_same_calendar_cache_and_reports_usage():
+    import inspect
+    m=_load_position_monitor()
+    src=inspect.getsource(m._alpaca_exchange_session)
+    main_src=inspect.getsource(m.main)
+    assert "CALENDAR_CACHE" in src
+    assert 'cached.get("date")==day' in src
+    assert "ALPACA_EXCHANGE_CALENDAR_CACHE" in src
+    assert "CALENDAR_USAGE" in src
+    assert "calendar_api_usage" in main_src
