@@ -35,7 +35,8 @@ jobs:
           R=pathlib.Path('research/results')
           required=[
             'hunter-cex-universe-run.json','hunter-early-signals.json',
-            'hunter-identity-audit.json','hunter-liquidity-probe.json',
+            'hunter-forward-research.json','hunter-identity-audit.json','hunter-liquidity-probe.json',
+            'hunter-tactical-supply-risk.json','hunter-health-and-queue.json',
             'hunter-tactical-capital-review.json','hunter-shadow-portfolio.json',
             'hunter-shadow-summary.json','hunter-shadow-v2-portfolio.json',
             'hunter-shadow-v2-summary.json','hunter-bybit-availability.json']
@@ -49,9 +50,26 @@ jobs:
           ident=data['hunter-identity-audit.json']
           review=data['hunter-tactical-capital-review.json']
           assert scan.get('binance_complete') is True
-          assert early.get('scan_generation_id')==scan.get('generation_id'),'EARLY_GENERATION_MISMATCH'
-          assert ident.get('scan_as_of_utc')==scan.get('as_of_utc'),'IDENTITY_GENERATION_MISMATCH'
-          assert review.get('scan_generation_id')==scan.get('generation_id'),'CAPITAL_REVIEW_GENERATION_MISMATCH'
+          downstream={
+            'early': early.get('scan_generation_id'),
+            'forward': data['hunter-forward-research.json'].get('scan_generation_id'),
+            'identity': ident.get('scan_generation_id'),
+            'liquidity': data['hunter-liquidity-probe.json'].get('scan_generation_id'),
+            'supply': data['hunter-tactical-supply-risk.json'].get('scan_generation_id'),
+            'capital_review': review.get('scan_generation_id'),
+            'health': data['hunter-health-and-queue.json'].get('scan_generation_id'),
+          }
+          generations={v for v in downstream.values() if v}
+          assert len(generations)==1 and all(downstream.values()), f'MIXED_PERSISTED_DOWNSTREAM_GENERATIONS {downstream}'
+          downstream_generation=next(iter(generations))
+          if downstream_generation==scan.get('generation_id'):
+            assert ident.get('scan_as_of_utc')==scan.get('as_of_utc'),'IDENTITY_GENERATION_MISMATCH'
+            print('PERSISTED_PIPELINE_GENERATION_CURRENT',downstream_generation)
+          else:
+            # Universe publishes atomically before the downstream Research workflow.
+            # A coherent older downstream snapshot is safe to read as OLD, but must
+            # never be presented as belonging to the new Universe generation.
+            print('PERSISTED_PIPELINE_IN_FLIGHT universe',scan.get('generation_id'),'downstream',downstream_generation)
           for lane in ('','-v2'):
             st=data[f'hunter-shadow{lane}-portfolio.json']; sm=data[f'hunter-shadow{lane}-summary.json']
             opens=st.get('open_positions') or []; closed=st.get('closed_positions') or []
