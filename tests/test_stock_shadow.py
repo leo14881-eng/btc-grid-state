@@ -169,11 +169,12 @@ def test_profit_floor_is_positive_and_tightens_with_mfe():
 
 def test_closed_trade_records_net_return_and_costs():
     import inspect
-    src=inspect.getsource(ss.main)
-    assert '"realized_net_return_pct"' in src
-    assert '"estimated_total_fees_usdt"' in src
-    assert '"gross_price_return_pct"' in src
-    assert 'NET_PROFIT_GIVEBACK_V3' in src
+    main_src=inspect.getsource(ss.main)
+    monitor_src=inspect.getsource(_load_position_monitor().main)
+    assert '"realized_net_return_pct"' in main_src
+    assert '"estimated_total_fees_usdt"' in main_src
+    assert '"gross_price_return_pct"' in main_src
+    assert 'NET_PROFIT_GIVEBACK_V3' in monitor_src
 
 def test_fresh_buy_cannot_add_in_same_run():
     import inspect
