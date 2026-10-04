@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m unittest tests.test_hunter_shadow_trader_v2 tests.test_hunter_position_monitor -v
       - name: Fast monitor V1 and V2 open positions only
-        run: python research/hunter_position_monitor.py
+        run: python -m research.hunter_position_monitor
       - name: Validate state
         run: |
           python - <<'PY'
