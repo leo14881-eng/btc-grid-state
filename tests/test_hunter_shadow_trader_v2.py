@@ -169,3 +169,26 @@ class OpportunityObservationTests(unittest.TestCase):
    self.assertEqual(pos["holding_mfe_pct"],25.0);self.assertEqual(pos["full_opportunity_mfe_pct"],25.0)
    self.assertEqual(pos["data_provenance"],"HISTORICAL_BACKFILL");self.assertFalse(pos["observation_complete"])
   finally:eng.binance_kline_bars=old
+
+
+class OpportunityCutoffSafetyTests(unittest.TestCase):
+ def test_peak_excludes_candle_that_closes_after_cutoff(self):
+  import datetime as dt
+  cutoff=dt.datetime(2026,10,5,2,0,0,tzinfo=dt.timezone.utc)
+  base=int(dt.datetime(2026,10,5,1,55,0,tzinfo=dt.timezone.utc).timestamp()*1000)
+  # First candle is fully known before cutoff. Second starts before SELL/cutoff but
+  # closes afterwards; its high is future information and must not enter Holding MFE.
+  bars=[
+   (base,base+4*60*1000+59999,1.08),
+   (base+5*60*1000,base+9*60*1000+59999,1.30),
+  ]
+  out=eng.peak_from_bars(bars,cutoff)
+  self.assertEqual(out["peak_price"],1.08)
+  self.assertEqual(out["source"],"BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY")
+
+ def test_peak_accepts_completed_candle_at_cutoff(self):
+  import datetime as dt
+  cutoff=dt.datetime(2026,10,5,2,0,0,tzinfo=dt.timezone.utc)
+  stop=int(cutoff.timestamp()*1000)
+  bars=[(stop-300000,stop,1.12)]
+  self.assertEqual(eng.peak_from_bars(bars,cutoff)["peak_price"],1.12)
