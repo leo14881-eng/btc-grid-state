@@ -39,6 +39,12 @@ jobs:
       - name: SEC public-data health
         continue-on-error: true
         run: python research/stock_shadow/stock_sec_monitor.py
+      - name: Alpaca batch data diagnostic
+        continue-on-error: true
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+        run: python research/stock_shadow/alpaca_diagnostic.py
       - name: Run Stock Shadow V1
         run: python research/stock_shadow/stock_shadow_v1.py
       - name: Winner loser review
