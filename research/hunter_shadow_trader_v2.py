@@ -12,6 +12,7 @@ MAX_CHASE_24H_PCT=20.; MAX_CHASE_FROM_DISCOVERY_PCT=12.; MIN_CHASE_RR=2.0; MIN_C
 OVERFILTER_ZERO_BUY_CYCLES=3; OVERFILTER_LOOKBACK=12; OVERFILTER_MISSED_MOVE_PCT=8.; OVERFILTER_MIN_SAFE_MISSES=2
 MAX_DECISION_HISTORY=1500
 MAX_EVENT_HISTORY=5000
+MAX_DEFERRED_HISTORY=500
 CAPITAL_POOL_USDT=20000.
 ENTRY_MODE="EXECUTABLE"
 STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
@@ -207,6 +208,16 @@ def profit_protection(pos,p):
  return {"armed":armed,"raw_pct":raw,"mfe_pct":mfe,"giveback_pct":giveback,"protect_floor_pct":protect_floor,
   "exit":bool(armed and (raw<=protect_floor or giveback>=GIVEBACK_MAX_PCT))}
 
+def record_deferred_buy(state,c,now,p,e):
+ state.setdefault("deferred_buy_opportunities",[])
+ s=sig(c); row={"at_utc":now.isoformat(),"asset":c.get("asset"),"price":p,"reason":"BUY_BUT_NO_CAPITAL","trade_action":authoritative_entry_action(c,"SYSTEM_BLOCKED"),
+  "score":finite(s.get("score")),"independent_signal_count":int(s.get("independent_signal_count") or 0),"btc_relative_1h_pct":finite(s.get("btc_relative_1h_pct")),
+  "btc_relative_4h_pct":finite(s.get("btc_relative_4h_pct")),"estimated_rr":e.get("estimated_rr"),"used_capital_usdt":used_capital(state),"capital_pool_usdt":CAPITAL_POOL_USDT,
+  "loss_making_positions_are_not_rotated":True}
+ state["deferred_buy_opportunities"].append(row)
+ state["deferred_buy_opportunities"]=state["deferred_buy_opportunities"][-MAX_DEFERRED_HISTORY:]
+ return row
+
 def record(state,pos,action,now,reasons,e,p):
  state["decisions"].append({"at":now.isoformat(),"shadow_id":pos.get("shadow_id"),"asset":pos["asset"],"action":action,
   "price":p,"reasons":reasons,"evidence":e,"tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0})
@@ -315,7 +326,8 @@ def build_summary(state,now,guard_status="NORMAL"):
    "max_spread_bps":MAX_SPREAD_BPS,"min_depth_2pct_usdt":MIN_DEPTH_USDT,"max_buy_slippage_bps":MAX_SLIP_BPS,"profit_review_trigger_pct":TARGET,"profit_target_is_forced_exit":False,"runner_requires_positive_1h_4h_relative_and_acceleration":True,
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
    "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":("AFTER_RESEARCH_DISCOVERY_ADMISSION" if ENTRY_MODE=="DISCOVERY" else "ONLY_AFTER_FULL_EXECUTABLE_DECISION_GATE"),"bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
-   "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard_status}},
+   "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard_status},
+   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL"}},
   "capital_authority":"NONE_SHADOW_ONLY"}
 
 def main():
@@ -353,7 +365,11 @@ def main():
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
   if not capital_available(state,TRANCHES[0]):
-   record(state,{"asset":a,"tranches":[]},"REJECT",now,["CAPITAL_POOL_FULL_ENTRY_DEFERRED"],e,p);continue
+   # The candidate passed the executable BUY gate. Preserve that fact instead of
+   # misclassifying a capital-capacity miss as a strategy rejection. Never rotate
+   # a losing position merely to fund a newer candidate.
+   record_deferred_buy(state,c,now,p,e)
+   record(state,{"asset":a,"tranches":[]},"WAIT",now,["BUY_BUT_NO_CAPITAL","NO_LOSS_MAKING_ROTATION"],e,p);continue
   add(pos,p,e,now);record(state,pos,"BUY",now,(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons),e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);open_assets.add(a);buy_count+=1
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
  # Trade events and positions are durable audit history. High-frequency HOLD/REJECT
