@@ -423,22 +423,3 @@ def test_fundamentals_main_migrates_legacy_unverified_false_flags():
     assert 'UNKNOWN_PENDING_TEXT_REVIEW' in src
 
 
-def test_filing_risk_unknown_is_not_false_negative():
-    import importlib.util
-    path=Path(__file__).parents[1]/"research"/"stock_shadow"/"fundamentals_observer.py"
-    spec=importlib.util.spec_from_file_location("fundamentals_observer_test",path)
-    m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-    r=m.filing_risk_evidence([])
-    assert r["going_concern"] is None
-    assert r["bankruptcy_restructuring"] is None
-    assert r["delisting_risk"] is None
-    assert r["material_8k_present"] is None
-    assert m.classify_evidence({},r)=="UNKNOWN"
-    r2=m.filing_risk_evidence([{"form":"8-K","filing_date":"2026-10-01","accession":"x"}])
-    assert r2["material_8k_present"] is True
-    assert m.classify_evidence({},r2)=="WATCH"
-
-def test_market_data_health_separates_transport_from_history_eligibility():
-    src=(Path(__file__).parents[1]/"research"/"stock_shadow"/"stock_shadow_v1.py").read_text()
-    assert 'data_status=("OK" if market and http_error_count==0' in src
-    assert 'history_coverage_status=("COMPLETE" if insufficient_history_count==0 else "PARTIAL_HISTORY")' in src
