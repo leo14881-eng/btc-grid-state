@@ -9,6 +9,7 @@ STATE=ROOT/"portfolio-v1.json"; OUT=ROOT/"fundamentals-observer-v1.json"
 UA="stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com"
 BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
+FALLBACK_MAX_REQUESTS=12
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
@@ -220,10 +221,15 @@ def main():
             facts=facts_by_cik.get(cik)
             transport="SEC_BULK_SUBMISSIONS" if sub else None
             facts_transport="SEC_BULK_COMPANYFACTS" if facts else None
-            if sub is None:
+            if sub is None and fallback_requests < FALLBACK_MAX_REQUESTS:
                 sub,transport=sec_submission(cik); fallback_requests+=1
-            if facts is None:
+            if facts is None and fallback_requests < FALLBACK_MAX_REQUESTS:
                 facts,facts_transport=sec_companyfacts(cik); fallback_requests+=1
+            if sub is None or facts is None:
+                companies[s]={"symbol":s,"cik":cik,"company":meta.get("title"),"status":"BULK_MISSING",
+                    "transport":transport,"companyfacts_transport":facts_transport,"updated_at":now(),
+                    "strategy_effect":False,"note":"Bulk archive did not contain complete evidence; bounded fallback only."}
+                continue
             recent=(sub.get("filings") or {}).get("recent") or {}
             forms=recent.get("form") or []; dates=recent.get("filingDate") or []; acc=recent.get("accessionNumber") or []
             latest=[]
@@ -246,7 +252,7 @@ def main():
     out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"refreshed_this_run":refreshed,
-         "bulk_transport":bulk,"fallback_requests":fallback_requests,
+         "bulk_transport":bulk,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
          "errors":errors,"mapping_errors":map_errors,"status":"OK" if not errors else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
