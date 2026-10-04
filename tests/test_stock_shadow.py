@@ -196,4 +196,4 @@ def test_hourly_daily_bar_engine_does_not_execute_intraday_profit_sell():
     import inspect
     src=inspect.getsource(ss.main)
     assert 'if p["profit_protection_signal"]' not in src
-    assert 'exit_reason="STRUCTURE_BROKEN_V3"' in src
+    assert 'exit_reason="STRUCTURE_BROKEN_PROFIT_EXIT_V3"' in src
