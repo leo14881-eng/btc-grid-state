@@ -466,11 +466,13 @@ def test_replay_is_chronological_and_observation_only():
     assert '"mode":"REPLAY_OBSERVATION_ONLY"' in src
     assert '"strategy_effect":False' in src
     assert '"future_data_prohibited":True' in src
-    fn=inspect.getsource(m.chronological_signal)
+    fn=inspect.getsource(m.chronological_trace)
     assert "for bar in sorted(intra" in fn
+    assert "if cutoff_at and bar" in fn
     assert "seen.append(bar)" in fn
     assert "partial_day(seen)" in fn
     assert "entry_decision" in fn
+    assert '"EARLY_ACCUMULATION"' in fn
 
 def test_replay_full_universe_screen_then_intraday_only_movers():
     import inspect
@@ -480,3 +482,13 @@ def test_replay_full_universe_screen_then_intraday_only_movers():
     assert "gain>=SURGE_PCT" in src
     assert 'wanted=list(dict.fromkeys([x[0] for x in movers]+["SPY","QQQ"]))' in src
     assert '"5Min"' in src
+
+
+def test_replay_reports_early_actual_buy_and_missed_gates():
+    import inspect
+    m=_load_replay(); src=inspect.getsource(m.main)
+    assert '"first_early_signal"' in src
+    assert '"actual_buy_before_high"' in src
+    assert '"remaining_upside_after_early_pct"' in src
+    assert '"missed_gate_reasons"' in src
+    assert 'e.get("type")=="BUY"' in src
