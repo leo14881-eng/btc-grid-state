@@ -410,6 +410,7 @@ def main():
     bulk={"attempted":False,"reason":"DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE","ciks_requested":len(set(symbol_cik.values()))}
 
     last_batch_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
+    fmp_refreshed_at=old.get("fmp_refreshed_at")
     batch_due=True
     if last_batch_at:
         try:
@@ -417,6 +418,9 @@ def main():
             batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 6*3600
         except Exception:
             batch_due=True
+    # Migration/acceptance rule: a fresh SEC Frames cache must not suppress the first real FMP bulk run.
+    if not fmp_refreshed_at:
+        batch_due=True
     market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
     frames_by_cik={}; fmp_by_symbol={}
@@ -428,6 +432,7 @@ def main():
             try:
                 fmp_by_symbol,fmp_status=fmp_bulk_evidence(symbols,api_key)
                 fmp_status["status"]="OK" if not fmp_status.get("errors") else "PARTIAL"
+                fmp_refreshed_at=now()
             except Exception as e:
                 fmp_status={"provider":"FMP_BULK","attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
         else:
@@ -513,7 +518,7 @@ def main():
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
     complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
     pending_symbols=[s for s in symbols if not evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {})]
-    out={"updated_at":now(),"market_batch_refreshed_at":market_batch_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
+    out={"updated_at":now(),"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
