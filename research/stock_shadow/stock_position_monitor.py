@@ -125,7 +125,7 @@ def alpaca_snapshot_quotes(symbols):
             requests+=1; errors.append({"batch":batch_index,"reason":f"HTTP_{e.code}","detail":str(e.reason)})
         except Exception as e:
             requests+=1; errors.append({"batch":batch_index,"reason":type(e).__name__,"detail":str(e)[:120]})
-    return prices,errors,requests
+    return prices,errors,requests,len(batches)
 
 def main(force=False):
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
@@ -134,7 +134,9 @@ def main(force=False):
     positions=state.get("positions",{}); symbols=sorted(positions)
     starting_positions=len(symbols); starting_events=len(events); starting_closed=len(state.get("closed",[]))
     starting_fingerprint=continuity_fingerprint(state,events)
-    session=_alpaca_exchange_session()\n    is_open=market_open(session=session)\n    if not force and not is_open:
+    session=_alpaca_exchange_session()
+    is_open=market_open(session=session)
+    if not force and not is_open:
         save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
     prices,errors,requests,logical_batches=alpaca_snapshot_quotes(symbols)
