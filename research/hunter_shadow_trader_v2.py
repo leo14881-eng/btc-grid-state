@@ -220,7 +220,13 @@ def backfill_opportunity_history(pos,now):
  bars=binance_kline_bars(pos.get("asset"),opened,end);buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
  full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed)
  if not bars or not full or not hold or not buy:
-  if pos.get("data_provenance")!="HISTORICAL_BACKFILL":pos["data_provenance"]="INSUFFICIENT_HISTORY"
+  if pos.get("data_provenance")!="HISTORICAL_BACKFILL":
+   pos["data_provenance"]="INSUFFICIENT_HISTORY"
+   # Legacy mfe_pct used the then-current weighted entry and cannot be relabeled as
+   # initial-BUY opportunity MFE without reliable historical bars.
+   if sample_cohort(pos)=="MIGRATION_SAMPLE":
+    pos["holding_mfe_pct"]=None;pos["holding_peak_price"]=None;pos["holding_peak_at_utc"]=None
+    pos["full_opportunity_mfe_pct"]=None;pos["full_opportunity_peak_price"]=None;pos["full_opportunity_peak_at_utc"]=None
   pos["opportunity_backfill_at_utc"]=now.isoformat();return pos
  pos["holding_peak_price"]=hold["peak_price"];pos["holding_peak_at_utc"]=hold["peak_at_utc"];pos["holding_mfe_pct"]=round((hold["peak_price"]/buy-1)*100,4)
  pos["full_opportunity_peak_price"]=full["peak_price"];pos["full_opportunity_peak_at_utc"]=full["peak_at_utc"];pos["full_opportunity_mfe_pct"]=round((full["peak_price"]/buy-1)*100,4)
