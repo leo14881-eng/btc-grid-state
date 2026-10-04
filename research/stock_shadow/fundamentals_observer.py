@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,11 +91,21 @@ def frame_evidence_by_cik():
     tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
     def fetch_one(task):
         key,tax,concept,unit,p=task
-        d,t=frame_json(tax,concept,unit,p)
-        return task,d,t
+        last=None
+        for attempt in range(3):
+            try:
+                d,t=frame_json(tax,concept,unit,p)
+                return task,d,t
+            except urllib.error.HTTPError as e:
+                last=e
+                if e.code!=429: raise
+                time.sleep(2*(attempt+1))
+            except json.JSONDecodeError as e:
+                last=e; time.sleep(1*(attempt+1))
+        raise last
     # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
     # below workflow timeout without creating per-symbol request storms.
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures=[ex.submit(fetch_one,t) for t in tasks]
         for fut in as_completed(futures):
             try:
@@ -308,10 +318,11 @@ def main():
             facts=facts_by_cik.get(cik)
             transport="SEC_BULK_SUBMISSIONS" if sub else None
             facts_transport="SEC_BULK_COMPANYFACTS" if facts else None
-            if sub is None and fallback_requests < FALLBACK_MAX_REQUESTS:
+            if sub is None and facts is not None and not prior_ev and fallback_requests < FALLBACK_MAX_REQUESTS:
                 sub,transport=sec_submission(cik); fallback_requests+=1
             frame_ev=frames_by_cik.get(cik)
-            if facts is None and frame_ev is None and fallback_requests < FALLBACK_MAX_REQUESTS:
+            prior_ev=(companies.get(s) or {}).get("financial_evidence")
+            if facts is None and frame_ev is None and not prior_ev and fallback_requests < FALLBACK_MAX_REQUESTS:
                 facts,facts_transport=sec_companyfacts(cik); fallback_requests+=1
             if facts is None and frame_ev is not None:
                 facts_transport="SEC_XBRL_FRAMES_MARKET_BATCH"
