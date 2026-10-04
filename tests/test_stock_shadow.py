@@ -222,7 +222,8 @@ def test_trade_actions_are_gated_to_actual_exchange_session():
 def test_main_benchmarks_no_longer_use_yahoo():
     import inspect
     src=inspect.getsource(ss.main)
-    assert '_alpaca_batch_bars(["SPY","QQQ"])' in src
+    assert 'bench=discovery.get("benchmarks") or {}' in src
+    assert '_alpaca_batch_bars(["SPY","QQQ"])' not in src
     assert "_stock_snapshot(idx)" not in src
 
 
