@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent Stock Shadow V2 clean-sample final run. Broad paper sampling only; never places orders."""
-import json, math, urllib.request, urllib.error, concurrent.futures
-from datetime import datetime, timezone
+import json, math, os, urllib.request, urllib.error, urllib.parse
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
@@ -38,7 +38,8 @@ def save(p,o):
 NASDAQ_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
 OTHER_LISTED = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
 EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", " PREFERRED", " PFD", " DEPOSITARY", " DEPOSITORY")
-MAX_MARKET_WORKERS = 24
+ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
+ALPACA_BATCH_SIZE = 200
 
 def get_text(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"text/plain,*/*"})
@@ -82,35 +83,51 @@ def discover_us_common_stocks():
     # Yahoo uses '-' for class shares; Nasdaq directories commonly use '.'.
     return sorted(s.replace(".","-") for s in symbols), source_errors
 
-def _stock_snapshot(symbol):
-    # Daily bars provide liquidity, trend, momentum and relative-strength inputs.
-    url=f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=3mo&interval=1d"
-    d=get_json(url); r=d["chart"]["result"][0]
-    q=r["indicators"]["quote"][0]
-    closes=[float(x) if x is not None else None for x in q["close"]]
-    volumes=[float(x or 0) for x in q["volume"]]
-    highs=[float(x) if x is not None else None for x in q.get("high",[])]
-    lows=[float(x) if x is not None else None for x in q.get("low",[])]
-    valid=[(p,v) for p,v in zip(closes,volumes) if p is not None and p>0]
-    if len(valid)<22: raise ValueError("insufficient_history")
-    prices=[x[0] for x in valid]; vols=[x[1] for x in valid]
-    price=prices[-1]
-    ret5=(price/prices[-6]-1)*100
-    ret20=(price/prices[-21]-1)*100
+def _snapshot_from_bars(symbol, bars, source):
+    rows=[b for b in bars if b.get("c") is not None and float(b["c"])>0]
+    if len(rows)<22: raise ValueError("insufficient_history")
+    prices=[float(b["c"]) for b in rows]; vols=[float(b.get("v") or 0) for b in rows]
+    highs=[float(b["h"]) for b in rows if b.get("h") is not None]
+    lows=[float(b["l"]) for b in rows if b.get("l") is not None]
+    price=prices[-1]; ret5=(price/prices[-6]-1)*100; ret20=(price/prices[-21]-1)*100
     sma20=sum(prices[-20:])/20
     avg_dollar_volume=sum(p*v for p,v in zip(prices[-20:],vols[-20:]))/20
     vol20=(sum(((prices[i]/prices[i-1]-1)*100)**2 for i in range(len(prices)-19,len(prices)))/19)**0.5
     avg_volume20=sum(vols[-20:])/20
     volume_ratio=(vols[-1]/avg_volume20) if avg_volume20 else 0.0
-    recent_highs=[x for x in highs[-20:] if x is not None]
-    recent_lows=[x for x in lows[-20:] if x is not None]
-    high20=max(recent_highs) if recent_highs else max(prices[-20:])
-    low20=min(recent_lows) if recent_lows else min(prices[-20:])
+    high20=max(highs[-20:]) if highs else max(prices[-20:])
+    low20=min(lows[-20:]) if lows else min(prices[-20:])
     range_pos20=((price-low20)/(high20-low20)) if high20>low20 else 0.5
     return {"base":symbol,"price":price,"ret5":ret5,"ret20":ret20,"sma20":sma20,
             "avg_dollar_volume20":avg_dollar_volume,"daily_volatility20":vol20,
             "volume_ratio20":volume_ratio,"high20":high20,"low20":low20,"range_position20":range_pos20,
-            "status":"OBSERVED","source":"FREE_PUBLIC_CHART_1D","observed_at":now()}
+            "status":"OBSERVED","source":source,"observed_at":now()}
+
+def _stock_snapshot(symbol):
+    # Compatibility/fallback helper for benchmarks only. Full universe uses Alpaca batch bars.
+    url=f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=3mo&interval=1d"
+    d=get_json(url); r=d["chart"]["result"][0]; q=r["indicators"]["quote"][0]
+    bars=[{"c":p,"v":v,"h":h,"l":l} for p,v,h,l in zip(q["close"],q["volume"],q.get("high",[]),q.get("low",[])) if p is not None]
+    return _snapshot_from_bars(symbol,bars,"FREE_PUBLIC_CHART_1D")
+
+def _alpaca_batch_bars(symbols):
+    key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
+    if not key or not secret: raise RuntimeError("missing_alpaca_secrets")
+    api_symbols=[s.replace("-",".") for s in symbols]
+    end=datetime.now(timezone.utc); start=end-timedelta(days=110)
+    params={"symbols":",".join(api_symbols),"timeframe":"1Day","start":start.isoformat().replace("+00:00","Z"),
+            "end":end.isoformat().replace("+00:00","Z"),"limit":10000,"feed":"iex","adjustment":"all"}
+    headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow/3.0"}
+    merged={}; token=None
+    while True:
+        if token: params["page_token"]=token
+        url=ALPACA_BARS_URL+"?"+urllib.parse.urlencode(params)
+        req=urllib.request.Request(url,headers=headers)
+        with urllib.request.urlopen(req,timeout=45) as resp: body=json.load(resp)
+        for sym, rows in (body.get("bars") or {}).items(): merged.setdefault(sym.replace(".","-"),[]).extend(rows)
+        token=body.get("next_page_token")
+        if not token: break
+    return merged
 
 def score_candidate(m, spy=None, qqq=None):
     reasons=[]; rejects=[]
@@ -245,23 +262,25 @@ def position_state_v3(p, market_state, net_return_pct):
             "market_state":market_state.get("state")}
 
 def stock_universe():
-    """Discover the full US common-stock universe, then observe symbols concurrently."""
+    """Discover full US common-stock universe and fetch daily bars in Alpaca batches."""
     symbols, discovery_errors=discover_us_common_stocks()
     out={}; failed=[]
-    def one(symbol):
+    for i in range(0,len(symbols),ALPACA_BATCH_SIZE):
+        batch=symbols[i:i+ALPACA_BATCH_SIZE]
         try:
-            return symbol, _stock_snapshot(symbol), None
+            bars_by_symbol=_alpaca_batch_bars(batch)
         except urllib.error.HTTPError as e:
-            # Diagnostics only: preserve the real upstream HTTP status/reason.
-            # Do not retry, throttle, or alter trading/selection behavior here.
-            return symbol, None, {"type":"HTTPError","status":e.code,"reason":str(e.reason),"url":e.geturl()}
+            err={"type":"HTTPError","status":e.code,"reason":str(e.reason),"source":"ALPACA_BATCH"}
+            failed.extend({"symbol":s,"error":err} for s in batch); continue
         except Exception as e:
-            return symbol, None, {"type":type(e).__name__,"message":str(e)[:160]}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_MARKET_WORKERS) as ex:
-        for symbol,snapshot,error in ex.map(one,symbols):
-            if snapshot is not None: out[symbol]=snapshot
-            else: failed.append({"symbol":symbol,"error":error})
+            err={"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_BATCH"}
+            failed.extend({"symbol":s,"error":err} for s in batch); continue
+        for s in batch:
+            rows=bars_by_symbol.get(s,[])
+            try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_IEX_BATCH_1D")
+            except Exception as e: failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_IEX_BATCH"}})
     return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors}
+
 
 def avg(p):
     q=sum(t["notional"]/t["price"] for t in p["tranches"]); c=sum(t["notional"] for t in p["tranches"])
