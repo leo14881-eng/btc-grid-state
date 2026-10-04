@@ -772,4 +772,4 @@ def test_history_gap_classifier_never_infers_listing_age_from_cached_first_bar()
     assert '"first_bar_at":first_bar_at' in src
     assert '"last_bar_at":last_bar_at' in src
     assert '"recovery_window_days":120 if classification else None' in src
-    assert "sorted({" in inspect.getsource(ss.main)\n
+    assert "sorted({" in inspect.getsource(ss.main)
