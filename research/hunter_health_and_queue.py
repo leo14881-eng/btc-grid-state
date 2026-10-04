@@ -110,6 +110,7 @@ def build(data,now):
         health["status"]="RESEARCH_RUNNING_CAPITAL_GATES_UNRESOLVED"
     else:health["status"]="REVIEW_ELIGIBLE_CANDIDATES_PRESENT"
     return {"schema":"hunter_health_queue_v1","as_of_utc":now.isoformat(),
+            "scan_generation_id":scan.get("generation_id"),
             "scan_as_of_utc":stamp,"health":health,
             "research_priority_queue":priority,
             "all_candidate_blockers":queue,
