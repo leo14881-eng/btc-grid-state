@@ -613,3 +613,16 @@ def test_foreign_issuer_forms_and_ifrs_are_supported():
     assert '"ifrs-full"' in src
     main_src=inspect.getsource(m.main)
     assert '"20-F"' in main_src and '"6-K"' in main_src
+
+
+def test_frames_pacing_and_ifrs_market_batch_coverage():
+    import inspect
+    m=_load_fundamentals_observer()
+    src=inspect.getsource(m.frame_evidence_by_cik)
+    assert m.PROXY_START_INTERVAL_SECONDS >= 2.0
+    assert m.FRAME_REQUEST_BUDGET >= 49
+    assert '"CashFlowsFromUsedInOperatingActivities"' in src
+    assert '"CashAndCashEquivalents"' in src
+    assert '"Borrowings"' in src
+    main_src=inspect.getsource(m.main)
+    assert "MARKET_BATCH_SCHEMA_VERSION" in main_src
