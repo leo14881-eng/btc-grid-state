@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent Stock Shadow V2 clean-sample final run. Broad paper sampling only; never places orders."""
+"""Independent Stock Shadow V3 forward-sample run. Broad paper sampling only; never places orders."""
 import json, math, os, urllib.request, urllib.error, urllib.parse
 from datetime import datetime, timezone, timedelta, time as dtime
 from zoneinfo import ZoneInfo
