@@ -32,6 +32,17 @@ class PositionMonitorTests(unittest.TestCase):
    self.assertEqual(out["quarantined_non_crypto"],["MSFTB"])
    self.assertEqual(saved["closed_positions"],[])
 
+ def test_v2_configuration_resets_v1_mutated_globals(self):
+  old=(m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE)
+  try:
+   m.eng.DISCOVERY_MIN_SCORE=0;m.eng.DISCOVERY_MIN_INDEPENDENT=0;m.eng.ENTRY_MODE="DISCOVERY"
+   m.configure_lane(False)
+   self.assertEqual(m.eng.DISCOVERY_MIN_SCORE,6)
+   self.assertEqual(m.eng.DISCOVERY_MIN_INDEPENDENT,2)
+   self.assertEqual(m.eng.ENTRY_MODE,"EXECUTABLE")
+  finally:
+   m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE=old
+
  def test_monitor_has_no_new_entry_path(self):
   self.assertFalse(hasattr(m,"entry_allowed"));self.assertFalse(hasattr(m,"discovery_decision"))
 if __name__=="__main__":unittest.main()
