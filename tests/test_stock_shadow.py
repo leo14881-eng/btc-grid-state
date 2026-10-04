@@ -111,12 +111,29 @@ def test_position_monitor_market_hours_gate():
     assert m.market_open(datetime(2026,10,5,14,0,tzinfo=timezone.utc)) is True
     assert m.market_open(datetime(2026,10,4,14,0,tzinfo=timezone.utc)) is False
 
-def test_monitor_has_no_giveback_only_sell_path():
+def test_monitor_executes_v3_profit_protection_sell():
     m=_load_position_monitor()
     import inspect
     src=inspect.getsource(m.main)
-    assert "PROFIT_GIVEBACK_POSITION_MONITOR" not in src
+    assert '"NET_PROFIT_GIVEBACK_V3"' in src
+    assert 'del positions[s]' in src
+    assert '"source":"POSITION_MONITOR_5M"' in src
     assert "profit_protection_signal" in src
+
+def test_profit_protection_survives_gap_through_zero():
+    import inspect
+    assert "r>0 and r<=floor" not in inspect.getsource(ss.main)
+    assert "r>0 and r<=floor" not in inspect.getsource(_load_position_monitor().main)
+
+def test_position_state_separates_market_strength_from_trade_drawdown():
+    market={"state":"STRONG"}
+    p={"mae_net_pct":-11.0}
+    d=ss.position_state_v3(p,market,-10.5)
+    assert d["market_state"]=="STRONG"
+    assert d["state"]=="DETERIORATING"
+    p2={"mae_net_pct":-4.0}
+    assert ss.position_state_v3(p2,market,-4.0)["state"]=="UNDERWATER"
+    assert ss.position_state_v3({"mae_net_pct":-0.4},market,2.0)["state"]=="PROFITABLE"
 
 def test_v3_add_requires_recovery_not_decline():
     import inspect

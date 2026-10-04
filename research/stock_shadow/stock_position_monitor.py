@@ -107,8 +107,28 @@ def main(force=False):
         # as the full lifecycle. It never discovers BUY/ADD candidates.
         floor=profit_floor_net_pct(mfe)
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
-        p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
+        p["profit_protection_signal"]=bool(floor is not None and r<=floor)
         p["profit_giveback_pct_points"]=round(giveback,6)
+        if p["profit_protection_signal"]:
+            closed_at=now()
+            final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
+            closed=dict(p); closed.update({"closed_at":closed_at,"exit_price":price,
+                "exit_reason":"NET_PROFIT_GIVEBACK_V3",
+                "realized_net_pnl_usdt":round(final_pnl,6),
+                "realized_net_return_pct":round(final_r,6),
+                "gross_price_return_pct":round((price/avg(p)-1)*100,6),
+                "estimated_total_fees_usdt":round((sum(x["notional"] for x in p["tranches"])*FEE_RATE)+(qty(p)*price*FEE_RATE),6),
+                "profit_giveback_pct_points":round(giveback,6),
+                "post_exit_tracking_due_days":[1,3,5,10]})
+            state.setdefault("closed",[]).append(closed)
+            del positions[s]
+            events.append({"type":"SELL","at":closed_at,"symbol":s,"price":price,
+                "reason":"NET_PROFIT_GIVEBACK_V3","net_pnl_usdt":closed["realized_net_pnl_usdt"],
+                "net_return_pct":closed["realized_net_return_pct"],
+                "gross_price_return_pct":closed["gross_price_return_pct"],
+                "estimated_total_fees_usdt":closed["estimated_total_fees_usdt"],
+                "USER_ALERT_REQUIRED":True,"source":"POSITION_MONITOR_5M"})
+            sells+=1
     state["updated_at"]=now(); state["simulation_only"]=True
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))

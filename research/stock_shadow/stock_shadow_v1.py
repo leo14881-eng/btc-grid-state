@@ -228,6 +228,22 @@ def position_state_v2(m, spy=None, qqq=None):
             "selling_pressure":selling_pressure,"trend_broken":trend_broken,"relative_weak":relative_weak,
             "sector_relative_status":"UNAVAILABLE_V2_BASELINE"}
 
+def position_state_v3(p, market_state, net_return_pct):
+    """Position-relative state; market strength and our trade outcome are separate dimensions."""
+    mae=float(p.get("mae_net_pct",net_return_pct))
+    if market_state.get("state")=="BROKEN":
+        state="BROKEN"
+    elif net_return_pct <= -8.0 or mae <= -10.0:
+        state="DETERIORATING"
+    elif net_return_pct <= -3.0:
+        state="UNDERWATER"
+    elif net_return_pct > 0:
+        state="PROFITABLE"
+    else:
+        state="HEALTHY_PULLBACK"
+    return {"state":state,"net_return_pct":round(net_return_pct,6),"mae_net_pct":round(mae,6),
+            "market_state":market_state.get("state")}
+
 def stock_universe():
     """Discover the full US common-stock universe, then observe symbols concurrently."""
     symbols, discovery_errors=discover_us_common_stocks()
@@ -289,11 +305,13 @@ def main():
         ps=position_state_v2(m,bench.get("SPY"),bench.get("QQQ"))
         recovery=recovery_add_signal(p,m,ps)
         p["recovery_add_signal"]=recovery
-        p["position_state_v2"]=ps
+        p["market_state_v3"]=ps
+        p["position_state_v3"]=position_state_v3(p,ps,r)
+        p["position_state_v2"]=ps  # compatibility for existing forward-sample records
         mfe=p.get("mfe_net_pct",r); giveback=mfe-r
         floor=profit_floor_net_pct(mfe)
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
-        p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
+        p["profit_protection_signal"]=bool(floor is not None and r<=floor)
         if s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
             tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
