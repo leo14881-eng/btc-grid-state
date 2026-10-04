@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
 MARKET_CACHE=ROOT/"market-daily-cache-v1.json"
+CALENDAR_CACHE=ROOT/"calendar-session-cache-v1.json"
 NOTIONAL=1000.0; MAX_TRANCHES=5
 LOW_PRICE_REFERENCE=2.0; MIN_DOLLAR_VOLUME=10_000_000.0; LOW_PRICE_MIN_DOLLAR_VOLUME=25_000_000.0; MIN_SCORE=68.0
 MAX_5D_RETURN=18.0; MAX_20D_RETURN=45.0; MAX_SMA20_EXTENSION=18.0; MIN_20D_RETURN=-8.0
@@ -24,23 +25,36 @@ RUN_ID=os.getenv("STOCK_SHADOW_RUN_ID","LOCAL")
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def _alpaca_exchange_session(ts=None):
-    """Resolve today's actual US equity session from Alpaca's exchange calendar.
-    Fail closed: if the calendar cannot be verified, no shadow trade action is allowed.
-    """
-    t=(ts or datetime.now(timezone.utc)).astimezone(NY)
+    """Resolve the authoritative Alpaca session, reusing only a same-day persisted cache."""
+    t=(ts or datetime.now(timezone.utc)).astimezone(NY); day=t.date().isoformat()
+    cached=load(CALENDAR_CACHE,{})
+    if cached.get("date")==day:
+        if cached.get("closed") is True:
+            API_USAGE["alpaca_calendar"]["cache_hits"]+=1
+            return None
+        if cached.get("open") and cached.get("close"):
+            try:
+                oh,om=map(int,cached["open"].split(":")); ch,cm=map(int,cached["close"].split(":"))
+                API_USAGE["alpaca_calendar"]["cache_hits"]+=1
+                return {"date":day,"open":dtime(oh,om),"close":dtime(ch,cm),"source":"ALPACA_EXCHANGE_CALENDAR_CACHE"}
+            except Exception: pass
+    API_USAGE["alpaca_calendar"]["cache_misses"]+=1
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
-    if not key or not secret: return None
-    day=t.date().isoformat()
+    if not key or not secret:
+        API_USAGE["alpaca_calendar"]["errors"]+=1; return None
     url="https://paper-api.alpaca.markets/v2/calendar?"+urllib.parse.urlencode({"start":day,"end":day})
     req=urllib.request.Request(url,headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"Accept":"application/json"})
     try:
+        API_USAGE["alpaca_calendar"]["http_requests"]+=1
         with urllib.request.urlopen(req,timeout=15) as r: rows=json.load(r)
-        if not rows: return None
-        row=rows[0]
-        oh,om=map(int,row["open"].split(":")); ch,cm=map(int,row["close"].split(":"))
+        if not rows:
+            save(CALENDAR_CACHE,{"date":day,"closed":True,"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
+            return None
+        row=rows[0]; oh,om=map(int,row["open"].split(":")); ch,cm=map(int,row["close"].split(":"))
+        save(CALENDAR_CACHE,{"date":day,"open":row["open"],"close":row["close"],"verified_at":now(),"source":"ALPACA_EXCHANGE_CALENDAR"})
         return {"date":day,"open":dtime(oh,om),"close":dtime(ch,cm),"source":"ALPACA_EXCHANGE_CALENDAR"}
     except Exception:
-        return None
+        API_USAGE["alpaca_calendar"]["errors"]+=1; return None
 
 def trade_action_window(ts=None, session=None):
     t=(ts or datetime.now(timezone.utc)).astimezone(NY)
@@ -95,7 +109,11 @@ EXCLUDED_NAME_MARKERS = (" ETF", " ETN", " WARRANT", " WTS", " UNIT", " RIGHT", 
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
 MAX_REQUEST_TARGET_CHARS = 7000
 DAILY_CACHE_KEEP_BARS = 24
-API_USAGE={"alpaca_daily_bars":{"http_requests":0,"pages":0,"logical_batches":0}}
+API_USAGE={
+    "alpaca_daily_bars":{"http_requests":0,"pages":0,"logical_batches":0},
+    "alpaca_calendar":{"http_requests":0,"cache_hits":0,"cache_misses":0,"errors":0},
+    "history_gap_recovery":{"http_requests":0,"logical_batches":0,"recovered":0},
+}
 NY=ZoneInfo("America/New_York")
 
 def get_text(url):
@@ -364,6 +382,29 @@ def stock_universe():
         rows=sorted(by_t.values(),key=lambda x:str(x.get("t") or ""))[-DAILY_CACHE_KEEP_BARS:]
         if rows:
             cached[s]=[{k:x.get(k) for k in ("t","o","h","l","c","v") if x.get(k) is not None} for x in rows]
+
+    # Deep-read only residual gaps; never refetch the full universe to repair a few symbols.
+    gap_symbols=[s for s in symbols if len(cached.get(s) or [])<22]
+    gap_recovered=set()
+    if gap_symbols and not bootstrap:
+        gap_start=end-timedelta(days=45)
+        for batch in _pack_alpaca_symbol_batches(gap_symbols,"1Day",gap_start,end):
+            before=API_USAGE["alpaca_daily_bars"]["http_requests"]
+            API_USAGE["history_gap_recovery"]["logical_batches"]+=1
+            try:
+                got=_alpaca_batch_bars(batch,start=gap_start,end=end)
+                for s in batch:
+                    by_t={str(x.get("t")):x for x in (cached.get(s) or []) if x.get("t")}
+                    for x in got.get(s,[]): by_t[str(x.get("t"))]=x
+                    rows=sorted(by_t.values(),key=lambda x:str(x.get("t") or ""))[-DAILY_CACHE_KEEP_BARS:]
+                    if rows: cached[s]=[{k:x.get(k) for k in ("t","o","h","l","c","v") if x.get(k) is not None} for x in rows]
+                    if len(cached.get(s) or [])>=22: gap_recovered.add(s)
+            except Exception as e:
+                failed_batches.append({"symbols":batch,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_HISTORY_GAP_RECOVERY"}})
+            finally:
+                API_USAGE["history_gap_recovery"]["http_requests"]+=API_USAGE["alpaca_daily_bars"]["http_requests"]-before
+        API_USAGE["history_gap_recovery"]["recovered"]=len(gap_recovered)
+
     MARKET_CACHE.parent.mkdir(parents=True,exist_ok=True)
     tmp=MARKET_CACHE.with_suffix(".tmp")
     tmp.write_text(json.dumps({"updated_at":now(),"pit_cutoff":end.isoformat(),"feed":"sip","adjustment":"all",
@@ -375,7 +416,15 @@ def stock_universe():
         rows=cached.get(s,[])
         try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_SIP_DAILY_CACHE")
         except Exception as e:
-            failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_DAILY_CACHE"}})
+            rows=cached.get(s,[]); classification=None
+            if str(e)=="insufficient_history":
+                if rows:
+                    try:
+                        first_dt=datetime.fromisoformat(str(rows[0].get("t") or "").replace("Z","+00:00"))
+                        classification=("NEW_LISTING_INSUFFICIENT_HISTORY" if (end-first_dt).days<40 else "SOURCE_HISTORY_GAP")
+                    except Exception: classification="SOURCE_HISTORY_GAP"
+                else: classification="SOURCE_HISTORY_GAP"
+            failed.append({"symbol":s,"error":{"type":type(e).__name__,"message":str(e)[:160],"source":"ALPACA_SIP_DAILY_CACHE","history_gap_classification":classification}})
     for s in failed_symbols_from_batches:
         if not any(x["symbol"]==s for x in failed):
             failed.append({"symbol":s,"error":{"type":"BatchRefreshError","message":"incremental_refresh_failed","source":"ALPACA_BATCH"}})
@@ -385,7 +434,7 @@ def stock_universe():
         except Exception: pass
     return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors,
                          "cache_mode":"BOOTSTRAP_45D" if bootstrap else "INCREMENTAL_7D",
-                         "cache_covered_before":covered,"benchmarks":bench,"api_usage":dict(API_USAGE["alpaca_daily_bars"])}
+                         "cache_covered_before":covered,"benchmarks":bench,"api_usage":json.loads(json.dumps(API_USAGE))}
 
 
 
@@ -501,6 +550,7 @@ def main():
     save(STATE,state); save(EVENTS,events)
     save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
     "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":discovery.get("api_usage"),
+    "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in ("NEW_LISTING_INSUFFICIENT_HISTORY","SOURCE_HISTORY_GAP")},
     "failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
