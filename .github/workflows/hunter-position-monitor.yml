@@ -41,7 +41,9 @@ jobs:
           python - <<'PY'
           import json
           for p in ['research/results/hunter-shadow-portfolio.json','research/results/hunter-shadow-v2-portfolio.json']:
-              d=json.load(open(p)); names=[x.get('asset') for x in d.get('open_positions') or []]
+              raw=open(p).read().strip()
+              if not raw: continue
+              d=json.loads(raw); names=[x.get('asset') for x in d.get('open_positions') or []]
               assert len(names)==len(set(names)), f'DUPLICATE_OPEN {p}'
               assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
           m=json.load(open('research/results/hunter-position-monitor.json'))
@@ -53,7 +55,10 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -f research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json research/results/hunter-position-monitor.json
+          git add -f research/results/hunter-position-monitor.json
+          for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json; do
+            [ -s "$p" ] && git add -f "$p" || true
+          done
           if git diff --cached --quiet; then echo NO_POSITION_STATE_CHANGE; exit 0; fi
           git commit -m 'state: five-minute Hunter position monitor'
           for attempt in 1 2 3 4 5; do
