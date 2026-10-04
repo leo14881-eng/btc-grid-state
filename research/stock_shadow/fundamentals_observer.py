@@ -226,6 +226,9 @@ def frame_evidence_by_cik(requested_batch_index=0):
       ("cash_alt","us-gaap","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents","USD",instant),
       ("total_debt","us-gaap","LongTermDebt","USD",instant),
       ("total_debt_alt","us-gaap","LongTermDebtCurrent","USD",instant),
+      ("total_debt_alt2","us-gaap","LongTermDebtAndFinanceLeaseObligationsCurrent","USD",instant),
+      ("total_debt_alt3","us-gaap","LongTermDebtAndFinanceLeaseObligationsNoncurrent","USD",instant),
+      ("total_debt_alt4","us-gaap","ShortTermBorrowings","USD",instant),
       ("shares","dei","EntityCommonStockSharesOutstanding","shares",instant),
       ("shares_alt","us-gaap","CommonStockSharesOutstanding","shares",instant),
       # Foreign private issuers such as XP can report IFRS rather than US-GAAP.
@@ -286,7 +289,7 @@ def frame_evidence_by_cik(requested_batch_index=0):
         for key,primary,alt in [
             ("revenue","revenue",("revenue_alt","revenue_alt2")),("net_income","net_income",("net_income_alt",)),
             ("operating_cash_flow","operating_cash_flow",()),("cash","cash",("cash_alt",)),
-            ("total_debt","total_debt",("total_debt_alt",)),("shares","shares",("shares_alt",))]:
+            ("total_debt","total_debt",("total_debt_alt","total_debt_alt2","total_debt_alt3","total_debt_alt4")),("shares","shares",("shares_alt",))]:
             v=vals(primary,*alt)
             ev[key]={"concept":"SEC_XBRL_FRAME","values":v,"trend":_trend(v)}
         cap={r.get("end"):r for r in vals("capex")}
@@ -664,8 +667,11 @@ def main():
                         reviewed.append({**item,"text":text_body,"transport":text_transport})
                     except Exception as e:
                         errors.append({"symbol":s,"stage":"FILING_TEXT","form":item.get("form"),"type":type(e).__name__,"message":str(e)[:120]})
-                risk_flags=semantic_risk_evidence(reviewed)
-                semantic_refresh_at=now()
+                if reviewed:
+                    risk_flags=semantic_risk_evidence(reviewed)
+                    semantic_refresh_at=now()
+                else:
+                    risk_flags=prior_risk
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
                 "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("FMP_BULK+SEC_XBRL_FRAMES" if fmp_ev and frame_ev else ("FMP_BULK" if fmp_ev else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")))),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
