@@ -170,7 +170,7 @@ def frame_evidence_by_cik():
         raise last
     # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
     # below workflow timeout without creating per-symbol request storms.
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    with ThreadPoolExecutor(max_workers=6) as ex:
         futures=[ex.submit(fetch_one,t) for t in tasks]
         for fut in as_completed(futures):
             try:
