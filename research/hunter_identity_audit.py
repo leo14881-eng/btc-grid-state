@@ -309,6 +309,7 @@ def build(scan,market,registry,now):
                      and "CROSS_VENUE_CONTRACT_MAPPING_UNVERIFIED" not in blockers}
         counts[status]=counts.get(status,0)+1
     return {"schema":"hunter_identity_audit_v1","as_of_utc":now.isoformat(),
+            "scan_generation_id":scan.get("generation_id"),
             "scan_as_of_utc":scan["as_of_utc"],"universe_count":len(coins),
             "counts":counts,"ticker_collisions":sorted(collisions),
             "assets":assets,"capital_authority":"NONE__ANALYST_EVIDENCE_AND_EXECUTION_GATES_SEPARATE"}
