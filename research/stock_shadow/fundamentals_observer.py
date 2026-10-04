@@ -13,7 +13,7 @@ BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfa
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
 FRAME_REQUEST_BUDGET=12
-MARKET_BATCH_SCHEMA_VERSION=3
+MARKET_BATCH_SCHEMA_VERSION=4
 PROXY_START_INTERVAL_SECONDS=2.0
 
 def now(): return datetime.now(timezone.utc).isoformat()
@@ -516,6 +516,17 @@ def main():
              "status":"OK_EMPTY","companies":{}}
         OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
         print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
+    # Fundamentals/filings are low-frequency observation data. Reuse persisted SSOT for six hours.
+    _last=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
+    if _last and old.get("market_batch_schema_version")==MARKET_BATCH_SCHEMA_VERSION:
+        try:
+            _age=(datetime.now(timezone.utc)-datetime.fromisoformat(str(_last).replace("Z","+00:00"))).total_seconds()
+        except Exception:
+            _age=10**9
+        if _age < 6*60*60:
+            cached=dict(old); cached["cache_status"]="FUNDAMENTALS_CACHE_HIT_6H"; cached["strategy_effect"]=False
+            print(json.dumps({k:v for k,v in cached.items() if k!="companies"})); return
+
     # Market-wide batch first: FMP bulk CSV covers the requested symbols in a small fixed
     # number of requests. SEC XBRL Frames is the independent market-wide supplement.
     # Never download multi-GB SEC bulk archives in hourly CI.
@@ -537,7 +548,7 @@ def main():
     if last_batch_at:
         try:
             last_dt=datetime.fromisoformat(str(last_batch_at).replace("Z","+00:00"))
-            batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 55*60
+            batch_due=(datetime.now(timezone.utc)-last_dt).total_seconds() >= 6*60*60
         except Exception:
             batch_due=True
     if old.get("market_batch_schema_version") != MARKET_BATCH_SCHEMA_VERSION:
