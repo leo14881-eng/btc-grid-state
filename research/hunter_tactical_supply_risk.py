@@ -85,6 +85,7 @@ def main():
   assets[sym]=row
 
  report={"schema":"hunter_tactical_supply_risk_v2","as_of_utc":now.isoformat(),
+   "scan_generation_id":dossier.get("scan_generation_id") or forward.get("scan_generation_id"),
    "scan_as_of_utc":dossier.get("scan_as_of_utc") or forward.get("universe_scan_as_of_utc"),
    "fully_circulating_threshold":FULLY_CIRCULATING_THRESHOLD,
    "assets":assets,
