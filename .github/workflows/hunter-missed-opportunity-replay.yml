@@ -1,6 +1,11 @@
 name: Hunter Missed Opportunity Replay
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/hunter_missed_opportunity_replay.py'
+      - '.github/workflows/hunter-missed-opportunity-replay.yml'
   schedule:
     - cron: '55 16 * * *'
 permissions:
