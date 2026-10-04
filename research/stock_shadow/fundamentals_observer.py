@@ -374,6 +374,14 @@ def main():
              "status":"OK_EMPTY","companies":{}}
         OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
         print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
+    # Primary fundamentals provider: FMP bulk when configured. SEC remains an independent fallback/evidence source.
+    fmp_key=os.getenv("FMP_API_KEY","").strip()
+    fmp_by_symbol={}; fmp_status={"provider":"FMP_BULK","attempted":False,"reason":"FMP_API_KEY_NOT_CONFIGURED"}
+    if fmp_key:
+        try:
+            fmp_by_symbol,fmp_status=fmp_bulk_evidence(symbols,fmp_key)
+        except Exception as e:
+            fmp_status={"provider":"FMP_BULK","attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
     ticker_map_data,map_errors=ticker_map()
     symbol_cik={}; errors=[]
     for s in symbols:
@@ -415,8 +423,9 @@ def main():
             transport="SEC_BULK_SUBMISSIONS" if sub else None
             facts_transport="SEC_BULK_COMPANYFACTS" if facts else None
             frame_ev=frames_by_cik.get(cik)
+            fmp_ev=fmp_by_symbol.get(s)
             prior_ev=(companies.get(s) or {}).get("financial_evidence")
-            if facts is None and frame_ev is None and not prior_ev and fallback_requests < FALLBACK_MAX_REQUESTS:
+            if facts is None and frame_ev is None and fmp_ev is None and not prior_ev and fallback_requests < FALLBACK_MAX_REQUESTS:
                 fallback_requests+=1
                 try:
                     facts,facts_transport=sec_companyfacts(cik)
@@ -426,7 +435,7 @@ def main():
                 facts_transport="SEC_XBRL_FRAMES_MARKET_BATCH"
             # Filing metadata is optional here. Never turn frame-wide financial evidence
             # back into hundreds of per-company submissions requests.
-            if facts is None and frame_ev is None:
+            if facts is None and frame_ev is None and fmp_ev is None:
                 prev=companies.get(s) or {}
                 if prev.get("financial_evidence"):
                     prev["status"]="OBSERVED_STALE_FALLBACK"; prev["updated_at"]=now(); prev["strategy_effect"]=False
@@ -444,13 +453,16 @@ def main():
                     latest.append({"form":form,"filing_date":date,"accession":an})
                 if len(latest)>=12: break
             risk_forms=[x for x in latest if x["form"].startswith("8-K")]
-            evidence=financial_evidence(facts) if facts is not None else merge_financial_evidence(prior_ev,frame_ev); risk_flags=filing_risk_evidence(latest)
+            sec_ev=financial_evidence(facts) if facts is not None else frame_ev
+            evidence=merge_financial_evidence(prior_ev,fmp_ev)
+            evidence=merge_financial_evidence(evidence,sec_ev)
+            risk_flags=filing_risk_evidence(latest)
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
-                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,
+                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("FMP_BULK" if fmp_ev else facts_transport),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
                 "recent_8k_count":len(risk_forms),"updated_at":now(),
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
-                "note":"Observation-only SEC evidence; no automatic BUY/ADD/SELL effect."}
+                "note":"Observation-only fundamentals evidence; no automatic BUY/ADD/SELL effect."}
             refreshed+=1
         except Exception as e:
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
@@ -459,7 +471,7 @@ def main():
     out={"updated_at":now(),"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"refreshed_this_run":refreshed,
-         "bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
+         "fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
          "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols)) else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
