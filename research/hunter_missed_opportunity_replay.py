@@ -2,7 +2,7 @@
 """Daily Missed Opportunity Replay — read-only Hunter audit; never trades."""
 import datetime as dt,json,os,pathlib,urllib.parse,urllib.request
 ROOT=pathlib.Path("research/results")
-SCAN=ROOT/"hunter-cex-universe-run.json"; EARLY=ROOT/"hunter-early-signal-history.json"
+SCAN=ROOT/"hunter-cex-universe-run.json"; UNIVERSE_HISTORY=ROOT/"hunter-universe-history.json"; EARLY=ROOT/"hunter-early-signal-history.json"
 V1=ROOT/"hunter-shadow-portfolio.json"; V2=ROOT/"hunter-shadow-v2-portfolio.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json"; OUT=ROOT/"hunter-missed-opportunity-replay.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
@@ -36,7 +36,7 @@ def universe_time(scan,asset):
  # is UNKNOWN until universe history is accumulated. Never fabricate it.
  return scan.get("as_of_utc") if asset in (scan.get("coins") or {}) else None
 def main():
- start,now=today_bounds(); scan=load(SCAN); hist=load(EARLY); v1=load(V1); v2=load(V2); review=load(REVIEW)
+ start,now=today_bounds(); scan=load(SCAN); uhist=load(UNIVERSE_HISTORY); hist=load(EARLY); v1=load(V1); v2=load(V2); review=load(REVIEW)
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
  candidates=[]
  for a,c in (scan.get("coins") or {}).items():
@@ -53,14 +53,14 @@ def main():
  stats.sort(reverse=True); rows=[]
  by_review={x.get("asset"):x for x in review.get("candidates",[]) if x.get("asset")}
  for _,a,sym,s in stats[:TOP_N]:
-  h=(hist.get("assets") or {}).get(a) or {}
+  u=(uhist.get("assets") or {}).get(a) or {}\n  h=(hist.get("assets") or {}).get(a) or {}
   v1buy=first_event(v1,a,{"SHADOW_V1_BUY","SHADOW_BUY"})
   v2buy=first_event(v2,a,{"SHADOW_V2_BUY","SHADOW_BUY"})
   vd=[x for x in v2.get("deferred_buy_opportunities",[]) if x.get("asset")==a]
   vd.sort(key=lambda x:x.get("at_utc") or ""); deferred=vd[0] if vd else None
   r=by_review.get(a) or {}
   rows.append({"rank":len(rows)+1,"asset":a,"pair":sym,"day":s,
-   "universe":{"present":a in (scan.get("coins") or {}),"first_seen_at_utc":None,"current_scan_seen_at_utc":universe_time(scan,a),"status":"HISTORICAL_FIRST_SEEN_UNKNOWN" if a in (scan.get("coins") or {}) else "NOT_PRESENT"},
+   "universe":{"present":a in (scan.get("coins") or {}),"first_seen_at_utc":u.get("first_seen_at_utc"),"first_seen_price":u.get("first_seen_price"),"first_generation_id":u.get("first_generation_id"),"current_scan_seen_at_utc":universe_time(scan,a),"status":"RECORDED" if u.get("first_seen_at_utc") else ("HISTORICAL_FIRST_SEEN_UNKNOWN" if a in (scan.get("coins") or {}) else "NOT_PRESENT")},
    "early":{"ever_recorded":bool(h),"first_at_utc":h.get("first_early_at_utc"),"first_price":h.get("first_early_price"),"first_generation_id":h.get("first_generation_id")},
    "v1":{"buy_generated":bool(v1buy),"first_buy":v1buy},
    "capital_review":{"current_trade_action":r.get("trade_action"),"entry_stage":r.get("entry_stage"),"reference_price":r.get("reference_price"),"estimated_rr":(r.get("execution_scenario") or {}).get("estimated_rr")},
@@ -69,7 +69,7 @@ def main():
    "post_detection":{"max_gain_from_first_early_to_day_high_pct":round((s["day_high"]/h["first_early_price"]-1)*100,4) if h.get("first_early_price") else None}})
  out={"schema":"hunter_missed_opportunity_replay_v1","generated_at_utc":now.isoformat(),"date_utc":start.date().isoformat(),"mode":"READ_ONLY_NO_TRADING","top_n":TOP_N,
   "selection":"Binance spot USDT assets preselected by current 24h change then ranked by UTC-day open-to-intraday-high gain",
-  "limitations":["Universe historical first-seen is UNKNOWN until durable universe history is added; current scan membership is not backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
+  "limitations":["Universe first-seen is durable from hunter-universe-history deployment onward; older membership is never backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
  OUT.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"\n")
  print(json.dumps({"date":out["date_utc"],"leaders":[{"asset":x["asset"],"day_high_gain_pct":x["day"]["day_high_gain_pct"],"first_early":x["early"]["first_at_utc"],"v1":x["v1"]["buy_generated"],"v2":x["v2"]["buy_generated"],"why_not":x["v2"]["why_not_bought"]} for x in rows]},ensure_ascii=False))
 if __name__=="__main__":main()
