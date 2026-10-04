@@ -14,28 +14,39 @@ def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
     except Exception: return d
 def get(url):
-    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json"})
+    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Accept-Encoding":"identity"})
     with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
+
+def ticker_map():
+    urls=["https://www.sec.gov/files/company_tickers.json","https://www.sec.gov/files/company_tickers_exchange.json"]
+    errs=[]
+    for url in urls:
+        try:
+            raw=get(url)
+            if isinstance(raw,dict) and "data" in raw and "fields" in raw:
+                fields=raw["fields"]; return {str(dict(zip(fields,row)).get("ticker","")).upper().replace(".","-"):dict(zip(fields,row)) for row in raw["data"]},errs
+            return {str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()},errs
+        except urllib.error.HTTPError as e: errs.append({"url":url,"type":"HTTPError","status":e.code,"reason":str(e.reason)})
+        except Exception as e: errs.append({"url":url,"type":type(e).__name__,"message":str(e)[:120]})
+    return {},errs
 
 def main():
     state=load(STATE,{"positions":{}}); old=load(OUT,{"companies":{}})
     companies=old.get("companies",{})
-    try:
-        raw=get("https://www.sec.gov/files/company_tickers.json")
-        ticker_map={str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()}
-    except Exception as e:
-        out={"updated_at":now(),"mode":"OBSERVATION_ONLY","status":"DEGRADED","error":type(e).__name__,
+    ticker_map_data,map_errors=ticker_map()
+    if not ticker_map_data:
+        out={"updated_at":now(),"mode":"OBSERVATION_ONLY","status":"DEGRADED","mapping_errors":map_errors,
              "companies":companies,"strategy_effect":False}
-        OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); print(json.dumps(out)); return
+        OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
     symbols=sorted(state.get("positions",{}))
     # Rotate stale/unseen holdings; bounded SEC load per run.
     targets=sorted(symbols,key=lambda s:(s in companies,companies.get(s,{}).get("updated_at","")))[:MAX_REFRESH]
     refreshed=0; errors=[]
     for s in targets:
-        meta=ticker_map.get(s)
+        meta=ticker_map_data.get(s)
         if not meta:
             companies[s]={"symbol":s,"status":"NO_SEC_MAPPING","updated_at":now()}; continue
-        cik=int(meta["cik_str"])
+        cik=int(meta.get("cik_str") or meta.get("cik"))
         try:
             sub=get(f"https://data.sec.gov/submissions/CIK{cik:010d}.json")
             recent=(sub.get("filings") or {}).get("recent") or {}
