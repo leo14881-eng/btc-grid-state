@@ -28,7 +28,8 @@ def test_security_type_filter_excludes_non_common_instruments():
 
 def test_full_market_discovery_has_no_fixed_61_symbol_constant():
     assert not hasattr(ss, "STOCK_SYMBOLS")
-    assert ss.MAX_MARKET_WORKERS >= 8
+    assert ss.ALPACA_BATCH_SIZE >= 100
+    assert ss.ALPACA_BARS_URL.startswith("https://data.alpaca.markets/")
 
 
 def _m(price=50,dv=50_000_000,r5=4,r20=12,sma20=48,vol=2.5,volume_ratio=1.0,range_pos=0.6):
