@@ -251,6 +251,18 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          BASE_SHA=$(git rev-parse HEAD)
+          git fetch origin main
+          REMOTE_SHA=$(git rev-parse origin/main)
+          [ "$BASE_SHA" = "$REMOTE_SHA" ] || { echo "HUNTER_STATE_REVISION_CONFLICT base=$BASE_SHA remote=$REMOTE_SHA"; exit 1; }
+          python - <<'PY'
+          import json,os,subprocess
+          expected=os.environ['EXPECTED']
+          raw=subprocess.check_output(['git','show','origin/main:research/results/hunter-cex-universe-run.json'],text=True)
+          scan=json.loads(raw)
+          assert scan.get('generation_id')==expected, f'STALE_RESEARCH_GENERATION expected={expected} main={scan.get("generation_id")}'
+          print('PRE_PERSIST_GENERATION_STILL_AUTHORITATIVE',expected)
+          PY
           for file in \
             research/results/hunter-forward-research.json \
             research/results/hunter-early-signals.json \
@@ -287,9 +299,13 @@ jobs:
           fi
           git commit -m 'research: Hunter downstream potential-candidate analysis'
           git stash push --all -m 'hunter-nonpersistent-runtime-files' || true
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            if git rebase origin/main && git push origin HEAD:main; then
+          # Computed state is revision-bound. Never rebase stale research JSON onto
+          # a newer main; rerun from the newer revision instead.
+          git fetch origin main
+          [ "$(git rev-parse HEAD^)" = "$(git rev-parse origin/main)" ] || { echo "HUNTER_STATE_REVISION_CHANGED_BEFORE_PUSH"; exit 1; }
+          git push origin HEAD:main
+          git fetch origin main
+
               git fetch origin main
               git show origin/main:research/results/hunter-cex-universe-run.json > /tmp/scan.json
               git show origin/main:research/results/hunter-forward-research.json > /tmp/forward.json
@@ -302,13 +318,8 @@ jobs:
               git show origin/main:research/results/hunter-shadow-portfolio.json > /tmp/shadow.json
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
-              python -c "import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))"
-              exit 0
-            fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt*2))
-          done
-          exit 1
+              python -c "import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; assert scan.get('generation_id')==expected, f'MAIN_READBACK_GENERATION_MISMATCH expected={expected} actual={scan.get("generation_id")}'; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); b=json.load(open('/tmp/shadow-v2.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))"
+          exit 0
 
 # activate downstream pipeline
 # run current workflow definition
