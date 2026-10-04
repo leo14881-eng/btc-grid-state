@@ -18,7 +18,7 @@ class PositionMonitorTests(unittest.TestCase):
    p=Path(d)/"s.json";m.eng.atomic_json_write(p,state)
    with patch.object(m.v1,"configure_v1",lambda:None):
     out=m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True)
-   saved=m.load(p);self.assertEqual([x["asset"] for x in saved["open_positions"]],["X"]);self.assertEqual(len(saved["open_positions"][0]["tranches"]),2);self.assertEqual(out["added"],["X"])
+   saved=m.load(p);summary=m.load(p.with_name(p.stem+"-summary.json"));self.assertEqual([x["asset"] for x in saved["open_positions"]],["X"]);self.assertEqual(len(saved["open_positions"][0]["tranches"]),2);self.assertEqual(out["added"],["X"]);self.assertEqual(summary["open_positions"],1);self.assertEqual(summary["closed_positions"],0)
  def test_bstock_is_quarantined_not_sold_or_managed(self):
   state,market,review,liq,supply=self.fixture()
   state["open_positions"][0]["asset"]="MSFTB";market["MSFTB"]=market.pop("X")
@@ -33,15 +33,17 @@ class PositionMonitorTests(unittest.TestCase):
    self.assertEqual(saved["closed_positions"],[])
 
  def test_v2_configuration_resets_v1_mutated_globals(self):
-  old=(m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE)
+  old=(m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE,m.eng.SUMMARY,m.eng.GUARD)
   try:
    m.eng.DISCOVERY_MIN_SCORE=0;m.eng.DISCOVERY_MIN_INDEPENDENT=0;m.eng.ENTRY_MODE="DISCOVERY"
    m.configure_lane(False)
    self.assertEqual(m.eng.DISCOVERY_MIN_SCORE,6)
    self.assertEqual(m.eng.DISCOVERY_MIN_INDEPENDENT,2)
    self.assertEqual(m.eng.ENTRY_MODE,"EXECUTABLE")
+   self.assertEqual(m.eng.SUMMARY,m.V2_SUMMARY)
+   self.assertEqual(m.eng.GUARD,m.V2_GUARD)
   finally:
-   m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE=old
+   m.eng.DISCOVERY_MIN_SCORE,m.eng.DISCOVERY_MIN_INDEPENDENT,m.eng.ENTRY_MODE,m.eng.SUMMARY,m.eng.GUARD=old
 
  def test_monitor_has_no_new_entry_path(self):
   self.assertFalse(hasattr(m,"entry_allowed"));self.assertFalse(hasattr(m,"discovery_decision"))
