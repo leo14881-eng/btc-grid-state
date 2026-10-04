@@ -183,7 +183,7 @@ def main():
           "miss_reason":None if before else "NO_PRE_HIGH_ENTRY_SIGNAL"})
     early_count=sum(bool(x["first_early_signal"]) for x in results); buy_count=sum(bool(x["first_buy_signal"]) for x in results)
     late_early=sum(bool(x["first_early_signal"] and x["high_at"] and _dt(x["first_early_signal"]["at"])>_dt(x["high_at"])) for x in results)
-    out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY_UNDER_ACCEPTANCE","strategy_effect":False,
+    out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","acceptance_status":"UNDER_ACCEPTANCE","strategy_effect":False,
       "target_session":target,"strategy_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3",
       "decision_clock":{"schedule":"hourly UTC minute :23","market_data_delay_minutes":MARKET_DATA_DELAY_MINUTES,"bar_minutes":BAR_MINUTES},
       "exchange_session":{"date":session["date"],"open":str(session["open"]),"close":str(session["close"]),"source":session["source"]},
@@ -193,6 +193,8 @@ def main():
       "buy_detected":buy_count,"buy_detection_rate":round(buy_count/len(results)*100,4) if results else 0,
       "late_early_count":late_early,"missed_by_gate":sum(not x["discovered_before_high"] for x in results),
       "pre_high_discovered":sum(x["discovered_before_high"] for x in results),"actual_buy_before_high":sum(x["actual_buy_before_high"] for x in results),
+      "early_before_high":sum(bool(x["first_early_signal"] and x["high_at"] and _dt(x["first_early_signal"]["at"])<=_dt(x["high_at"])) for x in results),
+      "missed_before_high":sum(not x["discovered_before_high"] for x in results),"benchmark_daily_explicit":True,
       "future_data_prohibited":True,"future_mutation_invariance":True,"lookahead_violations":lookahead_violations,
       "future_leakage_detected":bool(lookahead_violations),"errors":errors,"discovery_errors":discovery_errors,"results":results}
     OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
