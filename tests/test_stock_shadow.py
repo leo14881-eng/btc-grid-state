@@ -644,7 +644,7 @@ def test_daily_market_cache_is_incremental_and_benchmarks_are_shared():
     import inspect
     src=inspect.getsource(ss)
     assert "MARKET_CACHE" in src
-    assert "DAILY_CACHE_KEEP_BARS = 35" in src
+    assert "DAILY_CACHE_KEEP_BARS = 24" in src
     assert "timedelta(days=45 if bootstrap else 7)" in src
     main_src=inspect.getsource(ss.main)
     assert 'bench=discovery.get("benchmarks") or {}' in main_src
