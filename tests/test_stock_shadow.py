@@ -722,8 +722,8 @@ def test_history_gap_recovery_is_residual_only_and_classified():
     assert "gap_symbols=[s for s in symbols if len(cached.get(s) or [])<22]" in src
     assert "gap_start=end-timedelta(days=120)" in src
     assert "history_gap_recovery" in src
-    assert "SOURCE_HISTORY_INSUFFICIENT_UNVERIFIED_IDENTITY" in src
-    assert "SOURCE_HISTORY_INSUFFICIENT_UNVERIFIED_IDENTITY" in src
+    assert "SOURCE_HISTORY_LT_22_AFTER_120D_RECOVERY" in src
+    assert "SOURCE_HISTORY_LT_22_AFTER_120D_RECOVERY" in src
     # The deep read must target only the residual queue, never the whole discovered universe.
     assert '_pack_alpaca_symbol_batches(gap_symbols,"1Day",gap_start,end)' in src
 
@@ -763,7 +763,11 @@ def test_historical_replay_calendar_lookup_does_not_mutate_persisted_today_cache
 def test_history_gap_classifier_never_infers_listing_age_from_cached_first_bar():
     import inspect
     src=inspect.getsource(ss.stock_universe)
-    assert "SOURCE_HISTORY_INSUFFICIENT_UNVERIFIED_IDENTITY" in src
+    assert "SOURCE_HISTORY_LT_22_AFTER_120D_RECOVERY" in src
     assert "POSSIBLE_NEW_LISTING" not in src
     assert "(end-first_dt).days" not in src
     assert 'deep_window_days"]=120' in src
+    assert '"bars_available":len(rows)' in src
+    assert '"first_bar_at":first_bar_at' in src
+    assert '"last_bar_at":last_bar_at' in src
+    assert '"recovery_window_days":120 if classification else None' in src
