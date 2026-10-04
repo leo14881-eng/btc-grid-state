@@ -22,11 +22,14 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    env:
+      STOCK_SHADOW_SOURCE_COMMIT: ${{ github.sha }}
+      STOCK_SHADOW_RUN_ID: ${{ github.run_id }}
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -49,10 +52,20 @@ jobs:
           git diff --name-only | grep -Ev '^research/results/stock-shadow/' && { echo "Isolation violation"; exit 1; } || true
       - name: Persist Stock Shadow position state only
         run: |
+          git fetch origin main
+          if ! git diff --quiet HEAD origin/main -- research/stock_shadow tests/test_stock_shadow.py .github/workflows/stock-shadow.yml .github/workflows/stock-shadow-position-monitor.yml; then
+            echo "Stock Shadow code changed during this run; refusing stale-result persistence"
+            exit 42
+          fi
           git config user.name "stock-shadow-bot"
           git config user.email "stock-shadow-bot@users.noreply.github.com"
           git add research/results/stock-shadow/
           if git diff --cached --quiet; then exit 0; fi
           git commit -m "data: update stock shadow position monitor"
-          git pull --rebase origin main
-          git push origin HEAD:main
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin HEAD:main; then exit 0; fi
+            sleep $((attempt * 2))
+          done
+          echo "Failed to persist Stock Shadow monitor results after retries"
+          exit 1
