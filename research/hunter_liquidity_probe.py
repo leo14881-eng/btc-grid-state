@@ -108,6 +108,7 @@ def build(scan,dossiers,fetch,now,early=None):
         except Exception as exc:
             failures[sym]=type(exc).__name__+": "+str(exc)[:160]
     return {"schema":"hunter_liquidity_probe_v1","as_of_utc":now.isoformat(),
+            "scan_generation_id":scan.get("generation_id"),
             "scan_as_of_utc":scan["as_of_utc"],
             "requested_count":len(targets(dossiers,scan,early)),
             "successful_count":len(records),"failures":failures,
