@@ -295,13 +295,18 @@ def ensure_opportunity_observation(pos,p=None,now=None,provenance="LIVE_OBSERVAT
   pos["full_opportunity_peak_price"]=seed
   pos["full_opportunity_peak_at_utc"]=pos.get("holding_peak_at_utc") or pos.get("opened_at_utc")
  if p and buy:
-  if not pos.get("closed_at_utc"):
+  closed_at=parse(pos["closed_at_utc"]) if pos.get("closed_at_utc") else None
+  inside_full_window=(closed_at is None or now<=closed_at+dt.timedelta(hours=max(REVIEW_HOURS)))
+  if closed_at is None:
    if p>(finite(pos.get("holding_peak_price")) or 0):
     pos["holding_peak_price"]=p;pos["holding_peak_at_utc"]=now.isoformat()
    pos["holding_mfe_pct"]=round((pos["holding_peak_price"]/buy-1)*100,4)
-  if p>(finite(pos.get("full_opportunity_peak_price")) or 0):
+  # Full Opportunity is strictly initial BUY -> SELL+72h. A monitor tick after
+  # that deadline is never allowed to extend the evaluation window.
+  if inside_full_window and p>(finite(pos.get("full_opportunity_peak_price")) or 0):
    pos["full_opportunity_peak_price"]=p;pos["full_opportunity_peak_at_utc"]=now.isoformat()
-  pos["full_opportunity_mfe_pct"]=round((pos["full_opportunity_peak_price"]/buy-1)*100,4)
+  if pos.get("full_opportunity_peak_price") is not None:
+   pos["full_opportunity_mfe_pct"]=round((pos["full_opportunity_peak_price"]/buy-1)*100,4)
  pos.setdefault("data_provenance",provenance)
  if pos.get("closed_at_utc"):
   # Time passing alone is not evidence that the full 72h opportunity was observed.
