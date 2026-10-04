@@ -93,9 +93,9 @@ def _parse_price(v):
 
 def alpaca_snapshot_quotes(symbols):
     """Batch latest SIP trades for held symbols; no Yahoo/Nasdaq fallback."""
-    if not symbols: return {},[],0
+    if not symbols: return {},[],0,0
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
-    if not key or not secret: return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0
+    if not key or not secret: return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0,0
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow-position-monitor/3.0"}
     prices={}; errors=[]; requests=0
     # Historical SIP latest-trades is entitlement-safe outside the 15-minute real-time window.
@@ -137,7 +137,7 @@ def main(force=False):
     session=_alpaca_exchange_session()\n    is_open=market_open(session=session)\n    if not force and not is_open:
         save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
-    prices,errors,requests=alpaca_snapshot_quotes(symbols)
+    prices,errors,requests,logical_batches=alpaca_snapshot_quotes(symbols)
     trade_actions_enabled=is_open
     sells=0; updated=0
     for s in list(symbols):
@@ -189,6 +189,6 @@ def main(force=False):
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
-    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":len(batches) if symbols else 0,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
+    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
