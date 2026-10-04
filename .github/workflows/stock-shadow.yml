@@ -61,12 +61,6 @@ jobs:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
         run: python research/stock_shadow/stock_shadow_v1.py
-      - name: Run strict chronological Replay
-        timeout-minutes: 8
-        env:
-          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
-          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
-        run: python research/stock_shadow/stock_replay.py
       - name: Winner loser review
         run: python research/stock_shadow/stock_review.py
       - name: Isolation guard
