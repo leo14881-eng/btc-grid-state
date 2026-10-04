@@ -39,7 +39,7 @@ def main():
  start,now=today_bounds(); scan=load(SCAN); hist=load(EARLY); v1=load(V1); v2=load(V2); review=load(REVIEW)
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
  stats=[]
- for a,c in (scan.get("coins") or {}).items():
+ candidates=[]\n for a,c in (scan.get("coins") or {}).items():
   if a in excluded or not c.get("pairs"):continue
   sym=c["pairs"][0].get("pair")
   if not sym or not sym.endswith("USDT"):continue
