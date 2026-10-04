@@ -442,3 +442,14 @@ def test_fmp_bulk_fundamentals_provider_is_observation_only(monkeypatch):
     assert m.evidence_sufficient(out["AAA"])
     assert out["AAA"]["revenue"]["concept"]=="FMP_NORMALIZED"
     assert "strategy" not in status
+
+
+def test_fundamentals_frames_full_batch_not_per_company_financial_loop():
+    src=(Path(__file__).parents[1]/"research"/"stock_shadow"/"fundamentals_observer.py").read_text()
+    assert "tasks=all_tasks" in src
+    assert "refresh_budget=4" in src
+    assert 'provider":"SEC_FRAMES_MARKET_BATCH_PLUS_BOUNDED_FILING_METADATA"' in src
+    # Per-company companyfacts must not be called from the refresh worker.
+    worker=src[src.index("def fetch_sec_pair"):src.index("with ThreadPoolExecutor",src.index("def fetch_sec_pair"))]
+    assert "sec_companyfacts(" not in worker
+    assert "sec_submission(" in worker
