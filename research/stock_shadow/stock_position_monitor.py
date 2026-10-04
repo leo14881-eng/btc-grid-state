@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Position-only Stock Shadow monitor. Never discovers or opens positions."""
-import json, os, time, urllib.parse, urllib.request
+import json, os, urllib.parse, urllib.request, urllib.error
 from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -47,52 +47,49 @@ def _parse_price(v):
         x=float(str(v).replace("$","").replace(",","").strip()); return x if x>0 else None
     except Exception: return None
 
-def nasdaq_snapshot_quotes(symbols):
-    """One lightweight public US-stock snapshot; match only held symbols locally."""
-    wanted=set(symbols)
-    url="https://api.nasdaq.com/api/screener/stocks?"+urllib.parse.urlencode({"tableonly":"true","limit":"10000","offset":"0","download":"true"})
-    req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131 Safari/537.36","Accept":"application/json, text/plain, */*","Referer":"https://www.nasdaq.com/market-activity/stocks/screener","Origin":"https://www.nasdaq.com"})
-    try:
-        with urllib.request.urlopen(req,timeout=30) as r: payload=json.load(r)
-        rows=((payload.get("data") or {}).get("rows") or [])
-        prices={}
-        for row in rows:
-            raw=(row.get("symbol") or "").strip()
-            s=raw.replace(".","-").replace("/","-")
-            if s in wanted:
-                p=_parse_price(row.get("lastsale") or row.get("lastSalePrice"))
-                if p is not None: prices[s]=p
-        missing=wanted-set(prices)
-        extra_requests=0
-        # Rare class-share aliases can be absent from the bulk snapshot. Use a bounded
-        # one-symbol chart fallback only for missing holdings, never for the full book.
-        for s in sorted(missing)[:3]:
-            alias=s  # Yahoo uses hyphen for class shares, e.g. MOG-A
-            url2=f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(alias)}?range=1d&interval=5m"
-            try:
-                d=_get_json(url2); extra_requests+=1
-                r=((d.get("chart") or {}).get("result") or [None])[0]
-                if r:
-                    meta=r.get("meta") or {}; p=_parse_price(meta.get("regularMarketPrice"))
-                    if p is None:
-                        closes=((r.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
-                        vals=[_parse_price(x) for x in closes]; vals=[x for x in vals if x is not None]; p=vals[-1] if vals else None
-                    if p is not None: prices[s]=p
-            except Exception:
-                extra_requests+=1
-        return prices,[],1+extra_requests
-    except urllib.error.HTTPError as e:
-        return {},[{"batch":0,"reason":f"HTTP_{e.code}"}],1
-    except Exception as e:
-        return {},[{"batch":0,"reason":type(e).__name__}],1
+def alpaca_snapshot_quotes(symbols):
+    """Batch latest SIP trades for held symbols; no Yahoo/Nasdaq fallback."""
+    if not symbols: return {},[],0
+    key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
+    if not key or not secret: return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0
+    headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow-position-monitor/3.0"}
+    prices={}; errors=[]; requests=0
+    # Historical SIP latest-trades is entitlement-safe outside the 15-minute real-time window.
+    # Use latest bars with an end delayed 20m; during market hours this remains near-real-time enough
+    # for the 5m shadow monitor without requiring a paid real-time subscription.
+    end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=20)
+    start=end-__import__("datetime").timedelta(days=3)
+    for i in range(0,len(symbols),BATCH_SIZE):
+        batch=symbols[i:i+BATCH_SIZE]
+        params={"symbols":",".join(s.replace("-",".") for s in batch),"timeframe":"5Min",
+                "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
+                "limit":10000,"feed":"sip","adjustment":"all"}
+        token=None
+        try:
+            latest={}
+            while True:
+                if token: params["page_token"]=token
+                req=urllib.request.Request("https://data.alpaca.markets/v2/stocks/bars?"+urllib.parse.urlencode(params),headers=headers)
+                with urllib.request.urlopen(req,timeout=35) as r: body=json.load(r)
+                requests+=1
+                for raw,rows in (body.get("bars") or {}).items():
+                    if rows: latest[raw.replace(".","-")]=float(rows[-1]["c"])
+                token=body.get("next_page_token")
+                if not token: break
+            prices.update(latest)
+        except urllib.error.HTTPError as e:
+            requests+=1; errors.append({"batch":i//BATCH_SIZE,"reason":f"HTTP_{e.code}","detail":str(e.reason)})
+        except Exception as e:
+            requests+=1; errors.append({"batch":i//BATCH_SIZE,"reason":type(e).__name__,"detail":str(e)[:120]})
+    return prices,errors,requests
 
 def main(force=False):
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
     positions=state.get("positions",{}); symbols=sorted(positions)
     if not force and not market_open():
-        save(HEALTH,{"updated_at":now(),"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"NASDAQ_PUBLIC_BULK_SNAPSHOT","buy_capability":False})
+        save(HEALTH,{"updated_at":now(),"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False})
         print(json.dumps(load(HEALTH,{}))); return
-    prices,errors,requests=nasdaq_snapshot_quotes(symbols)
+    prices,errors,requests=alpaca_snapshot_quotes(symbols)
     sells=0; updated=0
     for s in list(symbols):
         price=prices.get(s)
