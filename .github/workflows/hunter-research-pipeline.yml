@@ -27,7 +27,7 @@ jobs:
           git fetch origin main
           git checkout -B main origin/main
           python - <<'PY'
-          import json
+          import json,os
           d=json.load(open('research/results/hunter-cex-universe-run.json'))
           assert d.get('generation_id') and d.get('binance_complete') is True
           trigger_sha=os.environ.get('TRIGGER_SHA')
