@@ -412,7 +412,7 @@ def main():
         raise RuntimeError("state_continuity:manual_reset_marker_present")
     market, failed_symbols, discovery=stock_universe()
     bench=discovery.get("benchmarks") or {}
-    actions_enabled=trade_action_window()
+    session=_alpaca_exchange_session()\n    actions_enabled=trade_action_window(session=session)
     candidates=[]; rejection_counts={}
     for s,m in market.items():
         d=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
