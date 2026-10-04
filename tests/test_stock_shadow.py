@@ -290,3 +290,25 @@ def test_bulk_zip_lookup_accepts_sec_cik_filename_forms():
         z.writestr("CIK0000000123.json",json.dumps({"cik":123}))
     with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as z:
         assert m.bulk_json_by_cik(z,{123})[123]["cik"]==123
+
+
+def test_ledger_invariants_reject_losing_sell_and_too_many_tranches():
+    import pytest
+    assert ss.validate_ledger({"positions":{"A":{"tranches":[{"price":1,"notional":1}]*5}},"closed":[]},[]) is True
+    with pytest.raises(RuntimeError):
+        ss.validate_ledger({"positions":{"A":{"tranches":[{"price":1,"notional":1}]*6}},"closed":[]},[])
+    with pytest.raises(RuntimeError):
+        ss.validate_ledger({"positions":{},"closed":[{"realized_net_pnl_usdt":-1}]},[])
+
+def test_fundamental_trend_handles_negative_values_directionally():
+    m=_load_fundamentals_observer()
+    assert m._trend([{"val":-43},{"val":-55}])=="DETERIORATING"
+    assert m._trend([{"val":-55},{"val":-43}])=="IMPROVING"
+
+def test_result_writers_are_atomic_and_versioned():
+    import inspect
+    assert ".tmp" in inspect.getsource(ss.save)
+    assert "SOURCE_COMMIT" in inspect.getsource(ss.main)
+    pm=_load_position_monitor()
+    assert ".tmp" in inspect.getsource(pm.save)
+    assert "SOURCE_COMMIT" in inspect.getsource(pm.main)
