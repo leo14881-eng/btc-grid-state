@@ -48,6 +48,7 @@ def main():
         print(json.dumps(fetch(g), sort_keys=True))
     print(json.dumps(fetch(groups[-1], feed="sip"), sort_keys=True))
     probe="AAPL MSFT NVDA AMZN META GOOGL TSLA JPM XOM UNH AVGO LLY WMT V MA ORCL NFLX COST HD PG JNJ ABBV BAC KO CRM CSCO IBM GE CAT GS AXP MCD DIS PEP TMO ABT PM RTX INTU QCOM AMGN TXN ISRG BKNG SPGI NOW HON COP AMAT".split()
+    # Probe safe SIP request sizes used by the production batch selector.
     for n in (25,50):
         syms=probe[:n]
         print(json.dumps(fetch(syms, feed="sip"), sort_keys=True))
