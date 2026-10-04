@@ -347,10 +347,11 @@ def classify_evidence(ev, risk_flags):
     return "HEALTHY" if available>=3 else "UNKNOWN"
 
 def filing_risk_evidence(latest):
-    # None means semantically unverified; never treat missing text verification as evidence of absence.
-    return {"material_8k_present":any(x["form"].startswith("8-K") for x in latest),
-            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,"material_8k_risk":None,
-            "semantic_review_status":"NOT_YET_TEXT_VERIFIED",
+    # None means UNKNOWN, never VERIFIED_ABSENT. Filing metadata can establish 8-K presence only.
+    has_8k=any(x["form"].startswith("8-K") for x in latest)
+    return {"material_8k_present":True if has_8k else None,
+            "going_concern":None,"bankruptcy_restructuring":None,"delisting_risk":None,
+            "material_8k_risk":None,"semantic_review_status":"NOT_YET_TEXT_VERIFIED",
             "semantic_risk_state":"UNKNOWN_PENDING_TEXT_REVIEW"}
 
 def main():
