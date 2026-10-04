@@ -24,7 +24,7 @@ ENTRY_MODE="EXECUTABLE"
 STRATEGY_ID="CAPITAL_DECISION_ENGINE_V2"
 ID_PREFIX="SHV2"
 EVENT_PREFIX="SHADOW_V2"
-SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"
+SHADOW_FREEZE=os.getenv("HUNTER_SHADOW_FREEZE","1")!="0"\nBINANCE_DATA_API=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 
 def entry_allowed(mode,broad,current_price,executable_action):
  return broad=="BUY" and current_price is not None and (mode=="DISCOVERY" or executable_action=="BUY")
@@ -187,7 +187,7 @@ def binance_kline_bars(asset,start,end,interval="5m"):
  try:
   while cursor<=stop:
    q=urllib.parse.urlencode({"symbol":symbol,"interval":interval,"startTime":cursor,"endTime":stop,"limit":1000})
-   req=urllib.request.Request("https://api.binance.com/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
+   req=urllib.request.Request(BINANCE_DATA_API+"/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
    with urllib.request.urlopen(req,timeout=12) as r:rows=json.loads(r.read().decode())
    if not rows:break
    out.extend((int(row[0]),finite(row[2])) for row in rows if finite(row[2]) is not None)
