@@ -318,16 +318,18 @@ def main():
             facts=facts_by_cik.get(cik)
             transport="SEC_BULK_SUBMISSIONS" if sub else None
             facts_transport="SEC_BULK_COMPANYFACTS" if facts else None
-            if sub is None and facts is not None and not prior_ev and fallback_requests < FALLBACK_MAX_REQUESTS:
-                sub,transport=sec_submission(cik); fallback_requests+=1
             frame_ev=frames_by_cik.get(cik)
             prior_ev=(companies.get(s) or {}).get("financial_evidence")
             if facts is None and frame_ev is None and not prior_ev and fallback_requests < FALLBACK_MAX_REQUESTS:
-                facts,facts_transport=sec_companyfacts(cik); fallback_requests+=1
+                fallback_requests+=1
+                try:
+                    facts,facts_transport=sec_companyfacts(cik)
+                except Exception:
+                    facts=None
             if facts is None and frame_ev is not None:
                 facts_transport="SEC_XBRL_FRAMES_MARKET_BATCH"
-            if sub is None and fallback_requests < FALLBACK_MAX_REQUESTS:
-                sub,transport=sec_submission(cik); fallback_requests+=1
+            # Filing metadata is optional here. Never turn frame-wide financial evidence
+            # back into hundreds of per-company submissions requests.
             if facts is None and frame_ev is None:
                 prev=companies.get(s) or {}
                 if prev.get("financial_evidence"):
