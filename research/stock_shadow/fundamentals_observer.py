@@ -457,7 +457,7 @@ def _trend(values):
 
 def financial_evidence(facts):
     specs={
-      "revenue":(["RevenueFromContractWithCustomerExcludingAssessedTax","Revenues","SalesRevenueNet","Revenue"],("USD",)),
+      "revenue":(["RevenueFromContractWithCustomerExcludingAssessedTax","RevenueFromContractWithCustomers","Revenues","SalesRevenueNet","Revenue"],("USD",)),
       "net_income":(["NetIncomeLoss","ProfitLoss"],("USD",)),
       "operating_cash_flow":(["NetCashProvidedByUsedInOperatingActivities","CashFlowsFromUsedInOperatingActivities"],("USD",)),
       "cash":(["CashAndCashEquivalentsAtCarryingValue","CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents","CashAndCashEquivalents"],("USD",)),
