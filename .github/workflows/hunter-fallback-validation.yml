@@ -1,0 +1,19 @@
+name: Hunter Conditional Fallback Validation
+on:
+  pull_request:
+    paths: ['research/hunter_scheduler/**', '.github/workflows/hunter-fallback-validation.yml']
+  push:
+    branches: ['fix/hunter-conditional-fallback-20261006']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Conditional fallback, token isolation and error tests
+        run: node --test research/hunter_scheduler/worker.test.mjs
