@@ -11,12 +11,18 @@ concurrency:
 jobs:
   regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Check out immutable main baseline
+        uses: actions/checkout@v4
+        with:
+          ref: '0e66e480094a72d0b0bccc2dd2bcedb662ed38aa'
+          path: baseline-main
+          persist-credentials: false
       - name: Existing Hunter tests plus isolated adapter fixtures
         env:
           HUNTER_VENUE_EXECUTION_ADAPTERS_ENABLED: '0'
@@ -25,5 +31,11 @@ jobs:
         run: |
           node tests/test_hunter_bybit_proxy.mjs
           node tests/test_hunter_market_proxy.mjs
+      - name: Frozen main versus adapter decisions and PnL
+        env:
+          FROZEN_MAIN_SHA: '0e66e480094a72d0b0bccc2dd2bcedb662ed38aa'
+        run: python research/validate_market_adapter_isolation.py --baseline "$PWD/baseline-main"
+      - name: Bounded public API latency and capability probes
+        run: python research/validate_market_adapter_isolation.py --live
       - name: Ensure no state mutation was published
         run: git diff --exit-code -- research/results
