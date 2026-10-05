@@ -111,9 +111,49 @@ def spot_proxy_universe(now=None):
                     "complete":True,"ttl_seconds":CACHE_TTL_SECONDS}
 
 def spot_proxy_candidates():
-    # Compatibility API: all symbols now come from the same complete snapshot.
-    symbols,meta=spot_proxy_universe()
-    return symbols,{},meta["network_requests"],meta["cache_count"]
+    """Explicitly candidate-scoped fallback while Worker requires symbol.
+
+    Never label this result as full market coverage. Legacy per-symbol cache is
+    still useful for V2's execution-channel labels.
+    """
+    try: review=json.loads(REVIEW.read_text())
+    except Exception: review={}
+    try: cache=json.loads(SPOT_CACHE.read_text())
+    except Exception: cache={}
+    if cache.get("schema")==CACHE_SCHEMA: cache={}
+    now=dt.datetime.now(dt.timezone.utc);requested=set();failures={}
+    for raw in review.get("capital_review_eligible") or []:
+        asset=exchange_asset(raw)
+        if asset:requested.add(asset)
+        elif raw:failures[str(raw)]={"reason":"INVALID_SYMBOL","detail":"REJECTED_BEFORE_TRANSPORT"}
+    requested.update({"BTC","ETH"});ok=[];requests=0
+    for asset in sorted(requested):
+        saved=cache.get(asset) or {}
+        try: age=(now-dt.datetime.fromisoformat(saved["as_of_utc"])).total_seconds()
+        except Exception: age=float("inf")
+        if 0<=age<CACHE_TTL_SECONDS:
+            if saved.get("trading"):ok.append(asset)
+            else:failures[asset]={"reason":"INVALID_SYMBOL","detail":"CACHED_NOT_TRADING_OR_NOT_LISTED"}
+            continue
+        if requests>=10:
+            failures[asset]={"reason":"DEFERRED","detail":"BYBIT_NEW_SYMBOL_REQUEST_BUDGET"}
+            continue
+        symbol=asset+"USDT";requests+=1
+        try:
+            data=request(SPOT_PROXY+"/bybit/spot?"+urllib.parse.urlencode({"symbol":symbol}))
+            if data.get("retCode")!=0:raise RuntimeError("BYBIT_PROXY_RET_"+str(data.get("retCode")))
+            rows=(data.get("result") or {}).get("list") or []
+            trading=any(row.get("symbol")==symbol and row.get("baseCoin")==asset
+                        and row.get("quoteCoin")=="USDT" and row.get("status")=="Trading" for row in rows)
+            cache[asset]={"as_of_utc":now.isoformat(),"trading":trading}
+            if trading:ok.append(asset)
+            else:failures[asset]={"reason":"INVALID_SYMBOL","detail":"NOT_TRADING_OR_NOT_LISTED"}
+        except Exception as exc:
+            failures[asset]={"reason":classify_error(exc),"detail":type(exc).__name__+":"+str(exc)[:120]}
+    if cache:
+        SPOT_CACHE.parent.mkdir(parents=True,exist_ok=True)
+        SPOT_CACHE.write_text(json.dumps(cache,ensure_ascii=False,indent=2)+"\n")
+    return sorted(ok),failures,requests,len(cache)
 
 def spot_official_pages():
     """Candidate-scoped fallback when V5 is region-blocked. Uses only official Bybit spot pages."""
@@ -159,9 +199,19 @@ def main():
     except Exception as e:
         proxy_error=type(e).__name__+":"+str(e)[:160]
         out["spot"].update({"status":"UNKNOWN","business_status":"UNKNOWN","error":proxy_error,"error_reason":classify_error(e),"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"})
-        # A failed/expired full snapshot is UNKNOWN. Do not substitute HTML pages
-        # or per-symbol calls and accidentally claim complete coverage.
         out["spot"].update({"scope":"FULL_USDT_SPOT_UNIVERSE","complete":False,"network_requests":1})
+        # Restore the previously working candidate check without promoting it to
+        # an all-market source. A partial failure remains UNKNOWN.
+        try:
+            xs,failures,requests,cache_count=spot_proxy_candidates()
+            out["spot"].update({"status":"OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE",
+                                "business_status":"TRADING","symbols":xs,"count":len(xs),
+                                "symbol_failures":failures,"cache_count":cache_count,
+                                "network_requests":requests+1,"scope":"CACHE_FIRST_CANDIDATE_MATCH",
+                                "input_rejections":{k:v for k,v in failures.items() if v.get("detail")=="REJECTED_BEFORE_TRANSPORT"},
+                                "bulk_error":proxy_error,"error":None,"error_reason":None})
+        except Exception as fallback_error:
+            out["spot"]["fallback_error"]=type(fallback_error).__name__+":"+str(fallback_error)[:160]
     try:
         xs,why=alpha()
         if xs is None:out["alpha"]["error"]=why
