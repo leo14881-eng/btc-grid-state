@@ -26,8 +26,12 @@ rotating proxy or a different regional Bybit site to evade service restrictions.
   writes timestamped snapshot and integrity checksum. A checksum is not
   cryptographic source authentication: the authorized repository writer and
   regional machine are the trust boundary.
-- Snapshot maximum age: 45 minutes. The main hourly GitHub scan is at minute
-  11, so the regional collector should run around minute 03. Stale, partial,
+- Snapshot maximum age: 45 minutes; EARLY signals require an age of at most
+  15 minutes. The main hourly GitHub scan is at minute 17, so the regional
+  collector should finish near minute 10. It now captures venue-matched
+  Bybit 1h/4h and 15m spot evidence across its active USDT pairs. Missing
+  candles remain `bybit_only_unscored`; no 24h-gain proxy is substituted.
+  Stale, partial,
   mismatched or missing snapshots never count as Bybit coverage.
 - `scripts/hunter_bybit_regional_publish.sh`: serialized publisher, rebases
   and retries safely, pushes only the Bybit snapshot to main.
@@ -69,7 +73,7 @@ On the regional machine:
    EnvironmentFile=/etc/hunter/bybit.env
    WorkingDirectory=/opt/hunter/btc-grid-state
    ExecStart=/usr/bin/bash /opt/hunter/btc-grid-state/scripts/hunter_bybit_regional_publish.sh
-   TimeoutStartSec=180
+   TimeoutStartSec=360
    NoNewPrivileges=true
    PrivateTmp=true
    ```
@@ -78,7 +82,7 @@ On the regional machine:
    [Unit]
    Description=Refresh official Bybit market data every hour
    [Timer]
-   OnCalendar=*-*-* *:03:00
+   OnCalendar=*-*-* *:10:00
    Persistent=true
    Unit=hunter-bybit-regional.service
    [Install]
@@ -90,7 +94,10 @@ On the regional machine:
 6. Check `sudo journalctl -u hunter-bybit-regional.service -n 50` for
    `BYBIT_REGIONAL_SNAPSHOT_PERSISTED`, then check the next GitHub hourly
    `research/results/hunter-health-and-queue.json`:
-   `bybit_complete=true` and `snapshot_consistent=true`.
+   `bybit_complete=true`, `bybit_signal_complete=true`, and
+   `snapshot_consistent=true`. Bybit-only EARLY rows remain research-only:
+   V1/V2 entry stays blocked until venue-specific order-book, monitoring and
+   shadow fill evidence are separately implemented and validated.
    If the actual region is disallowed, collection fails before contacting
    Bybit. If Bybit returns 403 from that host, choose a properly authorized
    hosting location or request access clarification from Bybit support.

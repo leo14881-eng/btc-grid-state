@@ -98,18 +98,29 @@ def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
       "return_15m_pct":round(m15,4),"range_position_6h":round(rp,4),
       "pre_move_components":{"volume":pre_volume,"compression":pre_compression,"relative_turn":pre_turn},
       "research_only":True}
-def build(scan,r1,r4,microdata,now):
-    pairs={c["pairs"][0]["pair"]:base for base,c in (scan.get("coins") or {}).items()
-           if c.get("pairs") and c["pairs"][0].get("venue")=="binance"}
+def build(scan,r1,r4,microdata,now,regional_signals=None):
+    pairs={p["pair"]:base for base,c in (scan.get("coins") or {}).items()
+           for p in c.get("pairs") or [] if p.get("venue")=="binance"}
     btc1=r1.get("BTCUSDT");btc4=r4.get("BTCUSDT")
     if not btc1 or not btc4:raise ValueError("BTC benchmark missing")
     rows=[x for sym,base in pairs.items() if (x:=score_row(sym,base,r1,r4,btc1,btc4,microdata))]
+    bybit_only={base for base,c in (scan.get("coins") or {}).items()
+                if "bybit" in (c.get("venues") or []) and "binance" not in (c.get("venues") or [])}
+    signals=regional_signals or {}
+    for base in sorted(bybit_only & signals.keys()):
+        row=signals[base]
+        if row.get("base")==base and row.get("source_venue")=="bybit" and row.get("execution_supported") is False:
+            rows.append(row)
+    unscored=sorted(bybit_only-{x["base"] for x in rows})
     rows.sort(key=lambda x:(x["stage"]!="EARLY",-x["score"],x["base"]))
     early=[x for x in rows if x["stage"]=="EARLY"]
-    return {"schema":"hunter_early_signals_v4","as_of_utc":now.isoformat(),
+    report={"schema":"hunter_early_signals_v4","as_of_utc":now.isoformat(),
       "scan_generation_id":scan.get("generation_id"),"capital_authority":"NONE_RESEARCH_ONLY",
-      "method":"1h/4h BTC-relative strength + relative acceleration; no 24h-gain prerequisite",
+      "method":"Venue-matched 1h/4h BTC-relative strength + relative acceleration; no 24h-gain prerequisite",
       "policy_version":VERSION,"early_count":len(early),"early":early,"all_signals":rows,"watch":rows[:30]}
+    report["bybit_only_unscored"]=unscored
+    report["bybit_only_signal_count"]=len(bybit_only)-len(unscored)
+    return report
 def persist_first_early(report):
     """Durable first-seen EARLY evidence for lead-time/missed-opportunity audits."""
     try: hist=json.loads(HISTORY.read_text())
@@ -127,11 +138,28 @@ def persist_first_early(report):
 def main():
     scan=json.loads(SCAN.read_text())
     if not scan.get("binance_complete"):raise SystemExit("incomplete Binance scan")
-    pairs=[c["pairs"][0]["pair"] for c in (scan.get("coins") or {}).values()
-           if c.get("pairs") and c["pairs"][0].get("venue")=="binance"]
+    pairs=[p["pair"] for c in (scan.get("coins") or {}).values()
+           for p in c.get("pairs") or [] if p.get("venue")=="binance"]
     symbols=sorted(set(pairs+["BTCUSDT"]))
     r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
-    report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc))
+    regional_signals={}
+    if scan.get("bybit_complete"):
+        try:
+            from research import hunter_bybit_regional as regional
+        except ModuleNotFoundError:
+            import hunter_bybit_regional as regional
+        path=pathlib.Path(os.getenv("HUNTER_BYBIT_REGIONAL_SNAPSHOT",
+            "research/results/hunter-bybit-regional-snapshot.json"))
+        snapshot=json.loads(path.read_text())
+        regional.validate(snapshot,dt.datetime.now(dt.timezone.utc))
+        if snapshot["captured_at_utc"]!=(scan.get("venue_status") or {}).get("bybit",{}).get("captured_at_utc"):
+            raise SystemExit("BYBIT_SIGNAL_SNAPSHOT_GENERATION_MISMATCH")
+        captured=dt.datetime.fromisoformat(snapshot["captured_at_utc"].replace("Z","+00:00"))
+        # A valid universe snapshot (45 minutes) is not necessarily a fresh
+        # entry signal. Keep stale Bybit assets visible as unscored research.
+        if 0 <= (dt.datetime.now(dt.timezone.utc)-captured).total_seconds() <= 900:
+            regional_signals=snapshot.get("early_signals") or {}
+    report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc),regional_signals)
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     persist_first_early(report)
     print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]}))

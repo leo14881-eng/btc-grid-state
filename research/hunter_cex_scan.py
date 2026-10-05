@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Binance-only active USDT spot universe; research only, never trades."""
+"""Binance and independently verified Bybit USDT spot discovery; research only."""
 import datetime as dt
 import json
 import importlib.util
@@ -164,7 +164,9 @@ def build(results,previous,at):
         for row in rows:grouped.setdefault(row["base"],[]).append(row)
     coins={};leads=[]
     for base,rows in sorted(grouped.items()):
-        reference=max(rows,key=lambda r:r["volume_24h_usdt"])
+        # Preserve the Binance mark for existing shadow positions. A second
+        # venue is discovery evidence, not permission to switch price sources.
+        reference=next((r for r in rows if r["venue"]=="binance"),None) or max(rows,key=lambda r:r["volume_24h_usdt"])
         prev=(previous.get("coins") or {}).get(base,{})
         prior=prev.get("venue_prices",{})
         changes=[(r["price"]/prior[r["venue"]]-1)*100 for r in rows if prior.get(r["venue"],0)>0]
@@ -190,7 +192,7 @@ def build(results,previous,at):
     leads.sort(key=lambda r:r["base"])
     generation_id=dt.datetime.fromisoformat(at).strftime("%Y%m%dT%H%M%S%fZ")
     return dict(schema="hunter_cex_universe_v2",generation_id=generation_id,source_head_sha=os.getenv("HUNTER_SOURCE_HEAD_SHA"),as_of_utc=at,
-                scope="Crypto-only active Binance USDT spot pairs; stablecoins and Binance type=3 bStocks/tokenized securities excluded",
+                scope="Crypto-only active Binance and verified Bybit USDT spot pairs; stablecoins and Binance type=3 bStocks/tokenized securities excluded",
                 limitations="Ticker dedup is provisional until contract IDs verified; venue 24h volumes overlap and must not be summed as unique demand.",
                 unique_base_tickers=len(coins),venue_counts={k:len(v) for k,v in results.items()},
                 coins=coins,research_leads=leads,capital_authority="NONE_RESEARCH_ONLY",
@@ -228,20 +230,31 @@ def main():
     except (ValueError,OSError):previous={}
     at=dt.datetime.now(dt.timezone.utc).isoformat()
     results={};statuses={};errors={}
-    # User-approved scope is Binance only. Do not read regional Bybit
-    # snapshots, request Bybit endpoints, or count their absence as a defect.
     try:
         rows,status=binance();results["binance"]=rows;statuses["binance"]=status
     except Exception as exc:
         errors["binance"]=str(exc);statuses["binance"]=dict(error=str(exc))
+    # The hosted runner cannot use Bybit's official API from its egress region.
+    # A fresh complete official regional snapshot is the only admissible input;
+    # missing evidence stays visible rather than becoming fake coverage.
+    try:
+        rows,status=bybit_from_authorized_region();results["bybit"]=rows;statuses["bybit"]=status
+    except Exception as exc:
+        errors["bybit"]=str(exc);statuses["bybit"]=dict(error=str(exc))
     report=build(results,previous,at)
     binance_complete=("binance" in results and
                       not statuses["binance"]["missing_or_invalid"])
-    report.update(required_venues=["binance"],venue_status=statuses,
-                  errors=errors,complete=binance_complete,
+    bybit_complete=("bybit" in results and
+                    not statuses["bybit"]["missing_or_invalid"])
+    bybit_signal_complete=bybit_complete and statuses["bybit"].get("signal_complete") is True
+    report.update(required_venues=["binance","bybit"],venue_status=statuses,
+                  errors=errors,complete=binance_complete and bybit_signal_complete,
                   binance_complete=binance_complete,
-                  bybit_required=False,
-                  coverage_status="BINANCE_COMPLETE" if binance_complete else "BINANCE_INCOMPLETE")
+                  bybit_complete=bybit_complete,bybit_signal_complete=bybit_signal_complete,bybit_required=True,
+                  coverage_status=("BINANCE_BYBIT_COMPLETE" if binance_complete and bybit_signal_complete
+                                   else "BINANCE_BYBIT_SIGNALS_INCOMPLETE" if binance_complete and bybit_complete
+                                   else "BINANCE_ONLY_BYBIT_UNAVAILABLE" if binance_complete
+                                   else "BINANCE_INCOMPLETE"))
     (OUT/"hunter-cex-universe-run.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     # Only a fully valid Binance scan may replace the last usable baseline.
     if binance_complete:

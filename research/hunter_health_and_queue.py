@@ -82,9 +82,10 @@ def build(data,now):
     priority=list({x["asset"]:x for x in (reviewed[:6]+early[:8]+cont[:8]+other[:8])}.values())
     health={"snapshot_consistent":not mismatches,
             "snapshot_mismatches":mismatches,
-            "required_venues":["binance"],
+            "required_venues":scan.get("required_venues") or ["binance"],
             "binance_complete":scan.get("binance_complete") is True,
-            "exchange_scope":"BINANCE_ONLY",
+            "bybit_complete":scan.get("bybit_complete") is True,
+            "exchange_scope":("BINANCE_BYBIT" if scan.get("bybit_complete") else "BINANCE_ONLY_BYBIT_UNAVAILABLE"),
             "universe_size":len(scan.get("coins") or {}),
             "researched_cached":research.get("deep_research_total_cached"),
             "market_data_screened_cached":research.get("deep_research_total_cached"),

@@ -1,5 +1,5 @@
 # Hunter v3 frozen stability baseline: discovery must remain independent of deep research. Final acceptance trigger v2.
-name: Hunter Binance Universe Scan
+name: Hunter Multi-Venue Universe Scan
 on:
   workflow_dispatch:
   schedule:
@@ -37,9 +37,10 @@ jobs:
           python-version: '3.12'
       - name: Validate discovery only
         run: python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v
-      - name: Scan Binance USDT spot universe
+      - name: Scan Binance and verified Bybit USDT spot universe
         env:
           HUNTER_SOURCE_HEAD_SHA: ${{ github.sha }}
+          HUNTER_BYBIT_DIRECT_DISABLED: '1'
         run: python research/hunter_cex_scan.py
       - name: Validate publishable discovery generation
         run: |
@@ -48,7 +49,8 @@ jobs:
           p=pathlib.Path('research/results/hunter-cex-universe-summary.json')
           d=json.loads(p.read_text())
           assert d.get('binance_complete') is True
-          assert d.get('coverage_status')=='BINANCE_COMPLETE'
+          assert d.get('coverage_status') in ('BINANCE_BYBIT_COMPLETE','BINANCE_BYBIT_SIGNALS_INCOMPLETE','BINANCE_ONLY_BYBIT_UNAVAILABLE')
+          assert d.get('required_venues')==['binance','bybit']
           assert d.get('generation_id')
           t=dt.datetime.fromisoformat(d['as_of_utc'].replace('Z','+00:00'))
           age=(dt.datetime.now(dt.timezone.utc)-t).total_seconds()

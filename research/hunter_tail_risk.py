@@ -63,7 +63,8 @@ def collect_systemic_evidence(scan,liq,now,cfg,base_url="https://data-api.binanc
     scan_fresh=is_fresh((scan or {}).get("as_of_utc"),now,max_age)
     coins=(scan or {}).get("coins") or {}
     stable_bases={"USDT","USDC","FDUSD","TUSD","USDP","DAI","BUSD"}
-    moves=[finite(v.get("change_24h_pct")) for k,v in coins.items() if k!="BTC" and k not in stable_bases and isinstance(v,dict)]
+    moves=[finite(v.get("change_24h_pct")) for k,v in coins.items() if k!="BTC" and k not in stable_bases and isinstance(v,dict)
+           and (not v.get("venues") or "binance" in v["venues"])]
     moves=[x for x in moves if x is not None]
     negative=(sum(x<0 for x in moves)/len(moves)) if moves else None
     loss5=(sum(x<=-5 for x in moves)/len(moves)) if moves else None

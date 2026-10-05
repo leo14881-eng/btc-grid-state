@@ -59,7 +59,8 @@ def collect_evidence(scan,liq,review,systemic,previous,now,cfg,fetch_json=None):
     fetch_json=fetch_json or _get_json
     coins=(scan or {}).get("coins") or {}
     stable={"USDT","USDC","FDUSD","TUSD","USDP","DAI","BUSD"}
-    moves=[finite(v.get("change_24h_pct")) for a,v in coins.items() if a!="BTC" and a not in stable and isinstance(v,dict)]
+    moves=[finite(v.get("change_24h_pct")) for a,v in coins.items() if a!="BTC" and a not in stable and isinstance(v,dict)
+           and (not v.get("venues") or "binance" in v["venues"])]
     moves=[x for x in moves if x is not None]
     neg=sum(x<0 for x in moves)/len(moves) if moves else None
     loss5=sum(x<=-5 for x in moves)/len(moves) if moves else None

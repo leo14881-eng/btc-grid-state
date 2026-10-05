@@ -60,6 +60,8 @@ def main():
         f=fact_by.get(sym) or {}
         supply_fact=supply_by.get(sym) or {}
         coin=(scan.get("coins") or {}).get(sym) or {}
+        if sig.get("execution_supported") is False or (coin.get("venues") and "binance" not in coin["venues"]):
+            blockers.append("VENUE_SPECIFIC_EXECUTION_AND_MONITOR_NOT_INTEGRATED")
         snap=(liq.get("snapshots") or {}).get(sym) or {}
         # Consume the current Identity Audit directly. Do not require a second,
         # disconnected per-asset contract_verified flag in verified-facts.
@@ -106,7 +108,7 @@ def main():
         early_strength=(independent>=C["DISCOVERY_MIN_INDEPENDENT"] and ((rel1 or 0)>=C["MIN_REL_1H"] or (rel4 or 0)>=C["MIN_REL_4H"]) and score>=C["MIN_SCORE"])
         # One authoritative first-entry decision. Downstream V2 MUST consume this
         # action instead of independently re-deciding the same entry.
-        system_blockers={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","BTC_RELATIVE_SIGNAL_MISSING","ASSET_IDENTITY_SOURCE_UNAVAILABLE"}
+        system_blockers={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","BTC_RELATIVE_SIGNAL_MISSING","ASSET_IDENTITY_SOURCE_UNAVAILABLE","VENUE_SPECIFIC_EXECUTION_AND_MONITOR_NOT_INTEGRATED"}
         slip=finite((execution or {}).get("buy_slippage_bps")); rr=finite((execution or {}).get("estimated_rr"))
         execution_ready=bool(execution and slip is not None and slip<=C["MAX_SLIP_BPS"] and rr is not None and rr>=C["MIN_RR"])
         anchor=finite((history.get(sym) or {}).get("first_early_price"))

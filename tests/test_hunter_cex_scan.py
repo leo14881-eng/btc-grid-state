@@ -15,25 +15,38 @@ scan=importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(scan)
 
 class CexUniverseTests(unittest.TestCase):
-    def test_production_scan_never_calls_bybit(self):
+    def test_scan_records_missing_bybit_without_fabricating_coverage(self):
         row={"venue":"binance","pair":"ABCUSDT","base":"ABC",
              "price":1.0,"volume_24h_usdt":50000,"change_24h_pct":3}
         status={"active_pairs":1,"valid_pairs":1,"missing_or_invalid":[]}
         with tempfile.TemporaryDirectory() as folder:
-            with patch.object(scan,"OUT",pathlib.Path(folder)):
+            with patch.object(scan,"OUT",pathlib.Path(folder)),patch.object(scan,"HISTORY",pathlib.Path(folder)/"history.json"):
                 with patch.object(scan,"binance",return_value=([row],status)):
-                    with patch.object(scan,"bybit_from_authorized_region") as bybit:
+                    with patch.object(scan,"bybit_from_authorized_region",side_effect=RuntimeError("REGIONAL_SNAPSHOT_MISSING")) as bybit:
                         with patch.object(scan,"bybit_with_fallback") as fallback:
                             self.assertEqual(scan.main(),0)
-                            bybit.assert_not_called()
+                            bybit.assert_called_once()
                             fallback.assert_not_called()
             report=json.loads((pathlib.Path(folder)/
                                "hunter-cex-universe-run.json").read_text())
-            self.assertEqual(report["required_venues"],["binance"])
-            self.assertEqual(report["coverage_status"],"BINANCE_COMPLETE")
-            self.assertTrue(report["complete"])
-            self.assertEqual(set(report["venue_status"]),{"binance"})
-            self.assertNotIn("bybit",report["errors"])
+            self.assertEqual(report["required_venues"],["binance","bybit"])
+            self.assertEqual(report["coverage_status"],"BINANCE_ONLY_BYBIT_UNAVAILABLE")
+            self.assertFalse(report["complete"])
+            self.assertFalse(report["bybit_complete"])
+            self.assertEqual(report["errors"]["bybit"],"REGIONAL_SNAPSHOT_MISSING")
+
+    def test_scan_includes_bybit_only_spot_without_changing_binance_mark(self):
+        b={"venue":"binance","pair":"ABCUSDT","base":"ABC","price":1.,"volume_24h_usdt":1000,"change_24h_pct":2}
+        y=[{"venue":"bybit","pair":"ABCUSDT","base":"ABC","price":1.1,"volume_24h_usdt":2000,"change_24h_pct":3},
+           {"venue":"bybit","pair":"FLUIDUSDT","base":"FLUID","price":2.,"volume_24h_usdt":3000,"change_24h_pct":22}]
+        st={"active_pairs":1,"valid_pairs":1,"missing_or_invalid":[],"excluded_bstocks":["MSFTB"]}
+        with tempfile.TemporaryDirectory() as folder,patch.object(scan,"OUT",pathlib.Path(folder)),patch.object(scan,"HISTORY",pathlib.Path(folder)/"history.json"),patch.object(scan,"binance",return_value=([b],st)),patch.object(scan,"bybit_from_authorized_region",return_value=(y,{"active_pairs":2,"valid_pairs":2,"missing_or_invalid":[],"signal_complete":True,"captured_at_utc":"2026-10-05T12:00:00+00:00"})):
+            self.assertEqual(scan.main(),0)
+            report=json.loads((pathlib.Path(folder)/"hunter-cex-universe-run.json").read_text())
+        self.assertTrue(report["complete"])
+        self.assertEqual(report["coverage_status"],"BINANCE_BYBIT_COMPLETE")
+        self.assertEqual(report["coins"]["ABC"]["reference_price"],1.)
+        self.assertEqual(report["coins"]["FLUID"]["venues"],["bybit"])
 
     def test_pump_not_dropped_by_up_suffix(self):
         self.assertTrue(scan.valid("PUMP"))
@@ -146,6 +159,7 @@ class CexUniverseTests(unittest.TestCase):
                     direct.assert_not_called()
         self.assertEqual(loaded,rows)
         self.assertEqual(meta["source"],reg.SOURCE)
+        self.assertFalse(meta["signal_complete"])
 
     def test_cross_venue_union_and_existing_baseline(self):
         b={"venue":"binance","pair":"ABCUSDT","base":"ABC","price":1.03,"volume_24h_usdt":50000,"change_24h_pct":5}

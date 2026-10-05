@@ -62,9 +62,21 @@ def validate(snapshot,now,max_age_seconds=MAX_AGE_SECONDS):
                 raise ValueError("BYBIT_REGIONAL_INVALID_MARKET_VALUE")
         if row["price"]<=0 or row["volume_24h_usdt"]<0:
             raise ValueError("BYBIT_REGIONAL_INVALID_PRICE_OR_VOLUME")
+    signals=snapshot.get("early_signals") or {}
+    if not isinstance(signals,dict) or not set(signals).issubset({r["base"] for r in rows}):
+        raise ValueError("BYBIT_REGIONAL_SIGNAL_SCOPE_INVALID")
+    for base,signal in signals.items():
+        if (not isinstance(signal,dict) or signal.get("base")!=base or
+            signal.get("pair")!=base+"USDT" or signal.get("source_venue")!="bybit" or
+            signal.get("execution_supported") is not False or
+            signal.get("stage") not in ("EARLY","WATCH")):
+            raise ValueError("BYBIT_REGIONAL_SIGNAL_INVALID")
     return rows,{**status,"source":SOURCE,
                  "captured_at_utc":snapshot["captured_at_utc"],
-                 "egress_country":snapshot.get("egress_country")}
+                 "egress_country":snapshot.get("egress_country"),
+                 "signal_pairs":len(signals),
+                 "signal_failures":len(snapshot.get("signal_failures") or {}),
+                 "signal_complete":len(signals)==len(rows)-int(any(r["base"]=="BTC" for r in rows)) and not snapshot.get("signal_failures")}
 
 def load(path=DEFAULT,now=None):
     if now is None:now=dt.datetime.now(dt.timezone.utc)
@@ -79,19 +91,30 @@ def egress_country():
                     if "=" in line)
     return fields.get("loc")
 
-def collect(now=None,fetcher=None,country=None):
+def collect(now=None,fetcher=None,country=None,signal_fetcher=None):
     if now is None:now=dt.datetime.now(dt.timezone.utc)
     if country is None:country=egress_country()
     expected=os.getenv("HUNTER_BYBIT_RUNNER_COUNTRY","").upper()
     if not expected or country!=expected or country in ("US","CN"):
         raise RuntimeError("BYBIT_RUNNER_COUNTRY_NOT_CONFIRMED_OR_BLOCKED")
-    if fetcher is None:
+    live=fetcher is None
+    if live:
         import hunter_cex_scan
         fetcher=hunter_cex_scan.bybit_with_fallback
     rows,status=fetcher()
+    if signal_fetcher is None and live:
+        try:
+            from research.hunter_bybit_signal_capture import capture
+        except ModuleNotFoundError:
+            from hunter_bybit_signal_capture import capture
+        signal_fetcher=capture
+    signals,failures=signal_fetcher(rows) if signal_fetcher else ({},{})
+    signals={base:{**row,"source_observed_at_utc":now.isoformat()}
+             for base,row in signals.items()}
     payload={"schema":"hunter_bybit_regional_v1","source":SOURCE,
              "captured_at_utc":now.isoformat(),"egress_country":country,
-             "rows":rows,"venue_status":status}
+             "rows":rows,"venue_status":status,"early_signals":signals,
+             "signal_failures":failures}
     payload["snapshot_sha256"]=checksum(payload)
     validate(payload,now)
     return payload
@@ -104,6 +127,8 @@ def main():
     tmp.replace(DEFAULT)
     print(json.dumps({"regional_bybit_complete":True,
                       "pairs":len(snapshot["rows"]),
+                      "early_signals":len(snapshot["early_signals"]),
+                      "signal_failures":len(snapshot["signal_failures"]),
                       "egress_country":snapshot["egress_country"],
                       "captured_at_utc":snapshot["captured_at_utc"]}))
     return 0

@@ -53,10 +53,13 @@ def universe_time(scan,asset):
 def main():
  start,now,local_date=today_bounds(); scan=load(SCAN); uhist=load(UNIVERSE_HISTORY); hist=load(EARLY); v1=load(V1); v2=load(V2); review=load(REVIEW)
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
- candidates=[]
+ candidates=[];unscored_bybit=[]
  for a,c in (scan.get("coins") or {}).items():
   if a in excluded or not c.get("pairs"):continue
-  sym=c["pairs"][0].get("pair")
+  pair=next((p for p in c["pairs"] if p.get("venue")=="binance"),None)
+  if not pair:
+   unscored_bybit.append(a);continue
+  sym=pair.get("pair")
   if not sym or not sym.endswith("USDT"):continue
   candidates.append((float(c.get("change_24h_pct") or -999),a,sym))
  # Exact daily replay: inspect every crypto Universe pair. Bounded concurrency keeps
@@ -92,7 +95,8 @@ def main():
          "why_not_bought":None if v2buy else ((deferred or {}).get("reason") or ((first_decision(v2,a) or {}).get("reasons") or ["NO_DURABLE_V2_DECISION_EVIDENCE"]))},
    "post_detection":pd})
  out={"schema":"hunter_missed_opportunity_replay_v1","generated_at_utc":now.isoformat(),"date_local":local_date,"timezone":"Asia/Ho_Chi_Minh","mode":"READ_ONLY_NO_TRADING","top_n":TOP_N,
-  "selection":"All current Binance crypto-only USDT Universe assets ranked by Ho Chi Minh local-day open-to-intraday-high gain; no current-24h top-N prefilter",
+  "selection":"Binance spot assets ranked by local-day high; Bybit-only assets require separate Bybit candle replay",
+  "unscored_bybit_only":sorted(unscored_bybit),
   "limitations":["Universe first-seen is durable from hunter-universe-history deployment onward; older membership is never backdated.","EARLY first-seen predates this module only when durable hunter-early-signal-history evidence exists."],"rows":rows}
  OUT.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"\n")
  print(json.dumps({"date":out["date_local"],"leaders":[{"asset":x["asset"],"day_high_gain_pct":x["day"]["day_high_gain_pct"],"first_early":x["early"]["first_at_utc"],"v1":x["v1"]["buy_generated"],"v2":x["v2"]["buy_generated"],"why_not":x["v2"]["why_not_bought"]} for x in rows]},ensure_ascii=False))

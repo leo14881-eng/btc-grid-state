@@ -20,9 +20,12 @@ class ChainConsistencyTests(unittest.TestCase):
   self.assertEqual(eng.TRANCHES,(1000.,1000.,1000.));self.assertEqual(eng.TARGET,8)
   self.assertEqual(eng.PROTECT_ARM_PCT,2);self.assertEqual(eng.CAPITAL_POOL_USDT,20000)
   self.assertFalse(policy.POLICY['time_exit_enabled']);self.assertIsNone(policy.POLICY['max_open'])
- def capital_fixture(self,change=5,price=100,rr=1.7,stage='EARLY',anchor=100):
+ def capital_fixture(self,change=5,price=100,rr=1.7,stage='EARLY',anchor=100,venue=None):
   signal={'base':'X','stage':stage,'score':12,'independent_signal_count':3,'btc_relative_1h_pct':2,'btc_relative_4h_pct':3,'relative_acceleration_pct':1}
-  scan={'generation_id':'g','as_of_utc':NOW.isoformat(),'binance_complete':True,'coins':{'X':{'reference_price':price,'change_24h_pct':change}}}
+  if venue=='bybit':signal.update(source_venue='bybit',execution_supported=False)
+  coin={'reference_price':price,'change_24h_pct':change}
+  if venue:coin['venues']=[venue]
+  scan={'generation_id':'g','as_of_utc':NOW.isoformat(),'binance_complete':True,'coins':{'X':coin}}
   data={review.SCAN:scan,review.EARLY:{'scan_generation_id':'g','as_of_utc':NOW.isoformat(),'early':[signal] if stage=='EARLY' else [],'all_signals':[signal]},review.LIQ:{'scan_as_of_utc':NOW.isoformat(),'snapshots':{'X':{'as_of_utc':NOW.isoformat(),'spread_bps':10,'bid_depth_2pct_usdt':50000,'ask_depth_2pct_usdt':50000,'execution_scenarios':{'3000':{'estimated_rr':rr,'buy_slippage_bps':10}}}}},review.IDENTITY:{'scan_as_of_utc':NOW.isoformat(),'assets':{'X':{'capital_identity_pass':True}}},review.CAPITAL:{'capital_pool_usdt':20000,'open_cost_usdt':0,'pending_reservations_usdt':0},review.HISTORY:{'assets':{'X':{'first_early_price':anchor}}},review.ROOT/'hunter-shadow-portfolio.json':{'open_positions':[{'asset':'X'}]}}
   class Clock(dt.datetime):
    @classmethod
@@ -39,6 +42,11 @@ class ChainConsistencyTests(unittest.TestCase):
  def test_left_side_and_watch_held_asset(self):
   self.assertEqual(self.capital_fixture(change=-10)['executable_buy'],['X'])
   out=self.capital_fixture(stage='WATCH');self.assertEqual(len(out['candidates']),1);self.assertEqual(out['executable_buy'],[])
+ def test_bybit_only_early_cannot_pass_binance_execution_gate(self):
+  out=self.capital_fixture(venue='bybit')
+  self.assertEqual(out['executable_buy'],[])
+  self.assertEqual(out['candidates'][0]['trade_action'],'SYSTEM_BLOCKED')
+  self.assertIn('VENUE_SPECIFIC_EXECUTION_AND_MONITOR_NOT_INTEGRATED',out['candidates'][0]['blockers'])
  def test_expired_signal_cannot_add_or_momentum_exit(self):
   for price in (99,110):
    pos={'asset':'X','opened_at_utc':NOW.isoformat(),'tranches':[{'price':100,'notional_usdt':1000}],'mfe_pct':0}

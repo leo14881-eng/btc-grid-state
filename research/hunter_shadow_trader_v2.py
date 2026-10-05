@@ -92,7 +92,10 @@ def capital_equity(state):
  return None if CAPITAL_POOL_USDT is None else max(0.0,float(CAPITAL_POOL_USDT)+realized_net_pnl(state))
 def market_regime(scan):
  btc=((scan.get("coins") or {}).get("BTC") or {});b=finite(btc.get("change_24h_pct"))
- vals=[finite(x.get("change_24h_pct")) for k,x in (scan.get("coins") or {}).items() if k!="BTC"]
+ # Existing allocator thresholds were calibrated on Binance. Research-only
+ # Bybit additions must not silently alter ordinary capital utilization.
+ vals=[finite(x.get("change_24h_pct")) for k,x in (scan.get("coins") or {}).items()
+       if k!="BTC" and (not x.get("venues") or "binance" in x["venues"])]
  vals=[x for x in vals if x is not None];negative=(sum(x<0 for x in vals)/len(vals)) if vals else None
  if b is None or negative is None:regime="RISK_OFF"
  elif b<=-2 or negative>=.60:regime="RISK_OFF"
@@ -205,7 +208,8 @@ def discovery_decision(c):
 
 def market_shock(scan):
  btc=((scan.get("coins") or {}).get("BTC") or {}); b=finite(btc.get("change_24h_pct"))
- vals=[finite(x.get("change_24h_pct")) for x in (scan.get("coins") or {}).values()]
+ vals=[finite(x.get("change_24h_pct")) for x in (scan.get("coins") or {}).values()
+       if not x.get("venues") or "binance" in x["venues"]]
  vals=[x for x in vals if x is not None]; negative=(sum(x<0 for x in vals)/len(vals)) if vals else 0
  return bool(b is not None and b<=-2 and negative>=.60),{"btc_change_24h_pct":b,"negative_breadth":round(negative,4)}
 

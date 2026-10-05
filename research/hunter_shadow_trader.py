@@ -38,7 +38,10 @@ def load_early_into_review():
     by={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
     candidates=[]
     held={p.get("asset") for p in (engine.load(root/"hunter-shadow-portfolio.json").get("open_positions") or [])}
-    signals={x.get("base"):x for x in early.get("early") or []}
+    # Bybit-only EARLY signals remain research observations until their own
+    # executable order book and position-monitor market data are integrated.
+    signals={x.get("base"):x for x in early.get("early") or []
+             if x.get("execution_supported") is not False}
     signals.update({x.get("base"):x for x in early.get("all_signals") or [] if x.get("base") in held})
     for s in signals.values():
         a=s.get("base")
