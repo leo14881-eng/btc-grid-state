@@ -52,9 +52,8 @@ REVIEW_HOURS=tuple(C["REVIEW_HOURS"])
 DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"]
 CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"]
 DYNAMIC_RESERVE_USDT=3000.0
-RESERVE_BUY_MIN_RR=2.2
-RESERVE_BUY_MIN_REL_4H=0.0
-RESERVE_BUY_MIN_ACCEL=0.0
+HARD_CASH_FLOOR_PCT=0.05
+MARKET_UTILIZATION={"RISK_OFF":0.60,"NEUTRAL":0.75,"CONSTRUCTIVE":0.85,"STRONG":0.95}
 ADD_MIN_MATERIAL_IMPROVEMENT_PCT=0.75
 ADD_VOLATILITY_FRACTION=0.25
 ADD_MAX_DYNAMIC_IMPROVEMENT_PCT=3.0
@@ -89,27 +88,48 @@ def realized_net_pnl(state):
 def capital_equity(state):
  # Initial V2 principal compounds only with realized net PnL. Unrealized PnL never expands capacity.
  return None if CAPITAL_POOL_USDT is None else max(0.0,float(CAPITAL_POOL_USDT)+realized_net_pnl(state))
-def capital_available(state,amount,purpose="BUY"):
- equity=capital_equity(state)
- if equity is None:return True
- # Ordinary first entries must preserve the 3,000U dynamic reserve. Revalidated ADDs may compete for it.
- limit=equity if purpose in ("ADD","RESERVE_BUY") else max(0.0,equity-DYNAMIC_RESERVE_USDT)
- return used_capital(state)+amount<=limit+1e-9
-def reserve_buy_gate(e):
- # Thin capital-only gate: never changes Discovery/Research/SELL or the base executable BUY decision.
- reasons=[]
- rr=finite((e or {}).get("estimated_rr")); rel4=finite((e or {}).get("btc_rel_4h")); accel=finite((e or {}).get("rel_accel"))
- if rr is None or rr<RESERVE_BUY_MIN_RR:reasons.append("RESERVE_RR_BELOW_2_2")
- if rel4 is None or rel4<=RESERVE_BUY_MIN_REL_4H:reasons.append("RESERVE_BTC_REL_4H_NOT_POSITIVE")
- if accel is None or accel<=RESERVE_BUY_MIN_ACCEL:reasons.append("RESERVE_RELATIVE_ACCEL_NOT_POSITIVE")
- return (not reasons),(reasons or ["DYNAMIC_RESERVE_HIGH_CONVICTION_PASS"])
+def market_regime(scan):
+ btc=((scan.get("coins") or {}).get("BTC") or {});b=finite(btc.get("change_24h_pct"))
+ vals=[finite(x.get("change_24h_pct")) for k,x in (scan.get("coins") or {}).items() if k!="BTC"]
+ vals=[x for x in vals if x is not None];negative=(sum(x<0 for x in vals)/len(vals)) if vals else None
+ if b is None or negative is None:regime="RISK_OFF"
+ elif b<=-2 or negative>=.60:regime="RISK_OFF"
+ elif b<1 or negative>=.45:regime="NEUTRAL"
+ elif b<3 or negative>=.30:regime="CONSTRUCTIVE"
+ else:regime="STRONG"
+ return regime,{"btc_change_24h_pct":b,"negative_breadth":round(negative,4) if negative is not None else None,"max_utilization":MARKET_UTILIZATION[regime]}
 
-def capital_snapshot(state):
+def capital_limit(state,scan=None):
  equity=capital_equity(state)
- used=used_capital(state)
- if equity is None:return {"initial_capital_usdt":None,"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":None,"used_capital_usdt":round(used,2),"dynamic_reserve_usdt":DYNAMIC_RESERVE_USDT,"ordinary_buy_limit_usdt":None,"ordinary_buy_available_usdt":None,"total_available_usdt":None}
- ordinary=max(0.0,equity-DYNAMIC_RESERVE_USDT)
- return {"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"dynamic_reserve_usdt":DYNAMIC_RESERVE_USDT,"ordinary_buy_limit_usdt":round(ordinary,2),"ordinary_buy_available_usdt":round(max(0.0,ordinary-used),2),"total_available_usdt":round(max(0.0,equity-used),2)}
+ if equity is None:return None
+ regime,meta=market_regime(scan or {});util=min(meta["max_utilization"],1-HARD_CASH_FLOOR_PCT)
+ return max(0.0,equity*util)
+
+def capital_available(state,amount,purpose="BUY",scan=None):
+ limit=capital_limit(state,scan)
+ return True if limit is None else used_capital(state)+amount<=limit+1e-9
+
+def opportunity_priority(e,kind):
+ e=e or {};score=finite(e.get("score")) or 0.0;rr=finite(e.get("estimated_rr")) or 0.0
+ r1=finite(e.get("btc_rel_1h")) or 0.0;r4=finite(e.get("btc_rel_4h")) or 0.0;acc=finite(e.get("rel_accel")) or 0.0
+ friction=((finite(e.get("spread_bps")) or 0.0)+(finite(e.get("buy_slippage_bps")) or 0.0))/100.0
+ return round(score+2*rr+0.25*r1+0.5*r4+0.5*acc-friction-(0.25 if kind=="ADD" else 0.0),6)
+
+def marginal_capital_gate(state,amount,e,kind,scan):
+ equity=capital_equity(state)
+ if equity is None:return True,["CAPITAL_UNBOUNDED_TEST_MODE"]
+ regime,meta=market_regime(scan);after=(used_capital(state)+amount)/equity if equity else 1.0;reasons=[]
+ if after>min(meta["max_utilization"],1-HARD_CASH_FLOOR_PCT)+1e-12:reasons.append("MARKET_REGIME_CAPACITY_LIMIT")
+ rr=finite((e or {}).get("estimated_rr"));r1=finite((e or {}).get("btc_rel_1h"));r4=finite((e or {}).get("btc_rel_4h"));acc=finite((e or {}).get("rel_accel"))
+ if after>0.60 and (rr is None or rr<1.8 or r4 is None or r4<0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_60PCT")
+ if after>0.75 and (rr is None or rr<2.2 or r4 is None or r4<=0 or acc is None or acc<=0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_75PCT")
+ if after>0.85 and (rr is None or rr<2.6 or r1 is None or r1<=0 or r4 is None or r4<0.5 or acc is None or acc<=0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_85PCT")
+ return (not reasons),(reasons or ["PORTFOLIO_CAPITAL_ALLOCATOR_PASS",f"MARKET_REGIME_{regime}",f"POST_TRADE_UTILIZATION_{after:.4f}"])
+
+def capital_snapshot(state,scan=None):
+ equity=capital_equity(state);used=used_capital(state);regime,meta=market_regime(scan or {});limit=capital_limit(state,scan)
+ if equity is None:return {"initial_capital_usdt":None,"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":None,"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"max_deployable_usdt":None,"allocator_available_usdt":None}
+ return {"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"max_deployable_usdt":round(limit,2),"allocator_available_usdt":round(max(0.0,limit-used),2),"total_cash_usdt":round(max(0.0,equity-used),2)}
 
 def load(p,d=None):
  try:return json.loads(p.read_text())
@@ -672,7 +692,7 @@ def quarantine_non_crypto_history(state,excluded):
  report["assets"]=sorted(report["assets"])
  return report
 
-def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
+def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_proposals=None):
  """Manage open positions only. Ordinary deterioration never forces a loss exit."""
  btc=btc or price(scan,"BTC");cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
@@ -690,8 +710,12 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   if health!="STRONG":act="HOLD"
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
-   if capital_available(state,next_amount,"ADD"):add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
-   else:record(state,pos,"HOLD",now,["CAPITAL_POOL_FULL_ADD_DEFERRED"],e,p)
+   if capital_proposals is not None:
+    capital_proposals.append({"kind":"ADD","asset":pos["asset"],"pos":pos,"price":p,"evidence":e,"reasons":list(reasons),"amount":next_amount})
+    record(state,pos,"HOLD",now,["CAPITAL_ALLOCATION_PENDING"]+reasons,e,p)
+   elif capital_available(state,next_amount,"ADD",scan):
+    add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
+   else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
   protection=profit_protection(pos,p);pnl=net_pnl(pos,p);exit_reason=None;exit_reasons=None
   if health=="HARD_INVALIDATION":exit_reason="HARD_INVALIDATION";exit_reasons=health_reasons
@@ -711,6 +735,22 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
    record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
  state["open_positions"]=still;compact_closed_history(state);return state
+
+def execute_capital_proposals(state,proposals,scan,now):
+ executed_buys=0
+ ranked=sorted(proposals,key=lambda x:opportunity_priority(x.get("evidence"),x.get("kind")),reverse=True)
+ for q in ranked:
+  kind=q["kind"];pos=q["pos"];amount=q["amount"];e=q["evidence"];p=q["price"]
+  if kind=="ADD" and pos not in state.get("open_positions",[]):continue
+  ok,gate_reasons=marginal_capital_gate(state,amount,e,kind,scan)
+  if not ok:
+   if kind=="BUY" and q.get("candidate") is not None:record_deferred_buy(state,q["candidate"],now,p,e)
+   record(state,pos if kind=="ADD" else {"asset":q["asset"],"tranches":[]},"HOLD",now,gate_reasons+["CAPITAL_ALLOCATOR_WAIT"],e,p);continue
+  if kind=="ADD":
+   add(pos,p,e,now);record(state,pos,"ADD",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"ADD",now,p,"PORTFOLIO_ALLOCATOR_ADD")
+  else:
+   add(pos,p,e,now);record(state,pos,"BUY",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);executed_buys+=1
+ return executed_buys
 
 def opportunity_summary(rows,now=None):
  def vals(k):return [float(x[k]) for x in rows if finite(x.get(k)) is not None]
@@ -743,7 +783,7 @@ def opportunity_summary(rows,now=None):
   "potential_premature_exit_count":sum(x.get("exit_evaluation")=="POTENTIAL_PREMATURE_EXIT" for x in rows),
   "profit_giveback_count":sum(x.get("exit_evaluation")=="PROFIT_GIVEBACK" for x in rows),"full_opportunity_mfe_distribution":dist}
 
-def build_summary(state,now,guard_status="NORMAL"):
+def build_summary(state,now,guard_status="NORMAL",scan=None):
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
  for x in state.get("open_positions") or []:
@@ -761,8 +801,8 @@ def build_summary(state,now,guard_status="NORMAL"):
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
    "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":("AFTER_RESEARCH_DISCOVERY_ADMISSION" if ENTRY_MODE=="DISCOVERY" else "ONLY_AFTER_FULL_EXECUTABLE_DECISION_GATE"),"bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard_status},
-   "capital_management":capital_snapshot(state),
-   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL","dynamic_reserve_usdt":DYNAMIC_RESERVE_USDT,"ordinary_buy_preserves_dynamic_reserve":True,"revalidated_add_may_use_dynamic_reserve":True,"realized_net_pnl_compounds_equity":True,"unrealized_pnl_expands_equity":False},
+   "capital_management":capital_snapshot(state,scan),
+   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"CAPITAL_ALLOCATOR_WAIT","buy_add_compete_same_queue":True,"arrival_order_has_no_capital_priority":True,"market_regime_controls_utilization":True,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"realized_net_pnl_compounds_equity":True,"unrealized_pnl_expands_equity":False},
    "position_lifecycle":{"degrade_confirm_cycles":DEGRADE_CONFIRM_CYCLES,"ordinary_thesis_invalidation_loss_exit":False,"hard_invalidation_may_exit_at_loss":True,"profit_stagnation_exit":True,"reentry_requires_new_move":True,"max_hot_closed_positions":MAX_CLOSED_HOT}},
   "opportunity_evaluation":cohorts,"capital_authority":"NONE_SHADOW_ONLY"}
 
@@ -781,7 +821,8 @@ def main():
  if not excluded:raise SystemExit("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
  quarantine_non_crypto_history(state,excluded)
  refresh_closed_observations(state,now,lambda asset:price(scan,asset))
- manage_existing_positions(state,scan,review,liq,supply,now,btc)
+ capital_proposals=[]
+ manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
  open_assets={x["asset"] for x in state["open_positions"]};buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
  for c in ranked:
@@ -806,15 +847,9 @@ def main():
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
   entry_reasons=(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons)
-  if not capital_available(state,TRANCHES[0],"BUY"):
-   reserve_ok,reserve_reasons=reserve_buy_gate(e)
-   if not (reserve_ok and capital_available(state,TRANCHES[0],"RESERVE_BUY")):
-    # Base BUY already passed. A reserve miss is a capital wait, never a strategy rejection.
-    record_deferred_buy(state,c,now,p,e)
-    wait_reasons=(["CAPITAL_RESERVE_WAIT"]+reserve_reasons if capital_available(state,TRANCHES[0],"RESERVE_BUY") else ["BUY_BUT_NO_CAPITAL"])
-    record(state,{"asset":a,"tranches":[]},"WAIT",now,wait_reasons+["NO_LOSS_MAKING_ROTATION"],e,p);continue
-   entry_reasons=list(entry_reasons)+reserve_reasons
-  add(pos,p,e,now);record(state,pos,"BUY",now,entry_reasons,e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);open_assets.add(a);buy_count+=1
+  capital_proposals.append({"kind":"BUY","asset":a,"pos":pos,"price":p,"evidence":e,"reasons":list(entry_reasons),"amount":TRANCHES[0],"candidate":c})
+  open_assets.add(a)
+ buy_count=execute_capital_proposals(state,capital_proposals,scan,now)
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
  # Trade events and positions are durable audit history. High-frequency HOLD/REJECT
  # decisions are diagnostic only and must not make the authoritative portfolio grow forever.
@@ -828,7 +863,7 @@ def main():
   state["event_history_truncated"]=int(state.get("event_history_truncated") or 0)+len(state["events"])-MAX_EVENT_HISTORY
   state["events"]=state["events"][-MAX_EVENT_HISTORY:]
  state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();state["last_cycle_generation_id"]=scan["generation_id"];state["schema"]="hunter_shadow_v2_portfolio_v2";state["overfilter_guard_status"]=guard["status"]
- summary=build_summary(state,now,guard.get("status") or "NORMAL")
+ summary=build_summary(state,now,guard.get("status") or "NORMAL",scan)
  atomic_json_write(STATE,state);atomic_json_write(SUMMARY,summary)
  print(json.dumps({"open":[x["asset"] for x in state["open_positions"]],"closed":len(state.get("closed_positions") or []),"decisions":len(state["decisions"]),"summary":summary},ensure_ascii=False))
 if __name__=="__main__":main()
