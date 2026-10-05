@@ -42,7 +42,7 @@ def configure_lane(v1_mode):
  if v1_mode:
   v1.configure_v1();return
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"];eng.ENTRY_MODE=LANES["V2"]["entry_mode"];eng.DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"];eng.DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"];eng.STRATEGY_ID=LANES["V2"]["strategy"];eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
-def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None):
+def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None):
  state=load(path);excluded=set(excluded or [])
  # Both lanes get their own bounded observation budget in this shared process.
  eng._opportunity_backfill_requests=0
@@ -69,7 +69,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
- eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=scan))
+ eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan)))
  return {"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
 def refresh_management_evidence(states,market,review,liq,now):
  """Refresh bounded rotating holdings, including names no longer EARLY. No entry path."""
@@ -128,7 +128,8 @@ def main():
  if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
  review,liq,refresh=refresh_management_evidence(states,market,review,liq,now)
- results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded)]
+ regime_scan=load(UNIVERSE)
+ results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan)]
  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()
