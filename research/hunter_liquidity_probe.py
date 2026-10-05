@@ -12,6 +12,10 @@ import pathlib
 import urllib.parse
 import urllib.request
 try:
+    from research import hunter_market as markets
+except ModuleNotFoundError:
+    import hunter_market as markets
+try:
     from research.hunter_execution_cost import estimate
 except ModuleNotFoundError as exc:
     if exc.name != 'research':
@@ -83,7 +87,8 @@ def targets(dossiers,scan,early=None):
         for sym in names:
             if n>=quota:break
             coin=coins.get(sym) or {}
-            pairs=[p for p in coin.get("pairs") or [] if p.get("venue")=="binance"]
+            venue,_=markets.binding(coin)
+            pairs=[p for p in coin.get("pairs") or [] if p.get("venue")==venue]
             if not pairs or sym in seen:continue
             pair=max(pairs,key=lambda p:finite(p.get("volume_24h_usdt")) or 0)
             selected.append((sym,pair["pair"],lane))
@@ -97,12 +102,22 @@ def build(scan,dossiers,fetch,now,early=None):
     if (now-dt.datetime.fromisoformat(scan["as_of_utc"])).total_seconds()>7200:
         raise ValueError("STALE_SCAN")
     records={};failures={}
-    for sym,pair,lane in targets(dossiers,scan,early):
-        url=BN+"/api/v3/depth?"+urllib.parse.urlencode({"symbol":pair,"limit":100})
+    selected=targets(dossiers,scan,early);raw_books={}
+    groups={}
+    for sym,pair,lane in selected:
+        venue,_=markets.binding((scan.get("coins") or {}).get(sym))
+        groups.setdefault(venue,[]).append(pair)
+    for venue,pairs in groups.items():
+        found,errors=markets.adapter(venue,fetch).books(pairs)
+        raw_books.update(found)
+        for sym,pair,lane in selected:
+            if pair in errors:failures[sym]=errors[pair]
+    for sym,pair,lane in selected:
         try:
-            book=fetch(url)
+            if pair not in raw_books:continue
+            book=raw_books[pair]
             snapshot=measure(book,dt.datetime.now(dt.timezone.utc))
-            snapshot.update(pair=pair,venue="binance",lane=lane)
+            snapshot.update(pair=pair,venue=book["venue"],lane=lane)
             snapshot["execution_scenarios"]={}
             for amount in (2000,3000,4000):
                 try:
@@ -119,7 +134,8 @@ def build(scan,dossiers,fetch,now,early=None):
             "successful_count":len(records),"failures":failures,
             "snapshots":records,"capital_authority":"NONE__OFFICIAL_FACTS_AND_PORTFOLIO_GATES_SEPARATE"}
 
-def live_fetch(url):
+def live_fetch(url,body=None):
+    if body is not None:return markets.request(url,body)
     req=urllib.request.Request(url,headers={"User-Agent":"hunter-liquidity-probe/1.0","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=6) as response:
         return json.load(response)

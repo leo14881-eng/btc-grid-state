@@ -6,6 +6,7 @@ from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
 from research import hunter_liquidity_probe as books
 from research import hunter_leading_risk as leading
+from research import hunter_market as markets
 from research.hunter_policy import C,LANES,VERSION,stamp
 from concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results");BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
@@ -37,6 +38,24 @@ def batch_market(wanted):
   except (TypeError,ValueError):continue
   if math.isfinite(p) and p>0 and math.isfinite(ch):out[a]={"reference_price":p,"change_24h_pct":ch}
  return out
+def merge_bound_markets(states,market):
+ """One quote batch per venue; failures never relabel another venue's marks."""
+ needed={markets.binding(position=p)[0] for st in states for p in (st.get("open_positions") or [])+(st.get("closed_positions") or []) if p.get("asset") and not p.get("observation_complete")}
+ failures={}
+ for row in market.values():
+  row.setdefault("venue_prices",{})["binance"]=row.get("reference_price")
+  row["venues"]=["binance"]
+ with ThreadPoolExecutor(max_workers=min(4,max(1,len(needed)))) as executor:
+  tasks={executor.submit(markets.adapter(v).quotes):v for v in needed if v!="binance"}
+  for future in as_completed(tasks):
+   venue=tasks[future]
+   try:
+    for pair,quote in future.result().items():
+     asset=pair[:-4];row=market.setdefault(asset,{"reference_price":quote["reference_price"],"change_24h_pct":quote["change_24h_pct"],"venues":[]})
+     row.setdefault("venue_prices",{})[venue]=quote["reference_price"]
+     if venue not in row["venues"]:row["venues"].append(venue)
+   except Exception as exc:failures[venue]=type(exc).__name__+":"+str(exc)[:120]
+ return market,failures
 def v1_review():
  try:
   _,review=v1.load_early_into_review();return review
@@ -67,7 +86,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  # Closed positions remain observation subjects through SELL+72h. Live marks may
  # extend the all-time opportunity peak; exact horizon peaks are reconstructed by
  # the bounded historical backfill, never inferred from a late current price.
- eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"))
+ eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"),position_price=lambda pos:markets.mark(market.get(pos["asset"]) or {},pos))
  if len(state.get("decisions") or [])>eng.MAX_DECISION_HISTORY:
   n=len(state["decisions"])-eng.MAX_DECISION_HISTORY;state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+n;state["decisions"]=state["decisions"][-eng.MAX_DECISION_HISTORY:]
  if len(state.get("events") or [])>eng.MAX_EVENT_HISTORY:
@@ -87,17 +106,32 @@ def refresh_management_evidence(states,market,review,liq,now):
  previous=load(OUT);cursor=int(previous.get("evidence_refresh_cursor") or 0)
  count=min(C["MONITOR_EVIDENCE_BATCH"],len(wanted))
  selected=[wanted[(cursor+i)%len(wanted)] for i in range(count)] if wanted else []
+ bound={}
+ for st in states:
+  for pos in st.get("open_positions") or []:
+   if pos.get("asset") in selected:bound.setdefault(pos["asset"],markets.binding(position=pos))
  pairs=[a+"USDT" for a in selected]+["BTCUSDT"]
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
  current={};failures={}
  try:
   r1=signals.rolling(pairs,"1h");r4=signals.rolling(pairs,"4h");micro=signals.micro(pairs)
   for a in selected:
+   if bound[a][0]!="binance":continue
    row=signals.score_row(a+"USDT",a,r1,r4,r1.get("BTCUSDT"),r4.get("BTCUSDT"),micro)
    if row:current[a]=row
    else:failures[a]="SIGNAL_REFRESH_FAILED"
  except Exception as exc:
   failures.update({a:"SIGNAL_REFRESH_FAILED:"+type(exc).__name__ for a in selected})
+ groups={}
+ for a in selected:
+  venue,pair=bound[a]
+  if venue!="binance":groups.setdefault(venue,[]).append(pair)
+ for venue,pairs in groups.items():
+  try:
+   current.update(markets.adapter(venue).signals(pairs,now))
+   for pair in pairs:
+    if pair[:-4] not in current:failures[pair[:-4]]="SIGNAL_REFRESH_FAILED"
+  except Exception as exc:failures.update({p[:-4]:"SIGNAL_REFRESH_FAILED:"+type(exc).__name__ for p in pairs})
  by={x.get("asset"):x for x in review.get("candidates") or []}
  def book(a):
   raw=books.live_fetch(books.BN+"/api/v3/depth?symbol="+a+"USDT&limit=100")
@@ -106,8 +140,23 @@ def refresh_management_evidence(states,market,review,liq,now):
    try:row["execution_scenarios"][str(amount)]=books.estimate(raw,amount)
    except ValueError:pass
   return row
+ other_books={}
+ for venue,pairs in groups.items():
+  found,errs=markets.adapter(venue).books(pairs)
+  for pair,raw in found.items():
+   row=books.measure(raw,now);row.update(venue=venue,pair=pair,execution_scenarios={})
+   for amount in (1000,2000,3000,4000):
+    try:row["execution_scenarios"][str(amount)]=books.estimate(raw,amount)
+    except ValueError:pass
+   other_books[pair[:-4]]=row
+  failures.update({p[:-4]:"BOOK_REFRESH_FAILED:"+e for p,e in errs.items()})
+ def bound_book(a):
+  venue,pair=bound[a]
+  if venue=="binance":return {**book(a),"venue":venue,"pair":pair}
+  if a not in other_books:raise ValueError("BOOK_REFRESH_FAILED")
+  return other_books[a]
  with ThreadPoolExecutor(max_workers=16) as executor:
-  futures={executor.submit(book,a):a for a in selected if a in current}
+  futures={executor.submit(bound_book,a):a for a in selected if a in current}
   for future in as_completed(futures):
    a=futures[future]
    try:
@@ -132,8 +181,7 @@ def main():
   eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False})
   print(json.dumps({"assets":[],"status":"NO_OPEN_POSITIONS"}))
   return
- market=batch_market(wanted);missing=sorted(set(wanted)-set(market))
- if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
+ market,venue_failures=merge_bound_markets(states,batch_market(wanted));missing=sorted(set(wanted)-set(market))
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
  review,liq,refresh=refresh_management_evidence(states,market,review,liq,now)
  persisted_universe=load(UNIVERSE)
@@ -155,6 +203,6 @@ def main():
               "capital_authority":"NONE_SHADOW_ONLY"}
  eng.atomic_json_write(LEADING,leading_doc)
  results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan,risk_evidence),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan,risk_evidence)]
- eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
+ eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"VENUE_REGISTRY_BATCH_QUOTES","missing_marks":missing,"venue_failures":venue_failures,"scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()

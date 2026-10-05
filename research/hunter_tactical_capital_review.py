@@ -60,7 +60,7 @@ def main():
         f=fact_by.get(sym) or {}
         supply_fact=supply_by.get(sym) or {}
         coin=(scan.get("coins") or {}).get(sym) or {}
-        if sig.get("execution_supported") is False or (coin.get("venues") and "binance" not in coin["venues"]):
+        if sig.get("execution_supported") is False and sig.get("shadow_market_supported") is not True:
             blockers.append("VENUE_SPECIFIC_EXECUTION_AND_MONITOR_NOT_INTEGRATED")
         snap=(liq.get("snapshots") or {}).get(sym) or {}
         # Consume the current Identity Audit directly. Do not require a second,

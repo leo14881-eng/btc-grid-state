@@ -41,7 +41,7 @@ def load_early_into_review():
     # Bybit-only EARLY signals remain research observations until their own
     # executable order book and position-monitor market data are integrated.
     signals={x.get("base"):x for x in early.get("early") or []
-             if x.get("execution_supported") is not False}
+             if x.get("execution_supported") is not False or x.get("shadow_market_supported") is True}
     signals.update({x.get("base"):x for x in early.get("all_signals") or [] if x.get("base") in held})
     for s in signals.values():
         a=s.get("base")

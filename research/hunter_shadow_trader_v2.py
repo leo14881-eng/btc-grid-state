@@ -4,10 +4,12 @@ import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
+ from research import hunter_market as markets
 except ModuleNotFoundError as exc:
  if exc.name != 'research':raise
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  import hunter_tail_risk as tail
+ import hunter_market as markets
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
@@ -181,7 +183,7 @@ def evidence(c,liq,supply):
   "buy_slippage_bps":finite(ex.get("buy_slippage_bps")),"estimated_rr":finite(ex.get("estimated_rr")),
   "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),"supply_confirmed_major_risk":confirmed_supply_risk(sr),
   "return_1h":finite(s.get("return_1h_pct")),"return_4h":finite(s.get("return_4h_pct")),
-  "blockers":hard_blockers(c),"signal_evidence":(c or {}).get("signal_evidence"),"book_observed_at_utc":l.get("as_of_utc")}
+  "blockers":hard_blockers(c),"signal_evidence":(c or {}).get("signal_evidence"),"book_observed_at_utc":l.get("as_of_utc"),"book_venue":l.get("venue"),"book_pair":l.get("pair"),"signal_venue":s.get("source_venue") or "binance"}
 def bybit_channel(bybit,a):
  spot=bybit.get("spot") or {}; alpha=bybit.get("alpha") or {}; a=str(a or "").upper()
  spot_v=(a in set(spot.get("symbols") or [])) if str(spot.get("status") or "").startswith("OK") else None
@@ -340,6 +342,27 @@ def binance_kline_bars(asset,start,end,interval="5m"):
   return out or None
  except Exception:return None
 
+def venue_kline_bars(venue,pair,start,end):
+ global _opportunity_backfill_requests
+ if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:return None
+ try:
+  # Bybit returns newest-first. Bound each request to the earliest not-yet-read
+  # 1000-candle window so history never silently skips the entry period.
+  cursor=((int(start.timestamp()*1000)+299999)//300000)*300000;stop=int(end.timestamp()*1000);out=[]
+  provider=markets.adapter(venue)
+  while cursor<=stop:
+   if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:return None
+   _opportunity_backfill_requests+=1
+   window=min(stop,cursor+999*300000)
+   rows=provider.candles(pair,5,1000,start=cursor,end=window)
+   if not rows:break
+   valid=[r for r in rows if cursor<=int(r[0])<=window]
+   if not valid:return None
+   out.extend((int(r[0]),int(r[6]),finite(r[2])) for r in valid if finite(r[2]) is not None)
+   cursor=window+1
+  return out or None
+ except Exception:return None
+
 def peak_from_bars(bars,end=None):
  if not bars:return None
  stop=int(end.timestamp()*1000) if end else None
@@ -369,8 +392,13 @@ def backfill_opportunity_history(pos,now):
   except Exception:pass
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
   pos["data_provenance"]="BACKFILL_PENDING";return pos
- bars=binance_kline_bars(pos.get("asset"),opened,end);buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
+ venue,pair=markets.binding(position=pos)
+ bars=binance_kline_bars(pos.get("asset"),opened,end) if venue=="binance" else venue_kline_bars(venue,pair,opened,end)
+ buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
  full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed or end)
+ if venue!="binance":
+  for item in (full,hold):
+   if item:item["source"]=venue.upper()+"_SPOT_KLINES_5M_COMPLETED_ONLY"
  if not bars or not full or not hold or not buy:
   if pos.get("data_provenance")!="HISTORICAL_BACKFILL":
    pos["data_provenance"]="INSUFFICIENT_HISTORY"
@@ -415,14 +443,14 @@ def refresh_post_exit_status(pos,now):
   "max_return_from_sell_pct":max((obs[h]["max_return_from_sell_pct"] for h in completed),default=None),
   "source":"HISTORICAL_BACKFILL" if completed else None}
 
-def refresh_closed_observations(state,now,market_price=None):
+def refresh_closed_observations(state,now,market_price=None,position_price=None):
  """Fair, bounded backfill across closed trades; never creates trade events."""
  closed=state.get("closed_positions") or []
  if not closed:return
  for pos in closed:
   if pos.get("observation_complete"):
    refresh_post_exit_status(pos,now);continue
-  p=market_price(pos.get("asset")) if market_price else None
+  p=position_price(pos) if position_price else market_price(pos.get("asset")) if market_price else None
   if p:update_post_exit(pos,p,now)
   else:refresh_post_exit_status(pos,now)
  cursor=int(state.get("observation_backfill_cursor") or 0)%len(closed)
@@ -670,6 +698,8 @@ def trade_event(state,pos,action,now,p,reason=None,pnl=None):
  event={"type":EVENT_PREFIX+"_"+action,"at":now.isoformat(),"asset":pos["asset"],"shadow_id":pos.get("shadow_id"),"price":p,
   "tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0}
  if reason is not None:event["reason"]=reason
+ event["execution_venue"],event["execution_pair"]=markets.binding(position=pos)
+ event["fill_model"]="SHADOW_REFERENCE_PRICE_WITH_CONFIGURED_FEES_AND_SLIPPAGE"
  if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
  state["events"].append(event)
  if action=="BUY":
@@ -735,7 +765,8 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
  still=[]
  for pos in state["open_positions"]:
-  p=price(scan,pos["asset"])
+  venue,pair=markets.binding(position=pos)
+  p=markets.mark((scan.get("coins") or {}).get(pos["asset"]) or {},pos)
   if not p:record(state,pos,"HOLD",now,["CURRENT_PRICE_MISSING"],{},pos.get("last_price"));still.append(pos);continue
   c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
@@ -745,6 +776,9 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   health,health_reasons=position_health(pos,e,now,systemic_level,confirmed_systemic)
   signal_fresh=fresh((e.get("signal_evidence") or {}).get("observed_at_utc"),now)
   book_fresh=fresh(e.get("book_observed_at_utc"),now)
+  venue_matched=e.get("book_venue") in (None,venue) if venue=="binance" else e.get("book_venue")==venue and e.get("book_pair")==pair
+  if not venue_matched or (e.get("signal_venue") and e["signal_venue"]!=venue):
+   record(state,pos,"HOLD",now,["POSITION_MARKET_EVIDENCE_VENUE_MISMATCH"],e,p);still.append(pos);continue
   if not (signal_fresh and book_fresh):act="HOLD";reasons.append("MANAGEMENT_EVIDENCE_STALE_OR_MISSING")
   if health!="STRONG":act="HOLD"
   if tail.risk_blocks_new(state):
@@ -770,6 +804,8 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    if runner:record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
    else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
   if exit_reason:
+   if venue!="binance" and not (book_fresh and venue_matched):
+    record(state,pos,"HOLD",now,["EXIT_EXECUTION_EVIDENCE_UNAVAILABLE",exit_reason],e,p);still.append(pos);continue
    notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":exit_reason,"weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
    if exit_reason=="PROFIT_PROTECTION":pos["profit_protection"]=protection
@@ -867,7 +903,7 @@ def main():
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
  if not excluded:raise SystemExit("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
  quarantine_non_crypto_history(state,excluded)
- refresh_closed_observations(state,now,lambda asset:price(scan,asset))
+ refresh_closed_observations(state,now,lambda asset:price(scan,asset),position_price=lambda pos:markets.mark((scan.get("coins") or {}).get(pos["asset"]) or {},pos))
  capital_proposals=[]
  manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
  open_assets={x["asset"] for x in state["open_positions"]};buy_count=0
@@ -876,6 +912,15 @@ def main():
   a=c.get("asset")
   if not a or a in open_assets:continue
   p=price(scan,a)
+  venue,pair=markets.binding((scan.get("coins") or {}).get(a))
+  pair=pair or a+"USDT"
+  if venue!="binance":
+   snapshot=liq_for(liq,a)
+   if not markets.shadow_supported(venue,scan) or snapshot.get("venue")!=venue or snapshot.get("pair")!=pair or not fresh(snapshot.get("as_of_utc"),now):
+    record(state,{"asset":a,"tranches":[]},"WAIT",now,["VENUE_EXECUTION_DATA_UNAVAILABLE"],{},p)
+    state.setdefault("market_blocked_samples",[]).append({"asset":a,"generation_id":scan.get("generation_id"),"at_utc":now.isoformat(),"reason":"VENUE_EXECUTION_DATA_UNAVAILABLE"})
+    state["market_blocked_samples"]=state["market_blocked_samples"][-MAX_DEFERRED_HISTORY:]
+    continue
   if tail.risk_blocks_new(state):
    e=evidence(c,liq,supply);risk_reasons=["SYSTEMIC_RISK_ENTRY_FREEZE",str((state.get("systemic_risk") or {}).get("level") or "UNKNOWN")]
    record(state,{"asset":a,"tranches":[]},"RISK_BLOCKED" if ENTRY_MODE=="DISCOVERY" else "WAIT",now,risk_reasons,e,p)
@@ -897,6 +942,7 @@ def main():
    else: reject_reasons=reasons
    dummy={"asset":a,"tranches":[]};record(state,dummy,act if act in ("WAIT","SYSTEM_BLOCKED") else "REJECT",now,reject_reasons,e,p);continue
   pos={"shadow_id":ID_PREFIX+"-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
+   "execution_venue":venue,"execution_pair":pair,"market_type":"spot",
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"holding_mfe_pct":0.,"holding_peak_price":p,"holding_peak_at_utc":now.isoformat(),"full_opportunity_mfe_pct":0.,"full_opportunity_peak_price":p,"full_opportunity_peak_at_utc":now.isoformat(),"observation_complete":False,"sample_cohort":("NEW_VERSION_SAMPLE" if now>=NEW_VERSION_CUTOFF_UTC else "MIGRATION_SAMPLE"),"data_provenance":"LIVE_OBSERVATION","last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),

@@ -1,0 +1,29 @@
+name: Hunter Market Adapter Isolated Validation
+on:
+  push:
+    branches: ['codex/hunter-market-adapters-isolated']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hunter-market-adapter-isolated-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Existing Hunter tests plus isolated adapter fixtures
+        env:
+          HUNTER_VENUE_EXECUTION_ADAPTERS_ENABLED: '0'
+        run: python -m unittest discover -s tests -p 'test_hunter*.py' -v
+      - name: Worker route regression and new adapter routes
+        run: |
+          node tests/test_hunter_bybit_proxy.mjs
+          node tests/test_hunter_market_proxy.mjs
+      - name: Ensure no state mutation was published
+        run: git diff --exit-code -- research/results

@@ -8,7 +8,7 @@ def partition(early, universe):
     for signal in early.get("early") or []:
         base=signal.get("base")
         if not base or base in excluded:continue
-        if signal.get("execution_supported") is False:
+        if signal.get("execution_supported") is False and signal.get("shadow_market_supported") is not True:
             venues=set(((universe.get("coins") or {}).get(base) or {}).get("venues") or [])
             assert signal.get("source_venue")=="bybit" and venues=={"bybit"}, "V1_UNSUPPORTED_SIGNAL_SCOPE_INVALID"
             assert recorded.get(base)==signal, "V1_EARLY_RESEARCH_SAMPLE_MISSING"

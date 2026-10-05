@@ -11,6 +11,7 @@ async function upstream(path, params, signal) {
   });
   if (!response.ok) throw new Error("BYBIT_HTTP_" + response.status);
   const data = await response.json();
+  if (path === "/v5/market/orderbook" && data.retCode === 0 && data.result?.s === params.symbol) data.result.category = "spot";
   if (data.retCode !== 0 || data.result?.category !== "spot") throw new Error("BYBIT_RET_" + data.retCode);
   if (!Number.isFinite(Number(data.time)) || Math.abs(Number(data.time) - Date.now()) > 120000) throw new Error("BYBIT_STALE_TIME");
   return data;
@@ -23,7 +24,52 @@ export default {
       colo: request.cf?.colo || null, country: request.cf?.country || null,
       city: request.cf?.city || null, region: request.cf?.region || null, timezone: request.cf?.timezone || null
     });
-    if (url.pathname === "/health") return reply({ ok: true, service: "hunter-bybit-proxy", version: 2 });
+    if (url.pathname === "/health") return reply({ ok: true, service: "hunter-bybit-proxy", version: 3, capabilities: ["tickers", "orderbooks", "klines", "early-klines"] });
+
+    // Historical/management candles: fixed spot endpoint, bounded parameters.
+    if (url.pathname === "/bybit/klines") {
+      if (request.method !== "GET") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405, { Allow: "GET" });
+      const symbol = url.searchParams.get("symbol") || "";
+      const interval = url.searchParams.get("interval") || "";
+      const limit = Number(url.searchParams.get("limit") || 1000);
+      const params = { category: "spot", symbol, interval, limit };
+      if (!symbolPattern.test(symbol) || !symbol.endsWith("USDT") || !["5", "15", "60"].includes(interval) || !Number.isInteger(limit) || limit < 1 || limit > 1000) return reply({ ok: false, error: "INVALID_KLINE_QUERY" }, 400);
+      for (const key of ["start", "end"]) {
+        if (url.searchParams.has(key)) {
+          const value = Number(url.searchParams.get(key));
+          if (!Number.isSafeInteger(value) || value <= 0 || value > Date.now()) return reply({ ok: false, error: "INVALID_KLINE_TIME" }, 400);
+          params[key] = value;
+        }
+      }
+      if (params.start && params.end && params.start > params.end) return reply({ ok: false, error: "INVALID_KLINE_TIME" }, 400);
+      const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
+      try { return reply(await upstream("/v5/market/kline", params, controller.signal)); }
+      catch (error) { return reply({ ok: false, error: "BYBIT_KLINE_FAILED", detail: String(error) }, 502); }
+      finally { clearTimeout(timer); }
+    }
+
+    // Bounded order-book batch. No private/order-creation endpoints.
+    if (url.pathname === "/bybit/orderbooks") {
+      if (request.method !== "POST") return reply({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405, { Allow: "POST" });
+      let symbols;
+      try {
+        const raw = await request.text(); if (raw.length > 2048) throw new Error("size");
+        const body = JSON.parse(raw); symbols = body.symbols;
+        if (Object.keys(body).some(k => k !== "symbols") || !Array.isArray(symbols) || symbols.length < 1 || symbols.length > 20 || new Set(symbols).size !== symbols.length || symbols.some(s => typeof s !== "string" || !symbolPattern.test(s) || !s.endsWith("USDT"))) throw new Error("symbols");
+      } catch { return reply({ ok: false, error: "INVALID_BOOK_BATCH" }, 400); }
+      const books = {}; const failures = {}; let index = 0;
+      const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 45000);
+      const one = async () => {
+        while (index < symbols.length) {
+          const symbol = symbols[index++];
+          try { books[symbol] = await upstream("/v5/market/orderbook", { category: "spot", symbol, limit: 200 }, controller.signal); }
+          catch (error) { failures[symbol] = String(error); }
+        }
+      };
+      try { await Promise.all(Array.from({ length: 4 }, one)); }
+      finally { clearTimeout(timer); }
+      return reply({ retCode: 0, time: Date.now(), result: { category: "spot", books, failures } });
+    }
 
     // One complete instruments or ticker list. Only listings are cached by GitHub.
     if (url.pathname === "/bybit/spot" || url.pathname === "/bybit/tickers") {

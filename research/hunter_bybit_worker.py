@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import pathlib
+import os
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -114,11 +115,16 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None):
         signals, failures=capture(required,get)
     except RuntimeError as exc:
         signals={}; failures={s:str(exc) for s in symbols}
-    signals={b:{**s,"source_observed_at_utc":now.isoformat()} for b,s in signals.items()}
+    try:
+        from research.hunter_market import adapter
+    except ModuleNotFoundError:from hunter_market import adapter
+    ready=adapter("bybit").ready() if fetcher is request and os.getenv("HUNTER_VENUE_EXECUTION_ADAPTERS_ENABLED")=="1" else False
+    signals={b:{**s,"source_observed_at_utc":now.isoformat(),"shadow_market_supported":ready} for b,s in signals.items()}
     status=dict(active_pairs=len(bases),valid_pairs=len(rows),missing_or_invalid=[],
                 source=SOURCE,captured_at_utc=now.isoformat(),signal_pairs=len(signals),
                 signal_failures=len(failures),signal_complete=not failures and len(signals)==len(required),
                 signal_expected_bases=sorted(r["base"] for r in required),
+                shadow_market_supported=ready,
                 listing_cache=cache, ticker_requests=1,kline_batch_requests=len(batches))
     payload=dict(schema="hunter_bybit_worker_v1",source=SOURCE,captured_at_utc=now.isoformat(),
                  rows=rows,venue_status=status,early_signals=signals,signal_failures=failures)
