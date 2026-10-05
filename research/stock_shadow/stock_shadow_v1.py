@@ -3,6 +3,13 @@
 import json, math, os, urllib.request, urllib.error, urllib.parse
 from datetime import datetime, timezone, timedelta, time as dtime
 from zoneinfo import ZoneInfo
+try:
+    from .market_session import session_allows_trade
+except ImportError:
+    try:
+        from market_session import session_allows_trade
+    except ImportError:
+        from research.stock_shadow.market_session import session_allows_trade
 from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
@@ -59,9 +66,9 @@ def _alpaca_exchange_session(ts=None):
         API_USAGE["alpaca_calendar"]["errors"]+=1; return None
 
 def trade_action_window(ts=None, session=None):
-    t=(ts or datetime.now(timezone.utc)).astimezone(NY)
+    ts=ts or datetime.now(timezone.utc)
     s=session if session is not None else _alpaca_exchange_session(ts)
-    return bool(s and s["date"]==t.date().isoformat() and s["open"]<=t.time()<s["close"])
+    return session_allows_trade(ts,s)
 def get_json(url):
     req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0 stock-shadow-research","Accept":"application/json"})
     with urllib.request.urlopen(req,timeout=25) as r: return json.load(r)
@@ -511,8 +518,9 @@ def main():
     # Selective V1: scan the whole market, but BUY only candidates that pass every gate.
     newly_opened=set()
     for s,m,d in candidates:
-        if actions_enabled and trade_action_window(session=session) and s not in state["positions"]:
-            tr={"at":now(),"price":m["price"],"notional":NOTIONAL,"reason":"SELECTIVE_ENTRY_V1","score":d["score"],"entry_structure":d["entry_structure"],"selection_reasons":d["reasons"],"selection_metrics":d["metrics"],"snapshot":m}
+        event_at=now()
+        if actions_enabled and trade_action_window(datetime.fromisoformat(event_at),session=session) and s not in state["positions"]:
+            tr={"at":event_at,"price":m["price"],"notional":NOTIONAL,"reason":"SELECTIVE_ENTRY_V1","score":d["score"],"entry_structure":d["entry_structure"],"selection_reasons":d["reasons"],"selection_metrics":d["metrics"],"snapshot":m}
             state["positions"][s]={"symbol":s,"opened_at":tr["at"],"tranches":[tr],"entry_score":d["score"],"entry_structure":d["entry_structure"],"mfe_net_pct":net_pct({"tranches":[tr]},m["price"]),"mae_net_pct":net_pct({"tranches":[tr]},m["price"])}
             events.append({"type":"BUY","symbol":s,**tr}); newly_opened.add(s)
     for s,p in list(state["positions"].items()):
@@ -533,8 +541,9 @@ def main():
         floor=profit_floor_net_pct(mfe)
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
         p["profit_protection_signal"]=bool(floor is not None and r<=floor)
-        if actions_enabled and trade_action_window(session=session) and s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
-            tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
+        event_at=now()
+        if actions_enabled and trade_action_window(datetime.fromisoformat(event_at),session=session) and s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
+            tr={"at":event_at,"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
             p["pullback_seen"]=False; p["pullback_low_price"]=None
         # Intraday profit-protection SELL belongs exclusively to the 5m monitor.
@@ -552,9 +561,10 @@ def main():
             # Rebound exits are profit-only too. A losing rebound remains pending.
             if r > 0:
                 exit_reason="REBOUND_PROFIT_EXIT_AFTER_DETERIORATION_V3"
-        if exit_reason and actions_enabled and trade_action_window(session=session):
+        event_at=now()
+        if exit_reason and actions_enabled and trade_action_window(datetime.fromisoformat(event_at),session=session):
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
-            closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":exit_reason,
+            closed=dict(p); closed.update({"closed_at":event_at,"exit_price":price,"exit_reason":exit_reason,
                 "realized_net_pnl_usdt":round(final_pnl,6),"realized_net_return_pct":round(final_r,6),
                 "gross_price_return_pct":round((price/avg(p)-1)*100,6),"estimated_total_fees_usdt":round((sum(t["notional"] for t in p["tranches"])*FEE_RATE)+(qty(p)*price*FEE_RATE),6),
                 "profit_giveback_pct_points":round(giveback,6),"post_exit_tracking_due_days":[1,3,5,10]})
@@ -588,3 +598,4 @@ def main():
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__": main()
+

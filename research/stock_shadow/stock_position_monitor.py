@@ -4,6 +4,13 @@ import json, os, urllib.parse, urllib.request, urllib.error
 from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+try:
+    from .market_session import session_allows_trade
+except ImportError:
+    try:
+        from market_session import session_allows_trade
+    except ImportError:
+        from research.stock_shadow.market_session import session_allows_trade
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"; CALENDAR_CACHE=ROOT/"calendar-session-cache-v1.json"
@@ -79,9 +86,9 @@ def _alpaca_exchange_session(ts=None):
         CALENDAR_USAGE["errors"]+=1; return None
 
 def market_open(ts=None, session=None):
-    t=(ts or datetime.now(timezone.utc)).astimezone(NY)
+    ts=ts or datetime.now(timezone.utc)
     s=session if session is not None else _alpaca_exchange_session(ts)
-    return bool(s and s["date"]==t.date().isoformat() and s["open"]<=t.time()<s["close"])
+    return session_allows_trade(ts,s)
 def avg(p):
     q=sum(t["notional"]/t["price"] for t in p["tranches"]); c=sum(t["notional"] for t in p["tranches"])
     return c/q if q else 0
@@ -183,8 +190,8 @@ def main(force=False):
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
         p["profit_protection_signal"]=bool(floor is not None and r>0 and r<=floor)
         p["profit_giveback_pct_points"]=round(giveback,6)
-        if p["profit_protection_signal"] and trade_actions_enabled:
-            closed_at=now()
+        closed_at=now()
+        if p["profit_protection_signal"] and trade_actions_enabled and market_open(datetime.fromisoformat(closed_at),session=session):
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
             closed=dict(p); closed.update({"closed_at":closed_at,"exit_price":price,
                 "exit_reason":"NET_PROFIT_GIVEBACK_V3",
@@ -220,3 +227,4 @@ def main(force=False):
     save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
+

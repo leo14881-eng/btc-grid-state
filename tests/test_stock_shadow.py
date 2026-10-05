@@ -807,9 +807,9 @@ def test_ledger_accepts_weekday_trade_event_shape():
 def test_final_trade_mutations_recheck_exchange_session():
     import inspect
     src=inspect.getsource(ss.main)
-    assert 'if actions_enabled and trade_action_window(session=session) and s not in state["positions"]:' in src
-    assert 'if actions_enabled and trade_action_window(session=session) and s not in newly_opened' in src
-    assert 'if exit_reason and actions_enabled and trade_action_window(session=session):' in src
+    assert 'if actions_enabled and trade_action_window(datetime.fromisoformat(event_at),session=session) and s not in state["positions"]:' in src
+    assert 'if actions_enabled and trade_action_window(datetime.fromisoformat(event_at),session=session) and s not in newly_opened' in src
+    assert 'if exit_reason and actions_enabled and trade_action_window(datetime.fromisoformat(event_at),session=session):' in src
 
 def test_weekend_and_off_session_trade_gate_is_fail_closed():
     from datetime import datetime, timezone, time
@@ -819,3 +819,100 @@ def test_weekend_and_off_session_trade_gate_is_fail_closed():
     assert ss.trade_action_window(datetime(2026,10,5,13,29,tzinfo=timezone.utc), regular) is False
     assert ss.trade_action_window(datetime(2026,10,5,13,30,tzinfo=timezone.utc), regular) is True
     assert ss.trade_action_window(datetime(2026,10,5,20,0,tzinfo=timezone.utc), regular) is False
+
+
+# P0 execution acceptance: run the actual entry points with clocks and providers
+# controlled, preserving the input portfolio/ledger files throughout the tests.
+import pytest
+from datetime import datetime as real_datetime, timezone as utc_timezone, time as clock_time
+
+@pytest.mark.parametrize('stamp,day,opened,closed,allowed', [
+    ('2026-10-03T19:37:00+00:00','2026-10-03','09:30','16:00',False),
+    ('2026-10-04T09:26:25.677007+00:00','2026-10-04','09:30','16:00',False),
+    ('2026-07-03T15:00:00+00:00',None,None,None,False),
+    ('2026-10-05T13:29:59+00:00','2026-10-05','09:30','16:00',False),
+    ('2026-10-05T13:30:00+00:00','2026-10-05','09:30','16:00',True),
+    ('2026-10-05T17:00:00+00:00','2026-10-05','09:30','16:00',True),
+    ('2026-10-05T19:59:59+00:00','2026-10-05','09:30','16:00',True),
+    ('2026-10-05T20:00:00+00:00','2026-10-05','09:30','16:00',False),
+    ('2026-10-05T22:00:00+00:00','2026-10-05','09:30','16:00',False),
+    ('2026-11-27T17:59:59+00:00','2026-11-27','09:30','13:00',True),
+    ('2026-11-27T18:00:00+00:00','2026-11-27','09:30','13:00',False),
+    ('2026-12-07T14:30:00+00:00','2026-12-07','09:30','16:00',True),
+])
+def test_p0_both_engines_share_calendar_boundary_gate(monkeypatch,stamp,day,opened,closed,allowed):
+    session={'date':day,'open':clock_time.fromisoformat(opened),'close':clock_time.fromisoformat(closed)} if day else None
+    monitor=_load_position_monitor()
+    for engine,gate in [(ss,ss.trade_action_window),(monitor,monitor.market_open)]:
+        monkeypatch.setattr(engine,'_alpaca_exchange_session',lambda ts=None: session)
+        assert gate(real_datetime.fromisoformat(stamp),session=session) is allowed
+
+@pytest.mark.parametrize('session', [None,{}, {'date':'2026-10-05','open':'09:30','close':'16:00'},
+    {'date':'2026-10-04','open':clock_time(9,30),'close':clock_time(16)},
+    {'date':'2026-10-05','open':clock_time(16),'close':clock_time(9,30)}])
+def test_p0_missing_or_malformed_session_never_allows_trade(session):
+    from research.stock_shadow.market_session import session_allows_trade
+    assert not session_allows_trade(real_datetime.fromisoformat('2026-10-05T17:00:00+00:00'),session)
+
+
+def _p0_book(engine,monkeypatch):
+    import copy
+    state={'positions':{symbol:{'symbol':symbol,'opened_at':'2026-10-02T15:00:00+00:00',
+        'tranches':[{'at':'2026-10-02T15:00:00+00:00','price':90.0,'notional':1000.0,'reason':'SELECTIVE_ENTRY_V1'}],
+        'mfe_net_pct':10.0} for symbol in ['ADD','EXIT']},'closed':[]}
+    store={engine.STATE:state,engine.EVENTS:[]}
+    monkeypatch.setattr(engine,'load',lambda path,default: copy.deepcopy(store.get(path,default)))
+    monkeypatch.setattr(engine,'save',lambda path,data: store.__setitem__(path,copy.deepcopy(data)))
+    return store
+
+
+def _p0_clock(engine,monkeypatch,initial,event_stamp):
+    class Clock(real_datetime):
+        @classmethod
+        def now(cls,tz=None):
+            return real_datetime.fromisoformat(initial).astimezone(tz or utc_timezone.utc)
+    monkeypatch.setattr(engine,'datetime',Clock)
+    monkeypatch.setattr(engine,'now',lambda:event_stamp)
+
+@pytest.mark.parametrize('initial,event_stamp,expect_trade', [
+    ('2026-10-04T09:00:00+00:00','2026-10-04T09:26:25+00:00',False),
+    ('2026-10-05T19:59:59+00:00','2026-10-05T20:00:00+00:00',False),
+    ('2026-10-05T17:00:00+00:00','2026-10-05T17:00:01+00:00',True),
+])
+def test_p0_full_scan_buy_add_structural_sell_and_close_crossing(monkeypatch,initial,event_stamp,expect_trade):
+    book=_p0_book(ss,monkeypatch)
+    before=ss.continuity_fingerprint(book[ss.STATE],book[ss.EVENTS])
+    _p0_clock(ss,monkeypatch,initial,event_stamp)
+    day=initial[:10]
+    monkeypatch.setattr(ss,'_alpaca_exchange_session',lambda ts=None:{'date':day,'open':clock_time(9,30),'close':clock_time(16)})
+    market={symbol:{**_m(price=100),'base':symbol} for symbol in ['NEW','ADD','EXIT']}
+    monkeypatch.setattr(ss,'stock_universe',lambda:(market,[],{'discovered':3,'source_errors':[]}))
+    monkeypatch.setattr(ss,'entry_decision',lambda m,*a:{'ready':m['base']!='EXIT','score':80,'entry_structure':'MOMENTUM_TREND','reasons':[],'rejects':[],'metrics':{}})
+    monkeypatch.setattr(ss,'position_state_v2',lambda m,*a:{'state':'BROKEN' if m['base']=='EXIT' else 'STRONG','market_relative20':1})
+    monkeypatch.setattr(ss,'recovery_add_signal',lambda p,m,ps:{'eligible':m['base']=='ADD'})
+    ss.main()
+    if expect_trade:
+        assert {e['type'] for e in book[ss.EVENTS]}=={'BUY','ADD','SELL'}
+        assert all(e['at']==event_stamp for e in book[ss.EVENTS])
+    else:
+        assert ss.continuity_fingerprint(book[ss.STATE],book[ss.EVENTS])==before
+    assert book[ss.SUMMARY]['candidates_ready']==2
+
+@pytest.mark.parametrize('initial,event_stamp,expect_sell', [
+    ('2026-10-04T09:00:00+00:00','2026-10-04T09:26:25+00:00',False),
+    ('2026-10-05T19:59:59+00:00','2026-10-05T20:00:00+00:00',False),
+    ('2026-10-05T17:00:00+00:00','2026-10-05T17:00:01+00:00',True),
+])
+def test_p0_forced_monitor_cannot_bypass_weekend_or_final_close_gate(monkeypatch,initial,event_stamp,expect_sell):
+    monitor=_load_position_monitor();book=_p0_book(monitor,monkeypatch)
+    before=monitor.continuity_fingerprint(book[monitor.STATE],book[monitor.EVENTS])
+    _p0_clock(monitor,monkeypatch,initial,event_stamp)
+    monkeypatch.setattr(monitor,'_alpaca_exchange_session',lambda ts=None:{'date':initial[:10],'open':clock_time(9,30),'close':clock_time(16)})
+    monkeypatch.setattr(monitor,'alpaca_snapshot_quotes',lambda symbols:({s:94.0 for s in symbols},[],1,1))
+    monitor.main(force=True)
+    if expect_sell:
+        assert len(book[monitor.EVENTS])==2
+        assert all(e['type']=='SELL' and e['at']==event_stamp for e in book[monitor.EVENTS])
+    else:
+        assert monitor.continuity_fingerprint(book[monitor.STATE],book[monitor.EVENTS])==before
+    assert book[monitor.HEALTH]['positions_updated']==2
