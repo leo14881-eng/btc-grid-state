@@ -1,15 +1,15 @@
 {
   "schema": "hunter_shadow_v2_summary_v3",
-  "as_of_utc": "2026-10-05T10:46:49.232562+00:00",
+  "as_of_utc": "2026-10-05T11:01:34.551677+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "SHARED_DECISION_ENGINE_V1_BROAD_NET",
   "policy_version": "shadow-consistent-v2",
-  "open_positions": 290,
-  "closed_positions": 128,
+  "open_positions": 289,
+  "closed_positions": 129,
   "archived_closed_positions": 0,
-  "total_closed_positions": 128,
-  "net_pnl_usdt": 2896.87,
-  "profit_factor": 14.028,
+  "total_closed_positions": 129,
+  "net_pnl_usdt": 2874.24,
+  "profit_factor": 12.733,
   "policy": {
     "tranches_usdt": [
       1000.0,
@@ -63,21 +63,26 @@
     },
     "capital_management": {
       "initial_capital_usdt": null,
-      "realized_net_pnl_usdt": 2896.87,
+      "realized_net_pnl_usdt": 2874.24,
       "equity_usdt": null,
-      "used_capital_usdt": 297000.0,
-      "dynamic_reserve_usdt": 3000.0,
-      "ordinary_buy_limit_usdt": null,
-      "ordinary_buy_available_usdt": null,
-      "total_available_usdt": null
+      "used_capital_usdt": 296000.0,
+      "market_regime": "RISK_OFF",
+      "market_regime_evidence": {
+        "btc_change_24h_pct": null,
+        "negative_breadth": null,
+        "max_utilization": 0.6
+      },
+      "max_deployable_usdt": null,
+      "allocator_available_usdt": null
     },
     "capital_rotation": {
       "loss_making_position_rotation_allowed": false,
       "profitable_exit_may_release_capital_for_new_buy": true,
-      "full_pool_buy_status": "BUY_BUT_NO_CAPITAL",
-      "dynamic_reserve_usdt": 3000.0,
-      "ordinary_buy_preserves_dynamic_reserve": true,
-      "revalidated_add_may_use_dynamic_reserve": true,
+      "full_pool_buy_status": "CAPITAL_ALLOCATOR_WAIT",
+      "buy_add_compete_same_queue": true,
+      "arrival_order_has_no_capital_priority": true,
+      "market_regime_controls_utilization": true,
+      "hard_cash_floor_pct": 0.05,
       "realized_net_pnl_compounds_equity": true,
       "unrealized_pnl_expands_equity": false
     },
@@ -92,14 +97,14 @@
   },
   "opportunity_evaluation": {
     "all_samples": {
-      "evaluated_positions": 128,
-      "holding_mfe_available": 128,
-      "full_opportunity_mfe_available": 128,
+      "evaluated_positions": 129,
+      "holding_mfe_available": 129,
+      "full_opportunity_mfe_available": 129,
       "completed_72h_observations": 0,
       "post_exit_coverage": {
         "1h": {
           "due": 91,
-          "backfilled": 80
+          "backfilled": 88
         },
         "6h": {
           "due": 68,
@@ -120,20 +125,20 @@
       },
       "avg_completed_72h_max_return_from_sell_pct": null,
       "full_opportunity_metrics_provisional": true,
-      "avg_holding_mfe_pct": 5.2674,
-      "median_holding_mfe_pct": 3.5995,
-      "avg_full_opportunity_mfe_pct": 7.8215,
-      "median_full_opportunity_mfe_pct": 4.5189,
-      "avg_realized_net_return_pct": 2.1036,
-      "avg_holding_profit_capture_ratio": 0.3222,
-      "avg_full_opportunity_capture_ratio": 0.294,
+      "avg_holding_mfe_pct": 5.3023,
+      "median_holding_mfe_pct": 3.7037,
+      "avg_full_opportunity_mfe_pct": 7.9577,
+      "median_full_opportunity_mfe_pct": 4.5728,
+      "avg_realized_net_return_pct": 2.0697,
+      "avg_holding_profit_capture_ratio": 0.3114,
+      "avg_full_opportunity_capture_ratio": 0.2783,
       "potential_premature_exit_count": 0,
       "profit_giveback_count": 0,
       "full_opportunity_mfe_distribution": {
         "lt_0": 0,
         "0_3": 39,
         "3_5": 30,
-        "5_10": 35,
+        "5_10": 36,
         "10_20": 15,
         "gt_20": 9
       }
@@ -146,7 +151,7 @@
       "post_exit_coverage": {
         "1h": {
           "due": 82,
-          "backfilled": 73
+          "backfilled": 81
         },
         "6h": {
           "due": 67,
@@ -167,28 +172,28 @@
       },
       "avg_completed_72h_max_return_from_sell_pct": null,
       "full_opportunity_metrics_provisional": true,
-      "avg_holding_mfe_pct": 5.3013,
-      "median_holding_mfe_pct": 3.9702,
-      "avg_full_opportunity_mfe_pct": 8.2808,
-      "median_full_opportunity_mfe_pct": 4.7961,
+      "avg_holding_mfe_pct": 5.3911,
+      "median_holding_mfe_pct": 4.0691,
+      "avg_full_opportunity_mfe_pct": 8.4947,
+      "median_full_opportunity_mfe_pct": 4.89,
       "avg_realized_net_return_pct": 2.009,
-      "avg_holding_profit_capture_ratio": 0.3016,
-      "avg_full_opportunity_capture_ratio": 0.27,
+      "avg_holding_profit_capture_ratio": 0.2869,
+      "avg_full_opportunity_capture_ratio": 0.2533,
       "potential_premature_exit_count": 0,
       "profit_giveback_count": 0,
       "full_opportunity_mfe_distribution": {
         "lt_0": 0,
-        "0_3": 27,
-        "3_5": 28,
+        "0_3": 26,
+        "3_5": 29,
         "5_10": 35,
         "10_20": 10,
         "gt_20": 9
       }
     },
     "new_version_samples": {
-      "evaluated_positions": 19,
-      "holding_mfe_available": 19,
-      "full_opportunity_mfe_available": 19,
+      "evaluated_positions": 20,
+      "holding_mfe_available": 20,
+      "full_opportunity_mfe_available": 20,
       "completed_72h_observations": 0,
       "post_exit_coverage": {
         "1h": {
@@ -214,20 +219,20 @@
       },
       "avg_completed_72h_max_return_from_sell_pct": null,
       "full_opportunity_metrics_provisional": true,
-      "avg_holding_mfe_pct": 5.0725,
-      "median_holding_mfe_pct": 2.692,
-      "avg_full_opportunity_mfe_pct": 5.1865,
-      "median_full_opportunity_mfe_pct": 2.692,
-      "avg_realized_net_return_pct": 2.6461,
-      "avg_holding_profit_capture_ratio": 0.4493,
-      "avg_full_opportunity_capture_ratio": 0.4434,
+      "avg_holding_mfe_pct": 4.8189,
+      "median_holding_mfe_pct": 2.4497,
+      "avg_full_opportunity_mfe_pct": 5.0309,
+      "median_full_opportunity_mfe_pct": 2.5006,
+      "avg_realized_net_return_pct": 2.4007,
+      "avg_holding_profit_capture_ratio": 0.4568,
+      "avg_full_opportunity_capture_ratio": 0.4199,
       "potential_premature_exit_count": 0,
       "profit_giveback_count": 0,
       "full_opportunity_mfe_distribution": {
         "lt_0": 0,
-        "0_3": 12,
-        "3_5": 2,
-        "5_10": 0,
+        "0_3": 13,
+        "3_5": 1,
+        "5_10": 1,
         "10_20": 5,
         "gt_20": 0
       }

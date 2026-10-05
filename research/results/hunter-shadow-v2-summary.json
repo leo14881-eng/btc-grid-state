@@ -1,6 +1,6 @@
 {
   "schema": "hunter_shadow_v2_summary_v3",
-  "as_of_utc": "2026-10-05T10:46:56.289756+00:00",
+  "as_of_utc": "2026-10-05T11:01:34.551677+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
   "policy_version": "shadow-consistent-v2",
@@ -66,18 +66,25 @@
       "realized_net_pnl_usdt": 710.68,
       "equity_usdt": 20710.68,
       "used_capital_usdt": 20000.0,
-      "dynamic_reserve_usdt": 3000.0,
-      "ordinary_buy_limit_usdt": 17710.68,
-      "ordinary_buy_available_usdt": 0.0,
-      "total_available_usdt": 710.68
+      "market_regime": "RISK_OFF",
+      "market_regime_evidence": {
+        "btc_change_24h_pct": null,
+        "negative_breadth": null,
+        "max_utilization": 0.6
+      },
+      "hard_cash_floor_pct": 0.05,
+      "max_deployable_usdt": 12426.41,
+      "allocator_available_usdt": 0.0,
+      "total_cash_usdt": 710.68
     },
     "capital_rotation": {
       "loss_making_position_rotation_allowed": false,
       "profitable_exit_may_release_capital_for_new_buy": true,
-      "full_pool_buy_status": "BUY_BUT_NO_CAPITAL",
-      "dynamic_reserve_usdt": 3000.0,
-      "ordinary_buy_preserves_dynamic_reserve": true,
-      "revalidated_add_may_use_dynamic_reserve": true,
+      "full_pool_buy_status": "CAPITAL_ALLOCATOR_WAIT",
+      "buy_add_compete_same_queue": true,
+      "arrival_order_has_no_capital_priority": true,
+      "market_regime_controls_utilization": true,
+      "hard_cash_floor_pct": 0.05,
       "realized_net_pnl_compounds_equity": true,
       "unrealized_pnl_expands_equity": false
     },
