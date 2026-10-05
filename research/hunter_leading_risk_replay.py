@@ -14,7 +14,7 @@ SYMBOLS=("BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","SUIUSDT",
 WINDOWS=[
  ("2025-10-10",dt.datetime(2025,10,10,12,tzinfo=dt.timezone.utc),dt.datetime(2025,10,11,12,tzinfo=dt.timezone.utc)),
  ("2024-08-05",dt.datetime(2024,8,4,12,tzinfo=dt.timezone.utc),dt.datetime(2024,8,6,12,tzinfo=dt.timezone.utc)),
- ("2024-03-05",dt.datetime(2024,3,4,12,tzinfo=dt.timezone.utc),dt.datetime(2024,3,6,12,tzinfo=dt.timezone.utc))]
+ ("2025-02-03",dt.datetime(2025,2,2,12,tzinfo=dt.timezone.utc),dt.datetime(2025,2,4,12,tzinfo=dt.timezone.utc))]
 def get(url):
  req=urllib.request.Request(url,headers={"User-Agent":"hunter-leading-replay/1.0","Accept":"application/json"})
  with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
