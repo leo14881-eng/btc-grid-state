@@ -86,6 +86,18 @@ def missed_upside(index,ts,windows,undeployed):
         i=by[a];j=by[b];move=max(0.0,index[j]/index[i]-1);total+=undeployed*move
     return round(total,2)
 
+def partial_false_freeze_proxy(index,ts,windows):
+    # Explicit proxy: a freeze start is counted false only if the next 60 minutes
+    # finish positive AND never fall more than 1% below the freeze-start basket.
+    # This evaluates only the replay's BTC+breadth detector, not unavailable
+    # historical order-book/stablecoin dimensions.
+    by={t:i for i,t in enumerate(ts)};flags=[]
+    for a,_ in windows:
+        i=by[a];j=min(len(index)-1,i+12);segment=index[i:j+1]
+        flags.append(bool(index[j]>index[i] and min(segment)/index[i]-1>-0.01))
+    return {"count":sum(flags),"total_freezes":len(flags),"rate":round(sum(flags)/len(flags),4) if flags else 0.0,
+            "definition":"next 60m basket ends positive and has no additional drawdown worse than 1%; partial BTC+breadth replay proxy only"}
+
 def run():
     series={s:bars(s) for s in SYMBOLS};ts,px=align(series)
     if len(ts)<100:raise RuntimeError("HISTORICAL_REPLAY_INSUFFICIENT_ALIGNED_BARS")
@@ -115,8 +127,9 @@ def run():
             "tail_budget_scenarios":scenarios,
             "freeze_windows":[{"start_utc":dt.datetime.fromtimestamp(a/1000,dt.timezone.utc).isoformat(),"end_utc":dt.datetime.fromtimestamp(b/1000,dt.timezone.utc).isoformat(),"recovery_minutes":round((b-a)/60000,2)} for a,b in windows],
             "recovery_time_minutes":{"max":max(recovery) if recovery else 0,"average":round(sum(recovery)/len(recovery),2) if recovery else 0},
-            "false_freeze_rate_definition":"A full false-freeze classifier requires unavailable historical order-book/stablecoin evidence; not reported as a fabricated number.",
-            "false_freeze_rate":None,
+            "false_freeze_proxy":partial_false_freeze_proxy(index,ts,windows),
+            "full_false_freeze_rate":None,
+            "full_false_freeze_rate_caveat":"A full live-gate false-freeze rate requires historical order-book/stablecoin evidence and is intentionally not fabricated.",
             "execution_stress_assumption":{"hypothetical_liquidity_only_forced_exit_at_basket_trough":True,"extra_adverse_slippage_pct":assumed_extra_slip,
                                            "basket_trough_move_pct":round(trough_move,4),"hypothetical_fill_move_pct":round(forced_fill_move,4),
                                            "caveat":"Assumption only. Not a reconstructed fill."},
