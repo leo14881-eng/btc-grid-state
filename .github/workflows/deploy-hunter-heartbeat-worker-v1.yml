@@ -1,6 +1,13 @@
 name: Deploy Hunter Heartbeat Worker V1
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-hunter-heartbeat-worker-v1.yml'
+      - 'research/hunter_scheduler/worker.mjs'
+      - 'research/hunter_scheduler/worker.test.mjs'
+      - 'research/hunter_scheduler/wrangler.jsonc'
 permissions:
   contents: read
 concurrency:
