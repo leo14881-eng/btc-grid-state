@@ -127,5 +127,5 @@ def main():
  review,liq,refresh=refresh_management_evidence(states,market,review,liq,now)
  results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded)]
  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION})
- print(json.dumps({"assets":wanted,"results":results},ensure_ascii=False))
+ print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()
