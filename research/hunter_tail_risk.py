@@ -19,7 +19,10 @@ def parse(x):
 def is_fresh(ts,now,max_age):
     try:
         age=(now-parse(ts)).total_seconds()
-        return 0<=age<=max_age
+        # Same-process evidence collectors may stamp a snapshot milliseconds
+        # after the cycle timestamp. Tolerate only a tiny clock skew; this does
+        # not make genuinely future/stale evidence valid.
+        return -30<=age<=max_age
     except (TypeError,ValueError):return False
 
 def _get_json(url,timeout=8):
