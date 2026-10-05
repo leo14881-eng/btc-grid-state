@@ -1,0 +1,11 @@
+{
+  "name": "stock-shadow-scheduler",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-05",
+  "triggers": { "crons": ["3-58/5 * * * *"] },
+  "durable_objects": {
+    "bindings": [{ "name": "STOCK_SCHEDULER", "class_name": "StockScheduler" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["StockScheduler"] }],
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,21 @@
+name: Stock Shadow Scheduler Validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'research/stock_shadow/scheduler/**'
+      - '.github/workflows/stock-shadow-scheduler-test.yml'
+permissions:
+  contents: read
+jobs:
+  scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Scheduler fault and isolation acceptance
+        run: node --test research/stock_shadow/scheduler/worker.test.mjs
