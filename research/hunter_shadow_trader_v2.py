@@ -55,6 +55,12 @@ DYNAMIC_RESERVE_USDT=3000.0
 RESERVE_BUY_MIN_RR=2.2
 RESERVE_BUY_MIN_REL_4H=0.0
 RESERVE_BUY_MIN_ACCEL=0.0
+ADD_MIN_MATERIAL_IMPROVEMENT_PCT=0.75
+ADD_VOLATILITY_FRACTION=0.25
+ADD_MAX_DYNAMIC_IMPROVEMENT_PCT=3.0
+ADD_MIN_EVIDENCE_GAP_MINUTES=15
+ADD_THIRD_TRANCHE_MULTIPLIER=1.5
+ADD_THIRD_MAX_BTC_REL_4H_WEAKNESS=-1.0
 DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"]
 ENTRY_MODE=LANES["V2"]["entry_mode"]
 STRATEGY_ID=LANES["V2"]["strategy"]
@@ -141,6 +147,7 @@ def evidence(c,liq,supply):
   "bid_depth_2pct_usdt":finite(l.get("bid_depth_2pct_usdt")),"ask_depth_2pct_usdt":finite(l.get("ask_depth_2pct_usdt")),
   "buy_slippage_bps":finite(ex.get("buy_slippage_bps")),"estimated_rr":finite(ex.get("estimated_rr")),
   "supply_verified":bool(sr and sr.get("tactical_supply_risk_verified")),"supply_status":(sr or {}).get("status"),"supply_confirmed_major_risk":confirmed_supply_risk(sr),
+  "return_1h":finite(s.get("return_1h_pct")),"return_4h":finite(s.get("return_4h_pct")),
   "blockers":hard_blockers(c),"signal_evidence":(c or {}).get("signal_evidence"),"book_observed_at_utc":l.get("as_of_utc")}
 def bybit_channel(bybit,a):
  spot=bybit.get("spot") or {}; alpha=bybit.get("alpha") or {}; a=str(a or "").upper()
@@ -177,6 +184,35 @@ def discovery_anchor(c):
   v=finite((c or {}).get(k))
   if v:return v
  return None
+def add_material_improvement_required_pct(e,tranche_count):
+ # Dynamic threshold: recent 1h movement approximates current noise; execution friction sets a second floor.
+ r1=abs(finite((e or {}).get("return_1h")) or 0.0)
+ friction_bps=max(finite((e or {}).get("spread_bps")) or 0.0,0.0)+max(finite((e or {}).get("buy_slippage_bps")) or 0.0,0.0)
+ dynamic=max(ADD_MIN_MATERIAL_IMPROVEMENT_PCT,min(ADD_MAX_DYNAMIC_IMPROVEMENT_PCT,r1*ADD_VOLATILITY_FRACTION),friction_bps/100*2)
+ if tranche_count>=2:dynamic*=ADD_THIRD_TRANCHE_MULTIPLIER
+ return round(dynamic,4)
+
+def add_fresh_evidence(pos,e):
+ if not pos or not pos.get("tranches"):return False,["ADD_CONTEXT_MISSING"]
+ last=pos["tranches"][-1]; meta=(e or {}).get("signal_evidence") or {}
+ eid=meta.get("evidence_id"); gen=meta.get("generation_id"); observed=meta.get("observed_at_utc"); book=(e or {}).get("book_observed_at_utc")
+ if not eid or not gen or not observed or not book:return False,["ADD_FRESH_EVIDENCE_INCOMPLETE"]
+ if eid==last.get("signal_evidence_id") or gen==last.get("signal_generation_id"):return False,["ADD_SIGNAL_EVIDENCE_NOT_NEW"]
+ try:
+  last_at=parse(last.get("at")); obs_at=parse(observed); book_at=parse(book)
+ except Exception:return False,["ADD_EVIDENCE_TIME_INVALID"]
+ if obs_at<=last_at or book_at<=last_at:return False,["ADD_EVIDENCE_NOT_AFTER_LAST_TRANCHE"]
+ if (obs_at-last_at).total_seconds()<ADD_MIN_EVIDENCE_GAP_MINUTES*60:return False,["ADD_WAIT_NEW_15M_EVIDENCE_WINDOW"]
+ return True,["ADD_FRESH_EVIDENCE_CONFIRMED"]
+
+def add_recovery_confirmed(e,tranche_count):
+ r1=(e or {}).get("btc_rel_1h");r4=(e or {}).get("btc_rel_4h");acc=(e or {}).get("rel_accel")
+ confirmations=sum((acc is not None and acc>0,r1 is not None and r1>=0,r4 is not None and r4>=0))
+ if confirmations<2:return False,["ADD_RECOVERY_NOT_CONFIRMED"]
+ if tranche_count>=2 and (acc is None or acc<=0 or r1 is None or r1<0 or r4 is None or r4<ADD_THIRD_MAX_BTC_REL_4H_WEAKNESS):
+  return False,["ADD_THIRD_TRANCHE_RECOVERY_NOT_STRONG_ENOUGH"]
+ return True,["ADD_RECOVERY_CONFIRMED"]
+
 def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
  if not c:
   # Dropping out of the current shortlist is not itself a thesis failure.
@@ -219,15 +255,21 @@ def decision(c,scan,liq,supply,kind="ENTRY",pos=None,p=None):
   return "REJECT",reasons,e
  if kind=="ADD":
   if pos is None or p is None:return "REJECT",["ADD_CONTEXT_MISSING"],e
-  avg=weighted_entry(pos)
-  if p>=avg:return "HOLD",["ADD_NOT_BELOW_CURRENT_AVERAGE"],e
-  # Adds are attainable but never mechanical: better price + thesis still alive + stabilization/relative resilience.
+  last_price=finite((pos.get("tranches") or [{}])[-1].get("price"))
+  if last_price is None:return "HOLD",["ADD_LAST_TRANCHE_PRICE_MISSING"],e
+  # ADD is a new opportunity, not mechanical averaging down: it must beat the last fill by a material,
+  # volatility-aware amount and be supported by fresh post-fill evidence plus an actual recovery signal.
+  if p>=last_price:return "HOLD",["ADD_NOT_BELOW_LAST_TRANCHE"],e
+  improvement=(last_price-p)/last_price*100
+  required=add_material_improvement_required_pct(e,len(pos["tranches"]))
+  if improvement<required:return "HOLD",[f"ADD_PRICE_IMPROVEMENT_TOO_SMALL_{improvement:.2f}PCT",f"ADD_REQUIRED_IMPROVEMENT_{required:.2f}PCT"],e
   if e["score"] is None or e["score"]<DISCOVERY_MIN_SCORE:return "HOLD",["ADD_THESIS_SCORE_NOT_REVALIDATED"],e
   if e["independent"]<DISCOVERY_MIN_INDEPENDENT:return "HOLD",["ADD_THESIS_SIGNALS_NOT_REVALIDATED"],e
-  stable=((e["rel_accel"] is not None and e["rel_accel"]>=-.5) or (e["btc_rel_1h"] is not None and e["btc_rel_1h"]>=0))
-  if not stable:return "HOLD",["ADD_WAITING_FOR_STABILIZATION"],e
-  improvement=(avg-p)/avg*100
-  return "ADD",["BETTER_PRICE","THESIS_REVALIDATED","STABILIZATION_PRESENT",f"AVERAGE_COST_IMPROVEMENT_{improvement:.2f}PCT"],e
+  fresh_ok,fresh_reasons=add_fresh_evidence(pos,e)
+  if not fresh_ok:return "HOLD",fresh_reasons,e
+  recovery_ok,recovery_reasons=add_recovery_confirmed(e,len(pos["tranches"]))
+  if not recovery_ok:return "HOLD",recovery_reasons,e
+  return "ADD",["MATERIAL_BETTER_THAN_LAST_TRANCHE","THESIS_REVALIDATED"]+fresh_reasons+recovery_reasons+[f"LAST_TRANCHE_IMPROVEMENT_{improvement:.2f}PCT",f"REQUIRED_IMPROVEMENT_{required:.2f}PCT"],e
  return ("BUY" if kind=="ENTRY" else "HOLD"),["FULL_EVIDENCE_VALIDATED"],e
 def weighted_entry(pos):
  n=sum(t["notional_usdt"] for t in pos["tranches"]);return sum(t["price"]*t["notional_usdt"] for t in pos["tranches"])/n
@@ -579,8 +621,11 @@ def trade_event(state,pos,action,now,p,reason=None,pnl=None):
   entered=set(state.get("ever_entered_assets") or [])
   entered.add(pos["asset"]);state["ever_entered_assets"]=sorted(entered)
 def add(pos,p,e,now):
- i=len(pos["tranches"]);pos["tranches"].append({"tranche":i+1,"at":now.isoformat(),"price":p,"notional_usdt":TRANCHES[i],
-  "buy_slippage_bps":e.get("buy_slippage_bps") or 0,"reason":"INITIAL" if i==0 else "LOWER_PRICE_FULL_REVALIDATION"})
+ i=len(pos["tranches"]);meta=(e or {}).get("signal_evidence") or {}
+ pos["tranches"].append({"tranche":i+1,"at":now.isoformat(),"price":p,"notional_usdt":TRANCHES[i],
+  "buy_slippage_bps":e.get("buy_slippage_bps") or 0,"reason":"INITIAL" if i==0 else "MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION",
+  "signal_evidence_id":meta.get("evidence_id"),"signal_generation_id":meta.get("generation_id"),
+  "signal_observed_at_utc":meta.get("observed_at_utc"),"book_observed_at_utc":e.get("book_observed_at_utc")})
 def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
  guard=load(GUARD,{"schema":"hunter_shadow_v2_overfilter_guard_v1","cycles":[],"status":"NORMAL"})
  safe_misses=[]
@@ -645,7 +690,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   if health!="STRONG":act="HOLD"
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
-   if capital_available(state,next_amount,"ADD"):add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
+   if capital_available(state,next_amount,"ADD"):add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_POOL_FULL_ADD_DEFERRED"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
   protection=profit_protection(pos,p);pnl=net_pnl(pos,p);exit_reason=None;exit_reasons=None
