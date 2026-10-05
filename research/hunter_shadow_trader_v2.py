@@ -125,8 +125,10 @@ def opportunity_priority(e,kind):
 def marginal_capital_gate(state,amount,e,kind,scan):
  equity=capital_equity(state)
  if equity is None:return True,["CAPITAL_UNBOUNDED_TEST_MODE"]
- regime,meta=market_regime(scan);after=(used_capital(state)+amount)/equity if equity else 1.0;reasons=[]
+ regime,meta=market_regime(scan);after_used=used_capital(state)+amount;after=after_used/equity if equity else 1.0;reasons=[]
  if after>min(meta["max_utilization"],1-HARD_CASH_FLOOR_PCT)+1e-12:reasons.append("MARKET_REGIME_CAPACITY_LIMIT")
+ limit=capital_limit(state,scan)
+ if limit is not None and after_used>limit+1e-9:reasons.append("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT")
  rr=finite((e or {}).get("estimated_rr"));r1=finite((e or {}).get("btc_rel_1h"));r4=finite((e or {}).get("btc_rel_4h"));acc=finite((e or {}).get("rel_accel"))
  if after>0.60 and (rr is None or rr<1.8 or r4 is None or r4<0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_60PCT")
  if after>0.75 and (rr is None or rr<2.2 or r4 is None or r4<=0 or acc is None or acc<=0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_75PCT")
