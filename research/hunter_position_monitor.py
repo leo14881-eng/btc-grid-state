@@ -23,12 +23,18 @@ def assets(states):
  return sorted({p.get("asset") for s in states for p in ((s.get("open_positions") or [])+(s.get("closed_positions") or []))
                 if p.get("asset") and (not p.get("closed_at_utc") or not p.get("observation_complete"))})
 def batch_market(wanted):
- rows=get(BN+"/api/v3/ticker/24hr");by={x.get("symbol"):x for x in rows if isinstance(x,dict)};out={}
- for a in sorted(set(wanted)|{"BTC"}):
-  x=by.get(a+"USDT") or {}
+ rows=get(BN+"/api/v3/ticker/24hr");out={}
+ # Keep the full USDT market snapshot from the same request. Existing-position
+ # management still touches only wanted assets, while systemic breadth gets a
+ # fresh cross-market observation every five minutes.
+ for x in rows if isinstance(rows,list) else []:
+  if not isinstance(x,dict):continue
+  sym=str(x.get("symbol") or "")
+  if not sym.endswith("USDT") or len(sym)<=4:continue
+  a=sym[:-4]
   try:p=float(x.get("lastPrice"));ch=float(x.get("priceChangePercent"))
   except (TypeError,ValueError):continue
-  if math.isfinite(p) and p>0:out[a]={"reference_price":p,"change_24h_pct":ch}
+  if math.isfinite(p) and p>0 and math.isfinite(ch):out[a]={"reference_price":p,"change_24h_pct":ch}
  return out
 def v1_review():
  try:
@@ -129,7 +135,8 @@ def main():
  if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
  review,liq,refresh=refresh_management_evidence(states,market,review,liq,now)
- regime_scan=load(UNIVERSE)
+ persisted_universe=load(UNIVERSE)
+ regime_scan={"schema":"hunter_monitor_market_snapshot_v1","generation_id":refresh["generation_id"],"as_of_utc":now.isoformat(),"coins":market,"binance_complete":True}
  # One systemic observation is shared by both lanes so V1/V2 cannot disagree
  # merely because they were evaluated a few milliseconds apart.
  risk_evidence=eng.tail.collect_systemic_evidence(regime_scan,liq,now,eng.C,eng.BINANCE_DATA_API)
