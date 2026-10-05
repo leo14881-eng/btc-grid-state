@@ -57,11 +57,25 @@ def rebind(expected, isolated=False):
     return latest
 
 
+def check_current(base, expected):
+    git("fetch", "origin", "main")
+    changes = git("diff", "--name-only", base, "origin/main").stdout.splitlines()
+    conflicts = [p for p in changes if protected(p)]
+    require(not conflicts, "HUNTER_STATE_CAS_REJECTED_STALE_WRITER " + " ".join(conflicts))
+    scan = json.loads(git("show", "origin/main:" + SCAN).stdout)
+    require(scan.get("generation_id") == expected, "RESEARCH_GENERATION_SUPERSEDED")
+    print("HUNTER_RESEARCH_EXECUTION_CAS_OK", base, expected)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--generation", required=True)
     parser.add_argument("--isolated-checkout", action="store_true")
+    parser.add_argument("--check-base")
     a = parser.parse_args()
+    if a.check_base:
+        check_current(a.check_base, a.generation)
+        return
     base = rebind(a.generation, a.isolated_checkout)
     if os.environ.get("GITHUB_ENV"):
         with open(os.environ["GITHUB_ENV"], "a") as f:

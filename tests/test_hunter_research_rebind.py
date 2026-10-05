@@ -99,8 +99,7 @@ class ResearchRebindTests(unittest.TestCase):
         self.fixture(self.writer, closed=False)
         self.publish()
         with self.assertRaisesRegex(RuntimeError, "CAS_REJECTED"):
-            from scripts.hunter_monitor_persist import cas
-            cas(base)
+            r.check_current(base, "scan")
 
     def test_new_discovery_generation_rejected_without_reset(self):
         before = r.git("rev-parse", "HEAD").stdout
@@ -122,6 +121,15 @@ class ResearchRebindTests(unittest.TestCase):
         self.publish()
         with self.assertRaisesRegex(RuntimeError, "RESEARCH_INPUT_CHANGED"):
             r.rebind("scan", isolated=True)
+
+    def test_final_cas_rejects_changed_execution_helper(self):
+        base = r.git("rev-parse", "HEAD").stdout.strip()
+        p = self.writer / "scripts/hunter_research_rebind.py"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("# concurrent code")
+        self.publish()
+        with self.assertRaisesRegex(RuntimeError, "CAS_REJECTED"):
+            r.check_current(base, "scan")
 
     def test_invalid_monitor_snapshot_rejected(self):
         self.write(self.writer, "research/results/hunter-shadow-v2-summary.json", {"mode": "REAL"})
