@@ -788,3 +788,16 @@ def test_history_gap_classifier_never_infers_listing_age_from_cached_first_bar()
     assert '"last_bar_at":last_bar_at' in src
     assert '"recovery_window_days":120 if (classification or universe_exclusion) else None' in src
     assert "sorted({" in inspect.getsource(ss.main)
+
+
+def test_ledger_rejects_weekend_trade_events():
+    state={"version":2,"simulation_only":True,"positions":{},"closed":[]}
+    events=[{"type":"BUY","symbol":"TEST","at":"2026-10-03T19:37:39+00:00","price":10.0,"notional":1000.0}]
+    with pytest.raises(RuntimeError, match="ledger_invariant:weekend_trade_event"):
+        ss.validate_ledger(state,events)
+
+
+def test_ledger_accepts_weekday_trade_event_shape():
+    state={"version":2,"simulation_only":True,"positions":{},"closed":[]}
+    events=[{"type":"BUY","symbol":"TEST","at":"2026-10-02T19:37:39+00:00","price":10.0,"notional":1000.0}]
+    assert ss.validate_ledger(state,events) is True
