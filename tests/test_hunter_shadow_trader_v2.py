@@ -103,6 +103,48 @@ class ObservationIntegrationRegressionTests(unittest.TestCase):
   finally:eng.GUARD=old
 
 class OpportunityObservationTests(unittest.TestCase):
+ def test_missing_due_horizon_is_pending_not_zero(self):
+  import datetime as dt
+  pos={"closed_at_utc":"2026-10-05T00:00:00+00:00","post_exit_tracking":{"max_rebound_from_exit_pct":0},"post_exit_observation":{}}
+  eng.refresh_post_exit_status(pos,dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc))
+  self.assertEqual(pos["post_exit_evaluation"]["missing_horizons"],["1h","6h"])
+  self.assertIsNone(pos["post_exit_evaluation"]["max_return_from_sell_pct"])
+
+ def test_backfill_rotates_when_budget_limited(self):
+  import datetime as dt
+  from unittest.mock import patch
+  now=dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc)
+  state={"closed_positions":[{"asset":str(i),"opened_at_utc":"2026-10-05T00:00:00+00:00",
+   "closed_at_utc":"2026-10-05T01:00:00+00:00","exit_reference_price":1.,
+   "tranches":[{"price":1.,"notional_usdt":1000}],"post_exit_observation":{}} for i in range(3)]}
+  visited=[]
+  def no_bars(asset,start,end,interval="5m"):
+   eng._opportunity_backfill_requests+=1;visited.append(asset);return None
+  old=eng._opportunity_backfill_requests
+  try:
+   with patch.object(eng,"OPPORTUNITY_BACKFILL_BUDGET",1),patch.object(eng,"binance_kline_bars",no_bars):
+    for _ in range(3):
+     eng._opportunity_backfill_requests=0
+     eng.refresh_closed_observations(state,now)
+   self.assertEqual(visited,["0","1","2"])
+  finally:eng._opportunity_backfill_requests=old
+
+ def test_historical_peak_is_authoritative_over_sampled_price(self):
+  import datetime as dt
+  pos={"closed_at_utc":"2026-10-05T00:00:00+00:00","post_exit_tracking":{"max_rebound_from_exit_pct":1.0},
+   "post_exit_observation":{"1h":{"max_return_from_sell_pct":3.0}}}
+  eng.refresh_post_exit_status(pos,dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc))
+  self.assertEqual(pos["post_exit_evaluation"]["max_return_from_sell_pct"],3.0)
+  self.assertEqual(pos["post_exit_evaluation"]["status"],"BACKFILL_PENDING")
+
+ def test_pending_observation_is_not_compacted_away(self):
+  from unittest.mock import patch
+  state={"closed_positions":[{"shadow_id":"pending","observation_complete":False},
+    {"shadow_id":"complete","observation_complete":True,"post_exit_observation":{"72h":{"max_return_from_sell_pct":3.}}}]}
+  with patch.object(eng,"MAX_CLOSED_HOT",1):eng.compact_closed_history(state)
+  self.assertEqual([x["shadow_id"] for x in state["closed_positions"]],["pending"])
+  self.assertEqual(state["closed_trade_archive"][0]["post_exit_observation"]["72h"]["max_return_from_sell_pct"],3.)
+
  def test_opportunity_observation_separates_holding_and_full_mfe(self):
   import datetime as dt
   pos={"opened_at_utc":"2026-10-05T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}],
@@ -145,7 +187,7 @@ class OpportunityObservationTests(unittest.TestCase):
 
  def test_opportunity_summary_separates_distribution(self):
   rows=[{"holding_mfe_pct":8.0,"full_opportunity_mfe_pct":20.0,"net_return_pct":3.0,"holding_profit_capture_ratio":.375,
-         "full_opportunity_capture_ratio":.15,"observation_complete":True,"exit_evaluation":"POTENTIAL_PREMATURE_EXIT"}]
+         "full_opportunity_capture_ratio":.15,"observation_complete":True,"post_exit_observation":{"72h":{"max_return_from_sell_pct":8.}},"exit_evaluation":"POTENTIAL_PREMATURE_EXIT"}]
   out=eng.opportunity_summary(rows)
   self.assertEqual(out["evaluated_positions"],1);self.assertEqual(out["completed_72h_observations"],1)
   self.assertEqual(out["full_opportunity_mfe_distribution"]["10_20"],1)
