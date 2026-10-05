@@ -1622,9 +1622,72 @@
     "event_timestamp_checked_before_mutation": true,
     "canonical_gate": "research/stock_shadow/market_session.py",
     "local_tests": {
-      "all": 109,
-      "p0": 23
+      "all": 112,
+      "p0": 26
     },
-    "github_actions_acceptance": "PENDING"
+    "github_actions_acceptance": "PASSED",
+    "gate_commit": "aa970766c30edf0dd60cc1bc88a66e8feafe9c4c",
+    "persistence_commit": "cd9948fd9145067eb783dc0e8f79979c65fc5630",
+    "first_full_action_failure": {
+      "run_id": 37352238953,
+      "reason": "portfolio-v1.json rebase conflict with an intervening Monitor write; test, scan and review steps passed; persistence did not pass."
+    },
+    "persistence_repair": "Checkout latest main when each serialized job begins; persist only files produced by that run onto latest main; reject intervening code/ledger changes; retry unrelated push races without restoring unrelated old files.",
+    "github_actions": {
+      "stock_shadow": {
+        "run_id": 37352848598,
+        "conclusion": "success",
+        "persisted": true
+      },
+      "monitor": {
+        "run_id": 37352848506,
+        "conclusion": "success",
+        "persisted": true
+      },
+      "replay": {
+        "run_id": 37352848590,
+        "conclusion": "success",
+        "persisted": true,
+        "acceptance_status": "ACCEPTED"
+      }
+    },
+    "weekend_forced_simulation": {
+      "buy": 0,
+      "add": 0,
+      "structural_sell": 0,
+      "monitor_sell": 0,
+      "candidate_research_preserved": true,
+      "cohort_and_trade_ledger_unchanged": true,
+      "test_mode": "controlled clock/provider tests executed in all three GitHub Actions; not a live weekend dispatch"
+    },
+    "regular_session_control": {
+      "buy_add_structural_sell_allowed": true,
+      "actual_monitor_sell_observed": true,
+      "late_event_at_exact_close_blocked": true,
+      "early_close_respects_calendar": true,
+      "holiday_missing_calendar_evidence_blocks": true
+    },
+    "latest_verified_portfolio": {
+      "open_positions": 327,
+      "closed_positions": 1,
+      "events": 329,
+      "buys": 328,
+      "sells": 1,
+      "illegal_session_events": 0,
+      "verified_event_date": "2026-10-05",
+      "monitor_run_id": "37352848506"
+    },
+    "changed_files": [
+      "research/stock_shadow/market_session.py",
+      "research/stock_shadow/stock_shadow_v1.py",
+      "research/stock_shadow/stock_position_monitor.py",
+      "research/stock_shadow/persist_results.sh",
+      "tests/test_stock_shadow.py",
+      ".github/workflows/stock-shadow.yml",
+      ".github/workflows/stock-shadow-position-monitor.yml",
+      ".github/workflows/stock-shadow-replay.yml",
+      "research/results/stock-shadow/audit-market-session-p0-20261005.json"
+    ],
+    "forward_sample_effect": "Core signal definitions, position management rules, fees and sizing remain unchanged. The pre-existing 308 weekend trades are invalid execution samples and remain excluded; the current lawful Oct-5 cohort was preserved and advanced. This repair did not reset/re-date/delete the active cohort or historical evidence."
   }
 }
