@@ -543,7 +543,7 @@ def profit_protection(pos,p):
  return {"armed":armed,"raw_pct":raw,"mfe_pct":mfe,"giveback_pct":giveback,"protect_floor_pct":protect_floor,
   "exit":bool(armed and (raw<=protect_floor or giveback>=GIVEBACK_MAX_PCT))}
 
-def position_health(pos,e,now=None,systemic_level="NORMAL"):
+def position_health(pos,e,now=None,systemic_level="NORMAL",confirmed_systemic_shock=False):
  # Ordinary signal decay is not a stop-loss. It only becomes thesis invalidation
  # after several consecutive multi-factor weak observations.
  hard=[]
@@ -559,7 +559,7 @@ def position_health(pos,e,now=None,systemic_level="NORMAL"):
  # During a confirmed/fail-closed systemic shock, cross-market liquidity collapse
  # is not proof that every individual asset died. Fatal identity/contract/supply
  # evidence above remains actionable; liquidity-only loss exits are suppressed.
- if systemic_level in ("HIGH","CRITICAL") and liquidity_hard:
+ if confirmed_systemic_shock and systemic_level in ("HIGH","CRITICAL") and liquidity_hard:
   pos["systemic_liquidity_suppressed_at_utc"]=(now or dt.datetime.now(dt.timezone.utc)).isoformat()
   pos["systemic_liquidity_suppressed_reasons"]=liquidity_hard
  else:hard+=liquidity_hard
@@ -737,7 +737,8 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
   systemic_level=((state.get("systemic_risk") or {}).get("level") or "HIGH")
-  health,health_reasons=position_health(pos,e,now,systemic_level)
+  confirmed_systemic=tail.confirmed_systemic_liquidity_shock(state)
+  health,health_reasons=position_health(pos,e,now,systemic_level,confirmed_systemic)
   signal_fresh=fresh((e.get("signal_evidence") or {}).get("observed_at_utc"),now)
   book_fresh=fresh(e.get("book_observed_at_utc"),now)
   if not (signal_fresh and book_fresh):act="HOLD";reasons.append("MANAGEMENT_EVIDENCE_STALE_OR_MISSING")
