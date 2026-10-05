@@ -270,6 +270,7 @@ jobs:
           assert d.get('real_trading_enabled') is False
           assert d.get('scope')=='LEADING_RISK_PARTIAL_PATH_REPLAY_NOT_STRATEGY_BACKTEST'
           assert len(d.get('windows') or [])>=3
+          assert sum(x.get('status')=='OK' for x in d.get('windows') or [])>=2, 'LEADING_REPLAY_NEEDS_TWO_VALID_STRESS_WINDOWS'
           assert any('not fabricated' in x for x in d.get('limitations') or [])
           print('LEADING_RISK_REPLAY_CONTRACT_OK')
           PY

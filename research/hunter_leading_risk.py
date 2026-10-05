@@ -22,14 +22,34 @@ def _get_json(url,timeout=8):
     with urllib.request.urlopen(req,timeout=timeout) as r:return json.load(r)
 
 def _derivatives(fetch_json):
-    """Best-effort public Binance futures evidence. Missing data is uncertainty, never a sell signal."""
-    base="https://fapi.binance.com"
-    premium=fetch_json(base+"/fapi/v1/premiumIndex?"+urllib.parse.urlencode({"symbol":"BTCUSDT"}))
-    oi=fetch_json(base+"/fapi/v1/openInterest?"+urllib.parse.urlencode({"symbol":"BTCUSDT"}))
-    mark=finite((premium or {}).get("markPrice"));index=finite((premium or {}).get("indexPrice"))
-    return {"open_interest":finite((oi or {}).get("openInterest")),
-            "funding_rate":finite((premium or {}).get("lastFundingRate")),
-            "basis_pct":round((mark/index-1)*100,5) if mark and index else None}
+    """Best-effort public derivatives evidence with independent official fallbacks."""
+    errors=[]
+    try:
+        base="https://fapi.binance.com"
+        premium=fetch_json(base+"/fapi/v1/premiumIndex?"+urllib.parse.urlencode({"symbol":"BTCUSDT"}))
+        oi=fetch_json(base+"/fapi/v1/openInterest?"+urllib.parse.urlencode({"symbol":"BTCUSDT"}))
+        mark=finite((premium or {}).get("markPrice"));index=finite((premium or {}).get("indexPrice"))
+        out={"source":"BINANCE_FUTURES","open_interest":finite((oi or {}).get("openInterest")),
+             "funding_rate":finite((premium or {}).get("lastFundingRate")),
+             "basis_pct":round((mark/index-1)*100,5) if mark and index else None}
+        if out["open_interest"] is not None and out["funding_rate"] is not None:return out
+        errors.append("BINANCE_INCOMPLETE")
+    except Exception as exc:errors.append("BINANCE_"+type(exc).__name__)
+    try:
+        base="https://www.okx.com"
+        oi=fetch_json(base+"/api/v5/public/open-interest?"+urllib.parse.urlencode({"instType":"SWAP","instId":"BTC-USDT-SWAP"}))
+        funding=fetch_json(base+"/api/v5/public/funding-rate?"+urllib.parse.urlencode({"instId":"BTC-USDT-SWAP"}))
+        swap=fetch_json(base+"/api/v5/market/ticker?"+urllib.parse.urlencode({"instId":"BTC-USDT-SWAP"}))
+        spot=fetch_json(base+"/api/v5/market/ticker?"+urllib.parse.urlencode({"instId":"BTC-USDT"}))
+        def first(d):return ((d or {}).get("data") or [{}])[0]
+        o=first(oi);fr=first(funding);sw=first(swap);sp=first(spot)
+        op=finite(o.get("oi"));fund=finite(fr.get("fundingRate"));swap_px=finite(sw.get("last"));spot_px=finite(sp.get("last"))
+        out={"source":"OKX_PUBLIC","open_interest":op,"funding_rate":fund,
+             "basis_pct":round((swap_px/spot_px-1)*100,5) if swap_px and spot_px else None}
+        if op is not None and fund is not None:return out
+        errors.append("OKX_INCOMPLETE")
+    except Exception as exc:errors.append("OKX_"+type(exc).__name__)
+    raise RuntimeError("DERIVATIVES_ALL_SOURCES_FAILED:"+",".join(errors))
 
 def _median(xs):
     xs=[x for x in xs if x is not None]
@@ -70,7 +90,7 @@ def collect_evidence(scan,liq,review,systemic,previous,now,cfg,fetch_json=None):
     deriv_error=None
     try:deriv=_derivatives(fetch_json)
     except Exception as exc:
-        deriv={"open_interest":None,"funding_rate":None,"basis_pct":None};deriv_error=type(exc).__name__
+        deriv={"source":None,"open_interest":None,"funding_rate":None,"basis_pct":None};deriv_error=type(exc).__name__+":"+str(exc)[:160]
 
     prev=(previous or {}).get("evidence") or {}
     def delta(path,current):
@@ -79,8 +99,8 @@ def collect_evidence(scan,liq,review,systemic,previous,now,cfg,fetch_json=None):
         p=finite(p)
         return None if p is None or current is None else current-p
     deriv["open_interest_change_pct"]=None
-    old_oi=finite(((prev.get("leverage") or {}).get("open_interest")))
-    if old_oi and deriv["open_interest"] is not None:
+    old_lev=(prev.get("leverage") or {});old_oi=finite(old_lev.get("open_interest"))
+    if old_oi and deriv["open_interest"] is not None and old_lev.get("source")==deriv.get("source"):
         deriv["open_interest_change_pct"]=round((deriv["open_interest"]/old_oi-1)*100,4)
 
     breadth={"sample_count":len(moves),"negative_fraction":round(neg,4) if neg is not None else None,
