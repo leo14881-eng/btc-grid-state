@@ -1,0 +1,38 @@
+name: Bybit Bulk Cache Check
+on:
+  push:
+    paths:
+      - ".github/workflows/bybit-bulk-cache-check.yml"
+      - "research/hunter_bybit_availability.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify full spot response and zero-request cache hit
+        run: |
+          python - <<'PY'
+          import json,pathlib,sys,tempfile
+          sys.path.insert(0,"research")
+          import hunter_bybit_availability as m
+          with tempfile.TemporaryDirectory() as temp:
+              m.SPOT_CACHE=pathlib.Path(temp)/"spot-cache.json"
+              try:
+                  symbols,first=m.spot_proxy_universe()
+              except Exception as exc:
+                  print("BULK_REQUEST_FAILED",str(exc),flush=True)
+                  raise
+              print("BULK_REQUEST_SUCCESS",json.dumps({"symbols_count":len(symbols),"FLUID":"FLUID" in symbols,"CARV":"CARV" in symbols,**first}),flush=True)
+              symbols2,second=m.spot_proxy_universe()
+              assert symbols2==symbols
+              assert second["cache_hit"] and second["network_requests"]==0
+              assert first["network_requests"]==1
+              print("CACHE_HIT_SUCCESS",json.dumps(second),flush=True)
+          PY
