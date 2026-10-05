@@ -382,9 +382,16 @@ class TailRiskIntegrationTests(unittest.TestCase):
   e={"score":12,"independent":3,"btc_rel_1h":2,"btc_rel_4h":3,"rel_accel":1,"spread_bps":250,
      "bid_depth_2pct_usdt":1000,"ask_depth_2pct_usdt":1000,"supply_confirmed_major_risk":False,"blockers":[],
      "book_observed_at_utc":now.isoformat(),"signal_evidence":eng.stamp("X","g",now.isoformat())}
-  health,reasons=position_health(p,e,now,"HIGH")
+  health,reasons=position_health(p,e,now,"HIGH",True)
   self.assertNotEqual(health,"HARD_INVALIDATION")
   self.assertIn("CATASTROPHIC_SPREAD",p["systemic_liquidity_suppressed_reasons"])
+ def test_fail_closed_missing_systemic_data_does_not_suppress_single_asset_hard_exit(self):
+  import datetime as dt
+  now=dt.datetime.now(dt.timezone.utc);p={}
+  e={"score":12,"independent":3,"btc_rel_1h":2,"btc_rel_4h":3,"rel_accel":1,"spread_bps":250,
+     "bid_depth_2pct_usdt":1000,"ask_depth_2pct_usdt":1000,"supply_confirmed_major_risk":False,"blockers":[],
+     "book_observed_at_utc":now.isoformat()}
+  self.assertEqual(position_health(p,e,now,"HIGH",False)[0],"HARD_INVALIDATION")
  def test_fatal_identity_still_exits_during_systemic_crash(self):
   import datetime as dt
   now=dt.datetime.now(dt.timezone.utc);p={}
