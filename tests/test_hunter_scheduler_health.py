@@ -3,6 +3,7 @@ from pathlib import Path
 from research import hunter_scheduler_health as s
 
 UTC=dt.timezone.utc
+# Isolated P0 validation: infrastructure only; no strategy mutation.
 class SchedulerHealthTests(unittest.TestCase):
  def test_generation_floor(self):
   self.assertEqual(s.generation_id(dt.datetime(2026,10,6,2,27,43,tzinfo=UTC)),"2026-10-06T02:25:00Z")
