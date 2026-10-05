@@ -511,7 +511,7 @@ def main():
     # Selective V1: scan the whole market, but BUY only candidates that pass every gate.
     newly_opened=set()
     for s,m,d in candidates:
-        if actions_enabled and s not in state["positions"]:
+        if actions_enabled and trade_action_window(session=session) and s not in state["positions"]:
             tr={"at":now(),"price":m["price"],"notional":NOTIONAL,"reason":"SELECTIVE_ENTRY_V1","score":d["score"],"entry_structure":d["entry_structure"],"selection_reasons":d["reasons"],"selection_metrics":d["metrics"],"snapshot":m}
             state["positions"][s]={"symbol":s,"opened_at":tr["at"],"tranches":[tr],"entry_score":d["score"],"entry_structure":d["entry_structure"],"mfe_net_pct":net_pct({"tranches":[tr]},m["price"]),"mae_net_pct":net_pct({"tranches":[tr]},m["price"])}
             events.append({"type":"BUY","symbol":s,**tr}); newly_opened.add(s)
@@ -533,7 +533,7 @@ def main():
         floor=profit_floor_net_pct(mfe)
         p["profit_protection_floor_net_pct"]=round(floor,6) if floor is not None else None
         p["profit_protection_signal"]=bool(floor is not None and r<=floor)
-        if actions_enabled and s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
+        if actions_enabled and trade_action_window(session=session) and s not in newly_opened and n<MAX_TRANCHES and recovery["eligible"] and decision["ready"]:
             tr={"at":now(),"price":price,"notional":NOTIONAL,"reason":"PULLBACK_RECOVERY_ADD_V3","score":decision["score"],"position_state":ps,"recovery_signal":recovery,"snapshot":m}
             p["tranches"].append(tr); events.append({"type":"ADD","symbol":s,**tr}); p["avg_price"]=avg(p)
             p["pullback_seen"]=False; p["pullback_low_price"]=None
@@ -552,7 +552,7 @@ def main():
             # Rebound exits are profit-only too. A losing rebound remains pending.
             if r > 0:
                 exit_reason="REBOUND_PROFIT_EXIT_AFTER_DETERIORATION_V3"
-        if exit_reason and actions_enabled:
+        if exit_reason and actions_enabled and trade_action_window(session=session):
             final_pnl=net_pnl(p,price); final_r=net_pct(p,price)
             closed=dict(p); closed.update({"closed_at":now(),"exit_price":price,"exit_reason":exit_reason,
                 "realized_net_pnl_usdt":round(final_pnl,6),"realized_net_return_pct":round(final_r,6),
