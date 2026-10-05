@@ -165,6 +165,8 @@ def live():
             record = {"name":name,"ok":True,"items":len(result) if hasattr(result,"__len__") else None}
         except Exception as exc:
             record = {"name":name,"ok":False,"error":str(exc)[:180]}
+            if hasattr(exc,"read"):
+                record["public_error_body"] = exc.read(2048).decode("utf-8",errors="replace")
         record["elapsed_ms"] = round((time.monotonic()-start)*1000,1)
         records.append(record)
     bybit, binance = m.Bybit(), m.Binance()
@@ -221,6 +223,14 @@ def live():
             return checks
         measure("bybit_v3_invalid_requests_blocked",blocked)
         measure("original_worker_health",lambda:m.request("https://bybit-api-test.qinx468.workers.dev/health"))
+        measure("original_worker_quotes",lambda:m.Bybit(lambda url,body=None:m.request(url.replace(bybit.host,"https://bybit-api-test.qinx468.workers.dev"),body)).quotes())
+        diagnostic = {}
+        for name,url,body in [("new_debug",bybit.host+"/debug",None),
+                              ("original_debug","https://bybit-api-test.qinx468.workers.dev/debug",None),
+                              ("new_raw_book",bybit.host+"/bybit/orderbooks",{"symbols":["BTCUSDT"]})]:
+            try:diagnostic[name] = m.request(url,body)
+            except Exception as exc:diagnostic[name] = str(exc)
+        print("WORKER_PUBLIC_DIAGNOSTICS "+json.dumps(diagnostic,sort_keys=True))
     # Public GET/market data only. An absent v3 deployment is an admission failure,
     # not a reason to modify the live Worker or enable the adapter.
     print("LIVE_PUBLIC_API_REPORT "+json.dumps({"records":records,
