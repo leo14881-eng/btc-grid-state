@@ -367,3 +367,44 @@ class CapitalAllocatorRegressionTests(unittest.TestCase):
   state["open_positions"][0]["unrealized_pnl_usdt"]=99999.0
   self.assertEqual(eng.capital_snapshot(state,scan)["equity_usdt"],20000.0)
 
+
+class TailRiskIntegrationTests(unittest.TestCase):
+ def _normal_systemic(self):
+  return {"level":"NORMAL","raw_level":"NORMAL","last_observation_id":"ok","risk_release_fraction":1.0,"recovery_mode":False}
+ def test_systemic_liquidity_shock_does_not_create_liquidity_only_hard_exit(self):
+  import datetime as dt
+  now=dt.datetime.now(dt.timezone.utc);p={}
+  e={"score":12,"independent":3,"btc_rel_1h":2,"btc_rel_4h":3,"rel_accel":1,"spread_bps":250,
+     "bid_depth_2pct_usdt":1000,"ask_depth_2pct_usdt":1000,"supply_confirmed_major_risk":False,"blockers":[],
+     "book_observed_at_utc":now.isoformat(),"signal_evidence":eng.stamp("X","g",now.isoformat())}
+  health,reasons=position_health(p,e,now,"HIGH")
+  self.assertNotEqual(health,"HARD_INVALIDATION")
+  self.assertIn("CATASTROPHIC_SPREAD",p["systemic_liquidity_suppressed_reasons"])
+ def test_fatal_identity_still_exits_during_systemic_crash(self):
+  import datetime as dt
+  now=dt.datetime.now(dt.timezone.utc);p={}
+  e={"score":12,"independent":3,"btc_rel_1h":2,"btc_rel_4h":3,"rel_accel":1,"spread_bps":250,
+     "bid_depth_2pct_usdt":1000,"ask_depth_2pct_usdt":1000,"supply_confirmed_major_risk":False,
+     "blockers":["CONTRACT_MISMATCH"],"book_observed_at_utc":now.isoformat()}
+  self.assertEqual(position_health(p,e,now,"CRITICAL")[0],"HARD_INVALIDATION")
+ def test_unified_allocator_enforces_tail_budget(self):
+  scan={"coins":{"BTC":{"change_24h_pct":4},"A":{"change_24h_pct":2},"B":{"change_24h_pct":2}}}
+  state={"open_positions":[{"asset":"P"+str(i),"tranches":[{"price":1,"notional_usdt":1000}]} for i in range(4)],
+         "closed_positions":[],"closed_trade_archive":[],"systemic_risk":self._normal_systemic()}
+  edge={"estimated_rr":3,"btc_rel_1h":2,"btc_rel_4h":2,"rel_accel":1,"score":12,"spread_bps":10,"buy_slippage_bps":10}
+  ok,reasons=eng.marginal_capital_gate(state,1000,edge,"BUY",scan)
+  self.assertFalse(ok);self.assertIn("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT",reasons)
+ def test_realized_profit_does_not_expand_tail_cap(self):
+  scan={"coins":{"BTC":{"change_24h_pct":4},"A":{"change_24h_pct":2},"B":{"change_24h_pct":2}}}
+  state={"open_positions":[],"closed_positions":[{"net_pnl_usdt":5000}],"closed_trade_archive":[],"systemic_risk":self._normal_systemic()}
+  snap=eng.capital_snapshot(state,scan)
+  self.assertEqual(snap["equity_usdt"],25000.0)
+  self.assertEqual(snap["max_deployable_usdt"],4000.0)
+ def test_reentry_lock_requires_full_risk_recovery(self):
+  import datetime as dt
+  now=dt.datetime.now(dt.timezone.utc)
+  state={"systemic_risk":{"level":"HIGH","recovery_mode":True,"last_observation_id":"shock"},"circuit_breaker":{"status":"TRIPPED"},
+         "reentry_registry":{"X":{"last_exit_at_utc":now.isoformat(),"last_exit_price":100,"post_exit_low":95,"reset_seen":True,"risk_lock":True}}}
+  c={"asset":"X","signal":{"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1},
+     "signal_evidence":eng.stamp("X","new",(now+dt.timedelta(minutes=5)).isoformat())}
+  self.assertFalse(reentry_allowed(state,c,102)[0])
