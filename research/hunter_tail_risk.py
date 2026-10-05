@@ -156,7 +156,7 @@ def update_systemic_risk(state,evidence,now,cfg):
     # enforced are not trusted.
     if recovery_mode and recovery>0 and not last_counted:recovery=0
     if raw in ("HIGH","CRITICAL"):
-        level=raw;recovery=0;release=0.0;recovery_mode=True
+        level=raw;recovery=0;release=0.0;recovery_mode=True;last_counted=None
     elif prev in ("HIGH","CRITICAL") or recovery_mode:
         if raw=="NORMAL":
             min_gap=float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"])
@@ -172,7 +172,7 @@ def update_systemic_risk(state,evidence,now,cfg):
                 level="ELEVATED";release=round(recovery/required,4);recovery_mode=True
                 if not gap_ok:reasons=list(reasons)+["RECOVERY_OBSERVATION_TOO_SOON"]
         else:
-            level="HIGH";release=0.0;recovery=0;recovery_mode=True
+            level="HIGH";release=0.0;recovery=0;recovery_mode=True;last_counted=None
             reasons=list(reasons)+["RECOVERY_REQUIRES_CONSECUTIVE_NORMAL_OBSERVATIONS"]
     else:
         level=raw;release=1.0;recovery=0;recovery_mode=False
