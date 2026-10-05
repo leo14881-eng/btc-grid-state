@@ -2,30 +2,6 @@
   "schema": "hunter_shadow_v2_overfilter_guard_v1",
   "cycles": [
     {
-      "at_utc": "2026-10-05T07:06:25.426732+00:00",
-      "generation_id": "20261005T070126598030Z",
-      "buys": 2,
-      "safe_misses": [
-        {
-          "asset": "FLOKI",
-          "change_24h_pct": 8.535,
-          "reasons": [
-            "SCORE_WEAK"
-          ],
-          "estimated_rr": 1.814
-        },
-        {
-          "asset": "ORCA",
-          "change_24h_pct": 9.804,
-          "reasons": [
-            "SCORE_WEAK",
-            "BTC_RELATIVE_WEAK"
-          ],
-          "estimated_rr": 1.762
-        }
-      ]
-    },
-    {
       "at_utc": "2026-10-05T07:51:47.857517+00:00",
       "generation_id": "20261005T074629690852Z",
       "buys": 5,
@@ -207,15 +183,41 @@
         }
       ],
       "risk_blocked": false
+    },
+    {
+      "at_utc": "2026-10-05T16:46:14.659409+00:00",
+      "generation_id": "20261005T164221279207Z",
+      "buys": 0,
+      "safe_misses": [
+        {
+          "asset": "ORCA",
+          "change_24h_pct": 9.956,
+          "reasons": [
+            "SCORE_WEAK"
+          ],
+          "estimated_rr": 1.817
+        },
+        {
+          "asset": "EDU",
+          "change_24h_pct": 10.687,
+          "reasons": [
+            "SCORE_WEAK",
+            "RELATIVE_MOMENTUM_DECELERATING"
+          ],
+          "estimated_rr": 1.716
+        }
+      ],
+      "risk_blocked": false
     }
   ],
-  "status": "NORMAL",
-  "as_of_utc": "2026-10-05T16:24:54.505518+00:00",
-  "consecutive_zero_buy_cycles": 8,
+  "status": "OVER_FILTERING",
+  "as_of_utc": "2026-10-05T16:46:14.659409+00:00",
+  "consecutive_zero_buy_cycles": 9,
   "recent_safe_missed_assets": [
-    "EDU"
+    "EDU",
+    "ORCA"
   ],
-  "optimizer_action": "NONE",
+  "optimizer_action": "RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST",
   "live_capital_rules_changed": false,
   "capital_authority": "NONE_SHADOW_ONLY"
 }
