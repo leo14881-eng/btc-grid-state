@@ -64,6 +64,12 @@ jobs:
             echo "Stock Shadow code changed during this run; refusing stale-result persistence"
             exit 42
           fi
+          # A monitor started from an older portfolio must never overwrite a newer
+          # portfolio/trade ledger after another run repaired or advanced the cohort.
+          if ! git diff --quiet HEAD origin/main -- research/results/stock-shadow/portfolio-v1.json research/results/stock-shadow/trades-v1.json; then
+            echo "Stock Shadow ledger changed during this monitor run; refusing stale portfolio persistence"
+            exit 43
+          fi
           git config user.name "stock-shadow-bot"
           git config user.email "stock-shadow-bot@users.noreply.github.com"
           # Preserve only files actually produced by this monitor, then rebase the result
