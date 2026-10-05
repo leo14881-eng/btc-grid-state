@@ -20,6 +20,17 @@ class PositionMonitorTests(unittest.TestCase):
    with patch.object(m.v1,"configure_v1",lambda:None):
     out=m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True)
    saved=m.load(p);summary=m.load(p.with_name(p.stem+"-summary.json"));self.assertEqual([x["asset"] for x in saved["open_positions"]],["X"]);self.assertEqual(len(saved["open_positions"][0]["tranches"]),2);self.assertEqual(out["added"],["X"]);self.assertEqual(summary["open_positions"],1);self.assertEqual(summary["closed_positions"],0)
+ def test_v2_monitor_defers_add_to_full_capital_allocator(self):
+  state,market,review,liq,supply=self.fixture()
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d)/"v2.json";m.eng.atomic_json_write(p,state)
+   out=m.run_lane(p,"SHADOW_V2",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),False)
+   saved=m.load(p)
+   self.assertEqual(len(saved["open_positions"][0]["tranches"]),1)
+   self.assertEqual(out["added"],[])
+   self.assertEqual(out["deferred_adds"],["X"])
+   self.assertTrue(any("CAPITAL_ALLOCATION_PENDING" in (x.get("reasons") or []) for x in saved.get("decisions") or []))
+
  def test_bstock_is_quarantined_not_sold_or_managed(self):
   state,market,review,liq,supply=self.fixture()
   state["open_positions"][0]["asset"]="MSFTB";market["MSFTB"]=market.pop("X")
