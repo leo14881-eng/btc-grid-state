@@ -79,22 +79,15 @@ class FullSpotCacheTests(unittest.TestCase):
             xs,_=mod.spot_proxy_universe(self.now+dt.timedelta(days=1))
         self.assertNotIn('FLUID',xs)
 
-    def test_worker_bulk_rejection_uses_explicit_candidate_fallback(self):
-        review=pathlib.Path(self.tmp.name)/'review.json'
+    def test_failed_bulk_refresh_never_queries_individual_symbols(self):
         output=pathlib.Path(self.tmp.name)/'availability.json'
-        review.write_text(json.dumps({'capital_review_eligible':['FLUID']}))
-        def worker(url,*args,**kwargs):
-            if url.endswith('/bybit/spot'):
-                raise RuntimeError('HTTP_400 body={"ok":false,"error":"INVALID_SYMBOL"}')
-            symbol=url.split('symbol=')[-1]
-            return {'retCode':0,'result':{'list':[row(symbol.removesuffix('USDT'))]}}
-        with patch.object(mod,'REVIEW',review),patch.object(mod,'OUT',output),patch.object(mod,'request',side_effect=worker) as req,patch.object(mod,'alpha',return_value=(None,'CREDENTIALS_NOT_CONFIGURED')):
+        with patch.object(mod,'OUT',output),patch.object(mod,'request',side_effect=RuntimeError('HTTP_400 INVALID_SYMBOL')) as req,patch.object(mod,'alpha',return_value=(None,'CREDENTIALS_NOT_CONFIGURED')):
             mod.main()
         d=json.loads(output.read_text())['spot']
-        self.assertEqual(d['status'],'OK_CANDIDATE_SCOPED_BYBIT_VIA_CLOUDFLARE')
+        self.assertEqual(d['status'],'UNKNOWN')
         self.assertFalse(d['complete'])
-        self.assertEqual(d['symbols'],['BTC','ETH','FLUID'])
-        self.assertIn('HTTP_400',d['bulk_error'])
-        self.assertEqual(req.call_count,4)
+        self.assertEqual(d['symbols'],[])
+        req.assert_called_once_with(mod.SPOT_PROXY+'/bybit/spot')
+        self.assertFalse(self.path.exists())
 
 if __name__=='__main__':unittest.main()
