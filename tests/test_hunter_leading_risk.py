@@ -8,6 +8,15 @@ def ev(oid="1",neg=.2,acc=0,rel=.2,racc=0,spread=5,sacc=0,depth=0,imb=0,btc5=0,b
  "btc_structure":{"return_5m_pct":btc5,"return_15m_pct":btc15,"return_1h_pct":btc1},"leverage":{"open_interest_change_pct":oi,"funding_rate":fund,"basis_pct":basis},
  "stablecoins":{"max_deviation_pct":stable},"missing_or_stale":list(missing or [])}
 class LeadingRiskTests(unittest.TestCase):
+ def test_derivatives_falls_back_to_second_official_source(self):
+  def fetch(url):
+   if "fapi.binance.com" in url:raise RuntimeError("blocked")
+   if "open-interest" in url:return {"data":[{"oi":"12345"}]}
+   if "funding-rate" in url:return {"data":[{"fundingRate":"0.0001"}]}
+   if "BTC-USDT-SWAP" in url:return {"data":[{"last":"100.1"}]}
+   if "BTC-USDT" in url:return {"data":[{"last":"100"}]}
+   raise AssertionError(url)
+  x=r._derivatives(fetch);self.assertEqual(x["source"],"OKX_PUBLIC");self.assertEqual(x["open_interest"],12345.0);self.assertAlmostEqual(x["basis_pct"],.1)
  def test_normal_is_normal(self):
   raw,score,groups,_=r.classify(ev(),C);self.assertEqual(raw,"NORMAL");self.assertEqual(score,0);self.assertFalse(any(groups.values()))
  def test_multiple_independent_groups_make_precrash(self):
