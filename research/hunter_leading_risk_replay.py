@@ -4,7 +4,7 @@
 Only completed spot klines are reconstructed. Historical order-book withdrawal,
 OI/funding, liquidation queues and stablecoin microstructure are not fabricated.
 """
-import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
+import datetime as dt,json,math,os,pathlib,time,urllib.parse,urllib.request
 from research.hunter_policy import C
 from research import hunter_leading_risk as leading
 
@@ -16,8 +16,15 @@ WINDOWS=[
  ("2024-08-05",dt.datetime(2024,8,4,12,tzinfo=dt.timezone.utc),dt.datetime(2024,8,6,12,tzinfo=dt.timezone.utc)),
  ("2025-02-03",dt.datetime(2025,2,2,12,tzinfo=dt.timezone.utc),dt.datetime(2025,2,4,12,tzinfo=dt.timezone.utc))]
 def get(url):
- req=urllib.request.Request(url,headers={"User-Agent":"hunter-leading-replay/1.0","Accept":"application/json"})
- with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+ last=None
+ for attempt in range(4):
+  try:
+   req=urllib.request.Request(url,headers={"User-Agent":"hunter-leading-replay/1.0","Accept":"application/json"})
+   with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+  except Exception as exc:
+   last=exc
+   if attempt<3:time.sleep(.5*(2**attempt))
+ raise last
 def bars(sym,start,end):
  q=urllib.parse.urlencode({"symbol":sym,"interval":"5m","startTime":int(start.timestamp()*1000),"endTime":int(end.timestamp()*1000),"limit":1000})
  out=[]
@@ -31,7 +38,8 @@ def align(series):
  ts=sorted(common);return ts,{s:[maps[s][t] for t in ts] for s in maps}
 def pct(a,b):return (b/a-1)*100 if a else 0
 def run_window(name,start,end):
- ts,px=align({s:bars(s,start,end) for s in SYMBOLS})
+ try:ts,px=align({s:bars(s,start,end) for s in SYMBOLS})
+ except Exception as exc:return {"name":name,"status":"DATA_UNAVAILABLE","error":type(exc).__name__+":"+str(exc)[:160],"aligned_bars":0}
  if len(ts)<100:return {"name":name,"status":"INSUFFICIENT_DATA","aligned_bars":len(ts)}
  btc=px["BTCUSDT"];alts=[s for s in SYMBOLS if s!="BTCUSDT"];signals=[]
  for i in range(12,len(ts)):
