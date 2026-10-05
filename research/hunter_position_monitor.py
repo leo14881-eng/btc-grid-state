@@ -44,6 +44,8 @@ def configure_lane(v1_mode):
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"];eng.ENTRY_MODE=LANES["V2"]["entry_mode"];eng.DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"];eng.DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"];eng.STRATEGY_ID=LANES["V2"]["strategy"];eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
 def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None):
  state=load(path);excluded=set(excluded or [])
+ # Both lanes get their own bounded observation budget in this shared process.
+ eng._opportunity_backfill_requests=0
  quarantine=eng.quarantine_non_crypto_history(state,excluded)
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
@@ -52,11 +54,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  # Closed positions remain observation subjects through SELL+72h. Live marks may
  # extend the all-time opportunity peak; exact horizon peaks are reconstructed by
  # the bounded historical backfill, never inferred from a late current price.
- for pos in state.get("closed_positions") or []:
-  if pos.get("observation_complete"):continue
-  p=(market.get(pos.get("asset")) or {}).get("reference_price")
-  if p:eng.update_post_exit(pos,p,now)
-  eng.backfill_opportunity_history(pos,now)
+ eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"))
  if len(state.get("decisions") or [])>eng.MAX_DECISION_HISTORY:
   n=len(state["decisions"])-eng.MAX_DECISION_HISTORY;state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+n;state["decisions"]=state["decisions"][-eng.MAX_DECISION_HISTORY:]
  if len(state.get("events") or [])>eng.MAX_EVENT_HISTORY:
