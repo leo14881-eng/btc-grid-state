@@ -47,9 +47,11 @@ class SharedShadowEngineTests(unittest.TestCase):
 
  def test_v2_capital_pool_blocks_overcommit(self):
   state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":20000}]}]}
-  self.assertFalse(core.capital_available(state,1000))
+  self.assertFalse(core.capital_available(state,1000,"BUY"))
+  self.assertFalse(core.capital_available(state,1000,"ADD"))
   state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":19000}]}]}
-  self.assertTrue(core.capital_available(state,1000))
+  self.assertFalse(core.capital_available(state,1000,"BUY"))
+  self.assertTrue(core.capital_available(state,1000,"ADD"))
 
  def test_freeze_is_fail_closed_by_default(self):
   self.assertTrue(core.SHADOW_FREEZE)
