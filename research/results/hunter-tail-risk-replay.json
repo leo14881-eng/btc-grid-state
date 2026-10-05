@@ -1,0 +1,96 @@
+{
+  "schema": "hunter_tail_risk_replay_v1",
+  "as_of_utc": "2026-10-05T12:15:00.217567+00:00",
+  "historical_window": {
+    "start_utc": "2025-10-10T12:00:00+00:00",
+    "end_utc": "2025-10-11T12:00:00+00:00",
+    "source": "BINANCE_SPOT_5M_COMPLETED_KLINES",
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT",
+      "XRPUSDT",
+      "DOGEUSDT",
+      "ADAUSDT",
+      "SUIUSDT",
+      "ENAUSDT"
+    ],
+    "aligned_bars": 288
+  },
+  "scope": "TAIL_RISK_PATH_REPLAY_NOT_STRATEGY_BACKTEST",
+  "limitations": [
+    "Historical klines cannot prove extreme-event stop execution price.",
+    "Historical spread/depth and queue priority are not reconstructed.",
+    "Stablecoin/order-book dimensions are omitted from detector replay; live gate remains fail-closed when those dimensions are missing.",
+    "Missed-upside is an opportunity-cost proxy, not evidence that Hunter would have selected the basket."
+  ],
+  "partial_detector_assumption": "Replay HIGH uses historical BTC 1h speed plus cross-alt 1h breadth only; missing historical microstructure is NOT treated as live evidence.",
+  "baseline_current_allocator": {
+    "assumed_exposure_usdt": 19000.0,
+    "max_drawdown_pct": -45.2801,
+    "tail_pnl_usdt": -8977.13,
+    "end_net_pnl_usdt": -3495.89
+  },
+  "tail_budget_scenarios": [
+    {
+      "tail_loss_budget_usdt": 1000.0,
+      "max_exposure_usdt": 1000.0,
+      "max_drawdown_pct": -2.3994,
+      "tail_pnl_usdt": -472.48,
+      "end_net_pnl_usdt": -183.99,
+      "missed_upside_proxy_usdt": 0.0
+    },
+    {
+      "tail_loss_budget_usdt": 2000.0,
+      "max_exposure_usdt": 2000.0,
+      "max_drawdown_pct": -4.797,
+      "tail_pnl_usdt": -944.96,
+      "end_net_pnl_usdt": -367.99,
+      "missed_upside_proxy_usdt": 0.0
+    },
+    {
+      "tail_loss_budget_usdt": 3000.0,
+      "max_exposure_usdt": 3000.0,
+      "max_drawdown_pct": -7.1928,
+      "tail_pnl_usdt": -1417.44,
+      "end_net_pnl_usdt": -551.98,
+      "missed_upside_proxy_usdt": 0.0
+    },
+    {
+      "tail_loss_budget_usdt": 4000.0,
+      "max_exposure_usdt": 4000.0,
+      "max_drawdown_pct": -9.5868,
+      "tail_pnl_usdt": -1889.92,
+      "end_net_pnl_usdt": -735.98,
+      "missed_upside_proxy_usdt": 0.0
+    }
+  ],
+  "freeze_windows": [
+    {
+      "start_utc": "2025-10-10T21:14:59.999000+00:00",
+      "end_utc": "2025-10-10T22:34:59.999000+00:00",
+      "recovery_minutes": 80.0
+    }
+  ],
+  "recovery_time_minutes": {
+    "max": 80.0,
+    "average": 80.0
+  },
+  "false_freeze_proxy": {
+    "count": 0,
+    "total_freezes": 1,
+    "rate": 0.0,
+    "definition": "next 60m basket ends positive and has no additional drawdown worse than 1%; partial BTC+breadth replay proxy only"
+  },
+  "full_false_freeze_rate": null,
+  "full_false_freeze_rate_caveat": "A full live-gate false-freeze rate requires historical order-book/stablecoin evidence and is intentionally not fabricated.",
+  "execution_stress_assumption": {
+    "hypothetical_liquidity_only_forced_exit_at_basket_trough": true,
+    "extra_adverse_slippage_pct": 10.0,
+    "basket_trough_move_pct": -47.2481,
+    "hypothetical_fill_move_pct": -57.2481,
+    "caveat": "Assumption only. Not a reconstructed fill."
+  },
+  "capital_authority": "NONE_SHADOW_ONLY",
+  "real_trading_enabled": false
+}
