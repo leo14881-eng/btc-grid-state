@@ -32,6 +32,14 @@ class SystemicRiskTests(unittest.TestCase):
         row,_=risk.update_systemic_risk(state,evidence("n-final"),NOW+dt.timedelta(minutes=25),C)
         self.assertEqual(row["level"],"NORMAL");self.assertFalse(row["recovery_mode"])
 
+    def test_distinct_observation_too_soon_cannot_advance_recovery(self):
+        state={}
+        risk.update_systemic_risk(state,evidence("shock",btc1=-7,neg=.9,loss5=.6),NOW,C)
+        row,_=risk.update_systemic_risk(state,evidence("normal1"),NOW+dt.timedelta(minutes=5),C)
+        self.assertEqual(row["recovery_observations"],1)
+        row,_=risk.update_systemic_risk(state,evidence("normal2"),NOW+dt.timedelta(minutes=6),C)
+        self.assertEqual(row["recovery_observations"],1);self.assertIn("RECOVERY_OBSERVATION_TOO_SOON",row["reasons"])
+
     def test_duplicate_observation_cannot_advance_recovery_after_restart(self):
         state={}
         risk.update_systemic_risk(state,evidence("shock",btc1=-7,neg=.9,loss5=.6),NOW,C)
