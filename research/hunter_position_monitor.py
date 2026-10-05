@@ -50,7 +50,12 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
  scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
- eng.manage_existing_positions(state,scan,review,liq,supply,now,btc)
+ capital_proposals=[] if not v1_mode else None
+ eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
+ # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit
+ # responsiveness; capital deployment is owned by the full allocator where BUY
+ # and ADD can compete in one ranked queue. V1 keeps its independent Broad Net behavior.
+ deferred_adds=sorted(q.get("asset") for q in (capital_proposals or []) if q.get("kind")=="ADD")
  # Closed positions remain observation subjects through SELL+72h. Live marks may
  # extend the all-time opportunity peak; exact horizon peaks are reconstructed by
  # the bounded historical backfill, never inferred from a late current price.
@@ -64,8 +69,8 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
- eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL")))
- return {"lane":label,"open":len(after),"added":added,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
+ eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=scan))
+ return {"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
 def refresh_management_evidence(states,market,review,liq,now):
  """Refresh bounded rotating holdings, including names no longer EARLY. No entry path."""
  import copy
