@@ -149,27 +149,35 @@ def update_state(state,evidence,now,cfg):
     if oid and oid==old.get("last_observation_id"):return old,False
     raw,score,groups,reasons=classify(evidence,cfg)
     prev=old.get("level") or "NORMAL";candidate=old.get("candidate_level");count=int(old.get("candidate_count") or 0)
-    last=old.get("last_transition_observation_at_utc");gap_ok=True
-    if last:
-        try:gap_ok=(now-parse(last)).total_seconds()>=float(cfg["LEADING_MIN_CONFIRM_GAP_SECONDS"])
-        except Exception:gap_ok=False
+    min_gap=float(cfg["LEADING_MIN_CONFIRM_GAP_SECONDS"])
+    candidate_at=old.get("last_candidate_observation_at_utc")
+    recovery_at=old.get("last_recovery_counted_at_utc")
+    def gap_ok(ts):
+        if not ts:return True
+        try:return (now-parse(ts)).total_seconds()>=min_gap
+        except Exception:return False
+    recovery=int(old.get("recovery_observations") or 0);transition_at=old.get("last_transition_observation_at_utc")
     if LEVELS.get(raw,0)>LEVELS.get(prev,0):
-        if raw==candidate and gap_ok:count+=1
-        else:candidate=raw;count=1
+        if raw==candidate:
+            if gap_ok(candidate_at):count+=1;candidate_at=now.isoformat()
+        else:
+            candidate=raw;count=1;candidate_at=now.isoformat()
         if count>=int(cfg["LEADING_CONFIRM_OBSERVATIONS"]):
-            level=raw;candidate=None;count=0;last=now.isoformat()
+            level=raw;candidate=None;count=0;transition_at=now.isoformat();candidate_at=None
         else:level=prev
-        recovery=0
+        recovery=0;recovery_at=None
     elif LEVELS.get(raw,0)<LEVELS.get(prev,0):
-        recovery=int(old.get("recovery_observations") or 0)+(1 if gap_ok else 0)
+        candidate=None;count=0;candidate_at=None
+        if gap_ok(recovery_at):recovery+=1;recovery_at=now.isoformat()
         if recovery>=int(cfg["LEADING_RECOVERY_OBSERVATIONS"]):
-            level=raw;recovery=0;candidate=None;count=0;last=now.isoformat()
+            level=raw;recovery=0;transition_at=now.isoformat();recovery_at=None
         else:level=prev
     else:
-        level=prev;recovery=0;candidate=None;count=0
+        level=prev;recovery=0;recovery_at=None;candidate=None;count=0;candidate_at=None
     row={"level":level,"raw_level":raw,"score":score,"groups":groups,"reasons":reasons,
-         "candidate_level":candidate,"candidate_count":count,"recovery_observations":recovery,
-         "last_transition_observation_at_utc":last,"last_observation_id":oid,"updated_at_utc":now.isoformat(),
+         "candidate_level":candidate,"candidate_count":count,"last_candidate_observation_at_utc":candidate_at,
+         "recovery_observations":recovery,"last_recovery_counted_at_utc":recovery_at,
+         "last_transition_observation_at_utc":transition_at,"last_observation_id":oid,"updated_at_utc":now.isoformat(),
          "evidence":evidence,"data_uncertain":bool(evidence.get("missing_or_stale")),"missing_or_stale":evidence.get("missing_or_stale") or [],
          "capital_authority":"NONE_SHADOW_ONLY"}
     return row,True
