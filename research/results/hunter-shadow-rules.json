@@ -1,7 +1,7 @@
 {
   "schema": "hunter_shadow_rules_v2",
-  "active_version": "shadow-consistent-v2-tail-risk-phase1",
-  "generation": 3,
+  "active_version": "shadow-consistent-v2-leading-risk-phase1",
+  "generation": 4,
   "common": {
     "MIN_RR": 1.5,
     "MAX_SPREAD_BPS": 50,
@@ -87,7 +87,35 @@
     "CIRCUIT_RECOVERY_OBSERVATIONS_BEFORE_RELEASE": 2,
     "CIRCUIT_RELEASE_STEP_PCT": 25,
     "SYSTEMIC_MAX_EVIDENCE_AGE_SECONDS": 900,
-    "SYSTEMIC_RECOVERY_MIN_GAP_SECONDS": 300
+    "SYSTEMIC_RECOVERY_MIN_GAP_SECONDS": 300,
+    "LEADING_MAX_EVIDENCE_AGE_SECONDS": 900,
+    "LEADING_MIN_BREADTH_SAMPLE": 100,
+    "LEADING_MIN_BOOK_SAMPLE": 20,
+    "LEADING_MIN_RELATIVE_SAMPLE": 5,
+    "LEADING_BREADTH_NEGATIVE_FRACTION": 0.7,
+    "LEADING_BREADTH_ACCELERATION": 0.15,
+    "LEADING_BREADTH_LOSS5_FRACTION": 0.2,
+    "LEADING_RELATIVE_NEGATIVE_FRACTION": 0.7,
+    "LEADING_RELATIVE_ACCELERATION": 0.15,
+    "LEADING_MEDIAN_SPREAD_BPS": 35,
+    "LEADING_SPREAD_ACCELERATION_BPS": 15,
+    "LEADING_BID_DEPTH_DROP_PCT": -35,
+    "LEADING_BOOK_IMBALANCE": -0.25,
+    "LEADING_BTC_5M_PCT": -0.75,
+    "LEADING_BTC_15M_PCT": -1.5,
+    "LEADING_BTC_1H_PCT": -2.5,
+    "LEADING_OI_CHANGE_PCT": 8,
+    "LEADING_FUNDING_ABS": 0.001,
+    "LEADING_BASIS_ABS_PCT": 0.75,
+    "LEADING_STABLE_DEVIATION_PCT": 0.25,
+    "LEADING_WATCH_SCORE": 15,
+    "LEADING_PRE1_SCORE": 40,
+    "LEADING_PRE2_SCORE": 55,
+    "LEADING_PRE3_SCORE": 75,
+    "LEADING_CONFIRM_OBSERVATIONS": 2,
+    "LEADING_RECOVERY_OBSERVATIONS": 3,
+    "LEADING_MIN_CONFIRM_GAP_SECONDS": 300,
+    "LEADING_HISTORY_LIMIT": 500
   },
   "lanes": {
     "V1": {
@@ -121,5 +149,33 @@
     "historical_kline_fill_caveat": "Historical klines do not prove executable crash stop fills.",
     "exchange_protection_orders": "FUTURE_ADMISSION_GATE_NOT_IMPLEMENTED",
     "real_trading_enabled": false
+  },
+  "leading_risk_phase1": {
+    "status": "SHADOW_OBSERVE_AND_COUNTERFACTUAL_ONLY",
+    "real_position_mutation": false,
+    "ordinary_buy_sell_signals_unchanged": true,
+    "states": [
+      "NORMAL",
+      "WATCH",
+      "PRE_CRASH_1",
+      "PRE_CRASH_2",
+      "PRE_CRASH_3"
+    ],
+    "evidence_groups": [
+      "leverage",
+      "market_breadth",
+      "btc_relative",
+      "orderbook",
+      "btc_structure",
+      "stablecoin"
+    ],
+    "counterfactual_profiles": [
+      "A_GENTLE",
+      "B_BALANCED",
+      "C_DEFENSIVE"
+    ],
+    "missing_derivatives_behavior": "DATA_UNCERTAIN_ONLY_NEVER_A_SELL_SIGNAL",
+    "activation_gate": "Historical/live shadow acceptance required before any active de-risk authority.",
+    "capital_authority": "NONE_SHADOW_ONLY"
   }
 }
