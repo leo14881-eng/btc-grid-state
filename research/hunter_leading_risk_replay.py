@@ -5,8 +5,11 @@ Only completed spot klines are reconstructed. Historical order-book withdrawal,
 OI/funding, liquidation queues and stablecoin microstructure are not fabricated.
 """
 import datetime as dt,json,math,os,pathlib,time,urllib.parse,urllib.request
-from research.hunter_policy import C
-from research import hunter_leading_risk as leading
+try:
+ from research.hunter_policy import C
+except ModuleNotFoundError as exc:
+ if exc.name!="research":raise
+ from hunter_policy import C
 
 ROOT=pathlib.Path("research/results");OUT=ROOT/"hunter-leading-risk-replay.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
