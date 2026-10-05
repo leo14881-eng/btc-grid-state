@@ -26,11 +26,45 @@ class V2CapitalDecisionTests(unittest.TestCase):
   c,s,l,u=self.base();c["blockers"].append("OFFICIAL_ASSET_IDENTITY_UNVERIFIED");self.assertEqual(decision(c,s,l,u,"ENTRY")[0],"REJECT")
  def test_missing_candidate_is_review_only_for_existing(self):
   c,s,l,u=self.base();self.assertEqual(decision(None,s,l,u,"HOLD")[0],"HOLD")
- def test_add_needs_better_price_and_revalidation(self):
-  c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};self.assertEqual(decision(c,s,l,u,"ADD",p,99)[0],"ADD")
+ def test_add_needs_material_better_price_fresh_evidence_and_recovery(self):
+  import datetime as dt
+  c,s,l,u=self.base();base=dt.datetime(2026,10,4,10,0,tzinfo=dt.timezone.utc);obs=base+dt.timedelta(minutes=16)
+  c["signal"]["return_1h_pct"]=3;c["signal_evidence"]=eng.stamp("X","g2",obs.isoformat());l["snapshots"]["X"]["as_of_utc"]=obs.isoformat()
+  p={"tranches":[{"price":100,"notional_usdt":1000,"at":base.isoformat(),"signal_evidence_id":"old","signal_generation_id":"g1"}]}
+  act,reasons,_=decision(c,s,l,u,"ADD",p,98.5);self.assertEqual(act,"ADD");self.assertIn("MATERIAL_BETTER_THAN_LAST_TRANCHE",reasons)
   self.assertEqual(decision(c,s,l,u,"ADD",p,101)[0],"HOLD")
   c["signal"]["relative_acceleration_pct"]=-2;c["signal"]["btc_relative_1h_pct"]=-1
   self.assertEqual(decision(c,s,l,u,"ADD",p,96)[0],"HOLD")
+ def test_axs_regression_tiny_drop_does_not_add(self):
+  import datetime as dt
+  c,s,l,u=self.base();base=dt.datetime(2026,10,4,10,59,16,tzinfo=dt.timezone.utc);obs=base+dt.timedelta(minutes=39)
+  c["signal"].update({"return_1h_pct":3.2782,"btc_relative_1h_pct":3.2782,"btc_relative_4h_pct":-3.7119,"relative_acceleration_pct":4.2062})
+  c["signal_evidence"]=eng.stamp("X","axs-g2",obs.isoformat());l["snapshots"]["X"]["as_of_utc"]=obs.isoformat()
+  p={"tranches":[{"price":1.396,"notional_usdt":1000,"at":base.isoformat(),"signal_evidence_id":"axs-old","signal_generation_id":"axs-g1"}]}
+  act,reasons,_=decision(c,s,l,u,"ADD",p,1.391)
+  self.assertEqual(act,"HOLD");self.assertTrue(any(x.startswith("ADD_PRICE_IMPROVEMENT_TOO_SMALL_") for x in reasons))
+ def test_axs_regression_third_add_cannot_be_above_last_fill(self):
+  import datetime as dt
+  base=dt.datetime(2026,10,4,10,59,16,tzinfo=dt.timezone.utc)
+  c,s,l,u=self.base();c["signal"]["return_1h_pct"]=3
+  p={"tranches":[{"price":1.396,"notional_usdt":1000,"at":base.isoformat()},{"price":1.391,"notional_usdt":1000,"at":(base+dt.timedelta(minutes=39)).isoformat()}]}
+  act,reasons,_=decision(c,s,l,u,"ADD",p,1.393)
+  self.assertEqual(act,"HOLD");self.assertIn("ADD_NOT_BELOW_LAST_TRANCHE",reasons)
+ def test_add_rejects_reused_or_too_soon_evidence(self):
+  import datetime as dt
+  c,s,l,u=self.base();base=dt.datetime(2026,10,4,10,0,tzinfo=dt.timezone.utc);obs=base+dt.timedelta(minutes=5)
+  c["signal"]["return_1h_pct"]=3;c["signal_evidence"]=eng.stamp("X","g1",obs.isoformat());l["snapshots"]["X"]["as_of_utc"]=obs.isoformat()
+  p={"tranches":[{"price":100,"notional_usdt":1000,"at":base.isoformat(),"signal_evidence_id":c["signal_evidence"]["evidence_id"],"signal_generation_id":"g1"}]}
+  act,reasons,_=decision(c,s,l,u,"ADD",p,98)
+  self.assertEqual(act,"HOLD");self.assertTrue("ADD_SIGNAL_EVIDENCE_NOT_NEW" in reasons or "ADD_WAIT_NEW_15M_EVIDENCE_WINDOW" in reasons)
+ def test_third_add_requires_stronger_recovery(self):
+  import datetime as dt
+  c,s,l,u=self.base();base=dt.datetime(2026,10,4,10,0,tzinfo=dt.timezone.utc);obs=base+dt.timedelta(minutes=40)
+  c["signal"].update({"return_1h_pct":3,"btc_relative_1h_pct":2.4,"btc_relative_4h_pct":-4.4,"relative_acceleration_pct":3.5})
+  c["signal_evidence"]=eng.stamp("X","g3",obs.isoformat());l["snapshots"]["X"]["as_of_utc"]=obs.isoformat()
+  p={"tranches":[{"price":100,"notional_usdt":1000,"at":base.isoformat()},{"price":98,"notional_usdt":1000,"at":(base+dt.timedelta(minutes=20)).isoformat(),"signal_evidence_id":"g2-e","signal_generation_id":"g2"}]}
+  act,reasons,_=decision(c,s,l,u,"ADD",p,96)
+  self.assertEqual(act,"HOLD");self.assertIn("ADD_THIRD_TRANCHE_RECOVERY_NOT_STRONG_ENOUGH",reasons)
  def test_weighted_cost_falls(self):
   c,s,l,u=self.base();p={"tranches":[{"price":100,"notional_usdt":1000}]};e=decision(c,s,l,u,"ADD",p,96)[2]
   import datetime as dt;add(p,96,e,dt.datetime.now(dt.timezone.utc));self.assertLess(weighted_entry(p),100)
