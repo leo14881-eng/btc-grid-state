@@ -1,0 +1,43 @@
+name: Deploy Hunter Heartbeat Worker V1
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-hunter-heartbeat-worker-v1
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.HUNTER_CF_HEARTBEAT_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.HUNTER_CF_HEARTBEAT_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate isolated heartbeat
+        working-directory: research/hunter_scheduler
+        run: node --test worker.test.mjs
+      - name: Validate required secrets
+        env:
+          HEARTBEAT_GITHUB_TOKEN: ${{ secrets.HUNTER_CF_HEARTBEAT_GH_TOKEN }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$HEARTBEAT_GITHUB_TOKEN"
+      - name: Deploy new Hunter Worker only
+        working-directory: research/hunter_scheduler
+        run: npx --yes wrangler@4 deploy --config wrangler.jsonc
+      - name: Install Worker GitHub dispatch secret
+        working-directory: research/hunter_scheduler
+        env:
+          HEARTBEAT_GITHUB_TOKEN: ${{ secrets.HUNTER_CF_HEARTBEAT_GH_TOKEN }}
+        run: printf '%s' "$HEARTBEAT_GITHUB_TOKEN" | npx --yes wrangler@4 secret put GITHUB_ACTIONS_TOKEN --config wrangler.jsonc
+      - name: Verify new Worker deployment
+        working-directory: research/hunter_scheduler
+        run: |
+          npx --yes wrangler@4 deployments list --config wrangler.jsonc
+          echo "HUNTER_HEARTBEAT_WORKER_V1_DEPLOYED"
