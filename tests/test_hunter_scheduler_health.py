@@ -32,6 +32,25 @@ class SchedulerHealthTests(unittest.TestCase):
    prev=(now-dt.timedelta(minutes=minutes)).isoformat()
    d=s.build_success_health(now,now-dt.timedelta(seconds=20),{"monitor_completed_at_utc":prev},"test")
    self.assertEqual(d["health"],level)
+ def test_serialized_same_bucket_mutates_once(self):
+  now=dt.datetime(2026,10,6,2,27,tzinfo=UTC); health={}; ledger=[]
+  for source in ("schedule","cloudflare"):
+   gid,process=s.should_process(now,health)
+   if process:
+    ledger.append(source)
+    health=s.build_success_health(now,now-dt.timedelta(seconds=20),health,source)
+  self.assertEqual(len(ledger),1)
+  self.assertEqual(health["last_successful_monitor_generation_id"],"2026-10-06T02:25:00Z")
+ def test_persistence_failure_does_not_consume_generation(self):
+  now=dt.datetime(2026,10,6,2,27,tzinfo=UTC); authoritative={}
+  gid,process=s.should_process(now,authoritative); self.assertTrue(process)
+  local=s.build_success_health(now,now-dt.timedelta(seconds=10),authoritative,"schedule")
+  self.assertEqual(local["last_successful_monitor_generation_id"],gid)
+  # Simulated push/CAS failure: local candidate never becomes authoritative.
+  self.assertTrue(s.should_process(now,authoritative)[1])
+ def test_stale_writer_cannot_make_newer_generation_process_again(self):
+  newer={"last_successful_monitor_generation_id":"2026-10-06T02:30:00Z"}
+  self.assertFalse(s.should_process(dt.datetime(2026,10,6,2,29,tzinfo=UTC),newer)[1])
  def test_atomic_roundtrip(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/"h.json"; s.atomic_write(p,{"x":1}); self.assertEqual(json.loads(p.read_text()),{"x":1})
