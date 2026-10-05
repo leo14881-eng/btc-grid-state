@@ -42,13 +42,14 @@ def configure_lane(v1_mode):
  if v1_mode:
   v1.configure_v1();return
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"];eng.ENTRY_MODE=LANES["V2"]["entry_mode"];eng.DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"];eng.DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"];eng.STRATEGY_ID=LANES["V2"]["strategy"];eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
-def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None):
+def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None,risk_evidence=None):
  state=load(path);excluded=set(excluded or [])
  # Both lanes get their own bounded observation budget in this shared process.
  eng._opportunity_backfill_requests=0
  quarantine=eng.quarantine_non_crypto_history(state,excluded)
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
+ if risk_evidence is not None:eng.tail.update_risk_controls(state,risk_evidence,now,eng.C)
  scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
  capital_proposals=[] if not v1_mode else None
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
@@ -129,7 +130,10 @@ def main():
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
  review,liq,refresh=refresh_management_evidence(states,market,review,liq,now)
  regime_scan=load(UNIVERSE)
- results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan)]
- eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION})
+ # One systemic observation is shared by both lanes so V1/V2 cannot disagree
+ # merely because they were evaluated a few milliseconds apart.
+ risk_evidence=eng.tail.collect_systemic_evidence(regime_scan,liq,now,eng.C,eng.BINANCE_DATA_API)
+ results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan,risk_evidence),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan,risk_evidence)]
+ eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()
