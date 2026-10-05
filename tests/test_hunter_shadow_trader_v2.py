@@ -223,3 +223,34 @@ class OpportunityCutoffSafetyTests(unittest.TestCase):
   stop=int(cutoff.timestamp()*1000)
   bars=[(stop-300000,stop,1.12)]
   self.assertEqual(eng.peak_from_bars(bars,cutoff)["peak_price"],1.12)
+
+
+class CapitalReserveRegressionTests(unittest.TestCase):
+ def _state(self,used=0,closed_pnls=()):
+  opens=[]
+  for i in range(int(used//1000)):
+   opens.append({"asset":"P"+str(i),"tranches":[{"price":1.0,"notional_usdt":1000.0}]})
+  return {"open_positions":opens,"closed_positions":[{"net_pnl_usdt":x} for x in closed_pnls],"closed_trade_archive":[]}
+ def test_ordinary_buy_preserves_3000_dynamic_reserve(self):
+  state=self._state(16000)
+  self.assertTrue(eng.capital_available(state,1000,"BUY"))
+  state=self._state(17000)
+  self.assertFalse(eng.capital_available(state,1000,"BUY"))
+ def test_revalidated_add_may_use_dynamic_reserve(self):
+  state=self._state(17000)
+  self.assertTrue(eng.capital_available(state,1000,"ADD"))
+ def test_realized_net_profit_compounds_equity(self):
+  state=self._state(17000,(500.0,))
+  snap=eng.capital_snapshot(state)
+  self.assertEqual(snap["equity_usdt"],20500.0)
+  self.assertEqual(snap["ordinary_buy_limit_usdt"],17500.0)
+  self.assertFalse(eng.capital_available(state,1000,"BUY"))
+ def test_realized_loss_reduces_equity(self):
+  state=self._state(16000,(-500.0,))
+  snap=eng.capital_snapshot(state)
+  self.assertEqual(snap["equity_usdt"],19500.0)
+  self.assertEqual(snap["ordinary_buy_limit_usdt"],16500.0)
+ def test_unrealized_pnl_does_not_expand_equity(self):
+  state=self._state(17000)
+  state["open_positions"][0]["unrealized_pnl_usdt"]=99999.0
+  self.assertEqual(eng.capital_snapshot(state)["equity_usdt"],20000.0)
