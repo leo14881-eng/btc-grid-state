@@ -15,3 +15,5 @@ def test_serialized_dual_trigger_mutates_once():
 def test_failed_persistence_does_not_consume_generation():
  now=dt.datetime(2026,10,6,2,27,tzinfo=UTC); authoritative={}; gid,process=s.should_process(now,authoritative); assert process
  local=s.build_success_health(now,now-dt.timedelta(seconds=10),authoritative,"schedule"); assert local["last_successful_monitor_generation_id"]==gid; assert s.should_process(now,authoritative)[1]
+
+# trigger isolated validation
