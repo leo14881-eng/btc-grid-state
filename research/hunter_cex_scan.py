@@ -250,7 +250,7 @@ def main():
     summary={k:v for k,v in report.items() if k!="coins"}
     (OUT/"hunter-cex-universe-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps(dict(complete=report["complete"],unique_base_tickers=report["unique_base_tickers"],
-                          venue_status=statuses,errors=errors,leads=report["research_leads"][:10]),ensure_ascii=False))
+                          venue_status=statuses,errors=errors,leads=report["research_leads"][:10])))
     return 0 if report["binance_complete"] else 2
 
 if __name__=="__main__":raise SystemExit(main())
