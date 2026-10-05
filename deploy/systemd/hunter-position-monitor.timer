@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Hunter Shadow Position Monitor every 5 minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=true
+AccuracySec=5s
+Unit=hunter-position-monitor.service
+
+[Install]
+WantedBy=timers.target
