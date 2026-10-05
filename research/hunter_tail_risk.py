@@ -186,8 +186,17 @@ def update_systemic_risk(state,evidence,now,cfg):
     return row,True
 
 def risk_blocks_new(state):
+    """Unified fail-closed gate for every Hunter BUY/ADD path.
+
+    Existing positions remain manageable; only NEW risk is frozen.  Circuit
+    breaker is deliberately checked here so V1 Broad Net and V2 Capital Review
+    cannot diverge or bypass a TRIPPED/RECOVERING breaker.
+    """
     row=(state or {}).get("systemic_risk") or {}
-    return row.get("level") in ("HIGH","CRITICAL") or not row.get("last_observation_id")
+    cb=(state or {}).get("circuit_breaker") or {}
+    systemic_block=row.get("level") in ("HIGH","CRITICAL") or not row.get("last_observation_id")
+    circuit_block=cb.get("status") in ("TRIPPED","RECOVERING")
+    return bool(systemic_block or circuit_block)
 
 def confirmed_systemic_liquidity_shock(state):
     """Only confirmed fresh systemic evidence may suppress liquidity-only hard exits.
@@ -229,7 +238,15 @@ def tail_budget_snapshot(state,cfg,capital_pool_usdt):
             "candidate_budget_caps_usdt":candidates,"realized_profit_expands_tail_budget":False}
 
 def record_loss_exit(state,pnl,reason,released_notional,now,cfg):
-    if pnl>=0:return
+    # "consecutive" means consecutive loss exits. A profitable exit breaks
+    # the sequence, while quarantine/recovery state remains intact.
+    if pnl>=0:
+        cb=(state or {}).get("circuit_breaker")
+        if cb:
+            cb["consecutive_loss_exits"]=0
+            cb["last_profitable_exit_at_utc"]=now.isoformat()
+            cb["updated_at_utc"]=now.isoformat()
+        return
     cb=state.setdefault("circuit_breaker",{"status":"NORMAL","consecutive_loss_exits":0,"quarantined_cash_usdt":0.0,"loss_events":[]})
     events=cb.setdefault("loss_events",[]);events.append({"at_utc":now.isoformat(),"net_pnl_usdt":round(float(pnl),2),"reason":reason,"released_notional_usdt":round(float(released_notional),2)})
     cutoff=now-dt.timedelta(hours=float(cfg["CIRCUIT_BREAKER_WINDOW_HOURS"]))
