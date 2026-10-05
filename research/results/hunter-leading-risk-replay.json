@@ -1,0 +1,57 @@
+{
+  "schema": "hunter_leading_risk_replay_v1",
+  "as_of_utc": "2026-10-05T13:52:39.757866+00:00",
+  "scope": "LEADING_RISK_PARTIAL_PATH_REPLAY_NOT_STRATEGY_BACKTEST",
+  "windows": [
+    {
+      "name": "2025-10-10",
+      "status": "OK",
+      "aligned_bars": 289,
+      "basket_trough_pct": -47.6453,
+      "first_partial_warning": {
+        "level": "PRE_CRASH_1",
+        "at_utc": "2025-10-10T14:59:59.999000+00:00",
+        "lead_minutes_vs_local_peak": -80.0,
+        "basket_move_at_warning_pct": -1.8945
+      },
+      "partial_precrash_count": 50,
+      "partial_watch_count": 26
+    },
+    {
+      "name": "2024-08-05",
+      "status": "OK",
+      "aligned_bars": 577,
+      "basket_trough_pct": -24.1205,
+      "first_partial_warning": {
+        "level": "PRE_CRASH_1",
+        "at_utc": "2024-08-04T13:39:59.999000+00:00",
+        "lead_minutes_vs_local_peak": -40.0,
+        "basket_move_at_warning_pct": -0.5872
+      },
+      "partial_precrash_count": 129,
+      "partial_watch_count": 73
+    },
+    {
+      "name": "2025-02-03",
+      "status": "OK",
+      "aligned_bars": 577,
+      "basket_trough_pct": -26.5774,
+      "first_partial_warning": {
+        "level": "PRE_CRASH_1",
+        "at_utc": "2025-02-02T15:04:59.999000+00:00",
+        "lead_minutes_vs_local_peak": -35.0,
+        "basket_move_at_warning_pct": -1.5266
+      },
+      "partial_precrash_count": 99,
+      "partial_watch_count": 17
+    }
+  ],
+  "limitations": [
+    "Historical spot klines reconstruct only BTC structure, breadth and BTC-relative deterioration.",
+    "Historical order-book withdrawal, OI/funding acceleration, liquidations and stablecoin microstructure are unavailable and are not fabricated.",
+    "Lead time can be negative when the local peak occurs before enough partial evidence exists; that is a miss, not rewritten as success.",
+    "No historical replay proves executable exit fills."
+  ],
+  "capital_authority": "NONE_SHADOW_ONLY",
+  "real_trading_enabled": false
+}
