@@ -288,7 +288,8 @@ def backfill_opportunity_history(pos,now):
  last=pos.get("opportunity_backfill_at_utc")
  if last:
   try:
-   if (now-parse(last)).total_seconds()<3300 and not (now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and not pos.get("observation_complete")):return pos
+   due_missing=bool(closed and any(now>=closed+dt.timedelta(hours=h) and f"{int(h)}h" not in (pos.get("post_exit_observation") or {}) for h in REVIEW_HOURS))
+   if (now-parse(last)).total_seconds()<3300 and not due_missing:return pos
   except Exception:pass
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
   pos["data_provenance"]="BACKFILL_PENDING";return pos
@@ -317,12 +318,47 @@ def backfill_opportunity_history(pos,now):
   if h:
    obs[f"{int(target)}h"]={"observed_at_utc":now.isoformat(),"max_price":h["peak_price"],
     "max_return_from_initial_buy_pct":round((h["peak_price"]/buy-1)*100,4),
-    "max_return_from_sell_pct":round((h["peak_price"]/sell-1)*100,4) if sell else None,"data_provenance":"HISTORICAL_BACKFILL"}
+    "max_return_from_sell_pct":round((h["peak_price"]/sell-1)*100,4) if sell else None,"peak_at_utc":h["peak_at_utc"],
+    "data_provenance":"HISTORICAL_BACKFILL","price_granularity":"5m_completed_candles"}
  pos["observation_complete"]=bool(now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and obs.get("72h"))
+ refresh_post_exit_status(pos,now)
  pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
  pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
  pos["exit_evaluation"]=exit_evaluation(pos)
  return pos
+
+def refresh_post_exit_status(pos,now):
+ """Expose only reconstructed post-sell peaks as evaluated results."""
+ if not pos.get("closed_at_utc"):return
+ closed=parse(pos["closed_at_utc"]);obs=pos.get("post_exit_observation") or {}
+ due=[f"{int(h)}h" for h in REVIEW_HOURS if now>=closed+dt.timedelta(hours=h)]
+ missing=[h for h in due if (obs.get(h) or {}).get("max_return_from_sell_pct") is None]
+ completed=[h for h in due if h not in missing]
+ pos["post_exit_evaluation"]={"status":"COMPLETE" if pos.get("observation_complete") else "BACKFILL_PENDING" if missing else "OBSERVING",
+  "due_horizons":due,"completed_horizons":completed,"missing_horizons":missing,
+  "max_return_from_sell_pct":max((obs[h]["max_return_from_sell_pct"] for h in completed),default=None),
+  "source":"HISTORICAL_BACKFILL" if completed else None}
+
+def refresh_closed_observations(state,now,market_price=None):
+ """Fair, bounded backfill across closed trades; never creates trade events."""
+ closed=state.get("closed_positions") or []
+ if not closed:return
+ for pos in closed:
+  if pos.get("observation_complete"):
+   refresh_post_exit_status(pos,now);continue
+  p=market_price(pos.get("asset")) if market_price else None
+  if p:update_post_exit(pos,p,now)
+  else:refresh_post_exit_status(pos,now)
+ cursor=int(state.get("observation_backfill_cursor") or 0)%len(closed)
+ visited=0
+ while visited<len(closed) and _opportunity_backfill_requests<OPPORTUNITY_BACKFILL_BUDGET:
+  pos=closed[(cursor+visited)%len(closed)];visited+=1
+  if not pos.get("closed_at_utc") or pos.get("observation_complete"):continue
+  due=(pos.get("post_exit_evaluation") or {}).get("missing_horizons") or []
+  last=pos.get("opportunity_backfill_at_utc")
+  periodic=not pos.get("observation_complete") and (not last or (now-parse(last)).total_seconds()>=3300)
+  if due or periodic:backfill_opportunity_history(pos,now)
+ state["observation_backfill_cursor"]=(cursor+visited)%len(closed)
 
 def sample_cohort(pos):
  try:return "NEW_VERSION_SAMPLE" if parse(pos.get("opened_at_utc"))>=NEW_VERSION_CUTOFF_UTC else "MIGRATION_SAMPLE"
@@ -403,6 +439,7 @@ def update_post_exit(pos,p,now):
  ensure_opportunity_observation(pos,p,now)
  if not pos.get("closed_at_utc") or not p:return
  t=pos.setdefault("post_exit_tracking",{"hours":list(REVIEW_HOURS),"max_rebound_from_exit_pct":0.,"potential_premature_exit":False,"marks":[]})
+ t["status"]="PROVISIONAL_SAMPLED_PRICE_NOT_PEAK"
  obs=pos.setdefault("post_exit_observation",{})
  hours=(now-parse(pos["closed_at_utc"])).total_seconds()/3600
  if hours<0:return
@@ -422,6 +459,7 @@ def update_post_exit(pos,p,now):
  pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
  pos["exit_evaluation"]=exit_evaluation(pos)
  t["potential_premature_exit"]=pos["exit_evaluation"]=="POTENTIAL_PREMATURE_EXIT"
+ refresh_post_exit_status(pos,now)
 
 def profit_protection(pos,p):
  raw=raw_return(pos,p); mfe=finite(pos.get("mfe_pct")) or 0.
@@ -505,10 +543,16 @@ def compact_closed_history(state):
  closed=state.get("closed_positions") or []
  if len(closed)<=MAX_CLOSED_HOT:return
  archive=state.setdefault("closed_trade_archive",[])
- for x in closed[:-MAX_CLOSED_HOT]:
+ # Never archive an unfinished observation: the compact archive is not backfilled.
+ eligible=[x for x in closed if x.get("observation_complete")][:len(closed)-MAX_CLOSED_HOT]
+ if not eligible:return
+ ids={id(x) for x in eligible}
+ for x in eligible:
   archive.append({"shadow_id":x.get("shadow_id"),"asset":x.get("asset"),"opened_at_utc":x.get("opened_at_utc"),"closed_at_utc":x.get("closed_at_utc"),
    "exit_reason":x.get("exit_reason"),"net_pnl_usdt":x.get("net_pnl_usdt"),"net_return_pct":x.get("net_return_pct"),"mfe_pct":x.get("mfe_pct"),"mae_pct":x.get("mae_pct"),"holding_mfe_pct":x.get("holding_mfe_pct"),"full_opportunity_mfe_pct":x.get("full_opportunity_mfe_pct"),"holding_profit_capture_ratio":x.get("holding_profit_capture_ratio"),"full_opportunity_capture_ratio":x.get("full_opportunity_capture_ratio"),"observation_complete":x.get("observation_complete"),"sample_cohort":x.get("sample_cohort"),"exit_evaluation":x.get("exit_evaluation"),"data_provenance":x.get("data_provenance")})
- state["closed_positions"]=closed[-MAX_CLOSED_HOT:]
+  archive[-1]["post_exit_evaluation"]=x.get("post_exit_evaluation")
+  archive[-1]["post_exit_observation"]=x.get("post_exit_observation")
+ state["closed_positions"]=[x for x in closed if id(x) not in ids]
  # Keep a compact permanent ledger in the authoritative state; no 5-minute scan needs full old position blobs.
  if len(archive)>5000:state["closed_trade_archive"]=archive[-5000:]
 
@@ -618,18 +662,25 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
    notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":exit_reason,"weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
    if exit_reason=="PROFIT_PROTECTION":pos["profit_protection"]=protection
-   pos.update(exit_analysis(pos,p,exit_reason));update_loss_exit_guard(state,pnl,exit_reason,now);register_exit_for_reentry(state,pos,p,exit_reason,now)
+   pos.update(exit_analysis(pos,p,exit_reason));refresh_post_exit_status(pos,now);update_loss_exit_guard(state,pnl,exit_reason,now);register_exit_for_reentry(state,pos,p,exit_reason,now)
    record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
  state["open_positions"]=still;compact_closed_history(state);return state
 
-def opportunity_summary(rows):
+def opportunity_summary(rows,now=None):
  def vals(k):return [float(x[k]) for x in rows if finite(x.get(k)) is not None]
  def avg(v):return round(sum(v)/len(v),4) if v else None
  def med(v):
   if not v:return None
   z=sorted(v);n=len(z);return round(z[n//2],4) if n%2 else round((z[n//2-1]+z[n//2])/2,4)
  full=vals("full_opportunity_mfe_pct");holding=vals("holding_mfe_pct")
+ now=now or dt.datetime.now(dt.timezone.utc)
+ coverage={}
+ for h in REVIEW_HOURS:
+  key=f"{int(h)}h"
+  due=[x for x in rows if x.get("closed_at_utc") and now>=parse(x["closed_at_utc"])+dt.timedelta(hours=h)]
+  coverage[key]={"due":len(due),"backfilled":sum((x.get("post_exit_observation") or {}).get(key,{}).get("max_return_from_sell_pct") is not None for x in due)}
+ completed=[x for x in rows if x.get("observation_complete") and (x.get("post_exit_observation") or {}).get("72h",{}).get("max_return_from_sell_pct") is not None]
  dist={"lt_0":0,"0_3":0,"3_5":0,"5_10":0,"10_20":0,"gt_20":0}
  for v in full:
   if v<0:dist["lt_0"]+=1
@@ -638,7 +689,9 @@ def opportunity_summary(rows):
   elif v<10:dist["5_10"]+=1
   elif v<=20:dist["10_20"]+=1
   else:dist["gt_20"]+=1
- return {"evaluated_positions":len(rows),"holding_mfe_available":len(holding),"full_opportunity_mfe_available":len(full),"completed_72h_observations":sum(bool(x.get("observation_complete")) for x in rows),
+ return {"evaluated_positions":len(rows),"holding_mfe_available":len(holding),"full_opportunity_mfe_available":len(full),"completed_72h_observations":len(completed),
+  "post_exit_coverage":coverage,"avg_completed_72h_max_return_from_sell_pct":avg([x["post_exit_observation"]["72h"]["max_return_from_sell_pct"] for x in completed]),
+  "full_opportunity_metrics_provisional":len(completed)<len(rows),
   "avg_holding_mfe_pct":avg(holding),"median_holding_mfe_pct":med(holding),"avg_full_opportunity_mfe_pct":avg(full),"median_full_opportunity_mfe_pct":med(full),
   "avg_realized_net_return_pct":avg(vals("net_return_pct")),"avg_holding_profit_capture_ratio":avg(vals("holding_profit_capture_ratio")),
   "avg_full_opportunity_capture_ratio":avg(vals("full_opportunity_capture_ratio")),
@@ -652,8 +705,8 @@ def build_summary(state,now,guard_status="NORMAL"):
   ensure_opportunity_observation(x,x.get("last_price"),now)
   if x.get("sample_cohort")=="MIGRATION_SAMPLE" and x.get("data_provenance")!="HISTORICAL_BACKFILL":backfill_opportunity_history(x,now)
  for x in closed:ensure_opportunity_observation(x,None,now)
- cohorts={"all_samples":opportunity_summary(all_closed),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"]),
-  "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"])}
+ cohorts={"all_samples":opportunity_summary(all_closed,now),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"],now),
+  "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"],now)}
  return {"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy":STRATEGY_ID,"policy_version":VERSION,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
   "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in all_closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
@@ -682,9 +735,7 @@ def main():
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
  if not excluded:raise SystemExit("CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING")
  quarantine_non_crypto_history(state,excluded)
- for old in state["closed_positions"]:
-  update_post_exit(old,price(scan,old.get("asset")),now)
-  backfill_opportunity_history(old,now)
+ refresh_closed_observations(state,now,lambda asset:price(scan,asset))
  manage_existing_positions(state,scan,review,liq,supply,now,btc)
  open_assets={x["asset"] for x in state["open_positions"]};buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
