@@ -1,6 +1,11 @@
 name: Hunter 5m Position Monitor
 on:
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: 'Infrastructure trigger source only'
+        required: false
+        default: 'manual'
   push:
     branches: [main]
     paths:
@@ -40,12 +45,29 @@ jobs:
         run: |
           git fetch origin main
           git checkout -B main origin/main
+      - name: Generation idempotency gate
+        id: generation
+        env:
+          TRIGGER_SOURCE: ${{ inputs.trigger_source || github.event_name }}
+        run: |
+          STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+          echo "started_at=$STARTED_AT" >> "$GITHUB_OUTPUT"
+          RESULT=$(python -m research.hunter_scheduler_health gate)
+          echo "$RESULT"
+          PROCESS=$(python -c "import json,sys; print(str(json.load(sys.stdin)['process']).lower())" <<<"$RESULT")
+          GENERATION=$(python -c "import json,sys; print(json.load(sys.stdin)['generation_id'])" <<<"$RESULT")
+          echo "process=$PROCESS" >> "$GITHUB_OUTPUT"
+          echo "generation_id=$GENERATION" >> "$GITHUB_OUTPUT"
+          echo "trigger_source=$TRIGGER_SOURCE" >> "$GITHUB_OUTPUT"
       - name: Test shared decision engine and fast position monitor
+        if: steps.generation.outputs.process == 'true'
         run: |
           python -m unittest tests.test_hunter_shadow_trader_v2 tests.test_hunter_position_monitor tests.test_hunter_tail_risk tests.test_hunter_leading_risk -v
       - name: Fast monitor V1 and V2 open positions only
+        if: steps.generation.outputs.process == 'true'
         run: python -m research.hunter_position_monitor
       - name: Validate state
+        if: steps.generation.outputs.process == 'true'
         run: |
           python - <<'PY'
           import json
@@ -78,7 +100,15 @@ jobs:
               assert int(lanes[lane].get('open') or 0)==len(d.get('open_positions') or []), f'MONITOR_OPEN_MISMATCH {lane}'
           print('FAST_POSITION_MONITOR_OK')
           PY
+      - name: Mark successful generation for atomic persistence
+        if: steps.generation.outputs.process == 'true'
+        env:
+          MONITOR_STARTED_AT: ${{ steps.generation.outputs.started_at }}
+          TRIGGER_SOURCE: ${{ steps.generation.outputs.trigger_source }}
+        run: |
+          python -m research.hunter_scheduler_health success --started-at "$MONITOR_STARTED_AT" --trigger-source "$TRIGGER_SOURCE" --state-revision "$(git rev-parse HEAD)"
       - name: Persist monitored shadow state
+        if: steps.generation.outputs.process == 'true'
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
@@ -91,7 +121,7 @@ jobs:
             printf '%s\n' "$CHANGED"
             exit 1
           fi
-          git add -f research/results/hunter-position-monitor.json research/results/hunter-leading-risk.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json
+          git add -f research/results/hunter-position-monitor.json research/results/hunter-leading-risk.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json research/results/hunter-scheduler-health.json
           for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json; do
             [ -s "$p" ] || { echo "REFUSE_EMPTY_PORTFOLIO $p"; exit 1; }
             python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('schema')=='hunter_shadow_v2_portfolio_v2'; assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'" "$p"
@@ -99,12 +129,12 @@ jobs:
           done
           verify_main () {
             git fetch origin main
-            for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json research/results/hunter-position-monitor.json; do
+            for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json research/results/hunter-position-monitor.json research/results/hunter-scheduler-health.json; do
               git show "origin/main:$p" > "/tmp/$(basename "$p")"
               [ -s "/tmp/$(basename "$p")" ] || { echo "POST_PUSH_EMPTY $p"; return 1; }
               python -c "import json,sys; json.load(open(sys.argv[1]))" "/tmp/$(basename "$p")" || return 1
             done
-            python -c "import json; v1=json.load(open('/tmp/hunter-shadow-portfolio.json')); v2=json.load(open('/tmp/hunter-shadow-v2-portfolio.json')); s1=json.load(open('/tmp/hunter-shadow-summary.json')); s2=json.load(open('/tmp/hunter-shadow-v2-summary.json')); m=json.load(open('/tmp/hunter-position-monitor.json')); lanes={x.get('lane'):x for x in m.get('results') or []}; assert lanes['SHADOW_V1']['open']==len(v1.get('open_positions') or []); assert lanes['SHADOW_V2']['open']==len(v2.get('open_positions') or []); assert s1.get('open_positions')==len(v1.get('open_positions') or []) and s1.get('closed_positions')==len(v1.get('closed_positions') or []); assert s2.get('open_positions')==len(v2.get('open_positions') or []) and s2.get('closed_positions')==len(v2.get('closed_positions') or []); assert s1.get('as_of_utc')==v1.get('updated_at_utc') and s2.get('as_of_utc')==v2.get('updated_at_utc'); print('POST_PUSH_SHADOW_STATE_VERIFIED',lanes['SHADOW_V1']['open'],lanes['SHADOW_V2']['open'])"
+            python -c "import json; v1=json.load(open('/tmp/hunter-shadow-portfolio.json')); v2=json.load(open('/tmp/hunter-shadow-v2-portfolio.json')); s1=json.load(open('/tmp/hunter-shadow-summary.json')); s2=json.load(open('/tmp/hunter-shadow-v2-summary.json')); m=json.load(open('/tmp/hunter-position-monitor.json')); lanes={x.get('lane'):x for x in m.get('results') or []}; assert lanes['SHADOW_V1']['open']==len(v1.get('open_positions') or []); assert lanes['SHADOW_V2']['open']==len(v2.get('open_positions') or []); assert s1.get('open_positions')==len(v1.get('open_positions') or []) and s1.get('closed_positions')==len(v1.get('closed_positions') or []); assert s2.get('open_positions')==len(v2.get('open_positions') or []) and s2.get('closed_positions')==len(v2.get('closed_positions') or []); assert s1.get('as_of_utc')==v1.get('updated_at_utc') and s2.get('as_of_utc')==v2.get('updated_at_utc'); h=json.load(open('/tmp/hunter-scheduler-health.json')); assert h.get('last_successful_monitor_generation_id')==h.get('current_generation_id'); assert h.get('shadow_only') is True and h.get('real_order_count')==0; print('POST_PUSH_SHADOW_STATE_VERIFIED',lanes['SHADOW_V1']['open'],lanes['SHADOW_V2']['open'],h.get('current_generation_id'))"
           }
           if git diff --cached --quiet; then
             echo NO_POSITION_STATE_CHANGE
