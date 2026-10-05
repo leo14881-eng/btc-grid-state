@@ -689,10 +689,12 @@ def update_overfilter_guard(state,scan,review,liq,supply,now,buy_count):
   ch=finite(((scan.get("coins") or {}).get(a) or {}).get("change_24h_pct"))
   if act!="BUY" and not hard and ch is not None and ch>=OVERFILTER_MISSED_MOVE_PCT:
    safe_misses.append({"asset":a,"change_24h_pct":ch,"reasons":reasons,"estimated_rr":e.get("estimated_rr")})
- cycles=guard.get("cycles",[]);cycles.append({"at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),"buys":buy_count,"safe_misses":safe_misses})
+ risk_blocked=tail.risk_blocks_new(state)
+ cycles=guard.get("cycles",[]);cycles.append({"at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),"buys":buy_count,"safe_misses":[] if risk_blocked else safe_misses,"risk_blocked":risk_blocked})
  cycles=cycles[-OVERFILTER_LOOKBACK:];guard["cycles"]=cycles
  zero=0
  for x in reversed(cycles):
+  if x.get("risk_blocked"):continue
   if x.get("buys",0)==0:zero+=1
   else:break
  recent_misses={m["asset"] for x in cycles[-OVERFILTER_ZERO_BUY_CYCLES:] for m in x.get("safe_misses",[])}
