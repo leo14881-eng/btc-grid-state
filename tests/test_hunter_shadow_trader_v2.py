@@ -301,47 +301,69 @@ class OpportunityCutoffSafetyTests(unittest.TestCase):
   self.assertEqual(eng.peak_from_bars(bars,cutoff)["peak_price"],1.12)
 
 
-class CapitalReserveRegressionTests(unittest.TestCase):
+class CapitalAllocatorRegressionTests(unittest.TestCase):
  def _state(self,used=0,closed_pnls=()):
   opens=[]
   for i in range(int(used//1000)):
    opens.append({"asset":"P"+str(i),"tranches":[{"price":1.0,"notional_usdt":1000.0}]})
   return {"open_positions":opens,"closed_positions":[{"net_pnl_usdt":x} for x in closed_pnls],"closed_trade_archive":[]}
- def test_ordinary_buy_preserves_3000_dynamic_reserve(self):
-  state=self._state(16000)
-  self.assertTrue(eng.capital_available(state,1000,"BUY"))
-  state=self._state(17000)
-  self.assertFalse(eng.capital_available(state,1000,"BUY"))
- def test_high_conviction_buy_may_use_dynamic_reserve(self):
-  state=self._state(17000)
-  e={"estimated_rr":2.2,"btc_rel_4h":0.1,"rel_accel":0.1}
-  self.assertTrue(eng.reserve_buy_gate(e)[0])
-  self.assertTrue(eng.capital_available(state,1000,"RESERVE_BUY"))
- def test_reserve_buy_rejects_merely_ordinary_opportunity(self):
-  e={"estimated_rr":2.19,"btc_rel_4h":1.0,"rel_accel":1.0}
-  ok,reasons=eng.reserve_buy_gate(e)
-  self.assertFalse(ok);self.assertIn("RESERVE_RR_BELOW_2_2",reasons)
- def test_reserve_buy_requires_positive_btc_relative_and_acceleration(self):
-  self.assertFalse(eng.reserve_buy_gate({"estimated_rr":3.0,"btc_rel_4h":0.0,"rel_accel":1.0})[0])
-  self.assertFalse(eng.reserve_buy_gate({"estimated_rr":3.0,"btc_rel_4h":1.0,"rel_accel":0.0})[0])
- def test_reserve_buy_cannot_exceed_total_equity(self):
-  state=self._state(20000)
-  self.assertFalse(eng.capital_available(state,1000,"RESERVE_BUY"))
- def test_revalidated_add_may_use_dynamic_reserve(self):
-  state=self._state(17000)
-  self.assertTrue(eng.capital_available(state,1000,"ADD"))
- def test_realized_net_profit_compounds_equity(self):
-  state=self._state(17000,(500.0,))
-  snap=eng.capital_snapshot(state)
+ def _scan(self,btc,others):
+  coins={"BTC":{"change_24h_pct":btc}}
+  coins.update({f"C{i}":{"change_24h_pct":v} for i,v in enumerate(others)})
+  return {"coins":coins}
+ def _edge(self,rr=3.0,r1=2.0,r4=2.0,acc=1.0,score=12):
+  return {"estimated_rr":rr,"btc_rel_1h":r1,"btc_rel_4h":r4,"rel_accel":acc,"score":score,"spread_bps":10,"buy_slippage_bps":10}
+ def test_risk_off_caps_deployment_at_60pct(self):
+  scan=self._scan(-3,[-2,-1,-4,1])
+  self.assertEqual(eng.market_regime(scan)[0],"RISK_OFF")
+  self.assertTrue(eng.marginal_capital_gate(self._state(11000),1000,self._edge(),"BUY",scan)[0])
+  self.assertFalse(eng.marginal_capital_gate(self._state(12000),1000,self._edge(),"BUY",scan)[0])
+ def test_neutral_caps_deployment_at_75pct(self):
+  scan=self._scan(.5,[1,-1,2,-2])
+  self.assertEqual(eng.market_regime(scan)[0],"NEUTRAL")
+  self.assertTrue(eng.marginal_capital_gate(self._state(14000),1000,self._edge(),"BUY",scan)[0])
+  self.assertFalse(eng.marginal_capital_gate(self._state(15000),1000,self._edge(),"BUY",scan)[0])
+ def test_constructive_caps_deployment_at_85pct(self):
+  scan=self._scan(2,[1,1,-1,1])
+  self.assertEqual(eng.market_regime(scan)[0],"CONSTRUCTIVE")
+  self.assertEqual(eng.capital_limit(self._state(),scan),17000.0)
+ def test_strong_market_never_exceeds_95pct(self):
+  scan=self._scan(4,[2,1,3,1])
+  self.assertEqual(eng.market_regime(scan)[0],"STRONG")
+  self.assertTrue(eng.marginal_capital_gate(self._state(18000),1000,self._edge(),"BUY",scan)[0])
+  self.assertFalse(eng.marginal_capital_gate(self._state(19000),1000,self._edge(),"BUY",scan)[0])
+ def test_buy_and_add_share_same_capacity_rule(self):
+  scan=self._scan(.5,[1,-1,2,-2]);state=self._state(15000)
+  self.assertFalse(eng.capital_available(state,1000,"BUY",scan))
+  self.assertFalse(eng.capital_available(state,1000,"ADD",scan))
+ def test_marginal_threshold_tightens_above_75pct(self):
+  scan=self._scan(4,[2,1,3,1]);state=self._state(15000)
+  ok,reasons=eng.marginal_capital_gate(state,1000,self._edge(rr=2.1,r4=.1,acc=.1),"BUY",scan)
+  self.assertFalse(ok);self.assertIn("MARGINAL_EDGE_INSUFFICIENT_ABOVE_75PCT",reasons)
+ def test_marginal_threshold_tightens_above_85pct(self):
+  scan=self._scan(4,[2,1,3,1]);state=self._state(17000)
+  ok,reasons=eng.marginal_capital_gate(state,1000,self._edge(rr=2.5,r1=2,r4=.6,acc=1),"BUY",scan)
+  self.assertFalse(ok);self.assertIn("MARGINAL_EDGE_INSUFFICIENT_ABOVE_85PCT",reasons)
+ def test_higher_quality_buy_outranks_weaker_add(self):
+  high=self._edge(rr=3.2,r1=3,r4=4,acc=2,score=14)
+  low=self._edge(rr=2.0,r1=.2,r4=.2,acc=.1,score=8)
+  self.assertGreater(eng.opportunity_priority(high,"BUY"),eng.opportunity_priority(low,"ADD"))
+ def test_missing_market_data_fails_closed_to_risk_off(self):
+  self.assertEqual(eng.market_regime({})[0],"RISK_OFF")
+  self.assertEqual(eng.capital_limit(self._state(),{}),12000.0)
+ def test_realized_net_profit_compounds_equity_but_keeps_regime_cap(self):
+  scan=self._scan(.5,[1,-1,2,-2]);state=self._state(14000,(500.0,))
+  snap=eng.capital_snapshot(state,scan)
   self.assertEqual(snap["equity_usdt"],20500.0)
-  self.assertEqual(snap["ordinary_buy_limit_usdt"],17500.0)
-  self.assertFalse(eng.capital_available(state,1000,"BUY"))
- def test_realized_loss_reduces_equity(self):
-  state=self._state(16000,(-500.0,))
-  snap=eng.capital_snapshot(state)
+  self.assertEqual(snap["market_regime"],"NEUTRAL")
+  self.assertEqual(snap["max_deployable_usdt"],15375.0)
+ def test_realized_loss_reduces_equity_and_capacity(self):
+  scan=self._scan(.5,[1,-1,2,-2]);state=self._state(14000,(-500.0,))
+  snap=eng.capital_snapshot(state,scan)
   self.assertEqual(snap["equity_usdt"],19500.0)
-  self.assertEqual(snap["ordinary_buy_limit_usdt"],16500.0)
+  self.assertEqual(snap["max_deployable_usdt"],14625.0)
  def test_unrealized_pnl_does_not_expand_equity(self):
-  state=self._state(17000)
+  scan=self._scan(4,[2,1,3,1]);state=self._state(10000)
   state["open_positions"][0]["unrealized_pnl_usdt"]=99999.0
-  self.assertEqual(eng.capital_snapshot(state)["equity_usdt"],20000.0)
+  self.assertEqual(eng.capital_snapshot(state,scan)["equity_usdt"],20000.0)
+
