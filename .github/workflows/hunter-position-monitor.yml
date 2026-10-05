@@ -86,7 +86,7 @@ jobs:
           BASE_SHA=$(git rev-parse HEAD)
           git fetch origin main
           CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor|leading-risk)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
             echo "SHADOW_STATE_REVISION_CONFLICT"
             printf '%s\n' "$CHANGED"
             exit 1
@@ -115,7 +115,7 @@ jobs:
           git fetch origin main
           BASE_PARENT=$(git rev-parse HEAD^)
           CHANGED=$(git diff --name-only "$BASE_PARENT"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor|leading-risk)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
             echo "SHADOW_STATE_REVISION_CHANGED_BEFORE_PUSH"
             printf '%s\n' "$CHANGED"
             exit 1
@@ -131,7 +131,7 @@ jobs:
             PRE_REBASE_PARENT=$(git rev-parse HEAD^)
             git fetch origin main
             CHANGED=$(git diff --name-only "$PRE_REBASE_PARENT"..origin/main || true)
-            if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
+            if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor|leading-risk)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
               echo "SHADOW_STATE_CAS_REJECTED_STALE_WRITER"
               printf '%s\n' "$CHANGED"
               exit 1
