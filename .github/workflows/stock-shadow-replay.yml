@@ -10,6 +10,7 @@ on:
     paths:
       - 'research/stock_shadow/stock_replay.py'
       - 'research/stock_shadow/market_session.py'
+      - 'research/stock_shadow/persist_results.sh'
       - 'tests/test_stock_shadow.py'
       - '.github/workflows/stock-shadow-replay.yml'
   schedule:
@@ -30,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -49,19 +50,7 @@ jobs:
         run: |
           git diff --name-only | grep -Ev '^research/results/stock-shadow/replay-v1.json$' && { echo "Replay isolation violation"; exit 1; } || true
       - name: Persist replay result only
-        run: |
-          git fetch origin main
-          if ! git diff --quiet HEAD origin/main -- research/stock_shadow/stock_replay.py research/stock_shadow/stock_shadow_v1.py research/stock_shadow/market_session.py tests/test_stock_shadow.py .github/workflows/stock-shadow-replay.yml; then
-            echo "Replay code changed during this run; refusing stale-result persistence"
-            exit 42
-          fi
-          git config user.name "stock-shadow-bot"
-          git config user.email "stock-shadow-bot@users.noreply.github.com"
-          git add research/results/stock-shadow/replay-v1.json
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "data: update stock shadow replay"
-          git pull --rebase origin main
-          git push origin HEAD:main
+        run: bash research/stock_shadow/persist_results.sh replay
 
 # TEST_REPAIR_RERUN_20261005
 

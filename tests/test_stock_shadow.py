@@ -916,3 +916,61 @@ def test_p0_forced_monitor_cannot_bypass_weekend_or_final_close_gate(monkeypatch
     else:
         assert monitor.continuity_fingerprint(book[monitor.STATE],book[monitor.EVENTS])==before
     assert book[monitor.HEALTH]['positions_updated']==2
+
+
+def _p0_git_pair(tmp_path):
+    import subprocess
+    def git(where,*args):
+        return subprocess.run(['git',*args],cwd=where,check=True,capture_output=True,text=True)
+    remote=tmp_path/'remote.git';work=tmp_path/'work';writer=tmp_path/'writer'
+    git(tmp_path,'init','--bare',str(remote))
+    git(tmp_path,'init','-b','main',str(work))
+    for key,value in [('user.name','Test'),('user.email','test@example.invalid')]: git(work,'config',key,value)
+    result=work/'research/results/stock-shadow';result.mkdir(parents=True)
+    (result/'portfolio-v1.json').write_text('{"positions":{}}\n')
+    (result/'trades-v1.json').write_text('[]\n')
+    (work/'unrelated.txt').write_text('initial\n')
+    git(work,'add','.');git(work,'commit','-m','base');git(work,'remote','add','origin',str(remote));git(work,'push','origin','main')
+    git(tmp_path,'clone','-b','main',str(remote),str(writer))
+    for key,value in [('user.name','Other'),('user.email','other@example.invalid')]: git(writer,'config',key,value)
+    return git,remote,work,writer
+
+
+def test_p0_persistence_preserves_other_system_commits(tmp_path):
+    import subprocess
+    git,remote,work,writer=_p0_git_pair(tmp_path)
+    (work/'research/results/stock-shadow/portfolio-v1.json').write_text('{"positions":{"NEW":{}}}\n')
+    (writer/'unrelated.txt').write_text('other system latest\n')
+    git(writer,'add','.');git(writer,'commit','-m','other update');git(writer,'push','origin','main')
+    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'main'],cwd=work,capture_output=True,text=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert git(work,'show','origin/main:unrelated.txt').stdout=='other system latest\n'
+    assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/portfolio-v1.json').stdout
+
+
+def test_p0_persistence_refuses_to_overwrite_a_newer_portfolio(tmp_path):
+    import subprocess
+    git,remote,work,writer=_p0_git_pair(tmp_path)
+    path='research/results/stock-shadow/portfolio-v1.json'
+    (work/path).write_text('{"positions":{"STALE":{}}}\n')
+    (writer/path).write_text('{"positions":{"FRESH":{}}}\n')
+    git(writer,'add','.');git(writer,'commit','-m','newer portfolio');git(writer,'push','origin','main')
+    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'monitor'],cwd=work,capture_output=True,text=True)
+    assert result.returncode==43,result.stdout+result.stderr
+    assert 'FRESH' in git(work,'show','origin/main:'+path).stdout
+    assert 'STALE' not in git(work,'show','origin/main:'+path).stdout
+
+
+def test_p0_push_race_retries_only_own_outputs(tmp_path):
+    import subprocess,shlex
+    git,remote,work,writer=_p0_git_pair(tmp_path)
+    (work/'research/results/stock-shadow/portfolio-v1.json').write_text('{"positions":{"NEW":{}}}\n')
+    (writer/'unrelated.txt').write_text('race winner\n')
+    git(writer,'add','.');git(writer,'commit','-m','race update')
+    hook=work/'.git/hooks/pre-push'
+    hook.write_text('#!/bin/bash\nif [ ! -f .git/race-injected ]; then\n touch .git/race-injected\n git -C '+shlex.quote(str(writer))+' push origin main\nfi\n')
+    hook.chmod(0o755)
+    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'main'],cwd=work,capture_output=True,text=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert 'race winner' in git(work,'show','origin/main:unrelated.txt').stdout
+    assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/portfolio-v1.json').stdout

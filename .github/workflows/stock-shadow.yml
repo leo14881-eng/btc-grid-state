@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: main
       - name: Bind execution version
         run: |
           echo "STOCK_SHADOW_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
@@ -66,24 +66,7 @@ jobs:
         run: |
           git diff --name-only | grep -Ev '^research/results/stock-shadow/' && { echo "Isolation violation"; exit 1; } || true
       - name: Persist Stock Shadow state only
-        run: |
-          git fetch origin main
-          if ! git diff --quiet HEAD origin/main -- research/stock_shadow tests/test_stock_shadow.py .github/workflows/stock-shadow.yml .github/workflows/stock-shadow-position-monitor.yml; then
-            echo "Stock Shadow code changed during this run; refusing stale-result persistence"
-            exit 42
-          fi
-          git config user.name "stock-shadow-bot"
-          git config user.email "stock-shadow-bot@users.noreply.github.com"
-          git add research/results/stock-shadow/
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m "data: update stock shadow state"
-          for attempt in 1 2 3; do
-            git pull --rebase origin main
-            if git push origin HEAD:main; then exit 0; fi
-            sleep $((attempt * 2))
-          done
-          echo "Failed to persist Stock Shadow results after retries"
-          exit 1
+        run: bash research/stock_shadow/persist_results.sh main
 
 # FINAL_API_ARCH_ACCEPTANCE_R3
 
