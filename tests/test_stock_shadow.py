@@ -791,6 +791,7 @@ def test_history_gap_classifier_never_infers_listing_age_from_cached_first_bar()
 
 
 def test_ledger_rejects_weekend_trade_events():
+    import pytest
     state={"version":2,"simulation_only":True,"positions":{},"closed":[]}
     events=[{"type":"BUY","symbol":"TEST","at":"2026-10-03T19:37:39+00:00","price":10.0,"notional":1000.0}]
     with pytest.raises(RuntimeError, match="ledger_invariant:weekend_trade_event"):
