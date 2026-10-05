@@ -9,6 +9,11 @@ name: Stock Shadow Position Monitor
 
 on:
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: 'Infrastructure trigger source only'
+        required: false
+        default: 'manual'
   push:
     branches: [main]
     paths:
@@ -24,7 +29,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: stock-shadow-main
+  group: stock-shadow-position-monitor
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +40,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: Refresh authoritative shadow state
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+      - name: Generation idempotency gate
+        id: generation
+        env:
+          TRIGGER_SOURCE: ${{ inputs.trigger_source || github.event_name }}
+        run: |
+          STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+          echo "started_at=$STARTED_AT" >> "$GITHUB_OUTPUT"
+          RESULT=$(python -m research.stock_shadow_scheduler_health gate)
+          echo "$RESULT"
+          PROCESS=$(python -c "import json,sys; print(str(json.load(sys.stdin)['process']).lower())" <<<"$RESULT")
+          echo "process=$PROCESS" >> "$GITHUB_OUTPUT"
+          echo "trigger_source=$TRIGGER_SOURCE" >> "$GITHUB_OUTPUT"
       - name: Bind execution version
         run: |
           echo "STOCK_SHADOW_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
@@ -45,10 +66,13 @@ jobs:
       - name: Install test dependency
         run: python -m pip install --disable-pip-version-check pytest
       - name: Test isolated Stock Shadow
+        if: steps.generation.outputs.process == 'true'
         run: python -m pytest -q tests/test_stock_shadow.py
       - name: P0 weekend and final mutation gate acceptance
+        if: steps.generation.outputs.process == 'true'
         run: python -m pytest -q tests/test_stock_shadow.py -k p0
       - name: Position-only 5m monitor
+        if: steps.generation.outputs.process == 'true'
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
@@ -58,10 +82,18 @@ jobs:
           else
             python research/stock_shadow/stock_position_monitor.py --force
           fi
+      - name: Mark successful generation for persistence
+        if: steps.generation.outputs.process == 'true'
+        env:
+          MONITOR_STARTED_AT: ${{ steps.generation.outputs.started_at }}
+          TRIGGER_SOURCE: ${{ steps.generation.outputs.trigger_source }}
+        run: python -m research.stock_shadow_scheduler_health success --started-at "$MONITOR_STARTED_AT" --trigger-source "$TRIGGER_SOURCE" --state-revision "$(git rev-parse HEAD)"
       - name: Isolation guard
+        if: steps.generation.outputs.process == 'true'
         run: |
           git diff --name-only | grep -Ev '^research/results/stock-shadow/' && { echo "Isolation violation"; exit 1; } || true
       - name: Persist Stock Shadow position state only
+        if: steps.generation.outputs.process == 'true'
         run: bash research/stock_shadow/persist_results.sh monitor
 
 # TEST_REPAIR_RERUN_20261005
