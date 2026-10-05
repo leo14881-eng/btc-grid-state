@@ -11,6 +11,9 @@ def evidence(oid="e1",btc1=0.0,btc15=0.0,btc5=0.0,neg=.2,loss5=.05,loss10=0.0,ca
             "liquidity":{"catastrophic_fraction":cat},"stablecoins":{"max_deviation_pct":stable}}
 
 class SystemicRiskTests(unittest.TestCase):
+    def test_same_cycle_small_future_clock_skew_is_fresh_but_large_future_is_not(self):
+        self.assertTrue(risk.is_fresh((NOW+dt.timedelta(seconds=2)).isoformat(),NOW,900))
+        self.assertFalse(risk.is_fresh((NOW+dt.timedelta(minutes=2)).isoformat(),NOW,900))
     def test_missing_evidence_fails_closed_high(self):
         level,reasons=risk.classify_systemic_risk(evidence(missing=["BTC_SHORT_TERM_MISSING"]),C)
         self.assertEqual(level,"HIGH");self.assertTrue(any("FAIL_CLOSED" in x for x in reasons))
