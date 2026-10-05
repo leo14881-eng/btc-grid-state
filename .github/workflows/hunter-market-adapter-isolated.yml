@@ -20,7 +20,7 @@ jobs:
       - name: Check out immutable main baseline
         uses: actions/checkout@v4
         with:
-          ref: '0e66e480094a72d0b0bccc2dd2bcedb662ed38aa'
+          ref: '59dcce8ab972e30349a4774cf324ae6d85b760b3'
           path: baseline-main
           persist-credentials: false
       - name: Existing Hunter tests plus isolated adapter fixtures
@@ -33,9 +33,12 @@ jobs:
           node tests/test_hunter_market_proxy.mjs
       - name: Frozen main versus adapter decisions and PnL
         env:
-          FROZEN_MAIN_SHA: '0e66e480094a72d0b0bccc2dd2bcedb662ed38aa'
+          FROZEN_MAIN_SHA: '59dcce8ab972e30349a4774cf324ae6d85b760b3'
         run: python research/validate_market_adapter_isolation.py --baseline "$PWD/baseline-main"
       - name: Bounded public API latency and capability probes
+        env:
+          HUNTER_BYBIT_SPOT_PROXY: 'https://hunter-bybit-market-v3.qinx468.workers.dev'
+          REQUIRE_BYBIT_V3_ACCEPTANCE: '1'
         run: python research/validate_market_adapter_isolation.py --live
       - name: Ensure no state mutation was published
         run: git diff --exit-code -- research/results

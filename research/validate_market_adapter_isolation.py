@@ -179,11 +179,55 @@ def live():
         return found
     measure("bybit_v3_books",books)
     measure("bybit_v3_history",lambda:bybit.candles("BTCUSDT",5,2))
+    if os.getenv("REQUIRE_BYBIT_V3_ACCEPTANCE") == "1":
+        def listing():
+            data = m.bybit_result(m.request(bybit.host+"/bybit/spot"))
+            rows = data.get("list") or []
+            if not rows or data.get("nextPageCursor"):raise ValueError("LIST_INCOMPLETE")
+            return rows
+        measure("bybit_v3_listing",listing)
+        def batch20():
+            quotes = bybit.quotes()
+            pairs = ["BTCUSDT","ETHUSDT","CARVUSDT","FLUIDUSDT"]
+            pairs += [p for p in sorted(quotes) if p not in pairs][:16]
+            found, errors = bybit.books(pairs)
+            if errors or len(found)!=20:raise ValueError(json.dumps(errors))
+            return found
+        measure("bybit_v3_books_20",batch20)
+        def history72():
+            end = int(time.time()*1000)//300000*300000-1
+            start = end+1-72*3600000
+            bars = bybit.candles("FLUIDUSDT",5,1000,start,end)
+            if len(bars)!=864 or int(bars[0][0])!=start or int(bars[-1][6])!=end:
+                raise ValueError("HISTORY_72H_INCOMPLETE:"+str(len(bars)))
+            return bars
+        measure("bybit_v3_history_72h",history72)
+        def early():
+            rows = bybit.signals(["ETHUSDT","CARVUSDT","FLUIDUSDT"],dt.datetime.now(dt.timezone.utc))
+            if set(rows)!={"ETH","CARV","FLUID"}:raise ValueError("EARLY_INCOMPLETE:"+str(sorted(rows)))
+            return rows
+        measure("bybit_v3_early",early)
+        def blocked():
+            import urllib.error
+            checks = [("/bybit/orderbooks",None,405),
+                      ("/bybit/klines?symbol=BTCUSDT&interval=5&limit=1001",None,400),
+                      ("/bybit/orderbooks",{"symbols":["BTCUSDT"]*21},400),
+                      ("/bybit/alpha/token-list",{"tokenTag":""},401)]
+            for path,body,expected in checks:
+                try:m.request(bybit.host+path,body)
+                except urllib.error.HTTPError as exc:
+                    if exc.code!=expected:raise
+                else:raise ValueError("INVALID_REQUEST_ACCEPTED:"+path)
+            return checks
+        measure("bybit_v3_invalid_requests_blocked",blocked)
+        measure("original_worker_health",lambda:m.request("https://bybit-api-test.qinx468.workers.dev/health"))
     # Public GET/market data only. An absent v3 deployment is an admission failure,
     # not a reason to modify the live Worker or enable the adapter.
     print("LIVE_PUBLIC_API_REPORT "+json.dumps({"records":records,
         "v3_admission":all(r["ok"] for r in records if r["name"].startswith("bybit_v3")),
         "benchmark_limit":"SMALL_SAMPLE_NOT_PRODUCTION_LOAD_TEST"},sort_keys=True))
+    if os.getenv("REQUIRE_BYBIT_V3_ACCEPTANCE")=="1" and not all(r["ok"] for r in records):
+        raise SystemExit("LIVE_V3_ACCEPTANCE_FAILED")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
