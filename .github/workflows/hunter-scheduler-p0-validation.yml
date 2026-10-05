@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: hunter-scheduler-p0-validation
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
