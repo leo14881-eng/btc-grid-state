@@ -1,0 +1,32 @@
+name: Hunter Vultr Runner Infrastructure
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/hunter_monitor_*'
+      - 'tests/test_hunter_monitor_persist.py'
+      - 'deploy/hunter-vultr-runner.md'
+      - 'deploy/systemd/hunter-position-monitor.*'
+      - '.github/workflows/hunter-vultr-runner-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Shell syntax and complete Hunter regression
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          bash -n scripts/hunter_monitor_runner.sh
+          python -m unittest discover -s tests -p 'test_hunter*.py'
+      - name: Validate authoritative snapshot contract
+        run: |
+          GENERATION=$(python -c 'import json; print(json.load(open("research/results/hunter-scheduler-health.json"))["current_generation_id"])')
+          python scripts/hunter_monitor_persist.py validate --generation "$GENERATION"

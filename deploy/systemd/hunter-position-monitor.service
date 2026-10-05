@@ -1,0 +1,12 @@
+[Unit]
+Description=Hunter Shadow Position Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/shadow-runner/btc-grid-state
+ExecStart=/usr/local/bin/hunter-monitor-runner.sh
+TimeoutStartSec=240
+StandardOutput=journal
+StandardError=journal
