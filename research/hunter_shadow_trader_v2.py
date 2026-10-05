@@ -872,9 +872,6 @@ def main():
   a=c.get("asset")
   if not a or a in open_assets:continue
   p=price(scan,a)
-  re_ok,re_reasons=reentry_allowed(state,c,p) if p else (False,["CURRENT_PRICE_MISSING"])
-  if not re_ok:
-   record(state,{"asset":a,"tranches":[]},"WAIT",now,re_reasons,{},p);continue
   if tail.risk_blocks_new(state):
    e=evidence(c,liq,supply);risk_reasons=["SYSTEMIC_RISK_ENTRY_FREEZE",str((state.get("systemic_risk") or {}).get("level") or "UNKNOWN")]
    record(state,{"asset":a,"tranches":[]},"RISK_BLOCKED" if ENTRY_MODE=="DISCOVERY" else "WAIT",now,risk_reasons,e,p)
@@ -883,6 +880,9 @@ def main():
     rows.append({"at_utc":now.isoformat(),"asset":a,"price":p,"signal_evidence":c.get("signal_evidence"),"systemic_risk":state.get("systemic_risk"),"would_be_discovery":discovery_decision(c)[0]=="BUY","capital_authority":"NONE_SHADOW_ONLY"})
     state["risk_blocked_samples"]=rows[-MAX_DEFERRED_HISTORY:]
    continue
+  re_ok,re_reasons=reentry_allowed(state,c,p) if p else (False,["CURRENT_PRICE_MISSING"])
+  if not re_ok:
+   record(state,{"asset":a,"tranches":[]},"WAIT",now,re_reasons,{},p);continue
   broad,broad_reasons=discovery_decision(c);fallback,reasons,e=decision(c,scan,liq,supply,"ENTRY")
   act=authoritative_entry_action(c,fallback)
   if not entry_allowed(ENTRY_MODE,broad,p,act):
