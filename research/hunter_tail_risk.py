@@ -56,10 +56,11 @@ def _stablecoin_prices(base_url,fetch_json):
 def collect_systemic_evidence(scan,liq,now,cfg,base_url="https://data-api.binance.vision",fetch_json=None):
     """Collect independent shadow-only evidence. Missing/stale dimensions are explicit."""
     fetch_json=fetch_json or _get_json
-    max_age=int(cfg["MAX_EVIDENCE_AGE_SECONDS"])
+    max_age=int(cfg.get("SYSTEMIC_MAX_EVIDENCE_AGE_SECONDS",cfg["MAX_EVIDENCE_AGE_SECONDS"]))
     scan_fresh=is_fresh((scan or {}).get("as_of_utc"),now,max_age)
     coins=(scan or {}).get("coins") or {}
-    moves=[finite(v.get("change_24h_pct")) for k,v in coins.items() if k!="BTC" and isinstance(v,dict)]
+    stable_bases={"USDT","USDC","FDUSD","TUSD","USDP","DAI","BUSD"}
+    moves=[finite(v.get("change_24h_pct")) for k,v in coins.items() if k!="BTC" and k not in stable_bases and isinstance(v,dict)]
     moves=[x for x in moves if x is not None]
     negative=(sum(x<0 for x in moves)/len(moves)) if moves else None
     loss5=(sum(x<=-5 for x in moves)/len(moves)) if moves else None
