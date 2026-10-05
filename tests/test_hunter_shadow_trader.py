@@ -46,12 +46,13 @@ class SharedShadowEngineTests(unittest.TestCase):
   self.assertEqual(core.decision(c,scan,{},supply,"ENTRY")[0],"REJECT")
 
  def test_v2_capital_pool_blocks_overcommit(self):
-  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":20000}]}]}
-  self.assertFalse(core.capital_available(state,1000,"BUY"))
-  self.assertFalse(core.capital_available(state,1000,"ADD"))
+  strong={"coins":{"BTC":{"change_24h_pct":4},"A":{"change_24h_pct":2},"B":{"change_24h_pct":1}}}
   state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":19000}]}]}
-  self.assertFalse(core.capital_available(state,1000,"BUY"))
-  self.assertTrue(core.capital_available(state,1000,"ADD"))
+  self.assertFalse(core.capital_available(state,1000,"BUY",strong))
+  self.assertFalse(core.capital_available(state,1000,"ADD",strong))
+  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":18000}]}]}
+  self.assertTrue(core.capital_available(state,1000,"BUY",strong))
+  self.assertTrue(core.capital_available(state,1000,"ADD",strong))
 
  def test_freeze_is_fail_closed_by_default(self):
   self.assertTrue(core.SHADOW_FREEZE)
