@@ -94,6 +94,17 @@ def continuity_fingerprint(state, events):
 
 def validate_ledger(state, events):
     positions=state.get("positions",{})
+    # Persisted trade events must never originate on a New York weekend. This is a
+    # second-line ledger invariant behind the authoritative exchange-calendar gate:
+    # even a stale workflow checkout cannot resurrect the archived pre-gate weekend cohort.
+    for event in events:
+        if event.get("type") in {"BUY","ADD","SELL"} and event.get("at"):
+            try:
+                event_ny=datetime.fromisoformat(str(event["at"]).replace("Z","+00:00")).astimezone(NY)
+            except Exception as exc:
+                raise RuntimeError("ledger_invariant:invalid_trade_event_timestamp") from exc
+            if event_ny.weekday() >= 5:
+                raise RuntimeError("ledger_invariant:weekend_trade_event")
     # State continuity is a hard invariant: a reset marker is never a valid runtime state.
     if state.get("reset_reason") or state.get("reset_at"):
         raise RuntimeError("ledger_invariant:manual_reset_marker_present")
