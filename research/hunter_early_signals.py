@@ -144,14 +144,19 @@ def main():
     r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
     regional_signals={}
     if scan.get("bybit_complete"):
+        worker_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")=="OFFICIAL_BYBIT_V5_VIA_WORKER"
         try:
             from research import hunter_bybit_regional as regional
+            from research import hunter_bybit_worker as worker
         except ModuleNotFoundError:
             import hunter_bybit_regional as regional
-        path=pathlib.Path(os.getenv("HUNTER_BYBIT_REGIONAL_SNAPSHOT",
+            import hunter_bybit_worker as worker
+        path=worker.DEFAULT if worker_source else pathlib.Path(os.getenv("HUNTER_BYBIT_REGIONAL_SNAPSHOT",
             "research/results/hunter-bybit-regional-snapshot.json"))
         snapshot=json.loads(path.read_text())
-        regional.validate(snapshot,dt.datetime.now(dt.timezone.utc))
+        (worker if worker_source else regional).validate(snapshot,dt.datetime.now(dt.timezone.utc))
+        if worker_source and snapshot["snapshot_sha256"]!=(scan.get("venue_status") or {}).get("bybit",{}).get("snapshot_sha256"):
+            raise SystemExit("BYBIT_SIGNAL_SNAPSHOT_HASH_MISMATCH")
         if snapshot["captured_at_utc"]!=(scan.get("venue_status") or {}).get("bybit",{}).get("captured_at_utc"):
             raise SystemExit("BYBIT_SIGNAL_SNAPSHOT_GENERATION_MISMATCH")
         captured=dt.datetime.fromisoformat(snapshot["captured_at_utc"].replace("Z","+00:00"))

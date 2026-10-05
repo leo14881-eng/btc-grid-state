@@ -133,12 +133,18 @@ def bybit_with_fallback():
                 " fallback="+str(second)) from second
 
 
-def bybit_from_authorized_region():
+def bybit_from_authorized_region(binance_bases=()):
     """Use only fresh complete official snapshots from a trusted repo runner.
 
     On a missing or stale snapshot, attempt direct official endpoints and keep
     failure explicit; never claim a Binance or third-party proxy as Bybit.
     """
+    if os.getenv("HUNTER_BYBIT_WORKER_MARKET_ENABLED")=="1":
+        try:
+            from research import hunter_bybit_worker
+        except ModuleNotFoundError:
+            import hunter_bybit_worker
+        return hunter_bybit_worker.collect(binance_bases)
     path=pathlib.Path(os.getenv(
         "HUNTER_BYBIT_REGIONAL_SNAPSHOT",
         "research/results/hunter-bybit-regional-snapshot.json"))
@@ -238,7 +244,7 @@ def main():
     # A fresh complete official regional snapshot is the only admissible input;
     # missing evidence stays visible rather than becoming fake coverage.
     try:
-        rows,status=bybit_from_authorized_region();results["bybit"]=rows;statuses["bybit"]=status
+        rows,status=bybit_from_authorized_region({r["base"] for r in results.get("binance",[])});results["bybit"]=rows;statuses["bybit"]=status
     except Exception as exc:
         errors["bybit"]=str(exc);statuses["bybit"]=dict(error=str(exc))
     report=build(results,previous,at)
