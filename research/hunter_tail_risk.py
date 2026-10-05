@@ -172,6 +172,16 @@ def risk_blocks_new(state):
     row=(state or {}).get("systemic_risk") or {}
     return row.get("level") in ("HIGH","CRITICAL") or not row.get("last_observation_id")
 
+def confirmed_systemic_liquidity_shock(state):
+    """Only confirmed fresh systemic evidence may suppress liquidity-only hard exits.
+    Fail-closed HIGH caused by missing/stale data freezes entries but never grants
+    this suppression authority.
+    """
+    row=(state or {}).get("systemic_risk") or {};ev=row.get("evidence") or {}
+    if row.get("raw_level") not in ("HIGH","CRITICAL") or (ev.get("missing_or_stale") or []):return False
+    reasons=row.get("reasons") or []
+    return any(str(x).startswith(("BTC_RAPID_","MARKET_BREADTH_","CROSS_ASSET_LIQUIDITY_","STABLECOIN_DEPEG_")) for x in reasons)
+
 def configured_tail_budget(cfg):
     active=finite(cfg.get("TAIL_LOSS_BUDGET_ACTIVE_USDT"))
     candidates=[finite(x) for x in cfg.get("TAIL_LOSS_BUDGET_CANDIDATES_USDT",[])];candidates=[x for x in candidates if x and x>0]
