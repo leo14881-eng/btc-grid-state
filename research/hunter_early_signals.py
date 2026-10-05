@@ -134,5 +134,5 @@ def main():
     report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc))
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     persist_first_early(report)
-    print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]},ensure_ascii=False))
+    print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]}))
 if __name__=="__main__":main()
