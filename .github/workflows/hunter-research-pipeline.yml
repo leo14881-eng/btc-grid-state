@@ -259,6 +259,20 @@ jobs:
           assert any('cannot prove' in x for x in d.get('limitations') or [])
           print('TAIL_RISK_REPLAY_CONTRACT_OK')
           PY
+      - name: Run historical leading-risk replay
+        run: python research/hunter_leading_risk_replay.py
+      - name: Verify leading-risk replay shadow boundary
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open('research/results/hunter-leading-risk-replay.json'))
+          assert d.get('capital_authority')=='NONE_SHADOW_ONLY'
+          assert d.get('real_trading_enabled') is False
+          assert d.get('scope')=='LEADING_RISK_PARTIAL_PATH_REPLAY_NOT_STRATEGY_BACKTEST'
+          assert len(d.get('windows') or [])>=3
+          assert any('not fabricated' in x for x in d.get('limitations') or [])
+          print('LEADING_RISK_REPLAY_CONTRACT_OK')
+          PY
       - name: Reject mixed-generation research
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
@@ -325,7 +339,7 @@ jobs:
           BASE_SHA=$(git rev-parse HEAD)
           git fetch origin main
           CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
             echo "HUNTER_STATE_REVISION_CONFLICT"
             printf '%s\n' "$CHANGED"
             exit 1
@@ -362,6 +376,7 @@ jobs:
             research/results/hunter-shadow-v2-summary.json \
             research/results/hunter-shadow-v2-overfilter-guard.json \
             research/results/hunter-tail-risk-replay.json \
+            research/results/hunter-leading-risk-replay.json \
             research/results/hunter-bybit-availability.json \
             research/results/hunter-bybit-spot-cache.json \
             research/results/hunter-shadow-candidate-ledger.json \
@@ -381,7 +396,7 @@ jobs:
           git fetch origin main
           BASE_PARENT=$(git rev-parse HEAD^)
           CHANGED=$(git diff --name-only "$BASE_PARENT"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
             echo "HUNTER_STATE_REVISION_CHANGED_BEFORE_PUSH"
             printf '%s\n' "$CHANGED"
             exit 1
@@ -396,7 +411,7 @@ jobs:
             PRE_REBASE_PARENT=$(git rev-parse HEAD^)
             git fetch origin main
             CHANGED=$(git diff --name-only "$PRE_REBASE_PARENT"..origin/main || true)
-            if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
+            if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
               echo "HUNTER_STATE_CAS_REJECTED_STALE_WRITER"
               printf '%s\n' "$CHANGED"
               exit 1

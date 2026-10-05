@@ -5,12 +5,13 @@ from research import hunter_shadow_trader_v2 as eng
 from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
 from research import hunter_liquidity_probe as books
+from research import hunter_leading_risk as leading
 from research.hunter_policy import C,LANES,VERSION,stamp
 from concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results");BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
 V1=ROOT/"hunter-shadow-portfolio.json";V2=ROOT/"hunter-shadow-v2-portfolio.json";OUT=ROOT/"hunter-position-monitor.json"
 V1_SUMMARY=ROOT/"hunter-shadow-summary.json";V2_SUMMARY=ROOT/"hunter-shadow-v2-summary.json";V1_GUARD=ROOT/"hunter-shadow-v1-overfilter-guard.json";V2_GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"
-REVIEW=ROOT/"hunter-tactical-capital-review.json";LIQ=ROOT/"hunter-liquidity-probe.json";SUPPLY=ROOT/"hunter-tactical-supply-risk.json";UNIVERSE=ROOT/"hunter-cex-universe-run.json"
+REVIEW=ROOT/"hunter-tactical-capital-review.json";LIQ=ROOT/"hunter-liquidity-probe.json";SUPPLY=ROOT/"hunter-tactical-supply-risk.json";UNIVERSE=ROOT/"hunter-cex-universe-run.json";LEADING=ROOT/"hunter-leading-risk.json"
 def load(p):
  try:return json.loads(p.read_text())
  except (OSError,ValueError):return {}
@@ -140,7 +141,20 @@ def main():
  # One systemic observation is shared by both lanes so V1/V2 cannot disagree
  # merely because they were evaluated a few milliseconds apart.
  risk_evidence=eng.tail.collect_systemic_evidence(regime_scan,liq,now,eng.C,eng.BINANCE_DATA_API)
+ # Leading Warning is observation-only in phase 1. It cannot mutate positions or
+ # ordinary BUY/SELL decisions. Persisted history lets acceleration and restart
+ # behavior be evaluated across independent five-minute observations.
+ leading_doc=load(LEADING);previous=leading_doc.get("current") or {}
+ leading_evidence=leading.collect_evidence(regime_scan,liq,review,risk_evidence,previous,now,eng.C)
+ leading_row,leading_changed=leading.update_state(previous,leading_evidence,now,eng.C)
+ v2_before=load(V2);used=sum(sum(float(t.get("notional_usdt") or 0) for t in p.get("tranches") or []) for p in v2_before.get("open_positions") or [])
+ tail_cap=(eng.tail.tail_budget_snapshot(v2_before,eng.C,LANES["V2"]["capital_pool_usdt"]) or {}).get("tail_cap_usdt")
+ leading_doc={"schema":"hunter_leading_risk_state_v1","updated_at_utc":now.isoformat(),"current":leading_row,
+              "history":leading.update_history(leading_doc,leading_row,used,tail_cap,eng.C),
+              "shadow_only":True,"real_position_mutation":False,"ordinary_buy_sell_signals_unchanged":True,
+              "capital_authority":"NONE_SHADOW_ONLY"}
+ eng.atomic_json_write(LEADING,leading_doc)
  results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan,risk_evidence),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan,risk_evidence)]
- eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
+ eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()
