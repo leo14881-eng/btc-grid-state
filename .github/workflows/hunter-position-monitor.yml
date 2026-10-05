@@ -10,8 +10,10 @@ on:
       - 'research/hunter_cex_scan.py'
       - 'research/hunter_shadow_trader_v2.py'
       - 'research/hunter_tail_risk.py'
+      - 'research/hunter_leading_risk.py'
       - 'tests/test_hunter_position_monitor.py'
       - 'tests/test_hunter_tail_risk.py'
+      - 'tests/test_hunter_leading_risk.py'
       - 'tests/test_hunter_shadow_trader_v2.py'
       - '.github/workflows/hunter-position-monitor.yml'
       - '.github/hunter-position-monitor-trigger'
@@ -40,7 +42,7 @@ jobs:
           git checkout -B main origin/main
       - name: Test shared decision engine and fast position monitor
         run: |
-          python -m unittest tests.test_hunter_shadow_trader_v2 tests.test_hunter_position_monitor tests.test_hunter_tail_risk -v
+          python -m unittest tests.test_hunter_shadow_trader_v2 tests.test_hunter_position_monitor tests.test_hunter_tail_risk tests.test_hunter_leading_risk -v
       - name: Fast monitor V1 and V2 open positions only
         run: python -m research.hunter_position_monitor
       - name: Validate state
@@ -62,6 +64,10 @@ jobs:
               assert int(sm.get('closed_positions') or 0)==len(st.get('closed_positions') or []), f'SUMMARY_CLOSED_MISMATCH {summary}'
               assert sm.get('as_of_utc')==st.get('updated_at_utc'), f'SUMMARY_REVISION_MISMATCH {summary}'
           m=json.load(open('research/results/hunter-position-monitor.json'))
+          lr=json.load(open('research/results/hunter-leading-risk.json'))
+          assert lr.get('capital_authority')=='NONE_SHADOW_ONLY'
+          assert lr.get('shadow_only') is True and lr.get('real_position_mutation') is False
+          assert (lr.get('current') or {}).get('level') in ('NORMAL','WATCH','PRE_CRASH_1','PRE_CRASH_2','PRE_CRASH_3')
           assert m.get('batch_endpoint')=='/api/v3/ticker/24hr' or m.get('status')=='NO_OPEN_POSITIONS'
           lanes={x.get('lane'):x for x in m.get('results') or []}
           for lane,p in [('SHADOW_V1','research/results/hunter-shadow-portfolio.json'),('SHADOW_V2','research/results/hunter-shadow-v2-portfolio.json')]:
@@ -80,12 +86,12 @@ jobs:
           BASE_SHA=$(git rev-parse HEAD)
           git fetch origin main
           CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
+          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
             echo "SHADOW_STATE_REVISION_CONFLICT"
             printf '%s\n' "$CHANGED"
             exit 1
           fi
-          git add -f research/results/hunter-position-monitor.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json
+          git add -f research/results/hunter-position-monitor.json research/results/hunter-leading-risk.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json
           for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json; do
             [ -s "$p" ] || { echo "REFUSE_EMPTY_PORTFOLIO $p"; exit 1; }
             python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('schema')=='hunter_shadow_v2_portfolio_v2'; assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'" "$p"
