@@ -21,7 +21,11 @@ echo "$GATE"
 PROCESS=$(python3 -c 'import json,sys; print(str(json.load(sys.stdin)["process"]).lower())' <<<"$GATE")
 GENERATION=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["generation_id"])' <<<"$GATE")
 [ "$PROCESS" = true ] || { echo "ALREADY_PROCESSED generation=$GENERATION"; exit 0; }
-python3 -m unittest tests.test_hunter_shadow_trader_v2 tests.test_hunter_position_monitor tests.test_hunter_tail_risk tests.test_hunter_leading_risk tests.test_hunter_scheduler_health tests.test_hunter_monitor_persist
+if ! python3 -m unittest tests.test_hunter_shadow_trader_v2 tests.test_hunter_position_monitor tests.test_hunter_tail_risk tests.test_hunter_leading_risk tests.test_hunter_scheduler_health tests.test_hunter_monitor_persist > "$TASK_DIR/regression.log" 2>&1; then
+  cat "$TASK_DIR/regression.log"
+  exit 1
+fi
+tail -n 4 "$TASK_DIR/regression.log"
 python3 -m research.hunter_position_monitor
 # Preserve the generation admitted at the gate, even across a time boundary.
 python3 -m research.hunter_scheduler_health success --started-at "$STARTED_AT" --trigger-source VULTR_SYSTEMD --state-revision "$BASE_SHA"

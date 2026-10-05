@@ -156,6 +156,46 @@ jobs:
         run: python research/hunter_tactical_capital_review.py
       - name: Health and candidate gate report
         run: python research/hunter_health_and_queue.py
+      - name: Run historical tail-risk replay
+        run: python research/hunter_tail_risk_replay.py
+      - name: Verify tail-risk replay assumptions and shadow boundary
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open('research/results/hunter-tail-risk-replay.json'))
+          assert d.get('capital_authority')=='NONE_SHADOW_ONLY'
+          assert d.get('real_trading_enabled') is False
+          assert d.get('scope')=='TAIL_RISK_PATH_REPLAY_NOT_STRATEGY_BACKTEST'
+          assert len(d.get('tail_budget_scenarios') or [])==4
+          assert d.get('full_false_freeze_rate') is None
+          assert any('cannot prove' in x for x in d.get('limitations') or [])
+          print('TAIL_RISK_REPLAY_CONTRACT_OK')
+          PY
+      - name: Run historical leading-risk replay
+        run: python research/hunter_leading_risk_replay.py
+      - name: Verify leading-risk replay shadow boundary
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open('research/results/hunter-leading-risk-replay.json'))
+          assert d.get('capital_authority')=='NONE_SHADOW_ONLY'
+          assert d.get('real_trading_enabled') is False
+          assert d.get('scope')=='LEADING_RISK_PARTIAL_PATH_REPLAY_NOT_STRATEGY_BACKTEST'
+          assert len(d.get('windows') or [])>=3
+          assert sum(x.get('status')=='OK' for x in d.get('windows') or [])>=2, 'LEADING_REPLAY_NEEDS_TWO_VALID_STRESS_WINDOWS'
+          assert any('not fabricated' in x for x in d.get('limitations') or [])
+          print('LEADING_RISK_REPLAY_CONTRACT_OK')
+          PY
+      - name: Refresh official Bybit execution channels
+        env:
+          BYBIT_ALPHA_API_KEY: ${{ secrets.BYBIT_ALPHA_API_KEY }}
+          BYBIT_ALPHA_API_SECRET: ${{ secrets.BYBIT_ALPHA_API_SECRET }}
+          HUNTER_PROXY_TOKEN: ${{ secrets.HUNTER_PROXY_TOKEN }}
+        run: python research/hunter_bybit_availability.py
+      - name: Bind latest authoritative monitor state before shadow execution
+        env:
+          EXPECTED: ${{ steps.generation.outputs.id }}
+        run: python -m scripts.hunter_research_rebind --generation "$EXPECTED" --isolated-checkout
       - name: Validate shadow engines
         run: python -m unittest tests.test_hunter_shadow_trader tests.test_hunter_shadow_trader_v2 tests.test_hunter_shadow_optimizer -v
       - name: Shadow optimizer frozen pending user acceptance
@@ -201,12 +241,6 @@ jobs:
           assert int(summary.get('closed_positions') or 0)==len(state.get('closed_positions') or []), 'V1_SUMMARY_CLOSED_MISMATCH'
           print(f'V1_EARLY_COVERAGE_OK executable_early={len(expected)} research_only_early={len(research_only)} open={len(actual)} entered_history={len(entered)} legacy_open={len(set(actual)-expected)} decisions={len(state.get("decisions") or [])}')
           PY
-      - name: Refresh official Bybit execution channels
-        env:
-          BYBIT_ALPHA_API_KEY: ${{ secrets.BYBIT_ALPHA_API_KEY }}
-          BYBIT_ALPHA_API_SECRET: ${{ secrets.BYBIT_ALPHA_API_SECRET }}
-          HUNTER_PROXY_TOKEN: ${{ secrets.HUNTER_PROXY_TOKEN }}
-        run: python research/hunter_bybit_availability.py
       - name: Run V2 executable shadow orders
         env:
           HUNTER_SHADOW_FREEZE: '0'
@@ -244,36 +278,6 @@ jobs:
           assert not (active_assets & excluded), f'V2_ACTIVE_BSTOCK_HISTORY {sorted(active_assets & excluded)}'
           assert buyset=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}, 'V2_EXECUTABLE_BUY_MISMATCH'
           print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} executable_buy={sorted(buyset)} decisions={len(state.get("decisions") or [])}')
-          PY
-      - name: Run historical tail-risk replay
-        run: python research/hunter_tail_risk_replay.py
-      - name: Verify tail-risk replay assumptions and shadow boundary
-        run: |
-          python - <<'PY'
-          import json
-          d=json.load(open('research/results/hunter-tail-risk-replay.json'))
-          assert d.get('capital_authority')=='NONE_SHADOW_ONLY'
-          assert d.get('real_trading_enabled') is False
-          assert d.get('scope')=='TAIL_RISK_PATH_REPLAY_NOT_STRATEGY_BACKTEST'
-          assert len(d.get('tail_budget_scenarios') or [])==4
-          assert d.get('full_false_freeze_rate') is None
-          assert any('cannot prove' in x for x in d.get('limitations') or [])
-          print('TAIL_RISK_REPLAY_CONTRACT_OK')
-          PY
-      - name: Run historical leading-risk replay
-        run: python research/hunter_leading_risk_replay.py
-      - name: Verify leading-risk replay shadow boundary
-        run: |
-          python - <<'PY'
-          import json
-          d=json.load(open('research/results/hunter-leading-risk-replay.json'))
-          assert d.get('capital_authority')=='NONE_SHADOW_ONLY'
-          assert d.get('real_trading_enabled') is False
-          assert d.get('scope')=='LEADING_RISK_PARTIAL_PATH_REPLAY_NOT_STRATEGY_BACKTEST'
-          assert len(d.get('windows') or [])>=3
-          assert sum(x.get('status')=='OK' for x in d.get('windows') or [])>=2, 'LEADING_REPLAY_NEEDS_TWO_VALID_STRESS_WINDOWS'
-          assert any('not fabricated' in x for x in d.get('limitations') or [])
-          print('LEADING_RISK_REPLAY_CONTRACT_OK')
           PY
       - name: Reject mixed-generation research
         env:
@@ -338,8 +342,9 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          BASE_SHA=$(git rev-parse HEAD)
+          BASE_SHA="${HUNTER_EXECUTION_BASE_SHA:?LATEST_EXECUTION_BASE_REQUIRED}"
           git fetch origin main
+          python -m scripts.hunter_research_rebind --generation "$EXPECTED" --check-base "$BASE_SHA"
           CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
           if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
             echo "HUNTER_STATE_REVISION_CONFLICT"
@@ -397,6 +402,7 @@ jobs:
           # a newer main; rerun from the newer revision instead.
           git fetch origin main
           BASE_PARENT=$(git rev-parse HEAD^)
+          python -m scripts.hunter_research_rebind --generation "$EXPECTED" --check-base "$BASE_PARENT"
           CHANGED=$(git diff --name-only "$BASE_PARENT"..origin/main || true)
           if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
             echo "HUNTER_STATE_REVISION_CHANGED_BEFORE_PUSH"
@@ -412,6 +418,7 @@ jobs:
             echo "HUNTER_STATE_PUSH_RACE attempt=$attempt"
             PRE_REBASE_PARENT=$(git rev-parse HEAD^)
             git fetch origin main
+            python -m scripts.hunter_research_rebind --generation "$EXPECTED" --check-base "$PRE_REBASE_PARENT"
             CHANGED=$(git diff --name-only "$PRE_REBASE_PARENT"..origin/main || true)
             if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
               echo "HUNTER_STATE_CAS_REJECTED_STALE_WRITER"
@@ -437,7 +444,9 @@ jobs:
               git show origin/main:research/results/hunter-shadow-summary.json > /tmp/shadow-summary.json
               git show origin/main:research/results/hunter-shadow-v2-portfolio.json > /tmp/shadow-v2.json
               git show origin/main:research/results/hunter-shadow-v2-summary.json > /tmp/shadow-v2-summary.json
-              python -c "import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; assert scan.get('generation_id')==expected, f'MAIN_READBACK_GENERATION_MISMATCH expected={expected} actual={scan.get("generation_id")}'; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); sa=json.load(open('/tmp/shadow-summary.json')); b=json.load(open('/tmp/shadow-v2.json')); sb=json.load(open('/tmp/shadow-v2-summary.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); assert sa.get('open_positions')==len(a.get('open_positions') or []) and sa.get('closed_positions')==len(a.get('closed_positions') or []); assert sb.get('open_positions')==len(b.get('open_positions') or []) and sb.get('closed_positions')==len(b.get('closed_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))"
+          python - <<'PY'
+          import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; assert scan.get('generation_id')==expected, f'MAIN_READBACK_GENERATION_MISMATCH expected={expected} actual={scan.get("generation_id")}'; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); sa=json.load(open('/tmp/shadow-summary.json')); b=json.load(open('/tmp/shadow-v2.json')); sb=json.load(open('/tmp/shadow-v2-summary.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); assert sa.get('open_positions')==len(a.get('open_positions') or []) and sa.get('closed_positions')==len(a.get('closed_positions') or []); assert sb.get('open_positions')==len(b.get('open_positions') or []) and sb.get('closed_positions')==len(b.get('closed_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))
+          PY
           exit 0
 
 # activate downstream pipeline

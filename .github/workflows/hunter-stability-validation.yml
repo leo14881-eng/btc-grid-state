@@ -1,0 +1,39 @@
+name: Hunter Stability and Execution Rebind Validation
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_research_rebind.py'
+      - 'scripts/hunter_monitor_runner.sh'
+      - 'research/hunter_position_monitor.py'
+      - 'tests/test_hunter_research_rebind.py'
+      - '.github/workflows/hunter-research-pipeline.yml'
+      - '.github/workflows/hunter-stability-validation.yml'
+  push:
+    branches: ['fix/hunter-stability-observability-20261006']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile, shell syntax and complete Hunter regression
+        run: |
+          python -m py_compile scripts/hunter_research_rebind.py research/hunter_position_monitor.py
+          bash -n scripts/hunter_monitor_runner.sh
+          python -m unittest discover -s tests -p 'test_hunter*.py' -v
+      - name: Preserve shadow and capital boundaries
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open('research/results/hunter-shadow-rules.json'))
+          assert d['lanes']['V2']['capital_pool_usdt']==20000
+          assert d['capital_authority']=='NONE_SHADOW_ONLY'
+          assert d['tail_risk_phase1']['real_trading_enabled'] is False
+          print('SHADOW_INVARIANTS_PASS')
+          PY
