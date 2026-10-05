@@ -45,12 +45,13 @@ class SharedShadowEngineTests(unittest.TestCase):
   self.assertEqual(core.decision(c,scan,liq,supply,"ENTRY")[0],"BUY")
   self.assertEqual(core.decision(c,scan,{},supply,"ENTRY")[0],"REJECT")
 
- def test_v2_capital_pool_blocks_overcommit(self):
+ def test_v2_capital_pool_and_tail_budget_block_overcommit(self):
   strong={"coins":{"BTC":{"change_24h_pct":4},"A":{"change_24h_pct":2},"B":{"change_24h_pct":1}}}
-  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":19000}]}]}
+  normal={"level":"NORMAL","raw_level":"NORMAL","last_observation_id":"ok","risk_release_fraction":1.0,"recovery_mode":False}
+  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":4000}]}],"systemic_risk":normal}
   self.assertFalse(core.capital_available(state,1000,"BUY",strong))
   self.assertFalse(core.capital_available(state,1000,"ADD",strong))
-  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":18000}]}]}
+  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":3000}]}],"systemic_risk":normal}
   self.assertTrue(core.capital_available(state,1000,"BUY",strong))
   self.assertTrue(core.capital_available(state,1000,"ADD",strong))
 
