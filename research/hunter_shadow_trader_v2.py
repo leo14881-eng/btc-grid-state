@@ -51,6 +51,7 @@ TRANCHES=tuple(C["TRANCHES"])
 REVIEW_HOURS=tuple(C["REVIEW_HOURS"])
 DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"]
 CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"]
+DYNAMIC_RESERVE_USDT=3000.0
 DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"]
 ENTRY_MODE=LANES["V2"]["entry_mode"]
 STRATEGY_ID=LANES["V2"]["strategy"]
@@ -73,8 +74,24 @@ def authoritative_entry_action(c, fallback_action):
 
 def used_capital(state):
  return sum(total_notional(x) for x in state.get("open_positions",[]) if x.get("tranches"))
-def capital_available(state,amount):
- return CAPITAL_POOL_USDT is None or used_capital(state)+amount<=CAPITAL_POOL_USDT+1e-9
+def realized_net_pnl(state):
+ rows=(state.get("closed_trade_archive") or [])+(state.get("closed_positions") or [])
+ return sum(float(x.get("net_pnl_usdt") or 0) for x in rows)
+def capital_equity(state):
+ # Initial V2 principal compounds only with realized net PnL. Unrealized PnL never expands capacity.
+ return None if CAPITAL_POOL_USDT is None else max(0.0,float(CAPITAL_POOL_USDT)+realized_net_pnl(state))
+def capital_available(state,amount,purpose="BUY"):
+ equity=capital_equity(state)
+ if equity is None:return True
+ # Ordinary first entries must preserve the 3,000U dynamic reserve. Revalidated ADDs may compete for it.
+ limit=equity if purpose=="ADD" else max(0.0,equity-DYNAMIC_RESERVE_USDT)
+ return used_capital(state)+amount<=limit+1e-9
+def capital_snapshot(state):
+ equity=capital_equity(state)
+ used=used_capital(state)
+ if equity is None:return {"initial_capital_usdt":None,"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":None,"used_capital_usdt":round(used,2),"dynamic_reserve_usdt":DYNAMIC_RESERVE_USDT,"ordinary_buy_limit_usdt":None,"ordinary_buy_available_usdt":None,"total_available_usdt":None}
+ ordinary=max(0.0,equity-DYNAMIC_RESERVE_USDT)
+ return {"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"dynamic_reserve_usdt":DYNAMIC_RESERVE_USDT,"ordinary_buy_limit_usdt":round(ordinary,2),"ordinary_buy_available_usdt":round(max(0.0,ordinary-used),2),"total_available_usdt":round(max(0.0,equity-used),2)}
 
 def load(p,d=None):
  try:return json.loads(p.read_text())
@@ -487,7 +504,7 @@ def record_deferred_buy(state,c,now,p,e):
  state.setdefault("deferred_buy_opportunities",[])
  s=sig(c); row={"at_utc":now.isoformat(),"asset":c.get("asset"),"price":p,"reason":"BUY_BUT_NO_CAPITAL","trade_action":authoritative_entry_action(c,"SYSTEM_BLOCKED"),
   "score":finite(s.get("score")),"independent_signal_count":int(s.get("independent_signal_count") or 0),"btc_relative_1h_pct":finite(s.get("btc_relative_1h_pct")),
-  "btc_relative_4h_pct":finite(s.get("btc_relative_4h_pct")),"estimated_rr":e.get("estimated_rr"),"used_capital_usdt":used_capital(state),"capital_pool_usdt":CAPITAL_POOL_USDT,
+  "btc_relative_4h_pct":finite(s.get("btc_relative_4h_pct")),"estimated_rr":e.get("estimated_rr"),"used_capital_usdt":used_capital(state),"capital_pool_usdt":CAPITAL_POOL_USDT,"capital_snapshot":capital_snapshot(state),
   "loss_making_positions_are_not_rotated":True}
  state["deferred_buy_opportunities"].append(row)
  state["deferred_buy_opportunities"]=state["deferred_buy_opportunities"][-MAX_DEFERRED_HISTORY:]
@@ -572,7 +589,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None):
   if health!="STRONG":act="HOLD"
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
-   if capital_available(state,next_amount):add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
+   if capital_available(state,next_amount,"ADD"):add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"LOWER_PRICE_FULL_REVALIDATION");raw=raw_return(pos,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_POOL_FULL_ADD_DEFERRED"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
   protection=profit_protection(pos,p);pnl=net_pnl(pos,p);exit_reason=None;exit_reasons=None
@@ -634,7 +651,8 @@ def build_summary(state,now,guard_status="NORMAL"):
    "profit_protection":{"arm_mfe_pct":PROTECT_ARM_PCT,"max_giveback_pct":GIVEBACK_MAX_PCT,"min_protected_net_pct":MIN_PROTECTED_NET_PCT},
    "three_tranche_adds_are_conditional_not_mechanical":True,"capital_pool_usdt":CAPITAL_POOL_USDT,"max_open":None,"discovery_sample_cap":None,"first_tranche":("AFTER_RESEARCH_DISCOVERY_ADMISSION" if ENTRY_MODE=="DISCOVERY" else "ONLY_AFTER_FULL_EXECUTABLE_DECISION_GATE"),"bybit_channel_is_label_not_discovery_gate":True,"post_exit_tracking_hours":list(REVIEW_HOURS),"tranche_counterfactuals_at_exit":True,
    "overfilter_guard":{"zero_buy_cycles":OVERFILTER_ZERO_BUY_CYCLES,"missed_move_pct":OVERFILTER_MISSED_MOVE_PCT,"min_safe_misses":OVERFILTER_MIN_SAFE_MISSES,"status":guard_status},
-   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL"},
+   "capital_management":capital_snapshot(state),
+   "capital_rotation":{"loss_making_position_rotation_allowed":False,"profitable_exit_may_release_capital_for_new_buy":True,"full_pool_buy_status":"BUY_BUT_NO_CAPITAL","dynamic_reserve_usdt":DYNAMIC_RESERVE_USDT,"ordinary_buy_preserves_dynamic_reserve":True,"revalidated_add_may_use_dynamic_reserve":True,"realized_net_pnl_compounds_equity":True,"unrealized_pnl_expands_equity":False},
    "position_lifecycle":{"degrade_confirm_cycles":DEGRADE_CONFIRM_CYCLES,"ordinary_thesis_invalidation_loss_exit":False,"hard_invalidation_may_exit_at_loss":True,"profit_stagnation_exit":True,"reentry_requires_new_move":True,"max_hot_closed_positions":MAX_CLOSED_HOT}},
   "opportunity_evaluation":cohorts,"capital_authority":"NONE_SHADOW_ONLY"}
 
@@ -679,7 +697,7 @@ def main():
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
-  if not capital_available(state,TRANCHES[0]):
+  if not capital_available(state,TRANCHES[0],"BUY"):
    # The candidate passed the executable BUY gate. Preserve that fact instead of
    # misclassifying a capital-capacity miss as a strategy rejection. Never rotate
    # a losing position merely to fund a newer candidate.
