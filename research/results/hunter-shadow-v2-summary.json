@@ -1,6 +1,6 @@
 {
   "schema": "hunter_shadow_v2_summary_v3",
-  "as_of_utc": "2026-10-05T07:51:47.857517+00:00",
+  "as_of_utc": "2026-10-05T10:04:22.040622+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
   "policy_version": "shadow-consistent-v2",
@@ -61,10 +61,25 @@
       "min_safe_misses": 2,
       "status": "NORMAL"
     },
+    "capital_management": {
+      "initial_capital_usdt": 20000.0,
+      "realized_net_pnl_usdt": 409.37,
+      "equity_usdt": 20409.37,
+      "used_capital_usdt": 20000.0,
+      "dynamic_reserve_usdt": 3000.0,
+      "ordinary_buy_limit_usdt": 17409.37,
+      "ordinary_buy_available_usdt": 0.0,
+      "total_available_usdt": 409.37
+    },
     "capital_rotation": {
       "loss_making_position_rotation_allowed": false,
       "profitable_exit_may_release_capital_for_new_buy": true,
-      "full_pool_buy_status": "BUY_BUT_NO_CAPITAL"
+      "full_pool_buy_status": "BUY_BUT_NO_CAPITAL",
+      "dynamic_reserve_usdt": 3000.0,
+      "ordinary_buy_preserves_dynamic_reserve": true,
+      "revalidated_add_may_use_dynamic_reserve": true,
+      "realized_net_pnl_compounds_equity": true,
+      "unrealized_pnl_expands_equity": false
     },
     "position_lifecycle": {
       "degrade_confirm_cycles": 3,
@@ -86,8 +101,8 @@
       "avg_full_opportunity_mfe_pct": 5.3498,
       "median_full_opportunity_mfe_pct": 4.4314,
       "avg_realized_net_return_pct": 1.8816,
-      "avg_holding_profit_capture_ratio": 0.4332,
-      "avg_full_opportunity_capture_ratio": 0.3575,
+      "avg_holding_profit_capture_ratio": 0.4191,
+      "avg_full_opportunity_capture_ratio": 0.3572,
       "potential_premature_exit_count": 0,
       "profit_giveback_count": 0,
       "full_opportunity_mfe_distribution": {
@@ -109,8 +124,8 @@
       "avg_full_opportunity_mfe_pct": 5.7559,
       "median_full_opportunity_mfe_pct": 5.0497,
       "avg_realized_net_return_pct": 2.0693,
-      "avg_holding_profit_capture_ratio": 0.4332,
-      "avg_full_opportunity_capture_ratio": 0.3575,
+      "avg_holding_profit_capture_ratio": 0.4607,
+      "avg_full_opportunity_capture_ratio": 0.3926,
       "potential_premature_exit_count": 0,
       "profit_giveback_count": 0,
       "full_opportunity_mfe_distribution": {
@@ -132,8 +147,8 @@
       "avg_full_opportunity_mfe_pct": 1.2887,
       "median_full_opportunity_mfe_pct": 1.2887,
       "avg_realized_net_return_pct": 0.0039,
-      "avg_holding_profit_capture_ratio": null,
-      "avg_full_opportunity_capture_ratio": null,
+      "avg_holding_profit_capture_ratio": 0.003,
+      "avg_full_opportunity_capture_ratio": 0.003,
       "potential_premature_exit_count": 0,
       "profit_giveback_count": 0,
       "full_opportunity_mfe_distribution": {
