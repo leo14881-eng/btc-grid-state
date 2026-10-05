@@ -102,6 +102,9 @@ def partial_false_freeze_proxy(index,ts,windows):
     return {"count":sum(flags),"total_freezes":len(flags),"rate":round(sum(flags)/len(flags),4) if flags else 0.0,
             "definition":"next 60m basket ends positive and has no additional drawdown worse than 1%; partial BTC+breadth replay proxy only"}
 
+def stressed_fill_move(trough_move_pct,extra_adverse_slippage_pct):
+    return max(-99.9,float(trough_move_pct)-float(extra_adverse_slippage_pct))
+
 def run():
     series={s:bars(s) for s in SYMBOLS};ts,px=align(series)
     if len(ts)<100:raise RuntimeError("HISTORICAL_REPLAY_INSUFFICIENT_ALIGNED_BARS")
@@ -121,7 +124,7 @@ def run():
     recovery=[round((b-a)/60000,2) for a,b in windows]
     trough=min(range(len(index)),key=lambda i:index[i]);trough_move=(index[trough]-1)*100
     assumed_extra_slip=10.0
-    forced_fill_move=max(-99.9,trough_move-assumed_extra_slip)
+    forced_fill_move=stressed_fill_move(trough_move,assumed_extra_slip)
     report={"schema":"hunter_tail_risk_replay_v1","as_of_utc":dt.datetime.now(dt.timezone.utc).isoformat(),
             "historical_window":{"start_utc":START.isoformat(),"end_utc":END.isoformat(),"source":"BINANCE_SPOT_5M_COMPLETED_KLINES","symbols":list(SYMBOLS),"aligned_bars":len(ts)},
             "scope":"TAIL_RISK_PATH_REPLAY_NOT_STRATEGY_BACKTEST",
