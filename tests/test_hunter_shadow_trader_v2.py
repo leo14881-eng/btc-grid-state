@@ -302,6 +302,11 @@ class OpportunityCutoffSafetyTests(unittest.TestCase):
 
 
 class CapitalAllocatorRegressionTests(unittest.TestCase):
+ def setUp(self):
+  self._tail_snapshot=eng.tail.tail_budget_snapshot
+  eng.tail.tail_budget_snapshot=lambda state,cfg,pool:{"effective_tail_cap_usdt":float(pool) if pool is not None else None}
+ def tearDown(self):
+  eng.tail.tail_budget_snapshot=self._tail_snapshot
  def _state(self,used=0,closed_pnls=()):
   opens=[]
   for i in range(int(used//1000)):
