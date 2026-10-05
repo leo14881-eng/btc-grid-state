@@ -125,7 +125,7 @@ def main():
     data={k:json.loads((ROOT/v).read_text()) for k,v in PATHS.items()}
     report=build(data,dt.datetime.now(dt.timezone.utc))
     OUT.write_text(json.dumps(report,indent=2,ensure_ascii=False)+"\n")
-    print(json.dumps(report["health"],ensure_ascii=False))
+    print(json.dumps(report["health"]))
     # Mismatched snapshots are fatal, never report an inconsistent scan as success.
     return 0 if report["health"]["snapshot_consistent"] else 2
 
