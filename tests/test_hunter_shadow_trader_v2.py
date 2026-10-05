@@ -236,6 +236,21 @@ class CapitalReserveRegressionTests(unittest.TestCase):
   self.assertTrue(eng.capital_available(state,1000,"BUY"))
   state=self._state(17000)
   self.assertFalse(eng.capital_available(state,1000,"BUY"))
+ def test_high_conviction_buy_may_use_dynamic_reserve(self):
+  state=self._state(17000)
+  e={"estimated_rr":2.2,"btc_rel_4h":0.1,"rel_accel":0.1}
+  self.assertTrue(eng.reserve_buy_gate(e)[0])
+  self.assertTrue(eng.capital_available(state,1000,"RESERVE_BUY"))
+ def test_reserve_buy_rejects_merely_ordinary_opportunity(self):
+  e={"estimated_rr":2.19,"btc_rel_4h":1.0,"rel_accel":1.0}
+  ok,reasons=eng.reserve_buy_gate(e)
+  self.assertFalse(ok);self.assertIn("RESERVE_RR_BELOW_2_2",reasons)
+ def test_reserve_buy_requires_positive_btc_relative_and_acceleration(self):
+  self.assertFalse(eng.reserve_buy_gate({"estimated_rr":3.0,"btc_rel_4h":0.0,"rel_accel":1.0})[0])
+  self.assertFalse(eng.reserve_buy_gate({"estimated_rr":3.0,"btc_rel_4h":1.0,"rel_accel":0.0})[0])
+ def test_reserve_buy_cannot_exceed_total_equity(self):
+  state=self._state(20000)
+  self.assertFalse(eng.capital_available(state,1000,"RESERVE_BUY"))
  def test_revalidated_add_may_use_dynamic_reserve(self):
   state=self._state(17000)
   self.assertTrue(eng.capital_available(state,1000,"ADD"))
