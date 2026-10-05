@@ -42,6 +42,8 @@ jobs:
           fresh=(-5 <= age <= 70 and scan.get('binance_complete') is True)
           monitor_fresh=(-5 <= monitor_age <= 25)
           aligned=bool(scan.get('generation_id')) and health.get('scan_generation_id')==scan.get('generation_id')
+          # Allow the workflow_run research pipeline time to publish its snapshot.
+          downstream_stale=not aligned and age > 25
           print(f"HUNTER_WATCHDOG_STATE generation={scan.get('generation_id')} age_minutes={age:.2f} discovery_fresh={fresh} downstream_aligned={aligned} monitor_age_minutes={monitor_age:.2f} monitor_fresh={monitor_fresh}")
           stale = not fresh
           if stale:
@@ -54,11 +56,12 @@ jobs:
           if out:
               with open(out,'a') as fh:
                   print('discovery_stale='+('true' if stale else 'false'), file=fh)
+                  print('downstream_stale='+('true' if downstream_stale else 'false'), file=fh)
                   print('monitor_stale='+('true' if not monitor_fresh else 'false'), file=fh)
           print('HUNTER_WATCHDOG_SELF_HEAL_ARMED')
           PY
-      - name: Self-heal stale discovery by touching dedicated trigger
-        if: ${{ steps.observe.outputs.discovery_stale == 'true' }}
+      - name: Self-heal stale discovery or downstream by touching dedicated trigger
+        if: ${{ steps.observe.outputs.discovery_stale == 'true' || steps.observe.outputs.downstream_stale == 'true' }}
         run: |
           set -euo pipefail
           git fetch origin main
