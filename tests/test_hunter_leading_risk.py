@@ -19,6 +19,11 @@ class LeadingRiskTests(unittest.TestCase):
   state={};bad=ev("a",neg=.9,rel=.9,depth=-50,btc15=-2)
   row,_=r.update_state(state,bad,NOW,C);self.assertEqual(row["level"],"NORMAL");self.assertTrue(row["candidate_level"].startswith("PRE_CRASH"))
   row,_=r.update_state(row,ev("b",neg=.9,rel=.9,depth=-50,btc15=-2),NOW+dt.timedelta(minutes=5),C);self.assertTrue(row["level"].startswith("PRE_CRASH"))
+ def test_distinct_observation_too_soon_cannot_confirm(self):
+  bad=ev("a",neg=.9,rel=.9,depth=-50,btc15=-2)
+  row,_=r.update_state({},bad,NOW,C)
+  row,_=r.update_state(row,ev("b",neg=.9,rel=.9,depth=-50,btc15=-2),NOW+dt.timedelta(minutes=1),C)
+  self.assertEqual(row["level"],"NORMAL");self.assertEqual(row["candidate_count"],1)
  def test_duplicate_cannot_confirm_after_restart(self):
   row,_=r.update_state({},ev("a",neg=.9,rel=.9,depth=-50),NOW,C)
   same,changed=r.update_state(dict(row),ev("a",neg=.9,rel=.9,depth=-50),NOW+dt.timedelta(minutes=5),C)
