@@ -63,6 +63,28 @@ def snapshot(frozen):
                     "out":out, "state":monitor.load(path),
                     "summary":monitor.load(path.with_name("portfolio-summary.json"))}
 
+            for scenario in ("new_buy", "new_buy_risk_freeze", "new_buy_full_pool"):
+                monitor.configure_lane(v1)
+                state, market, review, liq, supply = PositionMonitorTests().fixture(100)
+                state["open_positions"] = []
+                if scenario == "new_buy_risk_freeze":
+                    state["systemic_risk"].update(level="HIGH",raw_level="HIGH")
+                if scenario == "new_buy_full_pool":
+                    state["open_positions"] = [{"asset":"OTHER","tranches":[{
+                        "price":1,"notional_usdt":19000}]}]
+                candidate = review["candidates"][0]
+                scan = {"coins":market}
+                action, reasons, evidence = eng.decision(candidate,scan,liq,supply,"ENTRY")
+                pos = {"asset":"X","shadow_id":"FIXED-BUY-ID","tranches":[],
+                       "opened_at_utc":now.isoformat(),"btc_entry_price":100,
+                       "last_price":100,"mfe_pct":0,"mae_pct":0}
+                buys = eng.execute_capital_proposals(state,[{"kind":"BUY","asset":"X",
+                    "pos":pos,"amount":1000,"price":100,"evidence":evidence,
+                    "reasons":reasons,"candidate":candidate}],scan,now)
+                results[("V1" if v1 else "V2")+"_"+scenario] = {
+                    "entry_action":action,"buys":buys,"state":state,
+                    "capital":eng.capital_snapshot(state,scan)}
+
         # Replay the same frozen main portfolios, candidates and marks in both versions.
         root = Path(frozen)/"research/results"
         read = lambda name: json.loads((root/name).read_text())
@@ -114,6 +136,12 @@ def differential(baseline):
     report = {"baseline":os.getenv("FROZEN_MAIN_SHA"), "cases":len(versions[0]),
               "differing_cases":differences, "historical_backfill":"DISABLED_IDENTICALLY",
               "ignored_source_annotation_keys":sorted(ANNOTATIONS)}
+    root = Path(baseline)/"research/results"
+    report["frozen_input_sha256"] = {name:hashlib.sha256((root/name).read_bytes()).hexdigest()
+        for name in ("hunter-shadow-portfolio.json","hunter-shadow-v2-portfolio.json",
+                     "hunter-cex-universe-run.json","hunter-early-signals.json",
+                     "hunter-tactical-capital-review.json","hunter-liquidity-probe.json",
+                     "hunter-tactical-supply-risk.json")}
     for name in versions[0]:
         if name.endswith("frozen_main_portfolio"):
             report[name] = {"baseline":versions[0][name]["out"],
