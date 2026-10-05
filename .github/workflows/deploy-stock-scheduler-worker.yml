@@ -1,0 +1,26 @@
+name: Deploy Stock Scheduler Worker
+on:
+  push:
+    branches:
+      - fix/stock-shadow-scheduler-p0-20261006
+    paths:
+      - research/stock_shadow_scheduler/**
+      - .github/workflows/deploy-stock-scheduler-worker.yml
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Hard safety guard
+        run: |
+          test "$(python -c "import json; print(json.load(open('research/stock_shadow_scheduler/wrangler.jsonc'))['name'])")" = "stock-shadow-scheduler"
+          ! grep -R "hunter-bybit-market-v3\|bybit-api-test\|hunter-position-monitor-heartbeat" research/stock_shadow_scheduler
+      - name: Deploy stock-only worker
+        working-directory: research/stock_shadow_scheduler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy
