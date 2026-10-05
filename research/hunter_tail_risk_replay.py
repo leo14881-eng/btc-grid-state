@@ -7,7 +7,11 @@ depth, stop queue priority, exchange latency and true fills are unavailable, so
 execution stress is reported separately under explicit assumptions.
 """
 import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
-from research.hunter_policy import C
+try:
+    from research.hunter_policy import C
+except ModuleNotFoundError as exc:
+    if exc.name!="research":raise
+    from hunter_policy import C
 
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-tail-risk-replay.json"
