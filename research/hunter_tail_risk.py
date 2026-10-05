@@ -151,15 +151,26 @@ def update_systemic_risk(state,evidence,now,cfg):
     prev=old.get("level") or "NORMAL";required=int(cfg["SYSTEMIC_RECOVERY_OBSERVATIONS"])
     recovery=int(old.get("recovery_observations") or 0)
     recovery_mode=bool(old.get("recovery_mode"))
+    last_counted=old.get("last_recovery_counted_at_utc")
+    # Migration safety: recovery counts created before temporal independence was
+    # enforced are not trusted.
+    if recovery_mode and recovery>0 and not last_counted:recovery=0
     if raw in ("HIGH","CRITICAL"):
         level=raw;recovery=0;release=0.0;recovery_mode=True
     elif prev in ("HIGH","CRITICAL") or recovery_mode:
         if raw=="NORMAL":
-            recovery+=1
+            min_gap=float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"])
+            gap_ok=True
+            if last_counted:
+                try:gap_ok=(now-parse(last_counted)).total_seconds()>=min_gap
+                except Exception:gap_ok=False
+            if gap_ok:
+                recovery+=1;last_counted=now.isoformat()
             if recovery>=required:
                 level="NORMAL";release=1.0;recovery_mode=False
             else:
                 level="ELEVATED";release=round(recovery/required,4);recovery_mode=True
+                if not gap_ok:reasons=list(reasons)+["RECOVERY_OBSERVATION_TOO_SOON"]
         else:
             level="HIGH";release=0.0;recovery=0;recovery_mode=True
             reasons=list(reasons)+["RECOVERY_REQUIRES_CONSECUTIVE_NORMAL_OBSERVATIONS"]
@@ -168,6 +179,7 @@ def update_systemic_risk(state,evidence,now,cfg):
     row={"level":level,"raw_level":raw,"reasons":reasons,"entered_at_utc":old.get("entered_at_utc") if level==prev else now.isoformat(),
          "updated_at_utc":now.isoformat(),"last_observation_id":oid,"last_observed_at_utc":(evidence or {}).get("observed_at_utc"),
          "recovery_observations":recovery,"recovery_required":required,"recovery_mode":recovery_mode,
+         "last_recovery_counted_at_utc":last_counted,"recovery_min_gap_seconds":float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"]),
          "risk_release_fraction":release,"evidence":evidence,"capital_authority":"NONE_SHADOW_ONLY"}
     state["systemic_risk"]=row
     return row,True
