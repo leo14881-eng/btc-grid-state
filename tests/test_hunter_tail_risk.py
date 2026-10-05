@@ -1,5 +1,6 @@
 import datetime as dt,unittest
 from research import hunter_tail_risk as risk
+from research import hunter_tail_risk_replay as replay
 from research.hunter_policy import C
 
 NOW=dt.datetime(2026,10,5,12,0,0,tzinfo=dt.timezone.utc)
@@ -67,6 +68,11 @@ class TailBudgetTests(unittest.TestCase):
         b=risk.tail_budget_snapshot({"systemic_risk":{"level":"NORMAL","risk_release_fraction":1.0,"recovery_mode":False},
                                      "closed_positions":[{"net_pnl_usdt":9999}]},C,20000.0)
         self.assertEqual(a["effective_tail_cap_usdt"],b["effective_tail_cap_usdt"])
+
+class ReplayAssumptionTests(unittest.TestCase):
+    def test_adverse_fill_stress_subtracts_slippage_without_fake_near_zero_fill(self):
+        self.assertAlmostEqual(replay.stressed_fill_move(-47.2481,10.0),-57.2481,places=4)
+        self.assertEqual(replay.stressed_fill_move(-95.0,10.0),-99.9)
 
 class CircuitBreakerTests(unittest.TestCase):
     def test_loss_quarantines_released_notional_and_two_losses_trip(self):
