@@ -52,6 +52,9 @@ REVIEW_HOURS=tuple(C["REVIEW_HOURS"])
 DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"]
 CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"]
 DYNAMIC_RESERVE_USDT=3000.0
+RESERVE_BUY_MIN_RR=2.2
+RESERVE_BUY_MIN_REL_4H=0.0
+RESERVE_BUY_MIN_ACCEL=0.0
 DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"]
 ENTRY_MODE=LANES["V2"]["entry_mode"]
 STRATEGY_ID=LANES["V2"]["strategy"]
@@ -84,8 +87,17 @@ def capital_available(state,amount,purpose="BUY"):
  equity=capital_equity(state)
  if equity is None:return True
  # Ordinary first entries must preserve the 3,000U dynamic reserve. Revalidated ADDs may compete for it.
- limit=equity if purpose=="ADD" else max(0.0,equity-DYNAMIC_RESERVE_USDT)
+ limit=equity if purpose in ("ADD","RESERVE_BUY") else max(0.0,equity-DYNAMIC_RESERVE_USDT)
  return used_capital(state)+amount<=limit+1e-9
+def reserve_buy_gate(e):
+ # Thin capital-only gate: never changes Discovery/Research/SELL or the base executable BUY decision.
+ reasons=[]
+ rr=finite((e or {}).get("estimated_rr")); rel4=finite((e or {}).get("btc_rel_4h")); accel=finite((e or {}).get("rel_accel"))
+ if rr is None or rr<RESERVE_BUY_MIN_RR:reasons.append("RESERVE_RR_BELOW_2_2")
+ if rel4 is None or rel4<=RESERVE_BUY_MIN_REL_4H:reasons.append("RESERVE_BTC_REL_4H_NOT_POSITIVE")
+ if accel is None or accel<=RESERVE_BUY_MIN_ACCEL:reasons.append("RESERVE_RELATIVE_ACCEL_NOT_POSITIVE")
+ return (not reasons),(reasons or ["DYNAMIC_RESERVE_HIGH_CONVICTION_PASS"])
+
 def capital_snapshot(state):
  equity=capital_equity(state)
  used=used_capital(state)
@@ -697,13 +709,16 @@ def main():
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
+  entry_reasons=(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons)
   if not capital_available(state,TRANCHES[0],"BUY"):
-   # The candidate passed the executable BUY gate. Preserve that fact instead of
-   # misclassifying a capital-capacity miss as a strategy rejection. Never rotate
-   # a losing position merely to fund a newer candidate.
-   record_deferred_buy(state,c,now,p,e)
-   record(state,{"asset":a,"tranches":[]},"WAIT",now,["BUY_BUT_NO_CAPITAL","NO_LOSS_MAKING_ROTATION"],e,p);continue
-  add(pos,p,e,now);record(state,pos,"BUY",now,(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons),e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);open_assets.add(a);buy_count+=1
+   reserve_ok,reserve_reasons=reserve_buy_gate(e)
+   if not (reserve_ok and capital_available(state,TRANCHES[0],"RESERVE_BUY")):
+    # Base BUY already passed. A reserve miss is a capital wait, never a strategy rejection.
+    record_deferred_buy(state,c,now,p,e)
+    wait_reasons=(["CAPITAL_RESERVE_WAIT"]+reserve_reasons if capital_available(state,TRANCHES[0],"RESERVE_BUY") else ["BUY_BUT_NO_CAPITAL"])
+    record(state,{"asset":a,"tranches":[]},"WAIT",now,wait_reasons+["NO_LOSS_MAKING_ROTATION"],e,p);continue
+   entry_reasons=list(entry_reasons)+reserve_reasons
+  add(pos,p,e,now);record(state,pos,"BUY",now,entry_reasons,e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);open_assets.add(a);buy_count+=1
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
  # Trade events and positions are durable audit history. High-frequency HOLD/REJECT
  # decisions are diagnostic only and must not make the authoritative portfolio grow forever.
