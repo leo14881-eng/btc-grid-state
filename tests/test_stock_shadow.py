@@ -802,3 +802,20 @@ def test_ledger_accepts_weekday_trade_event_shape():
     state={"version":2,"simulation_only":True,"positions":{},"closed":[]}
     events=[{"type":"BUY","symbol":"TEST","at":"2026-10-02T19:37:39+00:00","price":10.0,"notional":1000.0}]
     assert ss.validate_ledger(state,events) is True
+
+
+def test_final_trade_mutations_recheck_exchange_session():
+    import inspect
+    src=inspect.getsource(ss.main)
+    assert 'if actions_enabled and trade_action_window(session=session) and s not in state["positions"]:' in src
+    assert 'if actions_enabled and trade_action_window(session=session) and s not in newly_opened' in src
+    assert 'if exit_reason and actions_enabled and trade_action_window(session=session):' in src
+
+def test_weekend_and_off_session_trade_gate_is_fail_closed():
+    from datetime import datetime, timezone, time
+    regular={"date":"2026-10-05","open":time(9,30),"close":time(16,0)}
+    assert ss.trade_action_window(datetime(2026,10,3,19,37,tzinfo=timezone.utc), None) is False
+    assert ss.trade_action_window(datetime(2026,10,4,19,37,tzinfo=timezone.utc), None) is False
+    assert ss.trade_action_window(datetime(2026,10,5,13,29,tzinfo=timezone.utc), regular) is False
+    assert ss.trade_action_window(datetime(2026,10,5,13,30,tzinfo=timezone.utc), regular) is True
+    assert ss.trade_action_window(datetime(2026,10,5,20,0,tzinfo=timezone.utc), regular) is False
