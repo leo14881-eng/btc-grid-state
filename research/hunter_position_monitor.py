@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """5-minute V1/V2 existing-position manager. No discovery, no new entries, no real orders."""
-import datetime as dt,json,math,os,pathlib,urllib.request
+import datetime as dt,json,math,os,pathlib,time,urllib.request
 from research import hunter_shadow_trader_v2 as eng
 from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
@@ -12,6 +12,13 @@ ROOT=pathlib.Path("research/results");BN=os.getenv("HUNTER_BINANCE_API","https:/
 V1=ROOT/"hunter-shadow-portfolio.json";V2=ROOT/"hunter-shadow-v2-portfolio.json";OUT=ROOT/"hunter-position-monitor.json"
 V1_SUMMARY=ROOT/"hunter-shadow-summary.json";V2_SUMMARY=ROOT/"hunter-shadow-v2-summary.json";V1_GUARD=ROOT/"hunter-shadow-v1-overfilter-guard.json";V2_GUARD=ROOT/"hunter-shadow-v2-overfilter-guard.json"
 REVIEW=ROOT/"hunter-tactical-capital-review.json";LIQ=ROOT/"hunter-liquidity-probe.json";SUPPLY=ROOT/"hunter-tactical-supply-risk.json";UNIVERSE=ROOT/"hunter-cex-universe-run.json";LEADING=ROOT/"hunter-leading-risk.json"
+TIMINGS={}
+def timed(stage,fn,*args,**kwargs):
+ start=time.perf_counter()
+ try:return fn(*args,**kwargs)
+ finally:
+  seconds=round(time.perf_counter()-start,6);TIMINGS[stage]=seconds
+  print("HUNTER_STAGE_TIMING "+json.dumps({"stage":stage,"seconds":seconds}),flush=True)
 def load(p):
  try:return json.loads(p.read_text())
  except (OSError,ValueError):return {}
@@ -91,7 +98,7 @@ def refresh_management_evidence(states,market,review,liq,now):
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
  current={};failures={}
  try:
-  r1=signals.rolling(pairs,"1h");r4=signals.rolling(pairs,"4h");micro=signals.micro(pairs)
+  r1=timed("evidence_1h",signals.rolling,pairs,"1h");r4=timed("evidence_4h",signals.rolling,pairs,"4h");micro=timed("evidence_micro",signals.micro,pairs)
   for a in selected:
    row=signals.score_row(a+"USDT",a,r1,r4,r1.get("BTCUSDT"),r4.get("BTCUSDT"),micro)
    if row:current[a]=row
@@ -127,25 +134,26 @@ def refresh_management_evidence(states,market,review,liq,now):
                    "evidence_refresh_cursor":(cursor+count)%len(wanted) if wanted else 0,"policy_version":VERSION}
 
 def main():
+ TIMINGS.clear();monitor_started=time.perf_counter()
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
  if not wanted:
   eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False})
   print(json.dumps({"assets":[],"status":"NO_OPEN_POSITIONS"}))
   return
- market=batch_market(wanted);missing=sorted(set(wanted)-set(market))
+ market=timed('market',batch_market,wanted);missing=sorted(set(wanted)-set(market))
  if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
- review,liq,refresh=refresh_management_evidence(states,market,review,liq,now)
+ review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now)
  persisted_universe=load(UNIVERSE)
  regime_scan={"schema":"hunter_monitor_market_snapshot_v1","generation_id":refresh["generation_id"],"as_of_utc":now.isoformat(),"coins":market,"binance_complete":True}
  # One systemic observation is shared by both lanes so V1/V2 cannot disagree
  # merely because they were evaluated a few milliseconds apart.
- risk_evidence=eng.tail.collect_systemic_evidence(regime_scan,liq,now,eng.C,eng.BINANCE_DATA_API)
+ risk_evidence=timed('systemic_evidence',eng.tail.collect_systemic_evidence,regime_scan,liq,now,eng.C,eng.BINANCE_DATA_API)
  # Leading Warning is observation-only in phase 1. It cannot mutate positions or
  # ordinary BUY/SELL decisions. Persisted history lets acceleration and restart
  # behavior be evaluated across independent five-minute observations.
  leading_doc=load(LEADING);previous=leading_doc.get("current") or {}
- leading_evidence=leading.collect_evidence(regime_scan,liq,review,risk_evidence,previous,now,eng.C)
+ leading_evidence=timed('leading_evidence',leading.collect_evidence,regime_scan,liq,review,risk_evidence,previous,now,eng.C)
  leading_row,leading_changed=leading.update_state(previous,leading_evidence,now,eng.C)
  v2_before=load(V2);used=sum(sum(float(t.get("notional_usdt") or 0) for t in p.get("tranches") or []) for p in v2_before.get("open_positions") or [])
  tail_cap=(eng.tail.tail_budget_snapshot(v2_before,eng.C,LANES["V2"]["capital_pool_usdt"]) or {}).get("tail_cap_usdt")
@@ -154,7 +162,8 @@ def main():
               "shadow_only":True,"real_position_mutation":False,"ordinary_buy_sell_signals_unchanged":True,
               "capital_authority":"NONE_SHADOW_ONLY"}
  eng.atomic_json_write(LEADING,leading_doc)
- results=[run_lane(V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan,risk_evidence),run_lane(V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan,risk_evidence)]
- eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
+ results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan,risk_evidence)]
+ TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
+ eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"timing_seconds":dict(TIMINGS),"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()
