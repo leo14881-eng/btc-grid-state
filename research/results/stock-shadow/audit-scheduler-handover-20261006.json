@@ -1,8 +1,8 @@
 {
-  "audit_kind": "SCHEDULER_HANDOVER_AND_BLOCKED_DEPLOYMENT",
-  "checked_at_utc": "2026-10-06T16:50:23.591Z",
-  "checked_at_bangkok": "2026-10-06T23:50:23.591+07:00",
-  "inspected_main_sha": "732c938db37e74c46c86be74b69262fa5b5e97dd",
+  "audit_kind": "SCHEDULER_DEPLOYMENT_AND_PENDING_LIVE_ACCEPTANCE",
+  "checked_at_utc": "2026-10-06T17:36:15.643Z",
+  "checked_at_bangkok": "2026-10-07T00:36:15.643+07:00",
+  "inspected_main_sha": "0dabde4bfe66e2e95ddd89b424da951d2901c265",
   "simulation_only": true,
   "strategy_parameters_changed": false,
   "hunter_bybit_resources_changed": false,
@@ -60,13 +60,13 @@
   },
   "cloudflare": {
     "worker_name": "stock-shadow-scheduler",
-    "worker_exists": false,
-    "deployed_source_sha": "UNVERIFIED",
-    "durable_object_binding_and_migration": "UNVERIFIED",
-    "cron_is_live": "UNVERIFIED",
-    "credential_presence_and_permissions": "Three names present; Cloudflare read and GitHub contents read passed; deployment/Actions write unverified",
-    "health_endpoint": "NOT_VERIFIED",
-    "blocker_layer": "NEW_WORKER_DISPATCH_CREDENTIAL_INSTALLATION_ACTION_TIME_CONFIRMATION",
+    "worker_exists": true,
+    "deployed_source_sha": "ea81b3b81f91cd8740d443844f5ea795d399b5c7",
+    "durable_object_binding_and_migration": "DEPLOYED_SQLITE_STOCK_SCHEDULER",
+    "cron_is_live": "CONFIGURATION_VERIFIED_AUTOMATIC_EXECUTION_UNVERIFIED",
+    "credential_presence_and_permissions": "Cloudflare stock deploy and GitHub contents read PASS; GitHub Actions write not yet proved by automatic dispatch",
+    "health_endpoint": "GET responds without checked_at in first observer; separate default-client probe HTTP403; exact rejection reason unknown",
+    "blocker_layer": "AUTOMATIC_CRON_HEARTBEAT_NOT_OBSERVED",
     "browser_observation": "Cloudflare login verification error remained after one reload; no signed-in account",
     "user_report": "Cloudflare requires Google login and Google account login is unavailable",
     "existing_hunter_secrets_reused": false,
@@ -77,23 +77,38 @@
     ],
     "secret_name_verification_method": "Signed-in GitHub Actions secrets page; no values read or modified",
     "browser_login_required_for_api_deploy": false,
-    "worker_existence_evidence": "Successful complete account inventory using existing stock token"
+    "worker_existence_evidence": "Successful complete account inventory using existing stock token",
+    "version_id": "992b8086-bf7d-451d-90d1-f77f0de2b079",
+    "cron": "3,8,13,18,23,28,33,38,43,48,53,58 * * * *",
+    "deployment_run_id": "37504411158",
+    "deployed_at_utc": "2026-10-06T17:33:26Z"
   },
   "continuous_external_automatic_acceptance": {
     "required_cycles": 3,
     "verified_cycles": 0,
     "cycle_evidence": [],
     "live_recovery_injection_verified": false,
-    "completion_claim": false
+    "completion_claim": false,
+    "first_observer": {
+      "run_id": "37500309350",
+      "started_at_utc": "2026-10-06T17:01:48Z",
+      "finished_at_utc": "2026-10-06T17:19:55Z",
+      "verified_cycles": 0,
+      "error": "THREE_AUTOMATIC_PERIODS_NOT_OBSERVED",
+      "artifact_id": "11430935901"
+    },
+    "current_observer": {
+      "run_id": "37504547895",
+      "status": "IN_PROGRESS",
+      "required_cycles": 3
+    }
   },
   "next_acceptance_order": [
-    "Read-only API preflight passed. Confirm installation of existing stock dispatch credential into the new independent Worker at browser action time; no new token creation or permission expansion requested",
-    "Read-only verify account, existing stock Worker, remote version, binding, migration, cron and concurrent deployment work",
-    "Use fresh main and manual stock-only deploy workflow with expected SHA and expected Worker existence; fail on inventory mismatch or remote configuration conflict",
-    "Observe at least three consecutive Cloudflare automatic cron cycles, record actual trigger time, decision, workflow_dispatch run ID, conclusion, persisted data time and complete-position counts",
-    "Verify overdue main receives a turn despite persistent partial monitoring; PARTIAL must remain unhealthy",
-    "Verify controlled recovery in an isolated simulation without changing forward ledger or real orders; distinguish mock tests from online recovery evidence",
-    "Commit real acceptance evidence; active notifications remain incomplete until a user-authorized destination and actual delivery are verified"
+    "Finish current read-only three-cycle observer; record real cron decisions and uniquely correlated Actions runs",
+    "If no heartbeat, preserve failed evidence and identify provider trigger/runtime layer; do not claim completion or rerun deployment blindly",
+    "Verify GitHub Actions write with an accepted stock-only simulation dispatch if automatic cron reaches that stage",
+    "Record full versus partial monitor counts, persistence and main fairness; QRVO missing remains unhealthy",
+    "Recovery injection remains simulation-only and isolated from forward ledger; proactive notification delivery unverified"
   ],
   "remote_preflight": {
     "run_id": "37498694558",
@@ -114,5 +129,40 @@
     "job_result": "cancelled",
     "logs": "NOT_AVAILABLE",
     "is_live_deployment_proof": false
-  }
+  },
+  "coin_shadow_read_only_comparison": {
+    "inspected_main_sha": "0dabde4bfe66e2e95ddd89b424da951d2901c265",
+    "worker": "hunter-position-monitor-heartbeat-v1",
+    "deployment_run_id": "37390812849",
+    "deployed_at_utc": "2026-10-05T23:51:17Z",
+    "version_id": "d7413dbe-1612-43fc-ba8a-5de1c4189cd6",
+    "dispatch_permission_probe": "GITHUB_DISPATCH_ACCEPTED_HTTP_204",
+    "latest_observed_monitor_generation": "2026-10-06T17:30:00Z",
+    "health": "HEALTHY",
+    "trigger_source": "VULTR_SYSTEMD",
+    "cloudflare_automatic_cron_proven_by_this_inspection": false,
+    "resource_changes": []
+  },
+  "recovery_attempts": [
+    {
+      "run_id": "37499848315",
+      "result": "DEPLOY_SUCCESS_NO_AUTO_HEARTBEAT",
+      "version_id": "165aaad1-d5ee-43b9-bd75-1d154a2d707b"
+    },
+    {
+      "run_id": "37502842532",
+      "result": "DIAGNOSTIC_COMPLETE_NO_RUNTIME_EVENTS_CAPTURED",
+      "meaning": "Successful diagnostic job is not healthy Worker evidence"
+    },
+    {
+      "run_id": "37503900044",
+      "result": "SAFE_STOP_GLOBAL_SHA_CHANGED"
+    },
+    {
+      "run_id": "37504411158",
+      "result": "DEPLOY_SUCCESS_CANONICAL_EQUIVALENT_CRON",
+      "root_cause_of_no_heartbeat": "UNKNOWN",
+      "guard": "Latest main checkout; expected inspected stock source diff must be unchanged"
+    }
+  ]
 }
