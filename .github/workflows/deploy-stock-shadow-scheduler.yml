@@ -40,7 +40,10 @@ jobs:
         env:
           EXPECTED_SHA: ${{ inputs.expected_main_sha }}
         run: |
-          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --no-tags --depth=1 origin "$EXPECTED_SHA"
+          git diff --quiet "$EXPECTED_SHA" HEAD -- research/stock_shadow/scheduler .github/workflows/deploy-stock-shadow-scheduler.yml
+          echo "STOCK_DEPLOYMENT_CHECKOUT_SHA=$(git rev-parse HEAD)"
           python - <<'PY'
           import json
           from pathlib import Path
