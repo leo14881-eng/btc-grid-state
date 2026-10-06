@@ -1,0 +1,93 @@
+{
+  "audit_kind": "SCHEDULER_HANDOVER_AND_BLOCKED_DEPLOYMENT",
+  "checked_at_utc": "2026-10-06T16:44:00Z",
+  "checked_at_bangkok": "2026-10-06T23:44:00+07:00",
+  "inspected_main_sha": "732c938db37e74c46c86be74b69262fa5b5e97dd",
+  "simulation_only": true,
+  "strategy_parameters_changed": false,
+  "hunter_bybit_resources_changed": false,
+  "other_windows": {
+    "main_advanced_during_inspection": true,
+    "scheduler_files_unchanged_at_inspected_sha": true,
+    "current_activity_of_other_chat_windows": "NOT_OBSERVABLE"
+  },
+  "latest_native_stock_schedule_observed": {
+    "run_id": "37478554680",
+    "workflow": "Stock Shadow Position Monitor",
+    "created_at_utc": "2026-10-06T14:23:30Z",
+    "created_at_bangkok": "2026-10-06T21:23:30+07:00",
+    "conclusion": "success"
+  },
+  "latest_monitor_artifact_at_inspected_sha": {
+    "run_id": "37496053655",
+    "trigger": "push",
+    "updated_at_utc": "2026-10-06T16:32:34.231085+00:00",
+    "updated_at_bangkok": "2026-10-06T23:32:34.231085+07:00",
+    "status": "PARTIAL",
+    "positions_before": 402,
+    "positions_updated": 401,
+    "missing_symbols": [
+      "QRVO"
+    ],
+    "source_commit": "5b987b0c04419e4c4bbccfa79ff9b9277a61dc6e",
+    "counts_as_complete_heartbeat": false
+  },
+  "latest_complete_monitor_time": "NOT_CONFIRMED_BY_THIS_AUDIT",
+  "prior_null_fix_push_acceptance": {
+    "fix_commit": "080c135ea63256c9aa555130f6723bb02a3486d4",
+    "successful_run_ids": [
+      "37496053682",
+      "37496053655",
+      "37496053673"
+    ],
+    "counts_as_external_automatic_acceptance": false
+  },
+  "scheduler_repair": {
+    "root_cause": "OPEN + perpetual PARTIAL makes stale=true forever; previous !stale condition prevents every overdue full scan",
+    "minimal_change": "After two GitHub-accepted monitor dispatches, give an overdue full scan one turn; retain stale and reset recovery turns after accepted main dispatch",
+    "failures_and_active_rechecks_count_as_recovery": false,
+    "local_scheduler_tests": {
+      "passed": 29,
+      "failed": 0
+    },
+    "wrangler_4_147_0_dry_run": "PASS",
+    "dry_run_is_live_deployment": false,
+    "manual_deploy_workflow_syntax_and_isolation_checks": "PASS"
+  },
+  "cloudflare": {
+    "worker_name": "stock-shadow-scheduler",
+    "worker_exists": "UNVERIFIED",
+    "deployed_source_sha": "UNVERIFIED",
+    "durable_object_binding_and_migration": "UNVERIFIED",
+    "cron_is_live": "UNVERIFIED",
+    "credential_presence_and_permissions": "UNVERIFIED",
+    "health_endpoint": "NOT_VERIFIED",
+    "blocker_layer": "REMOTE_API_PREFLIGHT_PENDING_EXISTING_GITHUB_SECRETS",
+    "browser_observation": "Cloudflare login verification error remained after one reload; no signed-in account",
+    "user_report": "Cloudflare requires Google login and Google account login is unavailable",
+    "existing_hunter_secrets_reused": false,
+    "github_repository_secret_names_verified": [
+      "CLOUDFLARE_API_TOKEN_STOCK",
+      "CLOUDFLARE_ACCOUNT_ID",
+      "STOCK_SCHEDULER_GITHUB_TOKEN"
+    ],
+    "secret_name_verification_method": "Signed-in GitHub Actions secrets page; no values read or modified",
+    "browser_login_required_for_api_deploy": false
+  },
+  "continuous_external_automatic_acceptance": {
+    "required_cycles": 3,
+    "verified_cycles": 0,
+    "cycle_evidence": [],
+    "live_recovery_injection_verified": false,
+    "completion_claim": false
+  },
+  "next_acceptance_order": [
+    "Restore secure Cloudflare access or confirm existing dedicated stock deployment credentials in GitHub secrets; never send values in chat",
+    "Read-only verify account, existing stock Worker, remote version, binding, migration, cron and concurrent deployment work",
+    "Use fresh main and manual stock-only deploy workflow with expected SHA and expected Worker existence; fail on inventory mismatch or remote configuration conflict",
+    "Observe at least three consecutive Cloudflare automatic cron cycles, record actual trigger time, decision, workflow_dispatch run ID, conclusion, persisted data time and complete-position counts",
+    "Verify overdue main receives a turn despite persistent partial monitoring; PARTIAL must remain unhealthy",
+    "Verify controlled recovery in an isolated simulation without changing forward ledger or real orders; distinguish mock tests from online recovery evidence",
+    "Commit real acceptance evidence; active notifications remain incomplete until a user-authorized destination and actual delivery are verified"
+  ]
+}

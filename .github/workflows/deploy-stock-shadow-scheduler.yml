@@ -1,0 +1,142 @@
+name: Deploy Stock Shadow Scheduler
+on:
+  workflow_dispatch:
+    inputs:
+      read_only:
+        description: Inspect remote stock resources without deploying
+        required: true
+        default: true
+        type: boolean
+      expected_main_sha:
+        description: Freshly inspected main SHA (40 characters)
+        required: true
+        type: string
+      expected_worker_exists:
+        description: Worker already exists in the inspected Cloudflare account
+        required: true
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: deploy-stock-shadow-scheduler
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify inspected source and isolated target
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          c = json.loads(Path('research/stock_shadow/scheduler/wrangler.jsonc').read_text())
+          assert c['name'] == 'stock-shadow-scheduler'
+          assert c['triggers']['crons'] == ['3-58/5 * * * *']
+          assert c['durable_objects']['bindings'] == [{'name': 'STOCK_SCHEDULER', 'class_name': 'StockScheduler'}]
+          assert not any(k in c for k in ('routes', 'route', 'services', 'env'))
+          PY
+      - name: Validate scheduler
+        working-directory: research/stock_shadow/scheduler
+        run: node --test worker.test.mjs
+      - name: Read-only account inventory and required credentials check
+        env:
+          EXPECTED_EXISTS: ${{ inputs.expected_worker_exists }}
+          STOCK_DISPATCH_TOKEN: ${{ secrets.STOCK_SCHEDULER_GITHUB_TOKEN }}
+          READ_ONLY: ${{ inputs.read_only }}
+        run: |
+          python - <<'PY'
+          import json, os, re, urllib.request
+          required = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'STOCK_DISPATCH_TOKEN']
+          for name in required:
+              if not os.environ.get(name):
+                  raise SystemExit('MISSING_' + name)
+          account = os.environ['CLOUDFLARE_ACCOUNT_ID']
+          if not re.fullmatch(r'[a-fA-F0-9]{32}', account):
+              raise SystemExit('INVALID_ACCOUNT_ID')
+          request = urllib.request.Request(
+              f'https://api.cloudflare.com/client/v4/accounts/{account}/workers/scripts?per_page=1000',
+              headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  data = json.load(response)
+          except Exception:
+              raise SystemExit('CLOUDFLARE_INVENTORY_FAILED')
+          scripts = data.get('result')
+          if not data.get('success') or not isinstance(scripts, list):
+              raise SystemExit('CLOUDFLARE_INVENTORY_INVALID')
+          if data.get('result_info', {}).get('total_count', len(scripts)) > len(scripts):
+              raise SystemExit('CLOUDFLARE_INVENTORY_TRUNCATED')
+          exists = any(s.get('id') == 'stock-shadow-scheduler' for s in scripts)
+          if os.environ['READ_ONLY'] != 'true' and exists != (os.environ['EXPECTED_EXISTS'] == 'true'):
+              raise SystemExit('WORKER_EXISTENCE_CHANGED_REINSPECT_ACCOUNT')
+          print('STOCK_WORKER_EXISTS' if exists else 'STOCK_WORKER_ABSENT')
+          def cf(path):
+              req = urllib.request.Request(f'https://api.cloudflare.com/client/v4/accounts/{account}/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as response:
+                      result = json.load(response)
+                  if not result.get('success'):
+                      raise ValueError()
+                  return result['result']
+              except Exception:
+                  raise SystemExit('CLOUDFLARE_STOCK_METADATA_READ_FAILED')
+          if exists:
+              script = next(s for s in scripts if s.get('id') == 'stock-shadow-scheduler')
+              print(json.dumps({'stock_modified_on': script.get('modified_on')}))
+              settings = cf('workers/scripts/stock-shadow-scheduler/settings')
+              bindings = settings.get('bindings', [])
+              print(json.dumps({'stock_binding_names_and_types': [
+                  {'name': b.get('name'), 'type': b.get('type'),
+                   **({'class_name': b.get('class_name')} if b.get('type') == 'durable_object_namespace' else {})}
+                  for b in bindings]}))
+              print(json.dumps({'stock_schedules': cf('workers/scripts/stock-shadow-scheduler/schedules')}))
+              deployments = cf('workers/scripts/stock-shadow-scheduler/deployments')
+              print(json.dumps({'stock_deployments': [
+                  {k: d.get(k) for k in ('id', 'created_on', 'strategy', 'versions')}
+                  for d in deployments.get('deployments', [])]}))
+          req = urllib.request.Request('https://api.github.com/repos/leo14881-eng/btc-grid-state/commits/main',
+              headers={'Authorization': 'Bearer ' + os.environ['STOCK_DISPATCH_TOKEN'],
+                       'Accept': 'application/vnd.github+json', 'User-Agent': 'stock-scheduler-preflight'})
+          try:
+              with urllib.request.urlopen(req, timeout=20) as response:
+                  head = json.load(response)
+              if not re.fullmatch(r'[a-f0-9]{40}', head.get('sha', '')):
+                  raise ValueError()
+          except Exception:
+              raise SystemExit('STOCK_GITHUB_CONTENTS_READ_FAILED')
+          print('STOCK_GITHUB_CONTENTS_READ_OK_ACTIONS_WRITE_NOT_YET_VERIFIED')
+          PY
+      - name: Deploy only the independent stock Worker with dispatch secret
+        if: inputs.read_only == false
+        working-directory: research/stock_shadow/scheduler
+        env:
+          STOCK_DISPATCH_TOKEN: ${{ secrets.STOCK_SCHEDULER_GITHUB_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          umask 077
+          STOCK_SECRET_FILE=$(mktemp "$RUNNER_TEMP/stock-scheduler-secrets.XXXXXX")
+          export STOCK_SECRET_FILE
+          trap 'rm -f "$STOCK_SECRET_FILE"' EXIT
+          python - <<'PY'
+          import json, os
+          with open(os.environ['STOCK_SECRET_FILE'], 'w') as f:
+              json.dump({'GITHUB_ACTIONS_TOKEN': os.environ['STOCK_DISPATCH_TOKEN']}, f)
+          PY
+          npx --yes wrangler@4.147.0 deploy --strict --config wrangler.jsonc --secrets-file "$STOCK_SECRET_FILE"
+          echo "STOCK_DEPLOYMENT_UPLOADED_CONTINUOUS_CRON_ACCEPTANCE_STILL_REQUIRED"

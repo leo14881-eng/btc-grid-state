@@ -53,10 +53,13 @@ export function decide(ms, snapshot, lease = {}) {
   const base = { market, stale, monitor_age_seconds: Number.isFinite(monitorMs) ? Math.round(monitorMs / 1000) : null };
   if (snapshot.active) return { ...base, action: 'WAIT_ACTIVE_RUN' };
   if (ms - (lease.at ?? 0) < 5 * MINUTE) return { ...base, action: 'DISPATCH_COOLDOWN' };
-  // Give the full scan a turn once per hour without letting stale monitoring wait behind it.
+  // Recover stale monitoring first, but persistent partial quotes must not starve scanning.
+  // Two accepted monitor dispatches buy a full scan one turn; stale stays visible.
   const mainDue = mainMs >= 60 * MINUTE;
-  if (mainDue && !stale && ms - (lease.main_at ?? 0) >= 15 * MINUTE)
-    return { ...base, action: 'DISPATCH_MAIN', workflow: MAIN };
+  const recoveryTurns = Number.isInteger(lease.monitor_recovery_turns) ? lease.monitor_recovery_turns : 0;
+  if (mainDue && (!stale || recoveryTurns >= 2) && ms - (lease.main_at ?? 0) >= 15 * MINUTE)
+    return { ...base, action: 'DISPATCH_MAIN', workflow: MAIN,
+      reason: stale ? 'BOUNDED_MONITOR_RECOVERY' : 'HOURLY_SCAN' };
   if (market !== 'CLOSED' && monitorMs >= 4 * MINUTE)
     return { ...base, action: 'DISPATCH_MONITOR', workflow: MONITOR };
   return { ...base, action: market === 'CLOSED' ? 'MARKET_CLOSED' : 'FRESH' };
@@ -136,6 +139,13 @@ export async function tick(storage, github, ms) {
       else {
         await github.dispatch(result.workflow);
         result.dispatched = true;
+        await storage.transaction(async txn => {
+          const lease = await txn.get('lease') ?? {};
+          // Only API-accepted dispatches count. Rechecks, 429s and ambiguous timeouts do not.
+          const turns = Number.isInteger(lease.monitor_recovery_turns) ? lease.monitor_recovery_turns : 0;
+          await txn.put('lease', { ...lease, monitor_recovery_turns:
+            result.workflow === MAIN ? 0 : Math.min(2, turns + 1) });
+        });
       }
     }
   } catch (e) {

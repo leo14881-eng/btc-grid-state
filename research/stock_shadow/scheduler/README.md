@@ -13,7 +13,7 @@
 - Cloudflare Cron 每 5 分钟（UTC 03、08……58）唤醒独立 Worker，原 GitHub cron 保留备用。
 - 固定仓库 `leo14881-eng/btc-grid-state`，固定 main，只允许触发 `stock-shadow.yml` 和 `stock-shadow-position-monitor.yml`。
 - 读取同一 Git commit 的交易日历缓存、主扫描摘要、监控健康记录。报价失败、缺失股票或部分刷新不计为成功心跳。
-- 开市监控超过 10 分钟无完整成功刷新，健康状态标记 stale；优先补跑监控。主扫描满 60 分钟需要刷新，且监控未严重失联时允许主扫描执行。
+- 开市监控超过 10 分钟无完整成功刷新，健康状态标记 stale；优先补跑监控。主扫描满 60 分钟需要刷新；持续 PARTIAL 时，两个 API 已接受的 monitor 派发后让到期主扫描执行一次，避免长期缺失单个报价导致主扫描永远饥饿。主扫描执行不清除 stale；429、超时和 active 二次检查拦截不计作恢复次数。
 - 周末不补跑持仓监控；主扫描仍可进行研究。节假日/提前休市使用 Alpaca 日历缓存；日历未知时可以触发现有引擎查询日历，实际交易授权始终由引擎最后一道 Gate 决定。
 - 检查 queued / in_progress / waiting / pending / requested 的任务，存在股票主扫描或监控时不重复触发。库存超过分页可验证范围时停止补跑，不猜测“没有任务”。
 - Durable Object 事务保存 5 分钟派发冷却，保护并发唤醒和进程重启；POST 超时也保留冷却，避免立即重复提交。GitHub 内置 cron 与外部调度仍存在 API 可见性窗口，最终账本写入继续由共同 concurrency 和持久化版本检查保护。
@@ -23,6 +23,10 @@
 ## 部署（独立 Worker，不修改 Bybit 行情 Worker）
 
 配置文件：`wrangler.jsonc`；入口：`worker.mjs`。
+
+仓库提供仅手动触发的 `.github/workflows/deploy-stock-shadow-scheduler.yml`。使用三项独立的仓库 secrets：`CLOUDFLARE_API_TOKEN_STOCK`、`CLOUDFLARE_ACCOUNT_ID`、`STOCK_SCHEDULER_GITHUB_TOKEN`；最后一项会作为 Worker 的 `GITHUB_ACTIONS_TOKEN` 安装。不要复用或修改 Hunter/Bybit secrets。
+
+先以默认 `read_only=true` 检查账户和已有股票 Worker，凭据仅在 Runner 内使用；确认后输入最新 main SHA、Worker 是否已存在及 `read_only=false` 部署。部署工作流会检查源码、固定 Worker/DO/Cron 配置、账户 Worker 清单和预期存在状态；不符则停止。Wrangler 4.147.0 用 `--strict` 防止无提示覆盖远端配置，`--secrets-file` 将代码和 secret 一起部署，临时 secret 文件不输出并在退出时删除。此工作流没有 push 或 schedule 部署触发，也不通过手动 dispatch 股票流程制造自动周期证据。部署上传成功仍需下述实跑验收。
 
 1. 在 Cloudflare 部署独立 `stock-shadow-scheduler` Worker，应用 `StockScheduler` 的 SQLite Durable Object 绑定 `STOCK_SCHEDULER` 和 v1 migration；Cron 为 `3-58/5 * * * *`。
 2. 通过 Cloudflare Secret 设置 `GITHUB_ACTIONS_TOKEN`，不要放进代码、仓库、URL、日志或聊天。Token 只选择这个仓库，最少需要 Actions 写入和读取仓库内容权限；不需要交易权限或其他仓库权限。创建/扩大凭据权限须在操作前获得确认。

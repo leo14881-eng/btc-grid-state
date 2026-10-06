@@ -56,6 +56,29 @@ test('hourly scan gets a turn, but cannot jump ahead of severely stale monitor',
   assert.equal(decide(ms, snapshot(5, 70)).workflow, MAIN);
   assert.equal(decide(ms, snapshot(15, 70)).workflow, MONITOR);
 });
+test('persistent partial monitoring gets two recovery turns then an overdue scan', async () => {
+  const partial = { ...snapshot(1, 90), monitor: { ...health(1), status: 'PARTIAL',
+    positions_updated: 326, missing_symbols: ['QRVO'] } };
+  const storage = new Storage(), gh = github(partial);
+  for (let n = 0; n < 4; n++) {
+    const result = await tick(storage, gh, ms + minutes(n * 5));
+    assert.equal(result.stale, true);
+    if (n === 2) assert.equal(result.reason, 'BOUNDED_MONITOR_RECOVERY');
+  }
+  assert.deepEqual(gh.calls, [MONITOR, MONITOR, MAIN, MONITOR]);
+  assert.equal(monitorAge(ms, partial.monitor), Infinity);
+});
+test('active recheck and dispatch failures do not count as recovery turns', async () => {
+  const storage = new Storage(), gh = github(snapshot(15, 90));
+  gh.active = async () => true;
+  await tick(storage, gh, ms);
+  assert.equal((await storage.get('lease')).monitor_recovery_turns, undefined);
+  gh.active = async () => false;
+  gh.dispatch = async () => { throw new Error('GITHUB_HTTP_429'); };
+  await tick(storage, gh, ms + minutes(5));
+  assert.equal((await storage.get('lease')).monitor_recovery_turns, undefined);
+  assert.equal(decide(ms + minutes(10), snapshot(15, 90), await storage.get('lease')).workflow, MONITOR);
+});
 test('active runs and persistent cooldown suppress duplicate recovery', () => {
   assert.equal(decide(ms, { ...snapshot(15), active: true }).action, 'WAIT_ACTIVE_RUN');
   assert.equal(decide(ms, snapshot(15), { at: ms - minutes(2) }).action, 'DISPATCH_COOLDOWN');
