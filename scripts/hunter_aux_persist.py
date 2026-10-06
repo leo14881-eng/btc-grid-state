@@ -44,6 +44,11 @@ def persist(job, base):
     require(all(p in expected for p in required), 'AUX_OUTPUT_MISSING')
     require(all(expected[p] for p in required), 'AUX_OUTPUT_EMPTY')
     remote = git('remote', 'get-url', 'origin').stdout.strip()
+    # actions/checkout stores its scoped authentication header in local config.
+    # Local clones do not inherit it. Keep it inside the disposable checkout;
+    # never print it or embed it in the remote URL.
+    headers = git('config', '--local', '--get-regexp',
+                  r'^http\..*\.extraheader$', check=False).stdout.splitlines()
     for attempt in range(1, 6):
         cas(base, job)
         with tempfile.TemporaryDirectory(prefix='hunter-aux-') as directory:
@@ -52,6 +57,9 @@ def persist(job, base):
                 return subprocess.run(['git', '-C', directory, *args], text=True,
                                       capture_output=True, check=check)
             aux('remote', 'set-url', 'origin', remote)
+            for header in headers:
+                key, value = header.split(' ', 1)
+                aux('config', '--local', key, value)
             aux('fetch', 'origin', 'main')
             # Recheck after the second fetch; a newer same-job writer must win.
             changed = aux('diff', '--name-only', base, 'origin/main').stdout.splitlines()
@@ -66,7 +74,12 @@ def persist(job, base):
             aux('add', '-f', '--', *expected)
             if aux('diff', '--cached', '--quiet', check=False).returncode:
                 aux('commit', '-m', 'state: publish verified Hunter ' + job)
-                if aux('push', 'origin', 'HEAD:main', check=False).returncode:
+                pushed = aux('push', 'origin', 'HEAD:main', check=False)
+                if pushed.returncode:
+                    require(not any(s in pushed.stderr for s in
+                                    ('could not read Username', 'Authentication failed',
+                                     'Permission denied', 'error: 403')),
+                            'AUX_PUSH_AUTHENTICATION_FAILED')
                     print('HUNTER_AUX_PUSH_RACE', job, attempt, flush=True)
                     continue
             commit = aux('rev-parse', 'HEAD').stdout.strip()
