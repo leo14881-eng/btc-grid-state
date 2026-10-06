@@ -3,7 +3,7 @@ set -euo pipefail
 # One host lock; every generation gets an isolated checkout. Never reset the
 # running production checkout or share its working tree with another writer.
 exec 9>/run/lock/hunter-position-monitor.lock
-flock -n 9 || { echo ALREADY_RUNNING; exit 0; }
+flock -w 120 9 || { echo PORTFOLIO_LOCK_WAIT_TIMEOUT; exit 1; }
 SOURCE=/opt/shadow-runner/btc-grid-state
 TASK_DIR=$(mktemp -d /opt/shadow-runner/monitor-generation.XXXXXX)
 trap 'rm -rf "$TASK_DIR"' EXIT

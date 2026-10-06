@@ -15,7 +15,23 @@ concurrency:
   group: hunter-missed-opportunity-replay
   cancel-in-progress: false
 jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - id: gate
+        name: Check authoritative Vultr primary health
+        run: |
+          git fetch origin main
+          git checkout --detach origin/main
+          python -m scripts.hunter_runtime_gate missed-replay
   replay:
+    if: ${{ needs.runtime.outputs.run == 'true' }}
+    needs: runtime
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
