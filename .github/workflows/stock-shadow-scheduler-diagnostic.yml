@@ -1,0 +1,70 @@
+name: Stock Scheduler Runtime Diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read public stock health
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          url = 'https://stock-shadow-scheduler.qinx468.workers.dev/health'
+          try:
+              r = urllib.request.urlopen(url, timeout=20)
+          except urllib.error.HTTPError as e:
+              if e.code != 503: raise SystemExit('HEALTH_HTTP_' + str(e.code))
+              r = e
+          with r:
+              data = json.load(r)
+          allowed = ['checked_at','action','error','market','stale','workflow','dispatched','scheduler_healthy']
+          print('STOCK_RUNTIME_HEALTH=' + json.dumps({k: data.get(k) for k in allowed}))
+          PY
+      - name: Observe stock-only runtime traces for six minutes
+        working-directory: research/stock_shadow/scheduler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          python - <<'PY'
+          import json, subprocess, time, select, os
+          p = subprocess.Popen(['npx','--yes','wrangler@4.147.0','tail','stock-shadow-scheduler','--format','json'],
+                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          deadline = time.monotonic() + 360
+          pending = ''
+          try:
+              while time.monotonic() < deadline:
+                  if p.poll() is not None:
+                      print('STOCK_TRACE_PROCESS_EXIT=' + str(p.returncode), flush=True)
+                      break
+                  ready, _, _ = select.select([p.stdout], [], [], 5)
+                  if not ready: continue
+                  pending += os.read(p.stdout.fileno(), 65536).decode('utf-8', errors='replace')
+                  start = pending.find('{')
+                  if start < 0: pending = ''; continue
+                  pending = pending[start:]
+                  try: d, consumed = json.JSONDecoder().raw_decode(pending)
+                  except json.JSONDecodeError:
+                      if len(pending) > 200000: pending = ''
+                      continue
+                  pending = pending[consumed:]
+                  event = d.get('event') or {}
+                  safe = {k:d.get(k) for k in ('outcome','eventTimestamp','scriptName')}
+                  safe['event'] = {k:event.get(k) for k in ('cron','scheduledTime') if k in event}
+                  safe['exceptions'] = [{'name':e.get('name'), 'message':e.get('message')} for e in d.get('exceptions',[])]
+                  print('STOCK_RUNTIME_TRACE=' + json.dumps(safe), flush=True)
+          finally:
+              p.terminate()
+              try: p.wait(timeout=5)
+              except subprocess.TimeoutExpired: p.kill(); p.wait()
+          PY
