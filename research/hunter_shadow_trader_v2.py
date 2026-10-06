@@ -133,7 +133,12 @@ def marginal_capital_gate(state,amount,e,kind,scan):
  regime,meta=market_regime(scan);after_used=used_capital(state)+amount;after=after_used/equity if equity else 1.0;reasons=[]
  if after>min(meta["max_utilization"],1-HARD_CASH_FLOOR_PCT)+1e-12:reasons.append("MARKET_REGIME_CAPACITY_LIMIT")
  limit=capital_limit(state,scan)
- if limit is not None and after_used>limit+1e-9:reasons.append("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT")
+ if limit is not None and after_used>limit+1e-9:
+  # Keep the same combined admission boundary; attribute the rejection to
+  # the actual constraint rather than calling every market cap a tail cap.
+  tail_cap=tail.tail_budget_snapshot(state,C,CAPITAL_POOL_USDT).get("effective_tail_cap_usdt")
+  if tail_cap is None or after_used>tail_cap+1e-9:reasons.append("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT")
+  elif "MARKET_REGIME_CAPACITY_LIMIT" not in reasons:reasons.append("MARKET_REGIME_CAPACITY_LIMIT")
  rr=finite((e or {}).get("estimated_rr"));r1=finite((e or {}).get("btc_rel_1h"));r4=finite((e or {}).get("btc_rel_4h"));acc=finite((e or {}).get("rel_accel"))
  if after>0.60 and (rr is None or rr<1.8 or r4 is None or r4<0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_60PCT")
  if after>0.75 and (rr is None or rr<2.2 or r4 is None or r4<=0 or acc is None or acc<=0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_75PCT")
@@ -657,11 +662,11 @@ def compact_closed_history(state):
  # Keep a compact permanent ledger in the authoritative state; no 5-minute scan needs full old position blobs.
  if len(archive)>5000:state["closed_trade_archive"]=archive[-5000:]
 
-def record_deferred_buy(state,c,now,p,e):
+def record_deferred_buy(state,c,now,p,e,scan):
  state.setdefault("deferred_buy_opportunities",[])
  s=sig(c); row={"at_utc":now.isoformat(),"asset":c.get("asset"),"price":p,"reason":"BUY_BUT_NO_CAPITAL","trade_action":authoritative_entry_action(c,"SYSTEM_BLOCKED"),
   "score":finite(s.get("score")),"independent_signal_count":int(s.get("independent_signal_count") or 0),"btc_relative_1h_pct":finite(s.get("btc_relative_1h_pct")),
-  "btc_relative_4h_pct":finite(s.get("btc_relative_4h_pct")),"estimated_rr":e.get("estimated_rr"),"used_capital_usdt":used_capital(state),"capital_pool_usdt":CAPITAL_POOL_USDT,"capital_snapshot":capital_snapshot(state),
+  "btc_relative_4h_pct":finite(s.get("btc_relative_4h_pct")),"estimated_rr":e.get("estimated_rr"),"used_capital_usdt":used_capital(state),"capital_pool_usdt":CAPITAL_POOL_USDT,"capital_snapshot":capital_snapshot(state,scan),
   "loss_making_positions_are_not_rotated":True}
  state["deferred_buy_opportunities"].append(row)
  state["deferred_buy_opportunities"]=state["deferred_buy_opportunities"][-MAX_DEFERRED_HISTORY:]
@@ -792,7 +797,7 @@ def execute_capital_proposals(state,proposals,scan,now):
   if kind=="ADD" and pos not in state.get("open_positions",[]):continue
   ok,gate_reasons=marginal_capital_gate(state,amount,e,kind,scan)
   if not ok:
-   if kind=="BUY" and q.get("candidate") is not None:record_deferred_buy(state,q["candidate"],now,p,e)
+   if kind=="BUY" and q.get("candidate") is not None:record_deferred_buy(state,q["candidate"],now,p,e,scan)
    record(state,pos if kind=="ADD" else {"asset":q["asset"],"tranches":[]},"HOLD",now,gate_reasons+["CAPITAL_ALLOCATOR_WAIT"],e,p);continue
   if kind=="ADD":
    add(pos,p,e,now);record(state,pos,"ADD",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"ADD",now,p,"PORTFOLIO_ALLOCATOR_ADD")

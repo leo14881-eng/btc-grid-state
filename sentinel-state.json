@@ -1,14 +1,19 @@
 {
-  "version": "3.37",
-  "updated_at": "2026-09-26T08:23:26+07:00",
-  "last_scan_at": "2026-09-26T08:23:26+07:00",
+  "version": "3.38",
+  "updated_at": "2026-10-06T14:43:35+07:00",
+  "last_scan_at": "2026-10-06T14:43:35+07:00",
   "persistence": {
     "provider": "github",
     "writable": true,
     "verification": "VERIFIED_SHA_UPDATE_REREAD",
     "last_write_test_at": "2026-09-26T22:29:00+07:00",
-    "note": "GitHub connector SHA-guarded write and main reread verified. Operational persistence test only; live market data freshness and alert workflow not validated.",
-    "last_verified_at": "2026-09-26T22:29:00+07:00"
+    "note": "Phase-1 CAS write was reread from main with matching run_id, run_status and last_persisted_at. Phase-2 records the verified closure; final exact-path reread required.",
+    "last_verified_at": "2026-10-06T14:43:35+07:00",
+    "run_id": "sentinel-20261006T144335+0700",
+    "status": "VERIFIED",
+    "last_write_attempt_at": "2026-10-06T14:43:35+07:00",
+    "last_persisted_at": "2026-10-06T14:43:35+07:00",
+    "persist_verified": true
   },
   "state_ownership": {
     "purpose": "Sentinel market and signal state only",
@@ -28,61 +33,85 @@
     "version": "2026-09-19 v1.5"
   },
   "market_state_freshness": {
-    "status": "STALE_NEEDS_NEW_SCAN_NO_NEW_CAPITAL_ACTION",
-    "as_of": "2026-09-26T08:23:26+07:00",
-    "reason": "Last recorded market scan Sep26 08:23 ICT. This is an accounting-only reconciliation, not a new market scan."
+    "status": "PARTIAL_FRESH_VALID_SCAN_NO_NEW_CAPITAL_ACTION",
+    "as_of": "2026-10-06T07:46:30Z",
+    "reason": "Fresh BTC price, derivatives and prior-US-close macro evidence obtained. ETF direction is consistently net outflow but two daily aggregators disagree on magnitude; exact live spot order-book depth and complete source-synchronous datasets are unavailable."
   },
-  "last_price": 83808.65,
-  "last_price_quality": "VERIFIED FRESH SECONDARY SNAPSHOT Sep25 late US morning; exact exchange tick varies.",
+  "last_price": 85349.1,
+  "last_price_quality": "Fresh secondary real-time snapshot around 2026-10-06 07:46 UTC; cross-source BTC observations ranged about 85.3K-85.9K. Exact exchange tick/order-book not verified.",
   "last_regime": "bear_market_accumulation_watch_breakout_candidate_under_pullback_not_confirmed",
   "etf_flow_acceleration": {
-    "status": "DECELERATION_THROUGH_SEP24__SEP25_FINAL_PENDING",
-    "last_checked_at": "2026-09-26T08:23:26+07:00",
-    "current_session_date": "2026-09-25",
-    "current_session_state": "FINAL_NOT_RELIABLY_VERIFIED",
-    "trigger_reference": {
-      "minimum_current_net_inflow_usd_m": 250,
-      "minimum_improvement_vs_prior_complete_day_usd_m": 200
+    "status": "LATEST_COMPLETE_DAY_NET_OUTFLOW_DIRECTION_CONFIRMED_MAGNITUDE_CONFLICT",
+    "last_checked_at": "2026-10-06T14:43:35+07:00",
+    "current_session_date": "2026-10-05",
+    "current_session_state": "COMPLETE_BUT_SOURCE_MAGNITUDE_CONFLICT",
+    "observed_net_flow_usd_m_range": [
+      -159.7,
+      -89.8
+    ],
+    "source_values_usd_m": {
+      "CoinStats": -89.8,
+      "BitcoinDigital_FarsideAttributed": -159.7
     },
-    "prior_complete_session": {
-      "date": "2026-09-22",
-      "net_inflow_usd_m": 714.7,
-      "status": "VERIFIED_COMPLETE_SESSION"
-    },
-    "latest_complete_session": {
-      "date": "2026-09-24",
-      "net_inflow_usd_m": 190.7,
-      "status": "VERIFIED_COMPLETE_SESSION",
-      "major_contributors_usd_m": {
-        "IBIT": 163
-      }
-    },
+    "latest_five_trading_days_net_flow_usd_m": 120.72,
     "trigger_test": {
-      "result": "NO_NEW_VERIFIED_ACCELERATION__MULTI_DAY_DECELERATION_ACTIVE",
-      "actionability": "LEADING_DISTRIBUTION_RISK_INPUT__NO_CAPITAL_ACTION_DUE_FRESHNESS_GAP"
+      "result": "NO_UPSIDE_REACCELERATION__LATEST_DAY_OUTFLOW",
+      "actionability": "LEADING_DISTRIBUTION_RISK_INPUT_ONLY__NO_STANDALONE_CAPITAL_ACTION"
     },
-    "last_trigger": {
-      "date": "2026-09-21",
-      "type": "ETF_FLOW_ACCELERATION",
-      "status": "HISTORICAL_COMPLETED_SESSION_RECORDED_NO_DUPLICATE_ALERT"
-    },
-    "divergence_status": "ETF_FLOW_PRICE_DIVERGENCE_PERSISTS",
-    "divergence_note": "Six-session ETF demand remained strongly positive through Sep24, but daily inflows decelerated for three sessions from the Sep21 peak while BTC failed to sustain >87K. Sep25 final ETF flow is not yet reliably verified."
+    "divergence_status": "PRICE_BELOW_87K_WITH_LATEST_ETF_DAY_NEGATIVE",
+    "divergence_note": "Both fresh aggregators report Oct 5 net outflow, but disagree by 69.9M USD; direction is usable, precise magnitude is not.",
+    "sources": [
+      {
+        "name": "CoinStats ETF tracker",
+        "as_of": "2026-10-05",
+        "url": "https://coinstats.app/etf/bitcoin/"
+      },
+      {
+        "name": "Bitcoin Digital ETF flows",
+        "as_of": "2026-10-05",
+        "url": "https://www.bitcoindigital.info/etf-flows/"
+      }
+    ]
   },
   "macro_state": {
-    "as_of": "2026-09-24T22:53:30+07:00",
-    "us2y_pct": 4.9,
-    "us10y_pct": 5.15,
-    "us30y_pct": 5.44,
-    "curve_quality": "Fresh Sep24 reporting keeps 2Y around 4.9%, 10Y around/above 5.15%, and 30Y around 5.44% at multi-year extremes.",
-    "dxy_approx": 101,
-    "direction": "RESTRICTIVE_YIELDS_FURTHER_WORSENED_CONFIRMED_ACROSS_CURVE",
-    "note": "No material easing since prior scan; front-end and long-end yields jointly indicate tight financial conditions and stronger Fed-hike repricing."
+    "as_of": "2026-10-05T16:00:00-04:00",
+    "us10y_pct": 5.31,
+    "dxy": 102.18,
+    "direction": "RESTRICTIVE_HIGH_YIELDS_AND_FIRM_DOLLAR",
+    "note": "Oct 5 close evidence shows the U.S. 10Y near 5.31% and DXY around 102.18, a restrictive backdrop despite weaker jobs data reducing immediate hike odds.",
+    "sources": [
+      {
+        "name": "AP markets Oct 5",
+        "url": "https://apnews.com/article/7f89624b604f25f313502c77d4d0b010"
+      },
+      {
+        "name": "Reuters global markets Oct 5",
+        "url": "https://www.reuters.com/world/china/global-markets-global-markets-2026-10-05/"
+      }
+    ]
   },
   "derivatives_state": {
-    "status": "PARTIAL_CURRENT",
-    "recent_context": "Recent BTC futures OI/leverage remained material after the prior squeeze; current reporting also indicates meaningful long liquidations during the Sep24 pullback. Current harmonized BTC-only OI/funding/liquidation dataset remains incomplete; capitulation is not confirmed.",
-    "actionability": "QUALITATIVE_CONFIRMATION_ONLY"
+    "status": "FRESH_PARTIAL_NEUTRAL_POSITIONING",
+    "as_of": "2026-10-06T06:30:00Z",
+    "total_open_interest_usd_b": 36.51,
+    "open_interest_change_24h_pct": 0.3,
+    "funding_rate_avg_pct": 0.0007,
+    "liquidations_24h_usd_m": 44.37,
+    "long_liquidations_usd_m": 20.95,
+    "short_liquidations_usd_m": 23.42,
+    "interpretation": "OI rose only mildly, funding stayed near zero, and liquidations were balanced; no fresh leverage-crowding or capitulation confirmation.",
+    "sources": [
+      {
+        "name": "Trnd Tools BTC OI",
+        "as_of": "2026-10-06T06:30:00Z",
+        "url": "https://trndtools.com/open-interest"
+      },
+      {
+        "name": "COINOTAG BTC futures",
+        "as_of": "2026-10-06",
+        "url": "https://en.coinotag.com/cryptocurrencies/futures/BTC"
+      }
+    ]
   },
   "pre_triggers": {
     "upside_squeeze": {
@@ -117,8 +146,8 @@
   },
   "allocation_gate": {
     "status": "NO_ACTION",
-    "recomputed_at": "2026-09-26T08:23:26+07:00",
-    "reason": "Confirmed STX exit and separate BTC swing now journal/portfolio/Hunter synchronized, but cash funding, fees and net balances unverified; market evidence last scan is stale. No new capital action."
+    "recomputed_at": "2026-10-06T14:43:35+07:00",
+    "reason": "No verified positive-net executable BTC swing: resistance remains unbroken, live order-book depth is missing, ETF amount conflicts, and portfolio ordinary cash/fees remain UNKNOWN. Core BTC unchanged; 20K extreme-crash reserve untouched."
   },
   "drawdown_budget": {
     "status": "NO_NEW_PROPOSAL_TO_STRESS_TEST",
@@ -149,29 +178,31 @@
     "status": "CANDIDATE_NOT_CONFIRMED"
   },
   "action": {
-    "current": "STOP_ADDING_NO_NEW_CAPITAL_ACTION_NO_CORE_SELL_KEEP_GRID_UNCHANGED",
-    "reason": "Maintain 14,000 USDT Grid unchanged; do not add BTC/Grid capital while freshness gate is incomplete and leading distribution risk persists. Preserve ordinary dry powder and strictly isolate 50,000 USD Crisis Reserve. BTC core remains below 0.5 BTC permanent floor, so ordinary core selling remains prohibited. User retains execution authority."
+    "current": "HOLD_NO_NEW_CAPITAL_ACTION_NO_CORE_SELL_KEEP_GRID_UNCHANGED",
+    "reason": "Partial fresh scan supports continued caution but not a confirmed downside break. Do not sell core BTC on ordinary short-term weakness. No executable swing can be sized without verified cash and live depth."
   },
   "leading_warning": {
     "primary_state": "EARLY_DISTRIBUTION_RISK",
     "first_detected_at": "2026-09-25T18:30:00+07:00",
-    "main_path": "NEXT_24_72H__CONSOLIDATION_OR_SUPPORT_RETEST_BEFORE_ANY_SUSTAINED_87K_90K_BREAK__DISTRIBUTION_RISK_REMAINS_BUT_NOT_DOWNSIDE_CONFIRMED",
+    "main_path": "NEXT_24_72H__RANGE_OR_SUPPORT_RETEST_MORE_LIKELY_THAN_CONFIRMED_BREAKOUT_WHILE_BELOW_87K_87_5K__NO_DOWNSIDE_BREAK_CONFIRMED",
     "leading_evidence": [
-      "ETF demand decelerated for three consecutive complete sessions through Sep24: about +999M -> +714.7M -> +346.98M -> +190.7M, while BTC failed to sustain >87K; marginal demand/price-response efficiency weakened.",
-      "Sep25 BTC failed to hold an intraday push above 85K and traded around 83.8K despite the prior six-session ETF inflow streak; this preserves the price-response divergence.",
-      "Counter-evidence: more than 13,800 BTC left Binance in a day and roughly 20,000 BTC over four days; fresh reporting also cites large-wallet accumulation, reducing confidence in a broad completed distribution thesis.",
-      "Counter-evidence: BTC held near 84K despite a severe Treasury-yield shock while about $1.7B of leverage was reportedly cut, suggesting deleveraging without a disorderly spot breakdown."
+      "BTC traded around 85.3K-85.9K after failing to sustain the 87K area; Oct 5 range reached about 86,995 but closed near 85,771.",
+      "Both fresh ETF aggregators show Oct 5 net outflow, although magnitude conflicts (-89.8M vs -159.7M); this does not support an upside flow reacceleration.",
+      "U.S. 10Y near 5.31% and DXY near 102.18 remain restrictive macro headwinds.",
+      "Counter-evidence: aggregate BTC OI rose only 0.30% in 24h, funding stayed near zero, and long/short liquidations were balanced; there is no clear fresh leverage excess or capitulation."
     ],
     "reversal_triggers": [
-      "Flip toward EARLY_UPSIDE_BUILDING if a complete ETF session reaches >=250M USD and improves >=200M vs prior complete day, BTC price response strengthens/accepts 86-87.4K+, and leverage does not re-expand aggressively.",
-      "Escalate toward EARLY_DOWNSIDE_BUILDING if 82K-area support fails to recover promptly AND at least one independent domain also worsens: ETF/spot demand turns materially negative, leverage expands into price weakness, macro liquidity tightens further with weaker BTC reaction, or fresh definition-clear holder/exchange supply turns distributive."
+      "Flip toward EARLY_UPSIDE_BUILDING only if BTC accepts above 87K-87.5K with stronger spot demand, verified ETF reacceleration, and no aggressive leverage expansion.",
+      "Escalate toward EARLY_DOWNSIDE_BUILDING if 84.7K-85K support fails and an independent domain confirms deterioration: materially negative ETF/spot demand, OI expansion into weakness, or further macro tightening."
     ],
-    "early_action": "STOP_ADDING",
-    "confirmation_status": "NO_DOWNSIDE_CONFIRMATION_REQUIRED_FOR_WARNING__DOWNSIDE_NOT_CONFIRMED",
+    "early_action": "HOLD_NO_NEW_SWING",
+    "confirmation_status": "DISTRIBUTION_RISK_PERSISTS__DOWNSIDE_NOT_CONFIRMED__BREAKOUT_NOT_CONFIRMED",
     "data_gaps": [
-      "Sep25 final US spot-BTC ETF fund-level net flow not reliably verified in this scan.",
-      "Same-definition current BTC OI/funding/basis/liquidations dataset incomplete.",
-      "Fresh definition-clear SOPR/LTH cohort supply data incomplete."
+      "Exact live BTC spot order-book spread/depth not obtained.",
+      "Oct 5 ETF net-outflow magnitude conflicts across two aggregators (-89.8M vs -159.7M).",
+      "Fresh same-venue spot-volume/OI/funding basis alignment is incomplete.",
+      "Current verified ordinary USDT balance and fees remain unknown, blocking allocation sizing.",
+      "Fresh Bybit custody/counterparty scan not completed in this run."
     ]
   },
   "operational_reconciliation": {
@@ -186,5 +217,109 @@
       "REFRESH_LIVE_MARKET_FEEDS"
     ],
     "note": "Do not alter last_scan_at or old market evidence; accounting reconciliation only."
+  },
+  "run_id": "sentinel-20261006T144335+0700",
+  "last_run_at": "2026-10-06T14:43:35+07:00",
+  "last_successful_scan_at": "2026-10-06T14:43:35+07:00",
+  "market_data_asof": "2026-10-06T07:46:30Z",
+  "etf_data_asof": "2026-10-05T23:59:59-04:00",
+  "derivatives_data_asof": "2026-10-06T06:30:00Z",
+  "macro_data_asof": "2026-10-05T16:00:00-04:00",
+  "run_status": "PARTIAL_DATA",
+  "last_persisted_at": "2026-10-06T14:43:35+07:00",
+  "persisted": true,
+  "persist_verified": true,
+  "market_snapshot": {
+    "run_id": "sentinel-20261006T144335+0700",
+    "btc_price_usd": 85349.1,
+    "btc_day_range_usd": [
+      85141.4,
+      86115.7
+    ],
+    "btc_change_pct_24h_approx": -1.02,
+    "structure": "BELOW_87000_87500_RESISTANCE_AFTER_FAILED_RECOVERY__NO_CONFIRMED_BREAKDOWN",
+    "spot_orderbook": "UNKNOWN_NOT_FETCHED",
+    "sources": [
+      {
+        "name": "Investing.com BTC historical/live",
+        "as_of": "2026-10-06T07:46:30Z",
+        "url": "https://ng.investing.com/crypto/bitcoin/historical-data"
+      },
+      {
+        "name": "Barrons market report",
+        "as_of": "2026-10-05T08:15:03Z",
+        "url": "https://www.barrons.com/livecoverage/stock-market-news-today-100526/card/bitcoin-regains-some-momentum-but-stays-below-87-000-vNkB8wqYMwEDZbyAJlVl"
+      }
+    ]
+  },
+  "axs_korea_monitor": {
+    "run_id": "sentinel-20261006T144335+0700",
+    "as_of": "2026-10-06T14:43:35+07:00",
+    "status": "SIGNIFICANT_WEAKNESS_BELOW_1_35__SECOND_WAVE_NOT_CONFIRMED",
+    "spot_price_usdt_approx": 1.293,
+    "unrealized_pct_approx": -7.75,
+    "threshold_tests": {
+      "recovered_1_40_1_42": false,
+      "broke_1_454_1_46": false,
+      "below_1_35": true
+    },
+    "binance_derivatives": {
+      "open_interest_usd_m": 9.04,
+      "funding_8h_pct": -0.0003,
+      "price_usdt": 1.293,
+      "interpretation": "Funding is near neutral/slightly negative and available OI evidence is not expanding meaningfully; no derivatives confirmation of a Korean-driven second wave."
+    },
+    "korea_market": {
+      "upbit_axs_krw": "UNAVAILABLE_THIS_RUN",
+      "bithumb_axs_krw_context": "Oct 4 volume spike followed by lower Oct 5 volume; Oct 6 intraday data is incomplete and cannot substitute for Upbit.",
+      "conclusion": "KOREAN_SECOND_WAVE_NOT_VERIFIED"
+    },
+    "action": "CONTINUE_NO_ADD__DO_NOT_MECHANICALLY_AVERAGE_DOWN",
+    "left_side_research": "NOT_QUALIFIED: lower price alone is insufficient; Upbit flow confirmation and a clear stop-falling structure are missing.",
+    "sources": [
+      {
+        "name": "Swolecharts AXS funding",
+        "as_of": "2026-10-06T14:43:35+07:00",
+        "url": "https://swolecharts.com/coin/AXS/funding-rate"
+      },
+      {
+        "name": "JustScreener AXS",
+        "as_of": "2026-10-06T03:54:00Z",
+        "url": "https://justscreener.com/en/market/AXS"
+      },
+      {
+        "name": "Investing.com Bithumb AXS/KRW",
+        "as_of": "2026-10-06",
+        "url": "https://kr.investing.com/crypto/axie-infinity/axs-krw-historical-data"
+      }
+    ],
+    "data_gaps": [
+      "Fresh Upbit AXS/KRW ticker, 24h turnover and abnormal-volume baseline unavailable.",
+      "Binance spot order-book/depth not obtained."
+    ]
+  },
+  "watchdog": {
+    "status": "RECOVERED",
+    "prior_status": "SENTINEL_DEGRADED",
+    "reason": "Current partial-but-valid scan persisted and phase-1 exact-path reread matched this run_id.",
+    "last_successful_scan_at": "2026-10-06T14:43:35+07:00",
+    "consecutive_invalid_scans": 0,
+    "recovery_notification_required": true
+  },
+  "notification": {
+    "decision": "NOTIFY",
+    "reasons": [
+      "SENTINEL_RECOVERED_AFTER_STALE_INTERVAL",
+      "AXS_BELOW_1_35_SIGNIFICANT_WEAKNESS"
+    ],
+    "delivery_status": "AUTOMATION_RESPONSE_QUEUED",
+    "dedupe_key": "sentinel-20261006T144335+0700__RECOVERY_AXS_WEAKNESS"
+  },
+  "portfolio_metrics": {
+    "main_investment_nav_usdt": "UNKNOWN",
+    "realized_net_profit_usdt": "UNKNOWN",
+    "gap_to_600k_usdt": "UNKNOWN",
+    "completion_pct": "UNKNOWN",
+    "reason": "Current balances, fees and complete positions are not verified."
   }
 }

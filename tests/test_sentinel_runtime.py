@@ -37,6 +37,13 @@ class RuntimeTest(unittest.TestCase):
             merge_owned({'last_run_at':stamp(self.now)}, {'last_run_at':stamp(self.now-dt.timedelta(seconds=1))})
         with self.assertRaisesRegex(ValueError,'NON_OWNED'):
             merge_owned({}, {'portfolio_ref':'erase'})
+    def test_undelivered_fault_remains_one_pending_event(self):
+        previous=dict(self.old,watchdog={'state':'SENTINEL_DEGRADED'},notification_decision={'type':'SENTINEL_DEGRADED','delivery_status':'FAILED','event_id':'same'})
+        result=scan(previous,{},self.now)
+        self.assertTrue(result['notification_decision']['required'])
+        self.assertEqual(result['notification_decision']['event_id'],'same')
+        previous['notification_decision']['delivery_status']='DELIVERED'
+        self.assertFalse(scan(previous,{},self.now)['notification_decision']['required'])
     def test_first_degraded_is_not_silently_suppressed(self):
         self.assertEqual(watchdog(self.old,False,self.now)['transition'],'SENTINEL_DEGRADED')
     def test_watchdog_deduplicates_and_recovers(self):
