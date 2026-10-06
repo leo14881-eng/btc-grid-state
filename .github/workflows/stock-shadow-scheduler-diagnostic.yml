@@ -20,7 +20,8 @@ jobs:
           import json, urllib.request, urllib.error
           url = 'https://stock-shadow-scheduler.qinx468.workers.dev/health'
           try:
-              r = urllib.request.urlopen(url, timeout=20)
+              req = urllib.request.Request(url, headers={'User-Agent':'stock-scheduler-read-only-acceptance'})
+              r = urllib.request.urlopen(req, timeout=20)
           except urllib.error.HTTPError as e:
               if e.code != 503:
                   print('STOCK_PUBLIC_HEALTH_HTTP=' + str(e.code))
@@ -32,7 +33,7 @@ jobs:
           allowed = ['checked_at','action','error','market','stale','workflow','dispatched','scheduler_healthy']
           print('STOCK_RUNTIME_HEALTH=' + json.dumps({k: data.get(k) for k in allowed}))
           PY
-      - name: Observe stock-only runtime traces for six minutes
+      - name: Compare stock and coin runtime traces read only
         working-directory: research/stock_shadow/scheduler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
@@ -41,33 +42,58 @@ jobs:
         run: |
           python - <<'PY'
           import json, subprocess, time, select, os
-          p = subprocess.Popen(['npx','--yes','wrangler@4.147.0','tail','stock-shadow-scheduler','--format','json'],
-                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-          deadline = time.monotonic() + 360
-          pending = ''
+          names=['stock-shadow-scheduler','hunter-position-monitor-heartbeat-v1']
+          streams={}
+          processes=[]
+          for name in names:
+              p=subprocess.Popen(['npx','--yes','wrangler@4.147.0','tail',name,'--format','json'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+              processes.append(p)
+              streams[p.stdout]={'name':name,'p':p,'pending':'','connected':False,'count':0}
+          deadline=time.monotonic()+360
           try:
-              while time.monotonic() < deadline:
-                  if p.poll() is not None:
-                      print('STOCK_TRACE_PROCESS_EXIT=' + str(p.returncode), flush=True)
-                      break
-                  ready, _, _ = select.select([p.stdout], [], [], 5)
-                  if not ready: continue
-                  pending += os.read(p.stdout.fileno(), 65536).decode('utf-8', errors='replace')
-                  start = pending.find('{')
-                  if start < 0: pending = ''; continue
-                  pending = pending[start:]
-                  try: d, consumed = json.JSONDecoder().raw_decode(pending)
-                  except json.JSONDecodeError:
-                      if len(pending) > 200000: pending = ''
-                      continue
-                  pending = pending[consumed:]
-                  event = d.get('event') or {}
-                  safe = {k:d.get(k) for k in ('outcome','eventTimestamp','scriptName')}
-                  safe['event'] = {k:event.get(k) for k in ('cron','scheduledTime') if k in event}
-                  safe['exceptions'] = [{'name':e.get('name'), 'message':e.get('message')} for e in d.get('exceptions',[])]
-                  print('STOCK_RUNTIME_TRACE=' + json.dumps(safe), flush=True)
+              while time.monotonic()<deadline and streams:
+                  ready,_,_=select.select(list(streams),[],[],5)
+                  for stream in ready:
+                      s=streams[stream]
+                      chunk=os.read(stream.fileno(),65536).decode('utf-8',errors='replace')
+                      if not chunk:
+                          print('RUNTIME_TRACE_PROCESS_EXIT='+json.dumps({'worker':s['name'],'code':s['p'].poll()}),flush=True)
+                          del streams[stream]
+                          continue
+                      if 'Connected to' in chunk or 'Successfully created tail' in chunk:
+                          s['connected']=True
+                          print('RUNTIME_TRACE_CONNECTED='+s['name'],flush=True)
+                      s['pending']+=chunk
+                      while True:
+                          start=s['pending'].find('{')
+                          if start<0:
+                              s['pending']=''
+                              break
+                          s['pending']=s['pending'][start:]
+                          try: d,used=json.JSONDecoder().raw_decode(s['pending'])
+                          except json.JSONDecodeError:
+                              if len(s['pending'])>200000: s['pending']=''
+                              break
+                          s['pending']=s['pending'][used:]
+                          event=d.get('event') or {}
+                          safe={k:d.get(k) for k in ('outcome','eventTimestamp','scriptName')}
+                          safe['event']={k:event.get(k) for k in ('cron','scheduledTime') if k in event}
+                          safe['exceptions']=[{'name':e.get('name'),'message':e.get('message')} for e in d.get('exceptions',[])]
+                          safe['scheduler_decisions']=[]
+                          for log in d.get('logs',[]):
+                              for msg in log.get('message',[]):
+                                  try: dec=json.loads(msg)
+                                  except (TypeError,json.JSONDecodeError): continue
+                                  if isinstance(dec,dict):
+                                      safe['scheduler_decisions'].append({k:dec.get(k) for k in ('checked_at','action','status','reason','error','workflow','dispatched','generation_id','trigger_source') if k in dec})
+                          s['count']+=1
+                          print('RUNTIME_TRACE='+json.dumps(safe),flush=True)
+              for s in streams.values():
+                  print('RUNTIME_TRACE_SUMMARY='+json.dumps({'worker':s['name'],'connected_banner_seen':s['connected'],'captured_events':s['count']}),flush=True)
           finally:
-              p.terminate()
-              try: p.wait(timeout=5)
-              except subprocess.TimeoutExpired: p.kill(); p.wait()
+              for p in processes:
+                  if p.poll() is None: p.terminate()
+              for p in processes:
+                  try: p.wait(timeout=5)
+                  except subprocess.TimeoutExpired: p.kill(); p.wait()
           PY
