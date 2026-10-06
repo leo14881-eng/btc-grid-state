@@ -24,6 +24,21 @@ class RuntimeTest(unittest.TestCase):
         result=source('https://public.example.invalid',lambda d:d,get=failed)
         self.assertIsNone(result['asof'])
         self.assertIn('OSError: offline',result['error'])
+    def test_freshness_rejects_ambiguous_timestamp_and_failed_source(self):
+        for record in ({'asof': '2026-10-06T08:00:00'},
+                       {'asof': stamp(self.now), 'error': 'invalid response'},
+                       {'asof': 1791273600000}, None):
+            with self.subTest(record=record):
+                self.assertFalse(fresh(record, self.now, 600))
+        self.assertTrue(fresh({'asof': '2026-10-06T15:00:00+07:00'}, self.now, 600))
+    def test_failed_timestamped_source_cannot_admit_evidence_scan(self):
+        evidence = {key: {'asof': stamp(self.now)} for key in
+                    ('btc_spot', 'btc_structure', 'btc_oi', 'btc_funding')}
+        evidence['btc_oi']['error'] = 'response schema invalid'
+        result = scan(self.old, evidence, self.now)
+        self.assertEqual(result['run_status'], 'DATA_STALE')
+        self.assertFalse(result['freshness_gate']['valid_evidence_scan'])
+        self.assertFalse(result['freshness_gate']['new_capital_action_allowed'])
     def test_depth_fallback_keeps_venue_timestamp_and_failed_primary(self):
         def get(url):
             if 'binance.com' in url:
