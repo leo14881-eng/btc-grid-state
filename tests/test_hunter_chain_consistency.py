@@ -71,7 +71,11 @@ class ChainConsistencyTests(unittest.TestCase):
    self.assertEqual(len(state['open_positions']),1);self.assertEqual(len(pos['tranches']),1);self.assertEqual(state['events'],[])
  def test_price_protection_still_operates_without_signal(self):
   p={'asset':'X','opened_at_utc':NOW.isoformat(),'tranches':[{'price':100,'notional_usdt':1000}],'mfe_pct':4}
-  state={'open_positions':[p]};eng.manage_existing_positions(state,{'coins':{'X':{'reference_price':101}}},{}, {},{},NOW)
+  from research import hunter_lifecycle_state as life
+  def book(price,now):return {'exchange':'binance','market':'spot','symbol':'XUSDT','price_unit':'USDT','quantity_unit':'BASE','bids':[[price,100]],'asks':[[price+.01,100]],'fetched_at':now.isoformat()}
+  before=NOW-dt.timedelta(minutes=5)
+  life.protect(p,104,eng.net_pnl(p,104),life.liquidation(p,book(104,before),before),before,'armed',before.isoformat())
+  state={'open_positions':[p]};eng.manage_existing_positions(state,{'as_of_utc':NOW.isoformat(),'generation_id':'current','coins':{'X':{'reference_price':101}}},{}, {'snapshots':{'X':{'raw_book_evidence':book(101,NOW)}}},{},NOW)
   self.assertEqual(state['closed_positions'][0]['exit_reason'],'PROFIT_PROTECTION')
  def test_monitor_refreshes_watch_holdings_without_new_entry(self):
   states=[{'open_positions':[{'asset':'X'}]}];market={'X':{'reference_price':100}}
