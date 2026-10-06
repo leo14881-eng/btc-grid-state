@@ -2,6 +2,8 @@ import datetime as dt
 import importlib.util
 import pathlib
 import unittest
+import threading
+import urllib.parse
 
 spec=importlib.util.spec_from_file_location("hunter_liquidity_probe",pathlib.Path("research/hunter_liquidity_probe.py"))
 h=importlib.util.module_from_spec(spec)
@@ -10,6 +12,24 @@ NOW=dt.datetime(2026,9,26,9,0,tzinfo=dt.timezone.utc)
 AT=NOW.isoformat()
 
 class LiquidityTests(unittest.TestCase):
+    def test_parallel_books_keep_all_targets_and_individual_failures(self):
+        symbols=['AAA','BBB','CCC','DDD']
+        scan={'as_of_utc':AT,'coins':{s:{'pairs':[{'venue':'binance','pair':s+'USDT'}]} for s in symbols}}
+        dossiers={'market_universe_size':4,'dossiers':[{'asset':s} for s in symbols]}
+        barrier=threading.Barrier(4,timeout=3)
+        seen=[];lock=threading.Lock()
+        def fetch(url):
+            symbol=urllib.parse.parse_qs(urllib.parse.urlparse(url).query)['symbol'][0]
+            with lock:seen.append(symbol)
+            barrier.wait()
+            if symbol=='BBBUSDT':raise RuntimeError('explicit failure')
+            return {'bids':[['99','1000']],'asks':[['101','1000']]}
+        result=h.build(scan,dossiers,fetch,NOW,workers=4)
+        self.assertCountEqual(seen,[s+'USDT' for s in symbols])
+        self.assertEqual(result['requested_count'],4)
+        self.assertEqual(result['successful_count'],3)
+        self.assertEqual(set(result['failures']),{'BBB'})
+        self.assertEqual(set(result['snapshots']),{'AAA','CCC','DDD'})
     def test_measure_spread_and_two_sided_depth(self):
         b={"bids":[["99","10"],["97","10"]],
            "asks":[["101","10"],["103","10"]]}

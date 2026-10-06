@@ -11,6 +11,7 @@ import os
 import pathlib
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 try:
     from research.hunter_execution_cost import estimate
 except ModuleNotFoundError as exc:
@@ -90,14 +91,16 @@ def targets(dossiers,scan,early=None):
             seen.add(sym);n+=1
     return selected
 
-def build(scan,dossiers,fetch,now,early=None):
+def build(scan,dossiers,fetch,now,early=None,workers=8):
     if dossiers.get("market_universe_size")!=len(scan.get("coins") or {}):
         raise ValueError("UNIVERSE_MISMATCH")
     if dossiers.get("dossiers") is None:raise ValueError("MISSING_DOSSIERS")
     if (now-dt.datetime.fromisoformat(scan["as_of_utc"])).total_seconds()>7200:
         raise ValueError("STALE_SCAN")
     records={};failures={}
-    for sym,pair,lane in targets(dossiers,scan,early):
+    selected=targets(dossiers,scan,early)
+    def probe(target):
+        sym,pair,lane=target
         url=BN+"/api/v3/depth?"+urllib.parse.urlencode({"symbol":pair,"limit":100})
         try:
             book=fetch(url)
@@ -109,13 +112,18 @@ def build(scan,dossiers,fetch,now,early=None):
                     snapshot["execution_scenarios"][str(amount)]=estimate(book,amount)
                 except ValueError as exc:
                     snapshot["execution_scenarios"][str(amount)]={"status":"BLOCKED","reason":str(exc)}
-            records[sym]=snapshot
+            return sym,snapshot,None
         except Exception as exc:
-            failures[sym]=type(exc).__name__+": "+str(exc)[:160]
+            return sym,None,type(exc).__name__+": "+str(exc)[:160]
+    # Bound public API concurrency; retain every target and every explicit failure.
+    with ThreadPoolExecutor(max_workers=max(1,min(int(workers),8))) as pool:
+        for sym,snapshot,error in pool.map(probe,selected):
+            if error is not None:failures[sym]=error
+            else:records[sym]=snapshot
     return {"schema":"hunter_liquidity_probe_v1","as_of_utc":now.isoformat(),
             "scan_generation_id":scan.get("generation_id"),"policy_version":VERSION,
             "scan_as_of_utc":scan["as_of_utc"],
-            "requested_count":len(targets(dossiers,scan,early)),
+            "requested_count":len(selected),
             "successful_count":len(records),"failures":failures,
             "snapshots":records,"capital_authority":"NONE__OFFICIAL_FACTS_AND_PORTFOLIO_GATES_SEPARATE"}
 
