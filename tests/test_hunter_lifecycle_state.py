@@ -82,6 +82,17 @@ class HealthRecoveryTests(unittest.TestCase):
   self.assertEqual(p['recovery_state'],'RECOVERED')
   self.assertEqual(p['health_reasons'],[])
   self.assertEqual(p['recovery_generation_id'],p['last_health_generation_id'])
+ def test_intervening_weakening_breaks_persistent_invalidation(self):
+  p=position()
+  for i in range(5):self.tick(p,i)
+  self.assertEqual(p['recovery_state'],'PERSISTENT_INVALIDATION')
+  ev=self.evidence(5,True);ev['score']=0;now=NOW+dt.timedelta(minutes=25)
+  health,_=e.position_health(p,ev,now)
+  h.recovery(p,ev,now,-20,p['last_health_generation_id'],health)
+  self.assertEqual(health,'WEAKENING')
+  self.assertEqual(p['loss_recovery_lifecycle']['persistent_invalidation_count'],0)
+  self.assertEqual(p['recovery_state'],'LOSS_RECOVERY')
+
  def test_missing_observation_breaks_degrade_confirmation(self):
   p=position();self.tick(p,0);self.tick(p,1)
   self.tick(p,10)
