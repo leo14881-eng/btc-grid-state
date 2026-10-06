@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 import subprocess
 import tempfile
+from html.parser import HTMLParser
+from zoneinfo import ZoneInfo
 import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -58,6 +60,64 @@ def treasury_daily(xml):
             'us2y_pct': float(latest['BC_2YEAR']), 'us10y_pct': float(latest['BC_10YEAR']),
             'us30y_pct': float(latest['BC_30YEAR']), 'dxy': None,
             'limitation': 'TREASURY_YIELDS_ONLY; NO_DXY_OR_INTRADAY_MACRO_CONFIRMATION'}
+
+class FlowTable(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.rows, self.row, self.cell = [], None, None
+    def handle_starttag(self, tag, attrs):
+        if tag == 'tr': self.row = []
+        if tag in ('td', 'th') and self.row is not None: self.cell = []
+    def handle_data(self, data):
+        if self.cell is not None: self.cell.append(data)
+    def handle_endtag(self, tag):
+        if tag in ('td', 'th') and self.cell is not None:
+            self.row.append(''.join(self.cell).strip())
+            self.cell = None
+        if tag == 'tr' and self.row is not None:
+            self.rows.append(self.row)
+            self.row = None
+
+
+def etf_latest_complete(html, now=None):
+    """Parse the source table, not an inferred zero or fabricated publication time."""
+    now = (now or dt.datetime.now(UTC)).astimezone(ZoneInfo('America/New_York'))
+    table = FlowTable()
+    table.feed(html)
+    issuers, complete, incomplete = None, [], []
+    def number(value):
+        value = value.replace(',', '').strip()
+        return -float(value[1:-1]) if value.startswith('(') and value.endswith(')') else float(value)
+    for row in table.rows:
+        if 'IBIT' in row and 'FBTC' in row:
+            issuers = row[1:-1]
+            continue
+        if not issuers or not row: continue
+        try: day = dt.datetime.strptime(row[0], '%d %b %Y').date()
+        except ValueError: continue
+        if day > now.date(): raise ValueError('ETF_FUTURE_SESSION_REJECTED')
+        if len(row) != len(issuers) + 2: raise ValueError('ETF_COLUMN_COUNT_MISMATCH')
+        try: values = [number(value) for value in row[1:]]
+        except ValueError:
+            incomplete.append({'date': day.isoformat(), 'status': 'NOT_PUBLISHED_OR_PARTIAL',
+                               'issuer_values_raw': dict(zip(issuers, row[1:-1])), 'reported_total_raw': row[-1]})
+            continue
+        if day == now.date() and now.hour < 16:
+            incomplete.append({'date': day.isoformat(), 'status': 'NOT_COMPLETE_BEFORE_US_CLOSE'})
+            continue
+        if abs(sum(values[:-1]) - values[-1]) > 0.05 * (len(issuers) + 1) + 1e-6:
+            raise ValueError('ETF_ISSUER_TOTAL_MISMATCH')
+        complete.append({'date': day.isoformat(), 'net_flow_usd_m': values[-1],
+                         'issuer_flows_usd_m': dict(zip(issuers, values[:-1])),
+                         'status': 'COMPLETE_REPORTED_SOURCE_ROW'})
+    if not complete: raise ValueError('ETF_NO_COMPLETE_REPORTED_SESSION')
+    latest = max(complete, key=lambda record: record['date'])
+    return {'asof': None, 'asof_date': latest['date'],
+            'asof_definition': 'US_TRADING_SESSION_DATE; SOURCE_PUBLICATION_TIME_UNEXPOSED',
+            'source_provider': 'FARSIDE_INVESTORS', 'flow_unit': 'USD_MILLIONS',
+            'latest_complete_session': latest,
+            'unpublished_or_incomplete_sessions': incomplete,
+            'calendar_limit': 'SOURCE_TABLE_COMPLETENESS_VERIFIED; EXCHANGE_HOLIDAY_CALENDAR_NOT_RECONSTRUCTED'}
 
 def source(url, parser, get=get_json):
     attempted = stamp()
@@ -167,10 +227,12 @@ def collect(get=get_json):
     with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {key: pool.submit(spot_source if url.startswith('https://api.binance.com/') else source, url, parser, get) for key, (url, parser) in specs.items()}
         depth = pool.submit(collect_depth, get)
+        etf = pool.submit(source, 'https://farside.co.uk/btc/', etf_latest_complete, get_text if get is get_json else get)
         treasury = pool.submit(source, 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=' + str(dt.datetime.now(UTC).year), treasury_daily, get_text if get is get_json else get)
         evidence = {key: future.result() for key, future in futures.items()}
         evidence['btc_depth'] = depth.result()
         evidence['macro_treasury_daily'] = treasury.result()
+        evidence['etf_latest_complete'] = etf.result()
         return evidence
 
 def fresh(record, now, seconds):
@@ -196,7 +258,11 @@ def scan(previous, evidence, now=None):
     valid = all(gates.get(key, False) for key in ('btc_spot', 'btc_structure', 'btc_oi', 'btc_funding'))
     gaps = [key + ': ' + record.get('error', 'SOURCE_TIMESTAMP_UNVERIFIED_OR_STALE') for key, record in evidence.items() if not gates[key]]
     macro_gap = 'MACRO_INTRADAY_AND_DXY_UNVERIFIED; TREASURY_DAILY_OBSERVED_' + evidence['macro_treasury_daily']['asof_date'] if evidence.get('macro_treasury_daily', {}).get('asof_date') else 'MACRO_TIMESTAMPED_EVIDENCE_NOT_ACQUIRED'
-    gaps += ['ETF_LATEST_COMPLETE_SESSION_NOT_ACQUIRED', macro_gap, 'LIQUIDATIONS_AND_HOLDER_SUPPLY_UNVERIFIED', 'FULL_LEADING_WARNING_ENGINE_REMAINS_CHATGPT; server evidence scan does not replace strategy']
+    if evidence.get('etf_latest_complete', {}).get('latest_complete_session'):
+        gaps = [gap for gap in gaps if not gap.startswith('etf_latest_complete:')]
+    else:
+        gaps.append('ETF_LATEST_COMPLETE_SESSION_NOT_ACQUIRED')
+    gaps += [macro_gap, 'LIQUIDATIONS_AND_HOLDER_SUPPLY_UNVERIFIED', 'FULL_LEADING_WARNING_ENGINE_REMAINS_CHATGPT; server evidence scan does not replace strategy']
     # Collection is not a complete Leading Warning analysis. Never advance success.
     wd = watchdog(previous, False, now)
     axs = {'status': 'PARTIAL_DATA', 'capital_action': 'NO_AUTOMATIC_TRADE', 'left_side_research': 'UNKNOWN_REQUIRES_LOW_STRUCTURE_KOREAN_FLOW_AND_BTC_RISK', 'second_wave': 'UNCONFIRMED', 'strong_breakout': 'UNCONFIRMED'}
@@ -223,7 +289,7 @@ def scan(previous, evidence, now=None):
         notification['event_id'] = previous_notification.get('event_id') if not wd['transition'] else 'sentinel-health-' + at
     result = {'run_id': 'sentinel-' + now.strftime('%Y%m%dT%H%M%S.%fZ'), 'last_run_at': at, 'last_scan_at': at, 'updated_at': at,
       'run_status': 'ANALYSIS_FAILED' if valid else 'DATA_STALE', 'market_data_asof': evidence.get('btc_spot', {}).get('asof'),
-      'derivatives_data_asof': evidence.get('btc_oi', {}).get('asof'), 'etf_data_asof': None, 'macro_data_asof': None,
+      'derivatives_data_asof': evidence.get('btc_oi', {}).get('asof'), 'etf_data_asof': evidence.get('etf_latest_complete', {}).get('asof_date'), 'macro_data_asof': evidence.get('macro_treasury_daily', {}).get('asof_date'),
       'early_action': 'NO_NEW_CAPITAL_ACTION', 'confirmation_status': 'ANALYSIS_NOT_PORTED',
       'data_gaps': gaps, 'evidence': evidence, 'freshness_gate': {'sources': gates, 'valid_evidence_scan': valid, 'valid_partial_scan': False, 'new_capital_action_allowed': False},
       'watchdog': wd, 'axs_monitor': axs, 'runtime': {'source': 'VULTR_SYSTEMD', 'scope': 'EVIDENCE_SCAN_ACCEPTANCE_ONLY', 'execution_authority': 'USER_ONLY', 'real_trading_enabled': False},
