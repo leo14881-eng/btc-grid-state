@@ -4,7 +4,6 @@ import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
- import hunter_lifecycle_state as lifecycle
  from research import hunter_lifecycle_state as lifecycle
  from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 except ModuleNotFoundError as exc:

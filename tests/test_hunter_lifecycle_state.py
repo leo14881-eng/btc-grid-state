@@ -16,6 +16,11 @@ class PersistentProtectionTests(unittest.TestCase):
  def observe(self,pos,p,i,at=None):
   now=at or NOW+dt.timedelta(minutes=5*i)
   return h.protect(pos,p,e.net_pnl(pos,p),h.liquidation(pos,book(p,now),now),now,'g'+str(i),now.isoformat())
+ def test_package_import_in_clean_process_without_test_path_mutation(self):
+  env=dict(os.environ);env.pop('PYTHONPATH',None)
+  r=subprocess.run([sys.executable,'-c','from research import hunter_shadow_trader_v2; from research import hunter_position_monitor'],env=env,capture_output=True,text=True)
+  self.assertEqual(r.returncode,0,r.stderr)
+
  def test_research_direct_entrypoint_imports_lifecycle_without_pythonpath(self):
   env=dict(os.environ);env.pop('PYTHONPATH',None);env['HUNTER_SHADOW_FREEZE']='1'
   r=subprocess.run([sys.executable,'research/hunter_shadow_trader_v2.py'],env=env,capture_output=True,text=True)
