@@ -3,6 +3,16 @@ from pathlib import Path
 from unittest.mock import patch
 from research import hunter_position_monitor as m
 class PositionMonitorTests(unittest.TestCase):
+ def test_v2_health_is_refreshed_every_bucket_without_v1_discovery_change(self):
+  states=[{'open_positions':[{'asset':str(i)} for i in range(200)]},{'open_positions':[{'asset':'ENA'},{'asset':'PENDLE'}]}]
+  cursor=0;rotated=set()
+  for _ in range(4):
+   selected,cursor=m.management_selection(states,cursor,80)
+   self.assertEqual(len(selected),80)
+   self.assertIn('ENA',selected);self.assertIn('PENDLE',selected)
+   rotated.update(set(selected)-{'ENA','PENDLE'})
+  self.assertEqual(len(rotated),200)
+
  def test_assets_deduplicates_v1_v2(self):
   s=[{"open_positions":[{"asset":"A"},{"asset":"B"}]},{"open_positions":[{"asset":"A"}]}]
   self.assertEqual(m.assets(s),["A","B"])
