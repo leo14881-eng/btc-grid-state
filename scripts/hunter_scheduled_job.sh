@@ -22,6 +22,10 @@ export RUNNER_TEMP="$TASK_DIR"
 export GITHUB_OUTPUT="$TASK_DIR/output"
 export GITHUB_ENV="$TASK_DIR/env"
 export HUNTER_RESEARCH_ISOLATED_CHECKOUT=1
+if [ "$JOB" = watchdog ]; then
+  # Optional observation health never disables the authoritative hourly/5m chain.
+  python3 -m scripts.hunter_market_stream --watchdog || echo FAST_WATCH_HEALTH_READ_FAILED
+fi
 if [ "$JOB" = blind-replay ]; then
   # Historical public market files only; GitHub main remains the state authority.
   export HUNTER_ARCHIVE_CACHE_DIR=/var/cache/hunter-binance-archives

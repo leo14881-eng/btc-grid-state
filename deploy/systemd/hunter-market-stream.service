@@ -1,0 +1,26 @@
+[Unit]
+Description=Hunter V2 market stream observation and REST active fallback
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hunter-fast-watch
+Group=hunter-fast-watch
+WorkingDirectory=/opt/hunter-fast-watch/code
+ExecStart=/opt/hunter-fast-watch/venv/bin/python -m scripts.hunter_market_stream --repo /var/lib/hunter-fast-watch/readback --state /var/lib/hunter-fast-watch/state.json
+Restart=on-failure
+RestartSec=5
+StateDirectory=hunter-fast-watch
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hunter-fast-watch
+UMask=0077
+MemoryMax=512M
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

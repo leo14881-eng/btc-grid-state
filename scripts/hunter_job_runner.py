@@ -148,6 +148,9 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
         "capital_authority": "NONE_SHADOW_ONLY", "real_trading_enabled": False}
  if error_details:
   doc["error_details"] = error_details
+ if job == "watchdog":
+  from scripts.hunter_market_stream import watchdog
+  doc["fast_watch_health"] = watchdog("/var/lib/hunter-fast-watch/state.json", end.timestamp())
  doc["main_readback_verified"] = status == "SUCCESS"
  doc["source_head_sha"] = git("rev-parse", "HEAD").stdout.strip()
  doc["main_readback_head_sha"] = git("rev-parse", "origin/main").stdout.strip()
