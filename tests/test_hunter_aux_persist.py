@@ -88,6 +88,36 @@ class AuxPublicationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'READBACK_MISMATCH'):
                 publisher.persist('discovery', self.base)
 
+    def test_checkout_auth_header_inherited_without_logging(self):
+        self.run_git('config', '--local', 'http.https://github.com/.extraheader',
+                     'AUTHORIZATION: test-private-value')
+        original_run = subprocess.run
+        verified = []
+        def intercept(args, **kwargs):
+            if args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                value = original_run(['git', '-C', args[2], 'config', '--local',
+                                      '--get', 'http.https://github.com/.extraheader'],
+                                     capture_output=True, text=True, check=True).stdout
+                verified.append(value.strip())
+            return original_run(args, **kwargs)
+        import io
+        from contextlib import redirect_stdout
+        output = io.StringIO()
+        with patch.object(subprocess, 'run', side_effect=intercept), redirect_stdout(output):
+            publisher.persist('discovery', self.base)
+        self.assertEqual(verified, ['AUTHORIZATION: test-private-value'])
+        self.assertNotIn('test-private-value', output.getvalue())
+
+    def test_auth_failure_is_not_reported_as_push_race(self):
+        original_run = subprocess.run
+        def intercept(args, **kwargs):
+            if args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                return subprocess.CompletedProcess(args, 128, '', 'could not read Username')
+            return original_run(args, **kwargs)
+        with patch.object(subprocess, 'run', side_effect=intercept):
+            with self.assertRaisesRegex(RuntimeError, 'AUTHENTICATION_FAILED'):
+                publisher.persist('discovery', self.base)
+
     def test_missing_outputs_prevent_publication(self):
         pathlib.Path(publisher.paths_for('discovery')[0]).unlink()
         with self.assertRaisesRegex(RuntimeError, 'OUTPUT_MISSING'):
