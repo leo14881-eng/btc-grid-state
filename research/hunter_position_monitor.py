@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """5-minute V1/V2 existing-position manager. No discovery, no new entries, no real orders."""
-import datetime as dt,json,math,os,pathlib,time,urllib.request
+import datetime as dt,json,math,os,pathlib,time,urllib.request,urllib.parse
 from research import hunter_shadow_trader_v2 as eng
 from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
@@ -108,7 +108,8 @@ def refresh_management_evidence(states,market,review,liq,now):
   failures.update({a:"SIGNAL_REFRESH_FAILED:"+type(exc).__name__ for a in selected})
  by={x.get("asset"):x for x in review.get("candidates") or []}
  def book(a):
-  raw=books.live_fetch(books.BN+"/api/v3/depth?symbol="+a+"USDT&limit=100")
+  query=urllib.parse.urlencode({"symbol":a+"USDT","limit":100})
+  raw=books.live_fetch(books.BN+"/api/v3/depth?"+query)
   row=books.measure(raw,dt.datetime.now(dt.timezone.utc),pair=a+"USDT");row["execution_scenarios"]={}
   for amount in (1000,2000,3000,4000):
    try:row["execution_scenarios"][str(amount)]=books.estimate(raw,amount)
