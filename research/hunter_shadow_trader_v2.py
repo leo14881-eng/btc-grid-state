@@ -574,6 +574,9 @@ def position_health(pos,e,now=None,systemic_level="NORMAL",confirmed_systemic_sh
  meta=e.get('signal_evidence') or {}
  if meta and not fresh(meta.get('observed_at_utc'),now or dt.datetime.now(dt.timezone.utc)):
   return 'EVIDENCE_PENDING',['SIGNAL_EVIDENCE_MISSING_OR_STALE']
+ previous=pos.get('last_health_observed_at_utc')
+ if meta and previous and parse(meta['observed_at_utc'])<=parse(previous):
+  return 'EVIDENCE_PENDING',['SIGNAL_EVIDENCE_NOT_NEWER']
  hard=[]
  if e.get("supply_confirmed_major_risk"):hard.append("CONFIRMED_MAJOR_NEAR_TERM_SUPPLY_RISK")
  for b in e.get("blockers") or []:

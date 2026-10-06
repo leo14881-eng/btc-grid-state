@@ -66,6 +66,12 @@ class HealthRecoveryTests(unittest.TestCase):
   now=NOW+dt.timedelta(minutes=5*i);ev=self.evidence(i,strong);health,_=e.position_health(p,ev,now)
   h.recovery(p,ev,now,-20,p.get('last_health_generation_id'),health)
   return health
+ def test_older_fresh_hard_evidence_cannot_overwrite_newer_health(self):
+  p=position();self.tick(p,2,True);before=copy.deepcopy(p)
+  ev=self.evidence(1,True);ev['blockers']=['IDENTITY_MISMATCH']
+  self.assertEqual(e.position_health(p,ev,NOW+dt.timedelta(minutes=10))[0],'EVIDENCE_PENDING')
+  self.assertEqual(p,before)
+
  def test_single_weak_reason_is_not_strong(self):
   p=position();ev=self.evidence(0,True);ev['score']=0
   self.assertEqual(e.position_health(p,ev,NOW)[0],'WEAKENING')
