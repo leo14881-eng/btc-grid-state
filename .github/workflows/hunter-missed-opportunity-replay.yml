@@ -57,19 +57,4 @@ jobs:
           print('MISSED_OPPORTUNITY_REPLAY_ACCEPTED',len(d['rows']))
           PY
       - name: Persist replay only
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          cp research/results/hunter-missed-opportunity-replay.json /tmp/replay.json
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git checkout -B replay-persist origin/main
-            cp /tmp/replay.json research/results/hunter-missed-opportunity-replay.json
-            git add -f research/results/hunter-missed-opportunity-replay.json
-            if git diff --cached --quiet; then echo REPLAY_NO_CHANGE; exit 0; fi
-            git commit -m 'research: daily missed opportunity replay'
-            if git push origin HEAD:main; then echo MISSED_OPPORTUNITY_REPLAY_PERSISTED; exit 0; fi
-            sleep $attempt
-          done
-          exit 1
+        run: python -m scripts.hunter_aux_persist missed-replay
