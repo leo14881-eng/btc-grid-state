@@ -153,6 +153,86 @@ class ResearchRebindTests(unittest.TestCase):
         self.assertIn("LATEST_EXECUTION_BASE_REQUIRED", s)
         self.assertIn("HUNTER_STATE_CAS_REJECTED_STALE_WRITER", s)
 
+    def publish_verified_monitor_metadata(self):
+        import datetime as dt
+        from scripts import hunter_monitor_persist as persist
+        from scripts import hunter_monitor_runtime as runtime
+        self.fixture(self.writer, closed=True)
+        self.write(self.writer, ".github/hunter-runtime.json",
+                   {"shadow_only": True, "primary_jobs": {"monitor": True}})
+        health_path = self.writer / runtime.HEALTH_PATH
+        h = json.loads(health_path.read_text())
+        h.update(trigger_source="VULTR_SYSTEMD",
+                 monitor_completed_at_utc=dt.datetime.now(dt.timezone.utc).isoformat())
+        health_path.write_text(json.dumps(h))
+        self.publish()
+        commit = self.command(self.writer, "rev-parse", "HEAD").strip()
+        previous = pathlib.Path.cwd()
+        try:
+            os.chdir(self.writer)
+            raw = persist.snapshot()
+            with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
+                persist.readback(raw, "g", commit)
+                runtime.publish_verified(raw, "g", commit)
+        finally:
+            os.chdir(previous)
+        self.command(self.writer, "fetch", "origin", "main")
+        self.command(self.writer, "merge", "--ff-only", "origin/main")
+        return commit
+
+    def test_verified_monitor_proof_can_change_during_research_precomputation(self):
+        self.publish_verified_monitor_metadata()
+        base = r.rebind("scan", isolated=True)
+        self.assertEqual(base, self.command(self.writer, "rev-parse", "HEAD").strip())
+        self.assertEqual(json.loads(pathlib.Path(r.PROOF_PATH).read_text())["monitor_generation_id"], "g")
+        self.assertEqual(json.loads(pathlib.Path("research/results/hunter-forward-research.json").read_text()),
+                         {"new_research": True})
+        # Final execution CAS continues rejecting any later metadata publication.
+        proof = json.loads((self.writer/r.PROOF_PATH).read_text())
+        proof["completed_at_utc"] = proof["completed_at_utc"].replace("+00:00", "Z")
+        self.write(self.writer, r.PROOF_PATH, proof); self.publish()
+        with self.assertRaisesRegex(RuntimeError, "CAS_REJECTED"):
+            r.check_current(base, "scan")
+
+    def test_new_monitor_commit_before_next_proof_uses_two_independent_validated_snapshots(self):
+        self.publish_verified_monitor_metadata()
+        h = json.loads((self.writer/r.HEALTH_PATH).read_text())
+        h["current_generation_id"] = h["last_successful_monitor_generation_id"] = "g2"
+        self.write(self.writer, r.HEALTH_PATH, h); self.publish()
+        r.rebind("scan", isolated=True)
+        self.assertEqual(json.loads(pathlib.Path(r.HEALTH_PATH).read_text())["current_generation_id"], "g2")
+        self.assertEqual(json.loads(pathlib.Path(r.PROOF_PATH).read_text())["monitor_generation_id"], "g")
+
+    def test_invalid_monitor_proof_is_not_an_allowlist_escape(self):
+        self.publish_verified_monitor_metadata()
+        good = json.loads((self.writer/r.PROOF_PATH).read_text())
+        before = r.git("rev-parse", "HEAD").stdout
+        for key, value in [("schema", "invalid"), ("job", "research"), ("status", "FAILURE"),
+                           ("capital_authority", "REAL"),
+                           ("source", "GITHUB_ACTIONS"), ("main_readback_verified", False),
+                           ("real_trading_enabled", True), ("scheduler_health_sha256", "wrong"),
+                           ("monitor_generation_id", "old"), ("completed_at_utc", "2020-01-01T00:00:00Z"),
+                           ("main_readback_head_sha", "a"*40)]:
+            with self.subTest(key=key):
+                self.write(self.writer, r.PROOF_PATH, {**good, key: value}); self.publish()
+                with self.assertRaisesRegex(RuntimeError, "MONITOR_PROOF"):
+                    r.rebind("scan", isolated=True)
+                self.assertEqual(r.git("rev-parse", "HEAD").stdout, before)
+
+    def test_other_runtime_auxiliary_metadata_still_conflicts(self):
+        self.publish_verified_monitor_metadata()
+        self.write(self.writer, "research/results/hunter-runtime-watchdog-health.json", {"status":"SUCCESS"})
+        self.publish()
+        with self.assertRaisesRegex(RuntimeError, "RESEARCH_INPUT_CHANGED.*watchdog"):
+            r.rebind("scan", isolated=True)
+
+    def test_locally_mutated_monitor_proof_cannot_be_restored_over_main(self):
+        self.publish_verified_monitor_metadata()
+        r.rebind("scan", isolated=True)
+        pathlib.Path(r.PROOF_PATH).write_text('{"fake":true}')
+        with self.assertRaisesRegex(RuntimeError, "UNEXPECTED_RESEARCH_MUTATION"):
+            r.rebind("scan", isolated=True)
+
 
 class MonitorTimingTests(unittest.TestCase):
     def test_observability_preserves_return_and_failure(self):
