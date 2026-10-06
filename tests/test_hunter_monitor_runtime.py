@@ -143,3 +143,28 @@ class ProofGitTests(GitRaceTests):
         with mock.patch.object(runtime.subprocess, 'run', side_effect=corrupt_readback):
             with self.assertRaisesRegex(RuntimeError, 'READBACK_MISMATCH'):
                 runtime.publish_verified(raw, GEN, commit)
+
+    def test_overlapping_new_generation_wins_during_proof_push(self):
+        raw, commit = self.prepare_proof()
+        original = runtime.subprocess.run
+        raced = []
+        def overlap(args, **kwargs):
+            if 'push' in args and len(args) > 2 and 'monitor-proof-' in args[2] and not raced:
+                raced.append(True)
+                self.run_git(self.other, 'fetch', 'origin', 'main')
+                self.run_git(self.other, 'checkout', '--detach', 'origin/main')
+                path = self.other / runtime.HEALTH_PATH
+                h = json.loads(path.read_text()); h['current_generation_id'] = 'new'
+                path.write_text(json.dumps(h))
+                self.run_git(self.other, 'add', '.')
+                self.run_git(self.other, 'commit', '-m', 'overlapping new monitor')
+                self.run_git(self.other, 'push', 'origin', 'HEAD:main')
+            return original(args, **kwargs)
+        with mock.patch.object(runtime.subprocess, 'run', side_effect=overlap):
+            with self.assertRaisesRegex(RuntimeError, 'STALE_GENERATION'):
+                runtime.publish_verified(raw, GEN, commit)
+        self.assertEqual(len(raced), 1)
+        self.run_git(self.writer, 'fetch', 'origin', 'main')
+        h = json.loads(runtime.git('show', 'origin/main:'+runtime.HEALTH_PATH).stdout)
+        self.assertEqual(h['current_generation_id'], 'new')
+        self.assertNotEqual(runtime.git('show', 'origin/main:'+runtime.PROOF_PATH, check=False).returncode, 0)
