@@ -64,7 +64,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
  if risk_evidence is not None:eng.tail.update_risk_controls(state,risk_evidence,now,eng.C)
- scan={"coins":market};btc=(market.get("BTC") or {}).get("reference_price")
+ scan={"coins":market,"generation_id":(regime_scan or {}).get("generation_id") or "MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")};btc=(market.get("BTC") or {}).get("reference_price")
  capital_proposals=[] if not v1_mode else None
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
  # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit

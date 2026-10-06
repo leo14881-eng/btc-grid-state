@@ -765,6 +765,14 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
   protection=profit_protection(pos,p);pnl=net_pnl(pos,p);exit_reason=None;exit_reasons=None
+  if protection["exit"] and pnl<=0 and health!="HARD_INVALIDATION":
+   # Audit the blocked profit window without changing the net-positive-only exit policy.
+   protection_review={**protection,"observed_at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),
+    "reference_price":p,"net_pnl_usdt":pnl,"fee_bps_per_side":FEE_BPS,
+    "tranche_cost_inputs":[{"price":t["price"],"notional_usdt":t["notional_usdt"],"buy_slippage_bps":t.get("buy_slippage_bps",0)} for t in pos["tranches"]],
+    "sell_cost_model":"REFERENCE_PRICE_WITH_SELL_FEE_ONLY","sell_spread_and_slippage_modelled":False}
+   pos["profit_protection_review"]=protection_review
+   record(state,pos,"HOLD",now,["PROFIT_PROTECTION_BLOCKED_NET_NONPOSITIVE"],{**e,"profit_protection_review":protection_review},p)
   if health=="HARD_INVALIDATION":exit_reason="HARD_INVALIDATION";exit_reasons=health_reasons
   elif protection["exit"] and pnl>0:exit_reason="PROFIT_PROTECTION";exit_reasons=["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"]
   elif health=="THESIS_INVALIDATED":
