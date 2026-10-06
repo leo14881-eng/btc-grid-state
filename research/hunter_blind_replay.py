@@ -22,6 +22,11 @@ OBSERVATION_STEP_DAYS=7
 FEATURE_VERSION="spot-daily-v1"
 RULE_VERSION="blind-full-universe-v1.3-frozen-window-reporting"
 MAX_DOWNLOAD_WORKERS=12
+try:
+    from research.hunter_archive_transport import archive_bytes
+except ModuleNotFoundError as exc:
+    if exc.name != 'research':raise
+    from hunter_archive_transport import archive_bytes
 STABLE_BASES={"USDC","BUSD","TUSD","FDUSD","USDP","DAI","USDS","UST","USTC","EUR","TRY","BRL","GBP","AUD","RUB","UAH","BIDR","IDRT","NGN","VAI","PAX","SUSD"}
 LEVERAGED_SUFFIXES=("UP","DOWN","BULL","BEAR")
 
@@ -68,7 +73,7 @@ MONTHS=months()
 
 def download_month(sym,month):
     name=f"{sym}-1d-{month}.zip"; url=f"{BASE}/{sym}/1d/{name}"
-    try:data=get(url,30)
+    try:data=archive_bytes(url,get,30)
     except Exception:return []
     try:
         z=zipfile.ZipFile(io.BytesIO(data)); raw=z.read(z.namelist()[0]).decode("utf-8-sig")

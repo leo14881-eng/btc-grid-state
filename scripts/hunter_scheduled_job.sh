@@ -22,4 +22,8 @@ export RUNNER_TEMP="$TASK_DIR"
 export GITHUB_OUTPUT="$TASK_DIR/output"
 export GITHUB_ENV="$TASK_DIR/env"
 export HUNTER_RESEARCH_ISOLATED_CHECKOUT=1
+if [ "$JOB" = blind-replay ]; then
+  # Historical public market files only; GitHub main remains the state authority.
+  export HUNTER_ARCHIVE_CACHE_DIR=/var/cache/hunter-binance-archives
+fi
 python3 -m scripts.hunter_job_runner "$JOB" "$@"

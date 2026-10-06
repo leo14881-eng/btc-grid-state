@@ -140,6 +140,11 @@ def publish_health(job, status, started, steps, error=None):
         "duration_seconds": round((end - started).total_seconds(), 3),
         "source": "VULTR_SYSTEMD", "steps": steps, "error": error,
         "capital_authority": "NONE_SHADOW_ONLY", "real_trading_enabled": False}
+ doc["main_readback_verified"] = status == "SUCCESS"
+ doc["source_head_sha"] = git("rev-parse", "HEAD").stdout.strip()
+ doc["main_readback_head_sha"] = git("rev-parse", "origin/main").stdout.strip()
+ if job in ("discovery", "research"):
+  doc["scan_generation_id"] = json.loads((RESULTS / "hunter-cex-universe-run.json").read_text()).get("generation_id")
  raw = json.dumps(doc, indent=2, sort_keys=True) + "\n"
  for attempt in range(5):
   git("fetch", "origin", "main")
@@ -152,6 +157,11 @@ def publish_health(job, status, started, steps, error=None):
     return subprocess.run(["git", "-C", d, *a], capture_output=True, text=True, check=check)
    hgit("remote", "set-url", "origin", remote); hgit("fetch", "origin", "main")
    hgit("checkout", "--detach", "origin/main")
+   previous = pathlib.Path(d, path)
+   if previous.exists():
+    old = json.loads(previous.read_text())
+    old_started = dt.datetime.fromisoformat(old["started_at_utc"].replace("Z", "+00:00"))
+    require(old_started <= started, "JOB_HEALTH_REJECTED_STALE_WRITER")
    target = pathlib.Path(d, path); target.write_text(raw)
    hgit("config", "user.name", "hunter-vultr-shadow")
    hgit("config", "user.email", "hunter-vultr-shadow@localhost")

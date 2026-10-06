@@ -13,26 +13,31 @@ class RuntimeGateTests(unittest.TestCase):
  def test_backups_remain_active_until_primary_verified(self):
   now=dt.datetime(2026,10,6,tzinfo=dt.timezone.utc)
   healthy={"schema":"hunter_runtime_job_health_v1","job":"research","status":"SUCCESS",
+           "source":"VULTR_SYSTEMD","main_readback_verified":True,"scan_generation_id":"g",
            "completed_at_utc":now.isoformat(),"real_trading_enabled":False,
            "capital_authority":"NONE_SHADOW_ONLY"}
   config={"primary_jobs":{"research":True}}
   self.assertTrue(gate.should_run("research",{},healthy,now))
-  self.assertFalse(gate.should_run("research",config,healthy,now))
+  self.assertFalse(gate.should_run("research",config,healthy,now,{"generation_id":"g"}))
+  self.assertTrue(gate.should_run("research",config,healthy,now,{"generation_id":"new"}))
+  self.assertTrue(gate.should_run("research",config,healthy,now,{}))
   for patch_doc in [{},{"status":"FAILURE"},{"real_trading_enabled":True},
                     {"completed_at_utc":(now-dt.timedelta(hours=2)).isoformat()},
                     {"completed_at_utc":(now+dt.timedelta(seconds=1)).isoformat()},
-                    {"completed_at_utc":"invalid"},{"job":"discovery"}]:
+                    {"completed_at_utc":"invalid"},{"job":"discovery"},
+                    {"main_readback_verified":False},{"source":"GITHUB_ACTIONS"}]:
    doc=patch_doc if not patch_doc else {**healthy,**patch_doc}
-   self.assertTrue(gate.should_run("research",config,doc,now))
+   self.assertTrue(gate.should_run("research",config,doc,now,{"generation_id":"g"}))
  def test_each_job_cadence_boundary(self):
   now=dt.datetime(2026,10,6,tzinfo=dt.timezone.utc)
   for job,max_age in gate.MAX_AGE.items():
    h={"schema":"hunter_runtime_job_health_v1","job":job,"status":"SUCCESS",
+      "source":"VULTR_SYSTEMD","main_readback_verified":True,"scan_generation_id":"g",
       "real_trading_enabled":False,"capital_authority":"NONE_SHADOW_ONLY",
       "completed_at_utc":(now-dt.timedelta(seconds=max_age)).isoformat()}
    c={"primary_jobs":{job:True}}
-   self.assertFalse(gate.should_run(job,c,h,now))
-   self.assertTrue(gate.should_run(job,c,h,now+dt.timedelta(seconds=1)))
+   self.assertFalse(gate.should_run(job,c,h,now,{"generation_id":"g"}))
+   self.assertTrue(gate.should_run(job,c,h,now+dt.timedelta(seconds=1),{"generation_id":"g"}))
 
 
 class WorkflowAdapterTests(unittest.TestCase):
