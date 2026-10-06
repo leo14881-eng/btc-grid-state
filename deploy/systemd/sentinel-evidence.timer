@@ -1,0 +1,9 @@
+[Unit]
+Description=Hourly Sentinel public evidence scan (read-only migration validation)
+[Timer]
+OnCalendar=*-*-* *:43:00 UTC
+Persistent=true
+AccuracySec=1s
+Unit=sentinel-evidence.service
+[Install]
+WantedBy=timers.target
