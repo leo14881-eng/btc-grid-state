@@ -1,9 +1,11 @@
 """Rebind a disposable research checkout to fresh monitor state before execution."""
 import argparse
+import datetime as dt
 import json
 import os
 import pathlib
 from scripts.hunter_monitor_persist import PATHS, git, require, snapshot, validate
+from scripts.hunter_monitor_runtime import PROOF_PATH, HEALTH_PATH, should_run
 
 SCAN = "research/results/hunter-cex-universe-run.json"
 RULES = "research/results/hunter-shadow-rules.json"
@@ -20,7 +22,28 @@ def protected(path):
 
 def research_output(path):
     return (path.startswith("research/results/hunter-") and
-            path.endswith((".json", ".jsonl")) and path != RULES)
+            path.endswith((".json", ".jsonl")) and path not in (RULES, PROOF_PATH))
+
+
+def verified_monitor_proof(latest):
+    """Allow only genuine read-back metadata, validated against its own snapshot.
+
+    The newest monitor state may precede publication of its proof. Validate the
+    proof's historical snapshot and independently validate latest state below.
+    Do not reinterpret a previous-cycle proof as proof of the latest portfolio.
+    """
+    proof = json.loads(git("show", latest + ":" + PROOF_PATH).stdout)
+    config = json.loads(git("show", latest + ":.github/hunter-runtime.json").stdout)
+    commit = proof.get("main_readback_head_sha")
+    require(isinstance(commit, str) and len(commit) == 40 and
+            all(c in "0123456789abcdef" for c in commit), "RESEARCH_MONITOR_PROOF_INVALID_COMMIT")
+    def ancestor(sha):
+        return git("merge-base", "--is-ancestor", sha, latest, check=False).returncode == 0
+    require(ancestor(commit), "RESEARCH_MONITOR_PROOF_NOT_AUTHORITATIVE")
+    raw = git("show", commit + ":" + HEALTH_PATH).stdout
+    require(not should_run(config, proof, raw, dt.datetime.now(dt.timezone.utc), ancestor),
+            "RESEARCH_MONITOR_PROOF_INVALID_OR_STALE")
+    validate(snapshot(commit), proof.get("monitor_generation_id"))
 
 
 def rebind(expected, isolated=False):
@@ -36,8 +59,10 @@ def rebind(expected, isolated=False):
     git("fetch", "origin", "main")
     latest = git("rev-parse", "origin/main").stdout.strip()
     changed = git("diff", "--name-only", base, latest).stdout.splitlines()
-    conflicts = [p for p in changed if protected(p) and p not in PATHS]
+    conflicts = [p for p in changed if protected(p) and p not in PATHS and p != PROOF_PATH]
     require(not conflicts, "RESEARCH_INPUT_CHANGED " + " ".join(conflicts))
+    if PROOF_PATH in changed:
+        verified_monitor_proof(latest)
     for raw in (pathlib.Path(SCAN).read_text(), git("show", latest + ":" + SCAN).stdout):
         scan = json.loads(raw)
         require(scan.get("generation_id") == expected and
