@@ -10,6 +10,7 @@ import re
 import signal
 import subprocess
 import time
+import tempfile
 
 JOBS = {
  "discovery": ("hunter-cex-universe.yml", "discovery"),
@@ -126,12 +127,17 @@ def readback(job):
  require(git("merge-base", "--is-ancestor", commit, "origin/main", check=False).returncode == 0,
          "JOB_COMMIT_NOT_AUTHORITATIVE")
  for p, data in expected.items():
-  actual = subprocess.run(["git", "show", "origin/main:" + p], capture_output=True, check=True).stdout
-  require(actual == data, "JOB_MAIN_READBACK_MISMATCH " + p)
+  result = subprocess.run(["git", "show", "origin/main:" + p], capture_output=True)
+  if result.returncode or result.stdout != data:
+   code = "JOB_MAIN_READBACK_SOURCE_FAILED" if result.returncode else "JOB_MAIN_READBACK_MISMATCH"
+   exc = RuntimeError(code + " " + p)
+   exc.failed_path = p
+   exc.stderr_tail = safe_diagnostic(result.stderr.decode("utf-8", errors="replace"))
+   raise exc
  print("HUNTER_JOB_MAIN_READBACK_OK", job, commit, len(paths), flush=True)
 
 
-def publish_health(job, status, started, steps, error=None):
+def publish_health(job, status, started, steps, error=None, error_details=None):
  # A separate file per job avoids lost updates between independent schedulers.
  path = str(RESULTS / ("hunter-runtime-" + job + "-health.json"))
  end = dt.datetime.now(dt.timezone.utc)
@@ -140,6 +146,8 @@ def publish_health(job, status, started, steps, error=None):
         "duration_seconds": round((end - started).total_seconds(), 3),
         "source": "VULTR_SYSTEMD", "steps": steps, "error": error,
         "capital_authority": "NONE_SHADOW_ONLY", "real_trading_enabled": False}
+ if error_details:
+  doc["error_details"] = error_details
  doc["main_readback_verified"] = status == "SUCCESS"
  doc["source_head_sha"] = git("rev-parse", "HEAD").stdout.strip()
  doc["main_readback_head_sha"] = git("rev-parse", "origin/main").stdout.strip()
@@ -190,72 +198,152 @@ def enabled(job):
  except (OSError, ValueError): return False
 
 
+def safe_diagnostic(value, env=None, limit=2048):
+ """Persist bounded diagnostic text, never raw shell arguments or credentials."""
+ text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value or "")
+ for key, value in (os.environ if env is None else env).items():
+  if value and re.search(r"TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTHORIZATION|PRIVATE|API_KEY", key, re.I):
+   for part in [value, *str(value).splitlines()]:
+    if len(part) >= 4: text = text.replace(part, "[REDACTED]")
+ text = re.sub(r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----",
+               "[REDACTED_PRIVATE_KEY]", text, flags=re.S)
+ text = re.sub(r"(?i)(https?://)[^\s/@]+:[^\s/@]+@", r"\1[REDACTED]@", text)
+ text = re.sub(r"(?i)(authorization[\s:=]+(?:bearer|basic)\s+)[^\s'\"]+",
+               r"\1[REDACTED]", text)
+ text = re.sub(r"(?i)([?&](?:token|key|api_key|access_token|secret|password)=)[^&\s'\"]+",
+               r"\1[REDACTED]", text)
+ text = re.sub(r"(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)", "[REDACTED]", text)
+ return text[-limit:]
+
+
+def exception_details(exc):
+ # CalledProcessError.__str__ includes the whole shell command. Report stderr
+ # and exit code instead; command source and argv are never sent to main.
+ if isinstance(exc, subprocess.CalledProcessError):
+  message = "SUBPROCESS_FAILED exit=" + str(exc.returncode)
+  stderr = safe_diagnostic(exc.stderr)
+ else:
+  message = safe_diagnostic(str(exc))
+  stderr = getattr(exc, "stderr_tail", "")
+ result = {"type": type(exc).__name__, "message": message}
+ if getattr(exc, "failed_path", None): result["failed_path"] = exc.failed_path
+ if stderr: result["stderr_tail"] = stderr
+ return result
+
+
 def run_shell(code, env, cwd, timeout=None):
- process = subprocess.Popen(["bash", "-euo", "pipefail", "-c", code],
-                            env=env, cwd=cwd, start_new_session=True)
- try:
-  process.wait(timeout=timeout)
- except subprocess.TimeoutExpired:
-  os.killpg(process.pid, signal.SIGTERM)
-  try: process.wait(timeout=5)
+ # Temporary file avoids pipe deadlock and unbounded in-memory stderr capture.
+ # stdout retains its existing live journal stream.
+ with tempfile.TemporaryFile() as errors:
+  process = subprocess.Popen(["bash", "-euo", "pipefail", "-c", code],
+                             env=env, cwd=cwd, start_new_session=True, stderr=errors)
+  timed_out = False
+  try:
+   process.wait(timeout=timeout)
   except subprocess.TimeoutExpired:
-   os.killpg(process.pid, signal.SIGKILL); process.wait()
-  raise RuntimeError("PORTFOLIO_CRITICAL_PHASE_TIMEOUT")
- return subprocess.CompletedProcess(process.args, process.returncode)
+   timed_out = True
+   os.killpg(process.pid, signal.SIGTERM)
+   try: process.wait(timeout=5)
+   except subprocess.TimeoutExpired:
+    os.killpg(process.pid, signal.SIGKILL); process.wait()
+  errors.seek(0, os.SEEK_END)
+  errors.seek(max(0, errors.tell()-65536))
+  tail = safe_diagnostic(errors.read().decode("utf-8", errors="replace"), env)
+  if tail: print("HUNTER_JOB_STDERR_TAIL", tail, flush=True)
+  if timed_out:
+   exc = RuntimeError("PORTFOLIO_CRITICAL_PHASE_TIMEOUT")
+   exc.stderr_tail = tail
+   raise exc
+  return subprocess.CompletedProcess(process.args, process.returncode, stderr=tail)
 
 
-def run_job(job, preview=False):
+def run_job(job, preview=False, steps=None):
+ # Share this collector with main so failures retain all completed/failed steps.
+ if steps is None: steps = []
  base = git("rev-parse", "HEAD").stdout.strip()
  scan = json.loads((RESULTS / "hunter-cex-universe-run.json").read_text())
  generation = scan.get("generation_id", "")
  env = dict(os.environ)
  env["EXPECTED"] = generation
  env["HUNTER_RESEARCH_ISOLATED_CHECKOUT"] = "1"
- steps = []
  lock = None
  lock_started = None
  try:
   for step in workflow_steps(job):
-   if "uses" in step: continue  # checkout and runtimes are prepared by the launcher.
+   if "uses" in step: continue
    name = step.get("name") or step.get("id", "unnamed")
    if name in ("Refresh latest published baseline", "Refresh latest main baseline"):
-    continue  # launcher already fetched latest main in an isolated checkout.
+    continue
    if preview and ("ersist" in name or name == "Refresh admitted generation baseline"
                    or name.startswith("Bind latest") or name.startswith("Self-heal")):
     print("HUNTER_JOB_PREVIEW_SKIP", job, name, flush=True); continue
-   outputs = output_file(env["GITHUB_OUTPUT"])
-   if not condition(step, outputs): continue
-   if job == "watchdog" and name.startswith("Self-heal"):
-    units = []
-    if "discovery or downstream" in name:
-     if outputs.get("discovery_stale") == "true" or outputs.get("downstream_stale") == "true":
-      units.append("hunter-discovery.service")
-    else: units.append("hunter-position-monitor.service")
-    for unit in units:
-     subprocess.run(["systemctl", "start", "--no-block", unit], check=True)
-    print("HUNTER_SERVER_SELF_HEAL", units, flush=True); continue
-   if job == "research" and name.startswith("Bind latest"):
-    lock = open("/run/lock/hunter-position-monitor.lock", "a")
-    waiting = time.monotonic()
-    while True:
-     try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB); break
-     except BlockingIOError:
-      require(time.monotonic() - waiting < 120, "PORTFOLIO_LOCK_WAIT_TIMEOUT")
-      time.sleep(0.2)
-    lock_started = time.monotonic()
-    print("HUNTER_PORTFOLIO_LOCK_ACQUIRED", round(time.monotonic()-waiting,3), flush=True)
-   local_env = {**env, **{k: resolve(v, env, generation, base) for k,v in step.get("env", {}).items()}}
+   # Include condition/lock/env-resolution failures in the active step record.
    started = time.monotonic()
-   print("HUNTER_JOB_STEP_START", job, name, flush=True)
-   remaining = None if lock_started is None else max(0.01, 90-(time.monotonic()-lock_started))
-   result = run_shell(step["run"], local_env, step.get("working-directory", "."), remaining)
-   row = {"name": name, "seconds": round(time.monotonic()-started,3), "exit": result.returncode}
+   row = {"job": job, "name": name, "status": "RUNNING", "exit": None,
+          "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat()}
    steps.append(row)
-   print("HUNTER_JOB_STEP_END", job, json.dumps(row), flush=True)
-   require(result.returncode == 0 or step.get("continue-on-error") is True, "JOB_STEP_FAILED " + name)
-   env.update(output_file(env["GITHUB_ENV"]))
-   if name == "Capture discovery generation": generation = output_file(env["GITHUB_OUTPUT"])["id"]
-  if not preview: readback(job)
+   try:
+    outputs = output_file(env["GITHUB_OUTPUT"])
+    if not condition(step, outputs):
+     row["status"] = "SKIPPED"
+     continue
+    if job == "watchdog" and name.startswith("Self-heal"):
+     units = []
+     if "discovery or downstream" in name:
+      if outputs.get("discovery_stale") == "true" or outputs.get("downstream_stale") == "true":
+       units.append("hunter-discovery.service")
+     else: units.append("hunter-position-monitor.service")
+     for unit in units:
+      subprocess.run(["systemctl", "start", "--no-block", unit], check=True)
+     print("HUNTER_SERVER_SELF_HEAL", units, flush=True)
+     row.update(status="SUCCESS", exit=0)
+     continue
+    if job == "research" and name.startswith("Bind latest"):
+     lock = open("/run/lock/hunter-position-monitor.lock", "a")
+     waiting = time.monotonic()
+     while True:
+      try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB); break
+      except BlockingIOError:
+       require(time.monotonic() - waiting < 120, "PORTFOLIO_LOCK_WAIT_TIMEOUT")
+       time.sleep(0.2)
+     lock_started = time.monotonic()
+     print("HUNTER_PORTFOLIO_LOCK_ACQUIRED", round(time.monotonic()-waiting,3), flush=True)
+    local_env = {**env, **{k: resolve(v, env, generation, base) for k,v in step.get("env", {}).items()}}
+    print("HUNTER_JOB_STEP_START", job, name, flush=True)
+    remaining = None if lock_started is None else max(0.01, 90-(time.monotonic()-lock_started))
+    result = run_shell(step["run"], local_env, step.get("working-directory", "."), remaining)
+    row["exit"] = result.returncode
+    stderr = getattr(result, "stderr", None)
+    if isinstance(stderr, str) and stderr: row["stderr_tail"] = safe_diagnostic(stderr, local_env)
+    if result.returncode != 0 and step.get("continue-on-error") is True:
+     row["status"] = "CONTINUED_AFTER_ERROR"
+    else:
+     require(result.returncode == 0, "JOB_STEP_FAILED " + name)
+     row["status"] = "SUCCESS"
+    env.update(output_file(env["GITHUB_ENV"]))
+    if name == "Capture discovery generation": generation = output_file(env["GITHUB_OUTPUT"])["id"]
+   except Exception as exc:
+    row["status"] = "FAILURE"
+    row["error_details"] = exception_details(exc)
+    raise
+   finally:
+    row["seconds"] = round(time.monotonic()-started, 3)
+    row["completed_at_utc"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    print("HUNTER_JOB_STEP_END", job, json.dumps(row), flush=True)
+  if not preview:
+   started = time.monotonic()
+   row = {"job": job, "name": "Authoritative main read-back", "status": "RUNNING", "exit": None,
+          "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat()}
+   steps.append(row)
+   try:
+    readback(job)
+    row.update(status="SUCCESS", exit=0)
+   except Exception as exc:
+    row.update(status="FAILURE", error_details=exception_details(exc))
+    raise
+   finally:
+    row["seconds"] = round(time.monotonic()-started,3)
+    row["completed_at_utc"] = dt.datetime.now(dt.timezone.utc).isoformat()
   return steps
  finally:
   if lock is not None: lock.close()
@@ -278,15 +366,18 @@ def main():
  rows = []
  try:
   for job in (["discovery", "research"] if args.job == "pipeline" else [args.job]):
-   rows.extend(run_job(job, args.preview))
+   run_job(job, args.preview, rows)
   if not args.preview: publish_health(args.job, "SUCCESS", started, rows)
   print("HUNTER_JOB_SUCCESS", args.job, "preview=" + str(args.preview), flush=True)
  except Exception as exc:
-  print("HUNTER_JOB_FAILURE", args.job, type(exc).__name__, str(exc)[:200], flush=True)
+  details = exception_details(exc)
+  details["failed_step"] = next((r["name"] for r in reversed(rows) if r.get("status") == "FAILURE"), "INITIALIZATION_OR_HEALTH_PUBLICATION")
+  print("HUNTER_JOB_FAILURE", args.job, json.dumps(details), flush=True)
   if not args.preview:
-   try: publish_health(args.job, "FAILURE", started, rows, type(exc).__name__)
-   except Exception: print("HUNTER_JOB_FAILURE_HEALTH_NOT_PUBLISHED", args.job, flush=True)
-  raise
+   try: publish_health(args.job, "FAILURE", started, rows, type(exc).__name__, details)
+   except Exception as health_exc:
+    print("HUNTER_JOB_FAILURE_HEALTH_NOT_PUBLISHED", args.job, json.dumps(exception_details(health_exc)), flush=True)
+  raise RuntimeError("HUNTER_JOB_FAILED " + details["message"]) from None
 
 
 if __name__ == "__main__": main()
