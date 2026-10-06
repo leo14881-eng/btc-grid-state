@@ -1,13 +1,17 @@
 """Offline stock writer migration acceptance. All remotes are local bare repos."""
 import copy
+from datetime import datetime, timezone
 import hashlib
+import io
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
 import sys
 
 import pytest
+import test_stock_shadow as stock_tests
 
 from research.stock_shadow.server import persist as publisher
 from research.stock_shadow.server import runtime
@@ -19,6 +23,75 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = 'research/results/stock-shadow/'
 CONFIG = '.github/stock-runtime.json'
 PERSIST = ROOT / 'research/stock_shadow/persist_results.sh'
+PROVIDER_KEYS = ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY', 'STOCKFIT_API_KEY', 'FMP_API_KEY')
+
+
+def calendar_fixture():
+    return {'date': '2026-10-06', 'open': '09:30', 'close': '16:00',
+            'verified_at': '2026-10-06T07:26:00+00:00',
+            'source': 'ALPACA_EXCHANGE_CALENDAR'}
+
+
+def test_original_market_hours_gate_with_inherited_keys_reproduces_cache_refresh(tmp_path, monkeypatch):
+    """A passing historical gate test can dirty today's cache before replay starts."""
+    for key in PROVIDER_KEYS:
+        monkeypatch.setenv(key, 'offline-dummy-' + key)
+    monitor = stock_tests._load_position_monitor()
+    cache = tmp_path / 'calendar-session-cache-v1.json'
+    original = calendar_fixture()
+    cache.write_text(json.dumps(original) + '\n')
+    refreshed_at = '2026-10-06T19:48:00+00:00'
+    monkeypatch.setattr(monitor, 'CALENDAR_CACHE', cache)
+    monkeypatch.setattr(monitor, 'now', lambda: refreshed_at)
+    monkeypatch.setattr(stock_tests, '_load_position_monitor', lambda: monitor)
+    requests = []
+
+    def fake_urlopen(request, **kwargs):
+        requests.append(request.full_url)
+        if request.full_url.endswith('start=2026-10-04&end=2026-10-04'):
+            return io.BytesIO(b'[]')
+        assert request.full_url.endswith('start=2026-10-06&end=2026-10-06')
+        return io.BytesIO(b'[{"date":"2026-10-06","open":"09:30","close":"16:00"}]')
+
+    monkeypatch.setattr(monitor.urllib.request, 'urlopen', fake_urlopen)
+    stock_tests.test_position_monitor_market_hours_gate()
+    assert json.loads(cache.read_text()) == {
+        'date': '2026-10-04', 'closed': True, 'verified_at': refreshed_at,
+        'source': 'ALPACA_EXCHANGE_CALENDAR',
+    }
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = cls(2026, 10, 6, 19, 48, tzinfo=timezone.utc)
+            return value.astimezone(tz) if tz is not None else value.replace(tzinfo=None)
+
+    # Replay uses this unchanged resolver; it repairs the cache dirtied by tests.
+    monkeypatch.setattr(stock_tests.ss, 'datetime', FrozenDateTime)
+    monkeypatch.setattr(stock_tests.ss, 'CALENDAR_CACHE', cache)
+    monkeypatch.setattr(stock_tests.ss, 'API_USAGE', copy.deepcopy(stock_tests.ss.API_USAGE))
+    session = stock_tests.ss._alpaca_exchange_session(FrozenDateTime.now(timezone.utc))
+    assert session['date'] == original['date']
+    refreshed = json.loads(cache.read_text())
+    assert {key for key in original if original[key] != refreshed[key]} == {'verified_at'}
+    assert refreshed == {**original, 'verified_at': refreshed_at}
+    assert len(requests) == 2
+
+
+def test_original_market_hours_gate_without_provider_keys_is_offline_and_read_only(tmp_path, monkeypatch):
+    for key in PROVIDER_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monitor = stock_tests._load_position_monitor()
+    cache = tmp_path / 'calendar-session-cache-v1.json'
+    cache.write_text(json.dumps(calendar_fixture()) + '\n')
+    before = cache.read_bytes()
+    monkeypatch.setattr(monitor, 'CALENDAR_CACHE', cache)
+    monkeypatch.setattr(stock_tests, '_load_position_monitor', lambda: monitor)
+    monkeypatch.setattr(monitor.urllib.request, 'urlopen',
+                        lambda *args, **kwargs: pytest.fail('gate test attempted provider access'))
+    stock_tests.test_position_monitor_market_hours_gate()
+    assert cache.read_bytes() == before
+    assert monitor.CALENDAR_USAGE['http_requests'] == 0
 
 
 def test_reporting_audit_detects_post_add_stale_pnl_without_rewriting_book():
@@ -268,12 +341,17 @@ def test_deleted_and_symlink_outputs_are_rejected(repo):
     assert result.returncode != 0 and 'DELETED_OR_SYMLINK_OUTPUT' in result.stderr
 
 
-def test_mode_cannot_publish_another_jobs_output(repo):
-    _, _, work, _ = repo
+@pytest.mark.parametrize('name', ['summary-v1.json', 'calendar-session-cache-v1.json'])
+def test_mode_cannot_publish_another_jobs_output(repo, name):
+    git, remote, work, _ = repo
+    before = git(remote, 'rev-parse', 'main').stdout
     env = prepare_outputs(work, 'replay')
-    write_json(work, RESULTS + 'summary-v1.json', {'unexpected': True})
+    write_json(work, RESULTS + name, {'unexpected': True})
     result = raw_persist(work, 'replay', env)
     assert result.returncode != 0 and 'UNEXPECTED_MUTATION' in result.stderr
+    assert git(remote, 'rev-parse', 'main').stdout == before
+    assert json.loads((work / (RESULTS + name)).read_text()) == {'unexpected': True}
+    assert publisher.OUTPUTS['replay'] == {'replay-v1.json'}
 
 
 def test_failure_health_does_not_publish_partial_ledger(repo):
@@ -540,9 +618,9 @@ def stub_engine(monkeypatch, fail=False):
         if command[0] != sys.executable:
             return original(command, **kwargs)
         commands.append((command, kwargs))
-        if command[1].endswith('stock_shadow_v1.py'):
+        if command[1].endswith(('stock_shadow_v1.py', 'stock_position_monitor.py')):
             env = kwargs['env']
-            write_json(Path.cwd(), RESULTS + 'main-run-health-v1.json', {
+            write_json(Path.cwd(), RESULTS + env['STOCK_SHADOW_JOB'] + '-run-health-v1.json', {
                 'source_commit': env['STOCK_SHADOW_SOURCE_COMMIT'],
                 'run_id': env['STOCK_SHADOW_RUN_ID'],
                 'status': 'FAILED' if fail else 'SUCCESS',
@@ -555,6 +633,233 @@ def stub_engine(monkeypatch, fail=False):
 
     monkeypatch.setattr(runner.subprocess, 'run', run)
     return commands
+
+
+@pytest.mark.parametrize('job', ['main', 'monitor', 'replay'])
+@pytest.mark.parametrize('preview', [False, True])
+def test_server_tests_strip_provider_keys_but_engines_keep_them(repo, monkeypatch, tmp_path, job, preview):
+    git, _, work, writer = repo
+    configure_server(git, work, writer)
+    monkeypatch.chdir(work)
+    for key in PROVIDER_KEYS:
+        monkeypatch.setenv(key, 'offline-dummy-' + key)
+    monkeypatch.setenv('STOCK_TEST_HARMLESS_SETTING', 'preserved')
+    commands = stub_engine(monkeypatch)
+    publications = []
+
+    def persist(mode, a):
+        publications.append(mode)
+        return {'verified': True, 'generation': a['generation'], 'commit': 'c' * 40}
+
+    monkeypatch.setattr(runner, 'persist', persist)
+    result = runner.run(job, preview, tmp_path / 'runtime')
+    assert commands[0][0][1:3] == ['-m', 'pytest']
+    assert len(commands) == 1 + len(runner.COMMANDS[job])
+    test_env = commands[0][1]['env']
+    assert all(key not in test_env for key in PROVIDER_KEYS)
+    for command, kwargs in commands[1:]:
+        assert command[1] in {script for script, _ in runner.COMMANDS[job]}
+        assert kwargs['env'] is not test_env
+        assert all(kwargs['env'][key] == 'offline-dummy-' + key for key in PROVIDER_KEYS)
+    for _, kwargs in commands:
+        assert kwargs['env']['STOCK_TEST_HARMLESS_SETTING'] == 'preserved'
+        assert kwargs['env']['STOCK_SHADOW_GENERATION'] == result['generation']
+    assert all(os.environ[key] == 'offline-dummy-' + key for key in PROVIDER_KEYS)
+    assert publications == ([] if preview else [job])
+
+
+@pytest.mark.parametrize('job', ['main', 'monitor', 'replay'])
+@pytest.mark.parametrize('preview', [False, True])
+@pytest.mark.parametrize('inject_failure_health', [False, True])
+def test_server_test_mutation_stops_before_engines_or_publication(
+        repo, monkeypatch, tmp_path, job, preview, inject_failure_health):
+    git, remote, work, writer = repo
+    configure_server(git, work, writer)
+    cache_path = RESULTS + 'calendar-session-cache-v1.json'
+    original_cache = calendar_fixture()
+    set_base(git, work, writer, {cache_path: original_cache})
+    source = git(remote, 'rev-parse', 'main').stdout
+    monkeypatch.chdir(work)
+    for key in PROVIDER_KEYS:
+        monkeypatch.setenv(key, 'offline-dummy-' + key)
+    original_run = subprocess.run
+    commands = []
+    changed_cache = {**original_cache, 'verified_at': '2026-10-06T19:48:00+00:00'}
+
+    def mutate_during_tests(command, **kwargs):
+        if command[0] != sys.executable:
+            return original_run(command, **kwargs)
+        commands.append(command)
+        assert command[1:3] == ['-m', 'pytest'], 'engine executed after tests dirtied checkout'
+        write_json(work, cache_path, changed_cache)
+        if inject_failure_health:
+            # A test-created health document must never masquerade as engine output.
+            env = kwargs['env']
+            write_json(work, RESULTS + job + '-run-health-v1.json', {
+                'status': 'FAILED', 'run_id': env['STOCK_SHADOW_RUN_ID'],
+                'source_commit': env['STOCK_SHADOW_SOURCE_COMMIT'],
+                'simulation_only': True, 'real_orders': False,
+            })
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', mutate_during_tests)
+    monkeypatch.setattr(runner, 'persist',
+                        lambda *args: pytest.fail('publication attempted after test mutation'))
+    with pytest.raises(RuntimeError, match='STOCK_TESTS_MUTATED_CHECKOUT'):
+        runner.run(job, preview, tmp_path / 'runtime')
+    assert len(commands) == 1
+    assert git(remote, 'rev-parse', 'main').stdout == source
+    assert git(work, 'rev-parse', 'HEAD').stdout == source
+    assert json.loads((work / cache_path).read_text()) == changed_cache
+    assert cache_path in publisher.changed_paths()
+    record = json.loads(next((tmp_path / 'runtime').glob('run-*.json')).read_text())
+    assert record['status'] == 'FAILED' and record['verified'] is False
+    assert record['error'] == 'STOCK_TESTS_MUTATED_CHECKOUT'
+    assert 'failure_health_publication' not in record
+    assert 'failure_health_error' not in record
+    if preview:
+        retained = Path(record['preview_outputs']) / 'stock-shadow/calendar-session-cache-v1.json'
+        assert json.loads(retained.read_text()) == changed_cache
+
+
+def test_server_preview_never_reads_or_archives_mutated_canonical_root_symlink(
+        repo, monkeypatch, tmp_path):
+    git, remote, work, _ = repo
+    source = git(remote, 'rev-parse', 'main').stdout
+    canonical_root = work / RESULTS
+    original_root = tmp_path / 'preserved-original-stock-output'
+    external_target = tmp_path / 'external-target'
+    external_target.mkdir()
+    (external_target / 'sentinel.txt').write_text('must not be read or archived\n')
+    monkeypatch.chdir(work)
+    original_run = subprocess.run
+    original_open = Path.open
+    original_rglob = Path.rglob
+    commands = []
+
+    def guarded_open(path, *args, **kwargs):
+        assert external_target not in path.resolve().parents, 'symlink target file was opened'
+        return original_open(path, *args, **kwargs)
+
+    def guarded_rglob(path, *args, **kwargs):
+        assert path.resolve() != external_target, 'symlink target directory was traversed'
+        return original_rglob(path, *args, **kwargs)
+
+    def mutate_during_tests(command, **kwargs):
+        if command[0] != sys.executable:
+            return original_run(command, **kwargs)
+        commands.append(command)
+        assert command[1:3] == ['-m', 'pytest'], 'engine executed after root symlink mutation'
+        canonical_root.rename(original_root)
+        canonical_root.symlink_to(external_target, target_is_directory=True)
+        assert runner.canonical_inventory() == {RESULTS: ('symlink', str(external_target))}
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(Path, 'open', guarded_open)
+    monkeypatch.setattr(Path, 'rglob', guarded_rglob)
+    monkeypatch.setattr(runner.subprocess, 'run', mutate_during_tests)
+    monkeypatch.setattr(runner.shutil, 'copytree',
+                        lambda *args, **kwargs: pytest.fail('symlinked canonical root was archived'))
+    monkeypatch.setattr(runner, 'persist', lambda *args: pytest.fail('root mutation was published'))
+    with pytest.raises(RuntimeError, match='STOCK_TESTS_MUTATED_CHECKOUT'):
+        runner.run('replay', True, tmp_path / 'runtime')
+    assert len(commands) == 1
+    assert git(remote, 'rev-parse', 'main').stdout == source
+    assert canonical_root.is_symlink() and canonical_root.readlink() == external_target
+    assert (original_root / 'portfolio-v1.json').is_file()
+    record = json.loads(next((tmp_path / 'runtime').glob('run-*.json')).read_text())
+    assert record['status'] == 'FAILED' and record['verified'] is False
+    assert record['error'] == 'STOCK_TESTS_MUTATED_CHECKOUT'
+    assert record['preview_archive_error'] == 'CANONICAL_ROOT_IS_SYMLINK'
+    assert 'preview_outputs' not in record
+    assert not list((tmp_path / 'runtime').rglob('sentinel.txt'))
+
+
+@pytest.mark.parametrize('mutation', ['create', 'modify', 'delete', 'symlink'])
+def test_server_test_boundary_detects_git_ignored_stock_mutations(
+        repo, monkeypatch, tmp_path, mutation):
+    git, remote, work, _ = repo
+    source = git(remote, 'rev-parse', 'main').stdout
+    ignored = work / (RESULTS + 'ignored-test-cache.json')
+    (work / '.git/info/exclude').write_text(RESULTS + 'ignored-test-cache.json\n')
+    if mutation in ('modify', 'delete'):
+        ignored.write_text('{"fixture":"before"}\n')
+    monkeypatch.chdir(work)
+    assert publisher.changed_paths() == []
+    original_run = subprocess.run
+    commands = []
+
+    def mutate_during_tests(command, **kwargs):
+        if command[0] != sys.executable:
+            return original_run(command, **kwargs)
+        commands.append(command)
+        assert command[1:3] == ['-m', 'pytest'], 'engine executed after ignored test mutation'
+        if mutation == 'delete':
+            ignored.unlink()
+        elif mutation == 'symlink':
+            ignored.symlink_to(work / 'unrelated.txt')
+        else:
+            ignored.write_text('{"fixture":"after"}\n')
+        assert publisher.changed_paths() == []
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', mutate_during_tests)
+    monkeypatch.setattr(runner, 'persist', lambda *args: pytest.fail('test mutation was published'))
+    with pytest.raises(RuntimeError, match='STOCK_TESTS_MUTATED_CHECKOUT'):
+        runner.run('replay', True, tmp_path / 'runtime')
+    assert len(commands) == 1
+    assert git(remote, 'rev-parse', 'main').stdout == source
+    if mutation == 'delete':
+        assert not ignored.exists()
+    elif mutation == 'symlink':
+        assert ignored.is_symlink() and ignored.readlink() == work / 'unrelated.txt'
+    else:
+        assert json.loads(ignored.read_text()) == {'fixture': 'after'}
+    record = json.loads(next((tmp_path / 'runtime').glob('run-*.json')).read_text())
+    assert record['status'] == 'FAILED' and record['verified'] is False
+    if mutation == 'symlink':
+        retained = Path(record['preview_outputs']) / 'stock-shadow/ignored-test-cache.json'
+        assert retained.is_symlink() and retained.readlink() == work / 'unrelated.txt'
+
+
+@pytest.mark.parametrize('preview', [False, True])
+def test_replay_engine_timestamp_only_cache_mutation_still_fails_closed(
+        repo, monkeypatch, tmp_path, preview):
+    git, remote, work, writer = repo
+    configure_server(git, work, writer)
+    cache_path = RESULTS + 'calendar-session-cache-v1.json'
+    original_cache = calendar_fixture()
+    set_base(git, work, writer, {cache_path: original_cache})
+    source = git(remote, 'rev-parse', 'main').stdout
+    monkeypatch.chdir(work)
+    monkeypatch.setenv('APCA_API_KEY_ID', 'offline-dummy-key')
+    monkeypatch.setenv('APCA_API_SECRET_KEY', 'offline-dummy-secret')
+    original_run = subprocess.run
+    commands = []
+    changed_cache = {**original_cache, 'verified_at': '2026-10-06T19:48:00+00:00'}
+
+    def mutate_during_replay(command, **kwargs):
+        if command[0] != sys.executable:
+            return original_run(command, **kwargs)
+        commands.append(command)
+        if command[1:3] != ['-m', 'pytest']:
+            assert command[1] == 'research/stock_shadow/stock_replay.py'
+            prepare_outputs(work, 'replay', env=kwargs['env'])
+            write_json(work, cache_path, changed_cache)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', mutate_during_replay)
+    monkeypatch.setattr(runner, 'persist', lambda *args: pytest.fail('replay cache mutation was published'))
+    with pytest.raises(RuntimeError, match='UNEXPECTED_MUTATION'):
+        runner.run('replay', preview, tmp_path / 'runtime')
+    assert len(commands) == 2
+    assert git(remote, 'rev-parse', 'main').stdout == source
+    assert json.loads((work / cache_path).read_text()) == changed_cache
+    assert publisher.changed_paths() == sorted([cache_path, RESULTS + 'replay-v1.json'])
+    assert publisher.OUTPUTS['replay'] == {'replay-v1.json'}
+    record = json.loads(next((tmp_path / 'runtime').glob('run-*.json')).read_text())
+    assert record['status'] == 'FAILED' and record['verified'] is False
+    assert record['error'] == 'UNEXPECTED_MUTATION'
 
 
 def test_server_runner_refuses_publish_when_github_owns_repo(repo, monkeypatch, tmp_path):

@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime, timezone
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -13,6 +14,9 @@ import uuid
 from .persist import ROOT, changed_paths, persist, snapshot, validate_outputs, PublicationUnverified
 from .runtime import JOBS, admission, check_fence, environment, git, require
 
+PROVIDER_ENV_KEYS = ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY',
+                     'STOCKFIT_API_KEY', 'FMP_API_KEY')
+
 COMMANDS = {
     'main': [('research/stock_shadow/fundamentals_observer.py', 480),
              ('research/stock_shadow/stock_shadow_v1.py', 900),
@@ -21,6 +25,26 @@ COMMANDS = {
                 ('research/stock_shadow/stock_review.py', 60)],
     'replay': [('research/stock_shadow/stock_replay.py', 1200)],
 }
+
+
+def canonical_inventory():
+    """Detect test changes to all canonical files, even Git-ignored additions."""
+    inventory = {}
+    base = Path(ROOT)
+    if base.is_symlink():
+        return {ROOT: ('symlink', os.readlink(base))}
+    for path in sorted(base.rglob('*')):
+        if path.is_symlink():
+            inventory[str(path)] = ('symlink', os.readlink(path))
+        elif path.is_file():
+            inventory[str(path)] = ('file', path.stat().st_mode,
+                                    hashlib.sha256(path.read_bytes()).hexdigest())
+    return inventory
+
+
+def test_environment(env):
+    """Unit tests must never inherit the live data-provider credentials."""
+    return {key: value for key, value in env.items() if key not in PROVIDER_ENV_KEYS}
 
 
 def run(job, preview, runtime_dir):
@@ -64,12 +88,17 @@ def run(job, preview, runtime_dir):
 
     save()
     deadline = time.monotonic() + (360 if job == 'monitor' else 1200)
+    engine_started = False
     try:
+        canonical_before_tests = canonical_inventory()
         subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_stock_shadow.py',
-                        'tests/test_stock_server_migration.py'], env=env, check=True, timeout=180)
+                        'tests/test_stock_server_migration.py'], env=test_environment(env), check=True, timeout=180)
+        require(not changed_paths() and canonical_inventory() == canonical_before_tests,
+                'STOCK_TESTS_MUTATED_CHECKOUT')
         for script, timeout in COMMANDS[job]:
             remaining = deadline - time.monotonic()
             require(remaining > 0, 'STOCK_RUN_DEADLINE_EXCEEDED')
+            engine_started = True
             subprocess.run([sys.executable, script], env=env, check=True, timeout=min(timeout, remaining))
         record['reporting_audit'] = validate_outputs(snapshot(job, a), job, a)
         if preview:
@@ -84,7 +113,7 @@ def run(job, preview, runtime_dir):
         # Preserve successful old book on any stage failure. Only a matching
         # engine-generated FAILED health document can take this narrow path.
         health = Path(ROOT + job + '-run-health-v1.json')
-        if not preview and job in ('main', 'monitor') and health.exists():
+        if engine_started and not preview and job in ('main', 'monitor') and health.exists():
             h = json.loads(health.read_text())
             if h.get('status') == 'FAILED' and h.get('run_id') == a['run_id']:
                 try:
@@ -96,8 +125,11 @@ def run(job, preview, runtime_dir):
         if preview:
             destination = runtime_dir / 'previews' / a['generation']
             destination.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(ROOT, destination / 'stock-shadow', dirs_exist_ok=True)
-            record['preview_outputs'] = str(destination)
+            if Path(ROOT).is_symlink():
+                record['preview_archive_error'] = 'CANONICAL_ROOT_IS_SYMLINK'
+            else:
+                shutil.copytree(ROOT, destination / 'stock-shadow', dirs_exist_ok=True, symlinks=True)
+                record['preview_outputs'] = str(destination)
         record['finished_at'] = datetime.now(timezone.utc).isoformat()
         save()
     print(json.dumps(record, sort_keys=True))
