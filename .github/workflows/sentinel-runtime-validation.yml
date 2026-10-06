@@ -4,7 +4,7 @@ on:
     paths:
       - 'scripts/sentinel_*'
       - 'sentinel-runtime.json'
-      - 'tests/test_sentinel_runtime.py'
+      - 'tests/test_sentinel*.py'
       - 'deploy/systemd/sentinel-*'
       - '.github/workflows/sentinel-runtime-validation.yml'
   workflow_dispatch:
@@ -18,5 +18,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m unittest tests.test_sentinel_runtime
+      - run: python -m unittest discover -s tests -p 'test_sentinel*.py'
       - run: bash -n scripts/sentinel_scheduled_job.sh
