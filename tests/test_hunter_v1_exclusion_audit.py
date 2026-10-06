@@ -17,7 +17,9 @@ class V1ExclusionAuditTests(unittest.TestCase):
   data={'hunter-early-signals.json':{'policy_version':engine.VERSION,'scan_generation_id':'G','as_of_utc':'2026-10-06T00:00:00Z','early':rows,'all_signals':rows},
         'hunter-cex-universe-run.json':{'generation_id':'G','venue_status':{'binance':{'excluded_bstocks':['STOCK']}}},
         'hunter-tactical-capital-review.json':{'scan_generation_id':'G','candidates':[]},
-        'hunter-shadow-portfolio.json':{'open_positions':[{'asset':'HELD'}]}}
+        'hunter-shadow-portfolio.json':{'schema':'hunter_shadow_v2_portfolio_v2',
+            'mode':'SIMULATION_ONLY_NO_REAL_ORDERS','open_positions':[{'asset':'HELD'}],
+            'closed_positions':[],'events':[],'decisions':[]}}
   for name,d in data.items():(root/name).write_text(json.dumps(d))
  def test_exclusion_does_not_admit_candidate_or_drop_existing_management(self):
   with tempfile.TemporaryDirectory() as d:
