@@ -1,0 +1,49 @@
+name: Stock Scheduler Dispatch Permission Verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify stock token and read coin backup metadata
+        env:
+          STOCK_TOKEN: ${{ secrets.STOCK_SCHEDULER_GITHUB_TOKEN }}
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python - <<'PY'
+          import json, os, urllib.request, urllib.error, datetime
+          repo='https://api.github.com/repos/leo14881-eng/btc-grid-state/'
+          def call(url, token, payload=None):
+              headers={'Authorization':'Bearer '+token,'User-Agent':'stock-shadow-dispatch-verification','Accept':'application/vnd.github+json'}
+              if payload is not None: headers['Content-Type']='application/json'
+              req=urllib.request.Request(url,headers=headers,data=json.dumps(payload).encode() if payload is not None else None)
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      raw=r.read()
+                      return r.status,json.loads(raw) if raw else None
+              except urllib.error.HTTPError as e:
+                  return e.code,None
+          cf='https://api.cloudflare.com/client/v4/accounts/'+os.environ['CF_ACCOUNT']+'/'
+          for suffix in ('settings','schedules','deployments'):
+              code,data=call(cf+'workers/scripts/hunter-position-monitor-heartbeat-v1/'+suffix,os.environ['CF_TOKEN'])
+              print('COIN_BACKUP_READ_'+suffix.upper()+'_HTTP_'+str(code),flush=True)
+              if code==200 and data and data.get('success'):
+                  result=data['result']
+                  if suffix=='settings':
+                      safe={'binding_names_and_types':[{'name':b.get('name'),'type':b.get('type')} for b in result.get('bindings',[])]}
+                  elif suffix=='schedules': safe=result
+                  else: safe={'deployments':[{k:d.get(k) for k in ('id','created_on','versions')} for d in result.get('deployments',[])]}
+                  print('COIN_BACKUP_METADATA='+json.dumps(safe),flush=True)
+          code,wf=call(repo+'actions/workflows/stock-shadow-position-monitor.yml',os.environ['STOCK_TOKEN'])
+          if code!=200 or wf.get('state')!='active':
+              raise SystemExit('STOCK_WORKFLOW_READ_OR_ACTIVE_CHECK_FAILED_HTTP_'+str(code))
+          print('STOCK_PERMISSION_PROBE_AT='+datetime.datetime.now(datetime.timezone.utc).isoformat(),flush=True)
+          code,_=call(repo+'actions/workflows/stock-shadow-position-monitor.yml/dispatches',os.environ['STOCK_TOKEN'],{'ref':'main'})
+          if code!=204: raise SystemExit('STOCK_DISPATCH_PERMISSION_FAILED_HTTP_'+str(code))
+          print('STOCK_DISPATCH_ACCEPTED_HTTP_204_MANUAL_PERMISSION_PROBE_NOT_AUTOMATIC_CRON',flush=True)
+          PY
