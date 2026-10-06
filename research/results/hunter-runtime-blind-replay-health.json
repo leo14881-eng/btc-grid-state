@@ -1,54 +1,54 @@
 {
   "capital_authority": "NONE_SHADOW_ONLY",
-  "completed_at_utc": "2026-10-06T22:31:52.563115+00:00",
-  "duration_seconds": 45.934,
-  "error": null,
+  "completed_at_utc": "2026-10-06T23:31:46.573650+00:00",
+  "duration_seconds": 40.226,
+  "error": "RuntimeError",
+  "error_details": {
+    "failed_step": "Persist replay outputs from clean latest main",
+    "message": "JOB_STEP_FAILED Persist replay outputs from clean latest main",
+    "type": "RuntimeError"
+  },
   "job": "blind-replay",
-  "main_readback_head_sha": "34296fe144cdfe567d6a4bf359a33b96b4200820",
-  "main_readback_verified": true,
+  "main_readback_head_sha": "d2af03785c70e81a8344968bb7c3e2431660a06a",
+  "main_readback_verified": false,
   "real_trading_enabled": false,
   "schema": "hunter_runtime_job_health_v1",
   "source": "VULTR_SYSTEMD",
-  "source_head_sha": "a7830d76d6cf325625fdc608de13d72f2cf72df1",
-  "started_at_utc": "2026-10-06T22:31:06.629095+00:00",
-  "status": "SUCCESS",
+  "source_head_sha": "16b4081d8a785f8f8c8d7cf72e2fbc2c5b1444c7",
+  "started_at_utc": "2026-10-06T23:31:06.347269+00:00",
+  "status": "FAILURE",
   "steps": [
     {
-      "completed_at_utc": "2026-10-06T22:31:06.696850+00:00",
+      "completed_at_utc": "2026-10-06T23:31:06.420161+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Normalize Binance archive timestamps",
-      "seconds": 0.053,
-      "started_at_utc": "2026-10-06T22:31:06.644081+00:00",
+      "seconds": 0.055,
+      "started_at_utc": "2026-10-06T23:31:06.365240+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-06T22:31:44.835262+00:00",
+      "completed_at_utc": "2026-10-06T23:31:44.907836+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Run blind replay",
-      "seconds": 38.138,
-      "started_at_utc": "2026-10-06T22:31:06.696945+00:00",
+      "seconds": 38.488,
+      "started_at_utc": "2026-10-06T23:31:06.420247+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-06T22:31:51.171700+00:00",
-      "exit": 0,
+      "completed_at_utc": "2026-10-06T23:31:46.573326+00:00",
+      "error_details": {
+        "message": "JOB_STEP_FAILED Persist replay outputs from clean latest main",
+        "type": "RuntimeError"
+      },
+      "exit": 1,
       "job": "blind-replay",
       "name": "Persist replay outputs from clean latest main",
-      "seconds": 6.336,
-      "started_at_utc": "2026-10-06T22:31:44.835369+00:00",
-      "status": "SUCCESS",
-      "stderr_tail": "Note: switching to 'a7830d76d6cf325625fdc608de13d72f2cf72df1'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\n"
-    },
-    {
-      "completed_at_utc": "2026-10-06T22:31:52.561936+00:00",
-      "exit": 0,
-      "job": "blind-replay",
-      "name": "Authoritative main read-back",
-      "seconds": 1.39,
-      "started_at_utc": "2026-10-06T22:31:51.171776+00:00",
-      "status": "SUCCESS"
+      "seconds": 1.665,
+      "started_at_utc": "2026-10-06T23:31:44.907928+00:00",
+      "status": "FAILURE",
+      "stderr_tail": "chedules-validation.yml deploy/systemd/hunter-market-stream.service research/hunter_fast_watch.py scripts/hunter_job_runner.py scripts/hunter_market_stream.py scripts/hunter_scheduled_job.sh tests/test_hunter_fast_watch.py\nError in sys.excepthook:\nTraceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/apport_python_hook.py\", line 228, in partial_apport_excepthook\n    return apport_excepthook(binary, exc_type, exc_obj, exc_tb)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/apport_python_hook.py\", line 114, in apport_excepthook\n    report[\"ExecutableTimestamp\"] = str(int(os.stat(binary).st_mtime))\n                                            ^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/opt/shadow-runner/job-generation.oluQpz/repo/-m'\n\nOriginal exception was:\nTraceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 106, in <module>\n    main()\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 102, in main\n    persist(args.job, git('rev-parse', 'HEAD').stdout.strip())\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 53, in persist\n    cas(base, job)\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 37, in cas\n    require(not conflicts, 'AUX_CAS_REJECTED_STALE_WRITER ' + ' '.join(conflicts))\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_monitor_persist.py\", line 31, in require\n    raise RuntimeError(message)\nRuntimeError: AUX_CAS_REJECTED_STALE_WRITER .github/workflows/hunter-server-schedules-validation.yml deploy/systemd/hunter-market-stream.service research/hunter_fast_watch.py scripts/hunter_job_runner.py scripts/hunter_market_stream.py scripts/hunter_scheduled_job.sh tests/test_hunter_fast_watch.py\n"
     }
   ]
 }
