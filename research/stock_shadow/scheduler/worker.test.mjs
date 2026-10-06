@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { age, marketStatus, monitorAge, decide, tick, GitHub, MAIN, MONITOR, StockScheduler } from './worker.mjs';
+import worker, { age, marketStatus, monitorAge, decide, tick, GitHub, MAIN, MONITOR, StockScheduler, scheduledProvenance } from './worker.mjs';
 
 const ms = Date.parse('2026-10-05T18:00:00Z');
 const minutes = n => n * 60_000;
@@ -160,4 +160,41 @@ test('scheduler heartbeat expiration is visible even if last run had been health
   const storage = new Storage(); await storage.put('health', { action: 'FRESH', checked_at: new Date(Date.now() - minutes(15)).toISOString() });
   const obj = new StockScheduler({ storage }, {});
   assert.equal((await obj.fetch(new Request('https://internal/health'))).status, 503);
+});
+
+
+test('GitHub client never invokes runtime fetch with client as receiver', async () => {
+  const fetcher = function () {
+    assert.equal(this, undefined);
+    return Promise.resolve(new Response(null, { status: 204 }));
+  };
+  await new GitHub('test-only', fetcher).request('commits/main');
+});
+test('scheduled provenance is bounded and direct calls do not manufacture cron evidence', () => {
+  const cron = '3,8,13,18,23,28,33,38,43,48,53,58 * * * *';
+  const input = { trigger_source: 'scheduled', cron, scheduledTime: ms };
+  assert.deepEqual(scheduledProvenance(input), { trigger_source: 'scheduled', cron, scheduled_at: new Date(ms).toISOString() });
+  for (const invalid of [null, {}, {...input, trigger_source: 'manual'}, {...input, cron: 'secret'},
+    {...input, scheduledTime: Infinity}, {...input, scheduledTime: 9e15}])
+    assert.deepEqual(scheduledProvenance(invalid), { trigger_source: 'diagnostic' });
+});
+test('scheduled event passes original trigger metadata only through private DO route', async () => {
+  const cron = '3,8,13,18,23,28,33,38,43,48,53,58 * * * *';
+  let promise, body;
+  const env = { STOCK_SCHEDULER: { idFromName: n => n, get: n => ({
+    async fetch(url, options) { assert.equal(n, 'stock-shadow-main');
+      assert.equal(url, 'https://scheduler.internal/tick');
+      body = JSON.parse(options.body); return Response.json({ action: 'FRESH' }); }
+  }) } };
+  await worker.scheduled({ cron, scheduledTime: ms }, env, { waitUntil: p => { promise = p; } });
+  await promise;
+  assert.deepEqual(body, { trigger_source: 'scheduled', cron, scheduledTime: ms });
+});
+test('tick retains scheduled provenance for successful and failed decisions', async () => {
+  const provenance = { trigger_source: 'scheduled', scheduled_at: new Date(ms).toISOString(), cron: 'test' };
+  const storage = new Storage(), gh = github(snapshot());
+  assert.equal((await tick(storage, gh, ms, provenance)).trigger_source, 'scheduled');
+  gh.snapshot = async () => { throw new Error('GITHUB_HTTP_429'); };
+  const result = await tick(storage, gh, ms + minutes(5), provenance);
+  assert.equal(result.action, 'ERROR'); assert.equal(result.scheduled_at, provenance.scheduled_at);
 });
