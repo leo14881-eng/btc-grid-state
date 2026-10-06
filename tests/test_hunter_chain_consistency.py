@@ -1,8 +1,22 @@
-import copy,datetime as dt,json,pathlib,tempfile,unittest
+import copy,datetime as dt,json,pathlib,tempfile,unittest,urllib.parse
 from unittest.mock import patch
 from research import hunter_policy as policy,hunter_shadow_trader_v2 as eng,hunter_tactical_capital_review as review,hunter_position_monitor as monitor,hunter_early_signals as early
 NOW=dt.datetime(2026,10,5,tzinfo=dt.timezone.utc)
 class ChainConsistencyTests(unittest.TestCase):
+ def test_monitor_encodes_unicode_pair_and_retains_actual_book(self):
+  states=[{'open_positions':[{'asset':'牛来'}]}]
+  raw={'lastUpdateId':123,'bids':[['99','1000']],'asks':[['101','1000']]}
+  def fetch(url):
+   self.assertTrue(url.isascii())
+   self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlparse(url).query),{'symbol':['牛来USDT'],'limit':['100']})
+   return raw
+  signal={'score':12,'independent_signal_count':3}
+  with patch.object(monitor,'load',return_value={}),patch.object(monitor.signals,'rolling',return_value={}),patch.object(monitor.signals,'micro',return_value={}),patch.object(monitor.signals,'score_row',return_value=signal),patch.object(monitor.books,'live_fetch',side_effect=fetch):
+   _,liq,meta=monitor.refresh_management_evidence(states,{}, {'candidates':[]},{},NOW)
+  self.assertEqual(meta['failures'],{})
+  self.assertEqual(meta['observed_raw_books']['牛来']['symbol'],'牛来USDT')
+  self.assertEqual(liq['snapshots']['牛来']['raw_book_evidence']['bids'],raw['bids'])
+
  def weak(self):
   return {'score':4,'independent':1,'btc_rel_1h':-1,'btc_rel_4h':-1,'rel_accel':-2,'blockers':[]}
  def test_same_evidence_never_counts_three_times(self):
