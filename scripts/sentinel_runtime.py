@@ -74,7 +74,7 @@ def watchdog(previous, valid, now):
     failures = 0 if valid else previous.get('watchdog', {}).get('consecutive_invalid_scans', 0) + 1
     last = now if valid else instant(previous.get('last_successful_scan_at'))
     degraded = not last or (now - last).total_seconds() > 7200 or failures >= 2
-    old = previous.get('watchdog', {}).get('state', 'SENTINEL_DEGRADED')
+    old = previous.get('watchdog', {}).get('state')
     state = 'SENTINEL_DEGRADED' if degraded else 'HEALTHY'
     transition = ('SENTINEL_DEGRADED' if degraded else 'SENTINEL_RECOVERED') if state != old else None
     return {'state': state, 'consecutive_invalid_scans': failures, 'transition': transition, 'checked_at': stamp(now)}

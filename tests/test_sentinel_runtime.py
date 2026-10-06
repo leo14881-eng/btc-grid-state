@@ -37,6 +37,8 @@ class RuntimeTest(unittest.TestCase):
             merge_owned({'last_run_at':stamp(self.now)}, {'last_run_at':stamp(self.now-dt.timedelta(seconds=1))})
         with self.assertRaisesRegex(ValueError,'NON_OWNED'):
             merge_owned({}, {'portfolio_ref':'erase'})
+    def test_first_degraded_is_not_silently_suppressed(self):
+        self.assertEqual(watchdog(self.old,False,self.now)['transition'],'SENTINEL_DEGRADED')
     def test_watchdog_deduplicates_and_recovers(self):
         previous = dict(self.old, watchdog={'state':'HEALTHY','consecutive_invalid_scans':0})
         failed = watchdog(previous,False,self.now)
