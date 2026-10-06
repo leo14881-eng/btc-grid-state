@@ -25,7 +25,7 @@ def liquidation(pos, book, now, fee_bps=10):
    if remain<=1e-10:break
   if remain>1e-10:raise ValueError('FULL_QUANTITY_DEPTH_UNKNOWN')
   net=proceeds*(1-fee_bps/10000)-n
-  return {'status':'SHADOW_RECEIPT_ESTIMATE','net_pnl_usdt':net,'vwap':proceeds/q,'quantity':q,'capital':n,'fee_bps':fee_bps,'fetched_at':book['fetched_at'],'source_timestamp':book.get('source_timestamp'),'historical_execution_verified':False}
+  return {'status':'SHADOW_RECEIPT_ESTIMATE','net_pnl_usdt':net,'vwap':proceeds/q,'quantity':q,'capital':n,'fee_bps':fee_bps,'book_mid':(bids[0][0]+asks[0][0])/2,'fetched_at':book['fetched_at'],'source_timestamp':book.get('source_timestamp'),'historical_execution_verified':False}
  except (KeyError,TypeError,ValueError,ZeroDivisionError,OverflowError) as ex:
   return {'status':'UNKNOWN','reason':str(ex),'net_pnl_usdt':None,'historical_execution_verified':False}
 
@@ -90,14 +90,50 @@ def recovery(pos, e, now, pnl, generation, health):
 
 def mtm(state, now, net_function, fee_bps):
  rows=state.get('open_positions',[]);closed=state.get('closed_positions',[])+state.get('closed_trade_archive',[])
- realized=sum(float(p.get('net_pnl_usdt',0)) for p in closed);marks=[];unknown=[];loss=0;costs=[]
+ realized=sum(float(p.get('net_pnl_usdt',0)) for p in closed)
+ marks=[];unknown=[];loss=0;costs=[];exits=[];exit_unknown=[];cost_unknown=[]
  for p in rows:
-  at=p.get('last_marked_at_utc');price=p.get('last_price')
-  if not price or not fresh(at,now):unknown.append(p.get('asset'));continue
-  q=sum(t['notional_usdt']/(t['price']*(1+(t.get('buy_slippage_bps',0)+fee_bps)/10000)) for t in p['tranches'])
-  gross=q*price-sum(t['notional_usdt'] for t in p['tranches']);marks.append(gross)
-  if gross<0:loss+=sum(t['notional_usdt'] for t in p['tranches'])
+  asset=p.get('asset')
+  try:
+   capital=sum(float(t['notional_usdt']) for t in p['tranches'])
+   q=sum(float(t['notional_usdt'])/(float(t['price'])*(1+(float(t.get('buy_slippage_bps',0))+fee_bps)/10000)) for t in p['tranches'])
+   if not math.isfinite(capital*q) or capital<=0 or q<=0:raise ValueError('POSITION_QUANTITY_UNKNOWN')
+  except (KeyError,TypeError,ValueError,ZeroDivisionError,OverflowError):
+   unknown.append(asset);exit_unknown.append(asset);cost_unknown.append(asset);continue
+  try:
+   price=float(p.get('last_price'))
+   if not math.isfinite(price) or price<=0 or not fresh(p.get('last_marked_at_utc'),now):raise ValueError('MARK_UNKNOWN')
+   gross=q*price-capital;marks.append(gross)
+   if gross<0:loss+=capital
+  except (TypeError,ValueError):unknown.append(asset)
   ex=p.get('last_exit_estimate',{})
-  if ex.get('net_pnl_usdt') is not None and fresh(ex.get('fetched_at'),now) and gross>=ex['net_pnl_usdt']:costs.append(gross-ex['net_pnl_usdt'])
- reliable=len(costs)==len(rows) and not unknown
- return {'realized_net_pnl_usdt':round(realized,2),'open_unrealized_pnl_usdt':round(sum(marks),2) if not unknown else 'UNKNOWN','estimated_exit_cost_usdt':round(sum(costs),2) if reliable else 'UNKNOWN','mark_to_market_net_pnl_usdt':round(realized+sum(marks)-sum(costs),2) if reliable else 'UNKNOWN','reference_mark_to_market_net_pnl_usdt':round(realized+sum(marks),2) if not unknown else 'UNKNOWN','closed_win_rate':sum(float(p.get('net_pnl_usdt',0))>0 for p in closed)/len(closed) if closed else None,'open_loss_exposure_usdt':round(loss,2) if not unknown else 'UNKNOWN','thesis_invalidated_open_count':sum(p.get('health_state')=='THESIS_INVALIDATED' for p in rows),'loss_recovery_open_count':sum(p.get('recovery_state') in ('LOSS_RECOVERY','PERSISTENT_INVALIDATION','RECOVERING') for p in rows),'mark_data_unknown_assets':unknown,'metric_scope':'SHADOW_MODEL_NOT_ACTUAL_FILLS'}
+  try:
+   net=float(ex['net_pnl_usdt']);vwap=float(ex['vwap'])
+   if (ex.get('status')!='SHADOW_RECEIPT_ESTIMATE' or not fresh(ex.get('fetched_at'),now) or
+       ex.get('fee_bps')!=fee_bps or not math.isfinite(net) or not math.isfinite(vwap) or vwap<=0):
+    raise ValueError('EXIT_ESTIMATE_UNKNOWN')
+   for observed,expected in [(ex['quantity'],q),(ex['capital'],capital),(net,q*vwap*(1-fee_bps/10000)-capital)]:
+    if not math.isclose(float(observed),expected,rel_tol=1e-9,abs_tol=1e-7):raise ValueError('EXIT_CASHFLOW_MISMATCH')
+   exits.append(net)
+  except (KeyError,TypeError,ValueError,OverflowError):
+   exit_unknown.append(asset);cost_unknown.append(asset);continue
+  try:
+   # A separate ticker price cannot split depth slippage from price movement.
+   mid=float(ex['book_mid'])
+   if not math.isfinite(mid) or mid<vwap:raise ValueError('EXIT_COST_REFERENCE_UNKNOWN')
+   costs.append(q*mid-q*vwap*(1-fee_bps/10000))
+  except (KeyError,TypeError,ValueError):cost_unknown.append(asset)
+ return {'realized_net_pnl_usdt':round(realized,2),
+  'open_unrealized_pnl_usdt':round(sum(marks),2) if not unknown else 'UNKNOWN',
+  'estimated_exit_cost_usdt':round(sum(costs),2) if not cost_unknown else 'UNKNOWN',
+  'mark_to_market_net_pnl_usdt':round(realized+sum(exits),2) if not exit_unknown else 'UNKNOWN',
+  'reference_mark_to_market_net_pnl_usdt':round(realized+sum(marks),2) if not unknown else 'UNKNOWN',
+  'closed_win_rate':sum(float(p.get('net_pnl_usdt',0))>0 for p in closed)/len(closed) if closed else None,
+  'open_loss_exposure_usdt':round(loss,2) if not unknown else 'UNKNOWN',
+  'thesis_invalidated_open_count':sum(p.get('health_state')=='THESIS_INVALIDATED' for p in rows),
+  'loss_recovery_open_count':sum(p.get('recovery_state') in ('LOSS_RECOVERY','PERSISTENT_INVALIDATION','RECOVERING') for p in rows),
+  'mark_data_unknown_assets':unknown,'exit_data_unknown_assets':exit_unknown,
+  'estimated_exit_cost_unknown_assets':cost_unknown,
+  'mark_to_market_basis':'FULL_QUANTITY_LIQUIDATION_ESTIMATES',
+  'estimated_exit_cost_basis':'SAME_DEPTH_RECEIPT_MID',
+  'metric_scope':'SHADOW_MODEL_NOT_ACTUAL_FILLS'}
