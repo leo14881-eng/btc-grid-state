@@ -260,6 +260,44 @@ def run_shell(code, env, cwd, timeout=None):
   return subprocess.CompletedProcess(process.args, process.returncode, stderr=tail)
 
 
+AUX_CAS_RECOVERY_MAX_AGE_SECONDS = 3600
+AUX_RECOVERY_STEPS = {
+ "blind-replay": "Persist replay outputs from clean latest main",
+ "missed-replay": "Persist replay only",
+}
+
+
+def auxiliary_cas_recovery_units(results, now):
+ """Retry complete replay from a fresh checkout; never retry stale publication.
+
+ The existing installed scheduled-job wrapper owns each job's flock and fetches
+ main into a disposable checkout. Only exact fresh CAS publication failures are
+ eligible. Authentication, market-data and validator failures remain failures.
+ """
+ units = []
+ for job, expected_step in AUX_RECOVERY_STEPS.items():
+  try:
+   row = json.loads((results / ('hunter-runtime-'+job+'-health.json')).read_text())
+   if (row.get('status') != 'FAILURE' or row.get('job') != job or
+       row.get('source') != 'VULTR_SYSTEMD' or row.get('capital_authority') != 'NONE_SHADOW_ONLY' or
+       row.get('real_trading_enabled') is not False or not row.get('source_head_sha')):
+    continue
+   completed = dt.datetime.fromisoformat(row['completed_at_utc'])
+   if completed.tzinfo is None or not 0 <= (now-completed).total_seconds() <= AUX_CAS_RECOVERY_MAX_AGE_SECONDS:
+    continue
+   failed = [step for step in row.get('steps', []) if step.get('status') == 'FAILURE']
+   if len(failed) != 1 or failed[0].get('name') != expected_step:
+    continue
+   if row.get('error_details', {}).get('failed_step') != expected_step:
+    continue
+   if 'RuntimeError: AUX_CAS_REJECTED_STALE_WRITER' not in failed[0].get('stderr_tail', ''):
+    continue
+   units.append('hunter-'+job+'.service')
+  except (OSError, ValueError, KeyError, TypeError):
+   continue
+ return units
+
+
 def run_job(job, preview=False, steps=None):
  # Share this collector with main so failures retain all completed/failed steps.
  if steps is None: steps = []
@@ -272,6 +310,22 @@ def run_job(job, preview=False, steps=None):
  lock = None
  lock_started = None
  try:
+  if job == "watchdog" and not preview:
+   units = auxiliary_cas_recovery_units(RESULTS, dt.datetime.now(dt.timezone.utc))
+   if units:
+    row = dict(job=job, name="Request fresh-source auxiliary CAS recovery", status="RUNNING",
+               exit=None, started_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
+               units=units, recovery_mode="FULL_JOB_FROM_LATEST_MAIN", recovery_verified=False)
+    steps.append(row)
+    try:
+     for unit in units:
+      subprocess.run(["systemctl", "start", "--no-block", unit], check=True)
+     row.update(status="SUCCESS", exit=0, action_status="RECOVERY_REQUESTED_NOT_VERIFIED")
+    except Exception as exc:
+     row.update(status="FAILURE", error_details=exception_details(exc))
+     raise
+    finally:
+     row["completed_at_utc"] = dt.datetime.now(dt.timezone.utc).isoformat()
   for step in workflow_steps(job):
    if "uses" in step: continue
    name = step.get("name") or step.get("id", "unnamed")
