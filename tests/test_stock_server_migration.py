@@ -137,6 +137,30 @@ def raw_persist(work, mode, env):
                           capture_output=True, text=True)
 
 
+def accepted_replay_fixture():
+    """A genuinely publishable synthetic report, with no provider access."""
+    return {
+        'mode': 'REPLAY_OBSERVATION_ONLY', 'strategy_effect': False,
+        'strategy_version': 'HYBRID_ENTRY_V1_POSITION_STATE_V3',
+        'acceptance_status': 'ACCEPTED', 'errors': [], 'discovery_errors': [],
+        'future_data_prohibited': True, 'future_mutation_invariance': True,
+        'future_leakage_detected': False, 'lookahead_violations': [],
+        'target_session': '2026-10-06', 'big_movers_total': 1,
+        'data_health': {
+            'status': 'COMPLETE', 'session_complete': True,
+            'required_symbols': ['MOVER', 'SPY', 'QQQ'], 'missing_symbols': [],
+            'regular_session_bar_counts': {'MOVER': 78, 'SPY': 78, 'QQQ': 78},
+            'cohort_status': 'QUALIFYING_MOVERS',
+        },
+        'query_window': {
+            'start': '2026-10-06T00:00:00Z', 'end': '2026-10-06T20:08:00Z',
+            'as_of_utc': '2026-10-06T20:28:00Z', 'market_data_delay_minutes': 20,
+        },
+        'results': [{'symbol': 'MOVER', 'high_at': '2026-10-06T19:55:00Z',
+                     'lookahead_check': 'PASS'}],
+    }
+
+
 def prepare_outputs(work, job='main', mode=None, env=None):
     env = env or _p0_persist_environment(work, job)
     if job in ('main', 'monitor'):
@@ -147,10 +171,7 @@ def prepare_outputs(work, job='main', mode=None, env=None):
             'simulation_only': True, 'real_orders': False,
         })
     else:
-        write_json(work, RESULTS + 'replay-v1.json', {
-            'mode': 'REPLAY_OBSERVATION_ONLY', 'strategy_effect': False,
-            'strategy_version': 'HYBRID_ENTRY_V1_POSITION_STATE_V3',
-        })
+        write_json(work, RESULTS + 'replay-v1.json', accepted_replay_fixture())
     return env
 
 
@@ -629,6 +650,8 @@ def stub_engine(monkeypatch, fail=False):
             if fail:
                 write_json(Path.cwd(), RESULTS + 'portfolio-v1.json', {'partial': True})
                 raise subprocess.CalledProcessError(1, command)
+        elif command[1].endswith('stock_replay.py'):
+            prepare_outputs(Path.cwd(), 'replay', env=kwargs['env'])
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(runner.subprocess, 'run', run)
@@ -1001,3 +1024,134 @@ def test_restarted_runner_uses_fresh_authoritative_state_and_rebinds_environment
     assert result['run_id'] != 'stale-prior-run' and result['generation'] != '0' * 64
     assert all(kwargs['env']['STOCK_SHADOW_SOURCE_COMMIT'] == fresh_source for _, kwargs in commands)
     assert json.loads((old_work / (RESULTS + 'portfolio-v1.json')).read_text())['fixture'] == 'unpublished stale scratch'
+
+
+@pytest.mark.parametrize('path,value', [
+    (('acceptance_status',), 'REJECTED_DATA'),
+    (('acceptance_status',), None),
+    (('errors',), [{'type': 'HTTPError', 'message': 'HTTP Error 403: Forbidden'}]),
+    (('errors',), [{'type': 'HTTPError', 'message': 'HTTP Error 429: Too Many Requests'}]),
+    (('errors',), None),
+    (('data_health',), None),
+    (('data_health', 'status'), 'PARTIAL'),
+    (('data_health', 'status'), 'ERROR'),
+    (('data_health', 'status'), 'WAITING_FOR_SESSION_DATA'),
+    (('data_health', 'session_complete'), False),
+    (('data_health', 'session_complete'), 1),
+    (('data_health', 'missing_symbols'), ['SPY']),
+    (('data_health', 'required_symbols'), ['MOVER', 'SPY']),
+    (('data_health', 'required_symbols'), []),
+    (('data_health', 'required_symbols'), ['MOVER', 'SPY', 'QQQ', 'MOVER']),
+    (('data_health', 'regular_session_bar_counts', 'MOVER'), 0),
+    (('data_health', 'regular_session_bar_counts', 'SPY'), 0),
+    (('data_health', 'regular_session_bar_counts', 'QQQ'), None),
+    (('data_health', 'regular_session_bar_counts', 'QQQ'), True),
+    (('data_health', 'regular_session_bar_counts', 'QQQ'), 1.5),
+    (('results',), [{'symbol': 'MOVER', 'high_at': None, 'lookahead_check': 'PASS'}]),
+    (('results',), [{'symbol': 'MOVER', 'high_at': '', 'lookahead_check': 'PASS'}]),
+    (('results',), [{'symbol': 'MOVER', 'high_at': '2026-10-06T19:55:00Z', 'lookahead_check': 'NOT_RUN'}]),
+    (('results',), None),
+    (('big_movers_total',), 214),
+    (('future_leakage_detected',), True),
+    (('future_mutation_invariance',), False),
+    (('lookahead_violations',), [{'symbol': 'MOVER', 'error': 'future mutation changed past decision'}]),
+    (('strategy_effect',), True),
+    (('mode',), 'LIVE'),
+])
+def test_replay_publisher_rejects_false_green_reports_without_any_remote_or_ledger_change(repo, path, value):
+    git, remote, work, _ = repo
+    env = prepare_outputs(work, 'replay')
+    report_path = work / (RESULTS + 'replay-v1.json')
+    report = json.loads(report_path.read_text())
+    cursor = report
+    for key in path[:-1]:
+        cursor = cursor[key]
+    cursor[path[-1]] = value
+    report_path.write_text(json.dumps(report) + '\n')
+    before_commit = git(remote, 'rev-parse', 'main').stdout
+    before_ledger = {name: (work / (RESULTS + name)).read_bytes()
+                     for name in ('portfolio-v1.json', 'trades-v1.json')}
+    result = raw_persist(work, 'replay', env)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert 'REPLAY_' in result.stderr
+    assert git(remote, 'rev-parse', 'main').stdout == before_commit
+    assert {name: (work / (RESULTS + name)).read_bytes() for name in before_ledger} == before_ledger
+    assert git(remote, 'ls-tree', '--name-only', 'main', '--', RESULTS + 'runtime-replay-v1.json').stdout == ''
+
+
+def test_replay_publisher_accepts_complete_data_and_only_publishes_report_and_receipt(repo):
+    git, remote, work, _ = repo
+    env = prepare_outputs(work, 'replay')
+    before_commit = git(remote, 'rev-parse', 'main').stdout.strip()
+    before_ledger = {name: (work / (RESULTS + name)).read_bytes()
+                     for name in ('portfolio-v1.json', 'trades-v1.json')}
+    result = raw_persist(work, 'replay', env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'STOCK_POST_PUSH_READBACK_OK' in result.stdout
+    assert set(git(remote, 'diff', '--name-only', before_commit, 'main').stdout.splitlines()) == {
+        RESULTS + 'replay-v1.json', RESULTS + 'runtime-replay-v1.json',
+    }
+    for name, raw in before_ledger.items():
+        assert (work / (RESULTS + name)).read_bytes() == raw
+        assert git(remote, 'show', 'main:' + RESULTS + name).stdout.encode() == raw
+    receipt = json.loads(git(remote, 'show', 'main:' + RESULTS + 'runtime-replay-v1.json').stdout)
+    assert receipt['status'] == 'RUN_COMPLETED'
+    assert set(receipt['files']) == {RESULTS + 'replay-v1.json'}
+
+
+def test_replay_publisher_accepts_genuine_zero_mover_session(repo):
+    git, remote, work, _ = repo
+    env = prepare_outputs(work, 'replay')
+    report = accepted_replay_fixture()
+    report['results'] = []
+    report['big_movers_total'] = 0
+    report['data_health']['required_symbols'] = ['SPY', 'QQQ']
+    report['data_health']['regular_session_bar_counts'] = {'SPY': 78, 'QQQ': 78}
+    report['data_health']['cohort_status'] = 'NO_QUALIFYING_MOVERS'
+    write_json(work, RESULTS + 'replay-v1.json', report)
+    result = raw_persist(work, 'replay', env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    published = json.loads(git(remote, 'show', 'main:' + RESULTS + 'replay-v1.json').stdout)
+    assert published['acceptance_status'] == 'ACCEPTED' and published['results'] == []
+
+
+def test_replay_publisher_rejects_vacuous_success_with_missing_mover_results(repo):
+    git, remote, work, _ = repo
+    env = prepare_outputs(work, 'replay')
+    report = accepted_replay_fixture()
+    report['results'] = []
+    report['big_movers_total'] = 0
+    write_json(work, RESULTS + 'replay-v1.json', report)
+    before = git(remote, 'rev-parse', 'main').stdout
+    result = raw_persist(work, 'replay', env)
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert git(remote, 'rev-parse', 'main').stdout == before
+
+
+def test_replay_runner_provider_failure_never_invokes_publisher(repo, monkeypatch, tmp_path):
+    git, remote, work, writer = repo
+    configure_server(git, work, writer)
+    before = git(remote, 'rev-parse', 'main').stdout
+    monkeypatch.chdir(work)
+    for key in PROVIDER_KEYS:
+        monkeypatch.setenv(key, 'offline-dummy-' + key)
+    original_run = subprocess.run
+
+    def fail_replay(command, **kwargs):
+        if command[0] != sys.executable:
+            return original_run(command, **kwargs)
+        if command[1].endswith('stock_replay.py'):
+            report = accepted_replay_fixture()
+            report.update(acceptance_status='REJECTED_DATA', results=[],
+                          errors=[{'type': 'HTTPError', 'message': 'HTTP Error 403: Forbidden'}])
+            report['data_health']['status'] = 'ERROR'
+            write_json(work, RESULTS + 'replay-v1.json', report)
+            raise subprocess.CalledProcessError(1, command)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(runner.subprocess, 'run', fail_replay)
+    monkeypatch.setattr(runner, 'persist', lambda *args: pytest.fail('rejected replay reached publication'))
+    with pytest.raises(subprocess.CalledProcessError):
+        runner.run('replay', False, tmp_path / 'runtime')
+    assert git(remote, 'rev-parse', 'main').stdout == before
+    assert json.loads((work / (RESULTS + 'replay-v1.json')).read_text())['results'] == []

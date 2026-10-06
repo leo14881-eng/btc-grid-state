@@ -16,6 +16,40 @@ BAR_MINUTES=5
 class LookaheadViolation(RuntimeError):
     pass
 
+class ReplayDataError(RuntimeError):
+    pass
+
+
+def replay_data_window(target, as_of):
+    """Request only the historical SIP data covered by the existing 20m delay."""
+    if as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("replay_as_of_requires_timezone")
+    start=datetime.fromisoformat(target+"T00:00:00+00:00")
+    cutoff=as_of.astimezone(timezone.utc)-timedelta(minutes=MARKET_DATA_DELAY_MINUTES)
+    return start,min(start+timedelta(days=1),cutoff)
+
+
+def replay_data_health(wanted, movers, intra, errors, session, query_end):
+    closed=datetime.combine(datetime.fromisoformat(session["date"]).date(),
+                            session["close"],tzinfo=ss.NY).astimezone(timezone.utc)
+    counts={symbol:len(intra.get(symbol,[])) for symbol in wanted}
+    missing=[symbol for symbol in wanted if not counts[symbol]]
+    complete=query_end>=closed
+    status=("ERROR" if errors else "WAITING_FOR_SESSION_DATA" if not complete
+            else "PARTIAL" if missing else "COMPLETE")
+    return {"status":status,"required_symbols":wanted,"missing_symbols":missing,
+            "regular_session_bar_counts":counts,"session_complete":complete,
+            "session_close_utc":closed.isoformat().replace("+00:00","Z"),
+            "cohort_status":"QUALIFYING_MOVERS" if movers else "NO_QUALIFYING_MOVERS"}
+
+
+def save_report(out):
+    OUT.parent.mkdir(parents=True,exist_ok=True)
+    tmp=OUT.with_suffix(".tmp")
+    tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
+    tmp.replace(OUT)
+    print(json.dumps({k:v for k,v in out.items() if k!="results"}))
+
 def alpaca(symbols,timeframe,start,end):
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
     if not key or not secret: raise RuntimeError("missing_alpaca_secrets")
@@ -119,7 +153,7 @@ def future_mutation_invariance(prior,intra,session,cutoff_at,spy_prior,spy_intra
 
 def main():
     symbols,discovery_errors=ss.discover_us_common_stocks()
-    end=datetime.now(timezone.utc)-timedelta(minutes=MARKET_DATA_DELAY_MINUTES)
+    as_of=datetime.now(timezone.utc)
     errors=[]
     market_cache=ss.load(ss.MARKET_CACHE,{"bars":{}})
     daily=market_cache.get("bars") or {}
@@ -140,17 +174,37 @@ def main():
             gain=(float(day["h"])/float(day["o"])-1)*100
             if gain>=SURGE_PCT: movers.append((sym,gain,day))
     movers.sort(key=lambda x:x[1],reverse=True)
-    d0=datetime.fromisoformat(target+"T00:00:00+00:00"); d1=d0+timedelta(days=1)
+    d0,query_end=replay_data_window(target,as_of)
     session=ss._alpaca_exchange_session(d0+timedelta(hours=16))
     if not session or session.get("date")!=target: raise RuntimeError("replay_exchange_calendar_unavailable")
     wanted=list(dict.fromkeys([x[0] for x in movers]+["SPY","QQQ"])); intra={}
-    replay_batches=ss._pack_alpaca_symbol_batches(wanted,"5Min",d0,d1)
+    replay_batches=ss._pack_alpaca_symbol_batches(wanted,"5Min",d0,query_end) if query_end>d0 else []
+    if query_end<=d0:
+        errors.append({"stage":"INTRADAY_WINDOW","type":"ReplayDataError",
+                       "message":"target session has no data in the allowed delayed window"})
     for batch_index,batch in enumerate(replay_batches):
         try:
-            intra.update(alpaca(batch,"5Min",d0.isoformat().replace("+00:00","Z"),d1.isoformat().replace("+00:00","Z")))
+            intra.update(alpaca(batch,"5Min",d0.isoformat().replace("+00:00","Z"),query_end.isoformat().replace("+00:00","Z")))
         except Exception as e:
             errors.append({"stage":"INTRADAY","batch_index":batch_index,"type":type(e).__name__,"message":str(e)[:120]})
-    intra={sym:regular_session_bars(rows,session) for sym,rows in intra.items()}
+    intra={sym:[bar for bar in regular_session_bars(rows,session)
+                if _dt(bar["t"])+timedelta(minutes=BAR_MINUTES)<=query_end]
+           for sym,rows in intra.items()}
+    data_health=replay_data_health(wanted,movers,intra,errors,session,query_end)
+    query_window={"as_of_utc":as_of.isoformat().replace("+00:00","Z"),
+                  "start":d0.isoformat().replace("+00:00","Z"),
+                  "end":query_end.isoformat().replace("+00:00","Z"),
+                  "market_data_delay_minutes":MARKET_DATA_DELAY_MINUTES}
+    if data_health["status"]!="COMPLETE":
+        save_report({"updated_at":datetime.now(timezone.utc).isoformat(),
+            "mode":"REPLAY_OBSERVATION_ONLY","acceptance_status":"REJECTED_DATA",
+            "strategy_effect":False,"target_session":target,
+            "strategy_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3",
+            "query_window":query_window,"data_health":data_health,
+            "big_movers_total":len(movers),"evaluated_movers":0,
+            "replay_intraday_logical_batches":len(replay_batches),
+            "errors":errors,"discovery_errors":discovery_errors,"results":[]})
+        raise ReplayDataError("replay_data_not_accepted:"+data_health["status"])
     try: trades=json.loads(TRADES.read_text()) if TRADES.exists() else []
     except Exception: trades=[]
     results=[]; lookahead_violations=[]
@@ -186,8 +240,9 @@ def main():
           "miss_reason":None if before else "NO_PRE_HIGH_ENTRY_SIGNAL"})
     early_count=sum(bool(x["first_early_signal"]) for x in results); buy_count=sum(bool(x["first_buy_signal"]) for x in results)
     late_early=sum(bool(x["first_early_signal"] and x["high_at"] and _dt(x["first_early_signal"]["at"])>_dt(x["high_at"])) for x in results)
-    out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","acceptance_status":"ACCEPTED","strategy_effect":False,
+    out={"updated_at":datetime.now(timezone.utc).isoformat(),"mode":"REPLAY_OBSERVATION_ONLY","acceptance_status":"REJECTED_LOOKAHEAD" if lookahead_violations else "ACCEPTED","strategy_effect":False,
       "target_session":target,"strategy_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3",
+      "query_window":query_window,"data_health":data_health,
       "decision_clock":{"schedule":"hourly UTC minute :23","market_data_delay_minutes":MARKET_DATA_DELAY_MINUTES,"bar_minutes":BAR_MINUTES},
       "exchange_session":{"date":session["date"],"open":str(session["open"]),"close":str(session["close"]),"source":session["source"]},
       "surge_threshold_pct":SURGE_PCT,"universe_discovered":len(symbols),"universe_with_daily_bars":len(daily),
@@ -200,8 +255,7 @@ def main():
       "missed_before_high":sum(not x["discovered_before_high"] for x in results),"benchmark_daily_explicit":True,"benchmark_daily_source":"UNIFIED_MARKET_CACHE",
       "future_data_prohibited":True,"future_mutation_invariance":True,"lookahead_violations":lookahead_violations,
       "future_leakage_detected":bool(lookahead_violations),"replay_intraday_logical_batches":len(replay_batches),"errors":errors,"discovery_errors":discovery_errors,"results":results}
-    OUT.parent.mkdir(parents=True,exist_ok=True); tmp=OUT.with_suffix(".tmp"); tmp.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n"); tmp.replace(OUT)
-    print(json.dumps({k:v for k,v in out.items() if k!="results"}))
+    save_report(out)
     if lookahead_violations: raise LookaheadViolation(f"{len(lookahead_violations)} replay lookahead violations")
 
 if __name__=="__main__": main()

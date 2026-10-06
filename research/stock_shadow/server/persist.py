@@ -143,6 +143,34 @@ def validate_outputs(outputs, mode, a):
                 'HEALTH_SHADOW_INVARIANT')
     if mode == 'health':
         return None
+    if a['job'] == 'replay':
+        replay = read_json(ROOT + 'replay-v1.json')
+        require(isinstance(replay, dict), 'REPLAY_DATA_NOT_ACCEPTED')
+        health = replay.get('data_health') or {}
+        require(isinstance(health, dict), 'REPLAY_DATA_NOT_ACCEPTED')
+        required = health.get('required_symbols') or []
+        counts = health.get('regular_session_bar_counts') or {}
+        rows = replay.get('results')
+        require(replay.get('mode') == 'REPLAY_OBSERVATION_ONLY' and
+                replay.get('strategy_effect') is False, 'REPLAY_OBSERVATION_INVARIANT')
+        require(replay.get('acceptance_status') == 'ACCEPTED' and
+                replay.get('errors') == [] and health.get('status') == 'COMPLETE' and
+                health.get('session_complete') is True and health.get('missing_symbols') == [] and
+                isinstance(required, list) and all(isinstance(symbol, str) and symbol for symbol in required) and
+                isinstance(counts, dict) and {'SPY', 'QQQ'} <= set(required) and
+                len(required) == len(set(required)) and
+                all(type(counts.get(symbol)) is int and counts[symbol] > 0 for symbol in required),
+                'REPLAY_DATA_NOT_ACCEPTED')
+        require(isinstance(rows, list) and type(replay.get('big_movers_total')) is int and
+                replay.get('big_movers_total') == len(rows) and
+                all(isinstance(row, dict) and row.get('symbol') in required and
+                    row.get('high_at') and row.get('lookahead_check') == 'PASS' for row in rows) and
+                len({row['symbol'] for row in rows}) == len(rows) and
+                set(required) == {'SPY', 'QQQ'} | {row['symbol'] for row in rows} and
+                health.get('cohort_status') == ('QUALIFYING_MOVERS' if rows else 'NO_QUALIFYING_MOVERS') and
+                replay.get('future_leakage_detected') is False and
+                replay.get('future_mutation_invariance') is True and
+                replay.get('lookahead_violations') == [], 'REPLAY_LOOKAHEAD_NOT_ACCEPTED')
     state, events = read_json(PORTFOLIO), read_json(TRADES)
     validate_inputs(state, events)
     validate_ledger(state, events)

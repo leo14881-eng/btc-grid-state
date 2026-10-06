@@ -1,5 +1,7 @@
 # V3 frozen baseline: 2026-10-04 through 2026-11-04; strategy retuning disabled during forward sample window.
 import importlib.util
+import copy
+import json
 from pathlib import Path
 
 P=Path("research/stock_shadow/stock_shadow_v1.py")
@@ -1111,3 +1113,315 @@ def test_isolation_guard_really_fails_for_tracked_and_untracked_files(tmp_path):
     git(work,'checkout','--','unrelated.txt')
     (work/'untracked.py').write_text('unexpected')
     assert subprocess.run(['bash',guard],cwd=work,capture_output=True).returncode==1
+
+
+# Data retrieval and acceptance are fail-closed; engine/scoring behavior is unchanged.
+def _replay_bar(stamp, high=110.0):
+    return {'t': stamp, 'o': 100.0, 'h': high, 'l': 99.0, 'c': 105.0, 'v': 1_000_000}
+
+
+def _replay_data_fixture(monkeypatch, tmp_path, *, as_of='2026-10-06T20:28:00+00:00',
+                         target='2026-10-06', close=clock_time(16), mover=True):
+    from datetime import timedelta
+    m = _load_replay()
+    now = real_datetime.fromisoformat(as_of)
+    calls = {'now': 0, 'pack': [], 'provider': [], 'calendar': []}
+
+    class FrozenDateTime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            calls['now'] += 1
+            return now.astimezone(tz) if tz is not None else now.replace(tzinfo=None)
+
+    monkeypatch.setattr(m, 'datetime', FrozenDateTime)
+    midnight = real_datetime.fromisoformat(target + 'T00:00:00+00:00')
+    history = [_replay_bar((midnight - timedelta(days=n)).isoformat(), 104.0)
+               for n in range(35, 0, -1)]
+    daily = {symbol: copy.deepcopy(history) + [_replay_bar(target + 'T04:00:00Z', high)]
+             for symbol, high in [('MOVER', 110.0 if mover else 107.0),
+                                  ('SPY', 102.0), ('QQQ', 103.0), ('QRVO', 102.0)]}
+    # A cached historical surge and a current holding do not join today's mover cohort.
+    daily['OLD_SURGE'] = copy.deepcopy(history)
+    daily['OLD_SURGE'][-1]['h'] = 150.0
+    market_cache = tmp_path / 'market-daily-cache-v1.json'
+    market_cache.write_text(json.dumps({'bars': daily}) + '\n')
+    trades = tmp_path / 'trades-v1.json'
+    trades.write_bytes(b'[  ]\n')
+    portfolio = tmp_path / 'portfolio-v1.json'
+    portfolio.write_bytes(b'{"positions":{"HOLDING_ONLY":{}},"closed":[],"simulation_only":true}\n')
+    calendar_cache = tmp_path / 'calendar-session-cache-v1.json'
+    calendar_cache.write_bytes(b'{"fixture":"read-only"}\n')
+    monkeypatch.setattr(m, 'OUT', tmp_path / 'replay-v1.json')
+    monkeypatch.setattr(m, 'TRADES', trades)
+    monkeypatch.setattr(m.ss, 'STATE', portfolio)
+    monkeypatch.setattr(m.ss, 'MARKET_CACHE', market_cache)
+    monkeypatch.setattr(m.ss, 'CALENDAR_CACHE', calendar_cache)
+    monkeypatch.setattr(m.ss, 'discover_us_common_stocks',
+                        lambda: (['MOVER', 'QRVO', 'OLD_SURGE', 'HOLDING_ONLY'], []))
+    session = {'date': target, 'open': clock_time(9, 30), 'close': close, 'source': 'TEST_CALENDAR'}
+
+    def get_session(at):
+        calls['calendar'].append(at)
+        return session
+
+    monkeypatch.setattr(m.ss, '_alpaca_exchange_session', get_session)
+    real_pack = m.ss._pack_alpaca_symbol_batches
+
+    def pack(symbols, timeframe, start, end):
+        calls['pack'].append((list(symbols), timeframe, start, end))
+        return real_pack(symbols, timeframe, start, end)
+
+    monkeypatch.setattr(m.ss, '_pack_alpaca_symbol_batches', pack)
+    session_open = real_datetime.combine(midnight.date(), session['open'], m.ss.NY).astimezone(utc_timezone.utc)
+    bars = [_replay_bar((session_open + timedelta(minutes=5 * n)).isoformat(), 105.0 + n / 100)
+            for n in range(int((real_datetime.combine(midnight.date(), close, m.ss.NY).astimezone(utc_timezone.utc)
+                                - session_open).total_seconds() // 300))]
+    data = {symbol: copy.deepcopy(bars) for symbol in ('MOVER', 'SPY', 'QQQ')}
+
+    def provider(symbols, timeframe, start, end):
+        calls['provider'].append((list(symbols), timeframe, start, end))
+        return {symbol: copy.deepcopy(data[symbol]) for symbol in symbols if symbol in data}
+
+    monkeypatch.setattr(m, 'alpaca', provider)
+    monkeypatch.setattr(m.urllib.request, 'urlopen',
+                        lambda *args, **kwargs: pytest.fail('replay test attempted live network access'))
+    original_bytes = {path: path.read_bytes() for path in (trades, portfolio, market_cache, calendar_cache)}
+    return m, calls, data, original_bytes
+
+
+def _assert_replay_inputs_unchanged(original_bytes):
+    assert {path: path.read_bytes() for path in original_bytes} == original_bytes
+
+
+@pytest.mark.parametrize('target,as_of,expected_end', [
+    ('2026-10-02', '2026-10-06T20:28:00+00:00', '2026-10-03T00:00:00+00:00'),
+    ('2026-10-06', '2026-10-06T20:28:00+00:00', '2026-10-06T20:08:00+00:00'),
+    ('2026-10-07', '2026-10-06T20:28:00+00:00', '2026-10-06T20:08:00+00:00'),
+    ('2026-10-06', '2026-10-06T16:28:00-04:00', '2026-10-06T20:08:00+00:00'),
+    ('2026-10-06', '2026-10-07T00:20:00+00:00', '2026-10-07T00:00:00+00:00'),
+    ('2026-10-06', '2026-10-06T00:10:00+00:00', '2026-10-05T23:50:00+00:00'),
+])
+def test_replay_data_window_caps_utc_bounds(target, as_of, expected_end):
+    m = _load_replay()
+    start, end = m.replay_data_window(target, real_datetime.fromisoformat(as_of))
+    assert start == real_datetime.fromisoformat(target + 'T00:00:00+00:00')
+    assert end == real_datetime.fromisoformat(expected_end)
+    assert start.tzinfo == utc_timezone.utc and end.tzinfo == utc_timezone.utc
+
+
+def test_replay_data_window_rejects_naive_clock():
+    m = _load_replay()
+    with pytest.raises((ValueError, m.ReplayDataError)):
+        m.replay_data_window('2026-10-06', real_datetime(2026, 10, 6, 20, 28))
+
+
+@pytest.mark.parametrize('as_of,target,expected_end', [
+    ('2026-10-06T20:28:00+00:00', '2026-10-06', '2026-10-06T20:08:00+00:00'),
+    ('2026-10-06T20:28:00+00:00', '2026-10-02', '2026-10-03T00:00:00+00:00'),
+])
+def test_replay_main_uses_single_captured_clock_for_pack_and_provider(
+        monkeypatch, tmp_path, as_of, target, expected_end):
+    m, calls, _, before = _replay_data_fixture(monkeypatch, tmp_path, as_of=as_of, target=target)
+    m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] == 'ACCEPTED'
+    assert out['data_health']['status'] == 'COMPLETE'
+    assert out['data_health']['session_complete'] is True
+    assert out['query_window']
+    assert m._dt(out['query_window']['as_of_utc']) == real_datetime.fromisoformat(as_of)
+    assert calls['pack'] and calls['provider']
+    expected = real_datetime.fromisoformat(expected_end)
+    for _, timeframe, start, end in calls['pack']:
+        assert timeframe == '5Min'
+        assert start == real_datetime.fromisoformat(target + 'T00:00:00+00:00')
+        assert end == expected
+    for _, timeframe, start, end in calls['provider']:
+        assert timeframe == '5Min'
+        assert m._dt(start) == real_datetime.fromisoformat(target + 'T00:00:00+00:00')
+        assert m._dt(end) == expected
+    assert out['results'][0]['high_at']
+    assert out['results'][0]['lookahead_check'] == 'PASS'
+    assert out['future_leakage_detected'] is False
+    assert out['lookahead_violations'] == []
+    _assert_replay_inputs_unchanged(before)
+
+
+def test_replay_regular_bars_obey_exact_twenty_minute_closed_bar_boundary():
+    m = _load_replay()
+    session = {'date': '2026-10-06', 'open': clock_time(9, 30), 'close': clock_time(16)}
+    # At 14:20, the delayed cutoff is 14:00; the 13:55 bar is closed, 14:00 is not.
+    now = real_datetime(2026, 10, 6, 14, 20, tzinfo=utc_timezone.utc)
+    _, query_end = m.replay_data_window(session['date'], now)
+    bars = [_replay_bar('2026-10-06T13:55:00Z'), _replay_bar('2026-10-06T14:00:00Z')]
+    visible, cutoff = m.bars_available_at(m.regular_session_bars(bars, session), now)
+    assert cutoff == query_end and visible == bars[:1]
+
+
+def test_replay_response_bar_after_query_end_never_enters_health_or_outcome(monkeypatch, tmp_path):
+    m, calls, data, before = _replay_data_fixture(monkeypatch, tmp_path, as_of='2026-10-06T14:20:00+00:00')
+    # Even an over-generous provider response must be clipped before acceptance.
+    data['MOVER'][-1]['h'] = 9_999.0
+    with pytest.raises(m.ReplayDataError):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] == 'REJECTED_DATA'
+    assert out['results'] == []
+    assert out['data_health']['status'] == 'WAITING_FOR_SESSION_DATA'
+    assert out['data_health']['regular_session_bar_counts'] == {'MOVER': 6, 'SPY': 6, 'QQQ': 6}
+    assert out['data_health']['session_complete'] is False
+    for _, _, _, end in calls['provider']:
+        assert m._dt(end) == real_datetime.fromisoformat('2026-10-06T14:00:00+00:00')
+    _assert_replay_inputs_unchanged(before)
+
+
+@pytest.mark.parametrize('target,as_of,close,expected_complete,expected_count', [
+    ('2026-03-06', '2026-03-06T21:20:00+00:00', clock_time(16), True, 78),
+    ('2026-03-09', '2026-03-09T20:20:00+00:00', clock_time(16), True, 78),
+    ('2026-11-27', '2026-11-27T18:20:00+00:00', clock_time(13), True, 42),
+    ('2026-11-27', '2026-11-27T18:19:59+00:00', clock_time(13), False, 41),
+])
+def test_replay_exchange_close_follows_dst_and_early_close(
+        monkeypatch, tmp_path, target, as_of, close, expected_complete, expected_count):
+    m, _, _, before = _replay_data_fixture(monkeypatch, tmp_path, target=target, as_of=as_of, close=close)
+    if expected_complete:
+        m.main()
+    else:
+        with pytest.raises(m.ReplayDataError):
+            m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['data_health']['session_complete'] is expected_complete
+    assert set(out['data_health']['regular_session_bar_counts'].values()) == {expected_count}
+    assert out['acceptance_status'] == ('ACCEPTED' if expected_complete else 'REJECTED_DATA')
+    _assert_replay_inputs_unchanged(before)
+
+
+@pytest.mark.parametrize('status_code', [403, 429])
+def test_replay_provider_http_errors_write_rejected_diagnostic_then_raise(
+        monkeypatch, tmp_path, status_code):
+    import urllib.error
+    m, _, _, before = _replay_data_fixture(monkeypatch, tmp_path)
+
+    def provider(*args):
+        raise urllib.error.HTTPError('https://data.alpaca.markets/v2/stocks/bars', status_code,
+                                     'offline fixture', {}, None)
+
+    monkeypatch.setattr(m, 'alpaca', provider)
+    with pytest.raises(m.ReplayDataError):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] == 'REJECTED_DATA'
+    assert out['results'] == []
+    assert out['data_health']['status'] == 'ERROR'
+    assert out['errors'] and str(status_code) in out['errors'][0]['message']
+    assert set(out['data_health']['missing_symbols']) == {'MOVER', 'SPY', 'QQQ'}
+    _assert_replay_inputs_unchanged(before)
+
+
+@pytest.mark.parametrize('missing', [('MOVER',), ('SPY',), ('QQQ',), ('MOVER', 'SPY', 'QQQ')])
+def test_replay_missing_required_bars_is_partial_not_an_accepted_missed_opportunity(
+        monkeypatch, tmp_path, missing):
+    m, _, data, before = _replay_data_fixture(monkeypatch, tmp_path)
+    for symbol in missing:
+        data[symbol] = []
+    with pytest.raises(m.ReplayDataError):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] == 'REJECTED_DATA'
+    assert out['results'] == []
+    assert out['data_health']['status'] == 'PARTIAL'
+    assert set(out['data_health']['missing_symbols']) == set(missing)
+    assert all(out['data_health']['regular_session_bar_counts'][symbol] == 0 for symbol in missing)
+    _assert_replay_inputs_unchanged(before)
+
+
+def test_replay_only_regular_session_bars_satisfy_required_data(monkeypatch, tmp_path):
+    m, _, data, _ = _replay_data_fixture(monkeypatch, tmp_path)
+    data['MOVER'] = [_replay_bar('2026-10-06T12:00:00Z'), _replay_bar('2026-10-06T20:00:00Z')]
+    with pytest.raises(m.ReplayDataError):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['data_health']['missing_symbols'] == ['MOVER']
+    assert out['data_health']['regular_session_bar_counts']['MOVER'] == 0
+    assert out['results'] == []
+
+
+def test_replay_required_cohort_excludes_nonmovers_old_surges_and_holdings(monkeypatch, tmp_path):
+    m, calls, _, before = _replay_data_fixture(monkeypatch, tmp_path)
+    m.main()
+    out = json.loads(m.OUT.read_text())
+    assert set(out['data_health']['required_symbols']) == {'MOVER', 'SPY', 'QQQ'}
+    assert out['data_health']['cohort_status'] == 'QUALIFYING_MOVERS'
+    assert {s for symbols, *_ in calls['provider'] for s in symbols} == {'MOVER', 'SPY', 'QQQ'}
+    assert [r['symbol'] for r in out['results']] == ['MOVER']
+    _assert_replay_inputs_unchanged(before)
+
+
+@pytest.mark.parametrize('missing_benchmark', [None, 'SPY', 'QQQ'])
+def test_replay_no_qualifying_movers_is_distinct_from_missing_required_data(
+        monkeypatch, tmp_path, missing_benchmark):
+    m, _, data, before = _replay_data_fixture(monkeypatch, tmp_path, mover=False)
+    if missing_benchmark:
+        data[missing_benchmark] = []
+        with pytest.raises(m.ReplayDataError):
+            m.main()
+    else:
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['data_health']['cohort_status'] == 'NO_QUALIFYING_MOVERS'
+    assert set(out['data_health']['required_symbols']) == {'SPY', 'QQQ'}
+    assert out['results'] == []
+    assert out['acceptance_status'] == ('REJECTED_DATA' if missing_benchmark else 'ACCEPTED')
+    assert out['data_health']['missing_symbols'] == ([missing_benchmark] if missing_benchmark else [])
+    _assert_replay_inputs_unchanged(before)
+
+
+@pytest.mark.parametrize('target,as_of,status,no_request', [
+    ('2026-10-07', '2026-10-06T20:28:00+00:00', 'ERROR', True),
+    ('2026-10-06', '2026-10-06T00:10:00+00:00', 'ERROR', True),
+    ('2026-10-06', '2026-10-06T13:40:00+00:00', 'WAITING_FOR_SESSION_DATA', False),
+])
+def test_replay_future_or_predata_session_is_never_accepted(
+        monkeypatch, tmp_path, target, as_of, status, no_request):
+    m, calls, _, before = _replay_data_fixture(monkeypatch, tmp_path, target=target, as_of=as_of)
+    with pytest.raises(m.ReplayDataError):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] == 'REJECTED_DATA'
+    assert out['results'] == []
+    assert out['data_health']['status'] == status
+    if no_request:
+        assert calls['provider'] == []
+    _assert_replay_inputs_unchanged(before)
+
+
+def test_replay_lookahead_failure_never_keeps_accepted_status(monkeypatch, tmp_path):
+    m, _, _, before = _replay_data_fixture(monkeypatch, tmp_path)
+
+    def fail_invariance(*args):
+        raise m.LookaheadViolation('offline future-mutation failure')
+
+    monkeypatch.setattr(m, 'future_mutation_invariance', fail_invariance)
+    with pytest.raises(m.LookaheadViolation):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] != 'ACCEPTED'
+    assert out['future_leakage_detected'] is True
+    assert out['lookahead_violations']
+    _assert_replay_inputs_unchanged(before)
+
+
+def test_replay_qualifying_qrvo_is_required_without_symbol_specific_exception(monkeypatch, tmp_path):
+    m, calls, _, before = _replay_data_fixture(monkeypatch, tmp_path)
+    cache = json.loads(m.ss.MARKET_CACHE.read_text())
+    cache['bars']['QRVO'][-1]['h'] = 108.0  # The same eight-percent boundary as every stock.
+    m.ss.MARKET_CACHE.write_text(json.dumps(cache) + '\n')
+    before[m.ss.MARKET_CACHE] = m.ss.MARKET_CACHE.read_bytes()
+    with pytest.raises(m.ReplayDataError):
+        m.main()
+    out = json.loads(m.OUT.read_text())
+    assert out['acceptance_status'] == 'REJECTED_DATA'
+    assert set(out['data_health']['required_symbols']) == {'MOVER', 'QRVO', 'SPY', 'QQQ'}
+    assert out['data_health']['missing_symbols'] == ['QRVO']
+    assert {s for symbols, *_ in calls['provider'] for s in symbols} == {'MOVER', 'QRVO', 'SPY', 'QQQ'}
+    assert out['results'] == []
+    _assert_replay_inputs_unchanged(before)
