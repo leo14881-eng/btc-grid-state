@@ -334,6 +334,8 @@ async def run(repo, state_path, duration=None, venue='BINANCE_SPOT'):
 async def run_dual(repo, state_path, duration=None):
     paths = {v: Path(str(state_path)+'.'+v+'.json') for v in ('BINANCE_SPOT','BYBIT_SPOT')}
     async def aggregate():
+        divergent = set()
+        divergence_count = 0
         while True:
             dual = DualWatch()
             try:
@@ -346,7 +348,16 @@ async def run_dual(repo, state_path, duration=None):
                         age = time.time()-__import__('datetime').datetime.fromisoformat(evidence['generated_at']).timestamp()
                         if not 0 <= age <= Config().unavailable_seconds: raise ValueError('VENUE_HEALTH_STALE')
                         snapshot['venues'][venue] = evidence
+                        dual.watches[venue].symbols = evidence['symbols']
                     except (OSError, ValueError): pass
+                snapshot['cross_venue'] = dual.snapshot(time.time())['cross_venue']
+                current_divergent = {x['symbol'] for x in snapshot['cross_venue'] if x['status']=='CROSS_VENUE_PRICE_DIVERGENCE'}
+                divergence_count += len(current_divergent-divergent)
+                divergent = current_divergent
+                snapshot['cross_venue_divergence_count'] = divergence_count
+                snapshot['primary_venue_unavailable_count'] = len(dual.unroutable) + sum(
+                    r.get('state') in ('FAST_MARKET_DATA_DEGRADED','MARKET_DATA_UNAVAILABLE')
+                    for v in snapshot['venues'].values() for r in v['symbols'].values())
                 snapshot['source_sha'] = sha
                 snapshot['status'] = 'PRIMARY_VENUE_IDENTITY_MISSING' if dual.unroutable else (
                     'FAST_PATH_HEALTHY' if all(x['status'] in ('FAST_PATH_HEALTHY','NOT_REQUIRED') for x in snapshot['venues'].values()) else 'PARTIAL_FAST_PATH_DEGRADED')
