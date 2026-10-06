@@ -4,11 +4,14 @@ import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
+ import hunter_lifecycle_state as lifecycle
+ from research import hunter_lifecycle_state as lifecycle
  from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 except ModuleNotFoundError as exc:
  if exc.name != 'research':raise
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  import hunter_tail_risk as tail
+ import hunter_lifecycle_state as lifecycle
  from hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
@@ -790,7 +793,6 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
     add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
-  from research import hunter_lifecycle_state as lifecycle
   pnl=net_pnl(pos,p);legacy_protection=profit_protection(pos,p)
   execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,FEE_BPS)
   pos['last_exit_estimate']=execution
@@ -884,7 +886,6 @@ def opportunity_summary(rows,now=None):
   "profit_giveback_count":sum(x.get("exit_evaluation")=="PROFIT_GIVEBACK" for x in rows),"full_opportunity_mfe_distribution":dist}
 
 def build_summary(state,now,guard_status="NORMAL",scan=None):
- from research.hunter_lifecycle_state import mtm
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
  for x in state.get("open_positions") or []:
@@ -893,7 +894,7 @@ def build_summary(state,now,guard_status="NORMAL",scan=None):
  for x in closed:ensure_opportunity_observation(x,None,now)
  cohorts={"all_samples":opportunity_summary(all_closed,now),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"],now),
   "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"],now)}
- return {**mtm(state,now,net_pnl,FEE_BPS),"generation_id":state.get('last_cycle_generation_id'),"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
+ return {**lifecycle.mtm(state,now,net_pnl,FEE_BPS),"generation_id":state.get('last_cycle_generation_id'),"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy":STRATEGY_ID,"policy_version":VERSION,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
   "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in all_closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":POLICY["price_only_stop_loss"],"time_exit_enabled":POLICY["time_exit_enabled"],"time_review_hours":list(REVIEW_HOURS),

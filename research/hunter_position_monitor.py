@@ -88,14 +88,22 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  guard_path=V1_GUARD if v1_mode else V2_GUARD
  eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan)))
  return {"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
+def management_selection(states,cursor,budget):
+ # V2 health/recovery needs consecutive fresh five-minute observations. Only
+ # the independent V1 management batch rotates; discovery admission is unchanged.
+ priority=sorted({p['asset'] for st in states[1:] for p in st.get('open_positions',[])})
+ ordinary=sorted({p['asset'] for st in states[:1] for p in st.get('open_positions',[])}-set(priority))
+ count=min(max(0,budget-len(priority)),len(ordinary))
+ selected=priority+[ordinary[(cursor+i)%len(ordinary)] for i in range(count)] if ordinary else priority
+ return selected,(cursor+count)%len(ordinary) if ordinary else 0
+
 def refresh_management_evidence(states,market,review,liq,now):
  """Refresh bounded rotating holdings, including names no longer EARLY. No entry path."""
  import copy
  review=copy.deepcopy(review);liq=copy.deepcopy(liq)
  wanted=sorted({p.get("asset") for st in states for p in st.get("open_positions") or [] if p.get("asset")})
  previous=load(OUT);cursor=int(previous.get("evidence_refresh_cursor") or 0)
- count=min(C["MONITOR_EVIDENCE_BATCH"],len(wanted))
- selected=[wanted[(cursor+i)%len(wanted)] for i in range(count)] if wanted else []
+ selected,next_cursor=management_selection(states,cursor,C["MONITOR_EVIDENCE_BATCH"])
  pairs=[a+"USDT" for a in selected]+["BTCUSDT"]
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
  current={};failures={};raw_books={}
@@ -136,7 +144,7 @@ def refresh_management_evidence(states,market,review,liq,now):
  review["candidates"]=list(by.values())
  return review,liq,{"generation_id":generation,"observed_at_utc":now.isoformat(),"attempted":selected,"failures":failures,
                    "observed_raw_books":raw_books,
-                   "evidence_refresh_cursor":(cursor+count)%len(wanted) if wanted else 0,"policy_version":VERSION}
+                   "evidence_refresh_cursor":next_cursor,"policy_version":VERSION}
 
 def main():
  TIMINGS.clear();monitor_started=time.perf_counter()
