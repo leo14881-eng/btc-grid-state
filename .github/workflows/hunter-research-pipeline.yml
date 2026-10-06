@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 7165)
+Total output lines: 452
+
 name: Hunter Potential Research Pipeline
 on:
   workflow_dispatch:
@@ -51,32 +54,7 @@ jobs:
         run: |
           git fetch origin main
           git checkout -B main origin/main
-          python - <<'PY'
-          import json,os
-          d=json.load(open('research/results/hunter-cex-universe-run.json'))
-          assert d.get('generation_id') and d.get('binance_complete') is True
-          trigger_sha=os.environ.get('TRIGGER_SHA')
-          event=os.environ.get('TRIGGER_EVENT')
-          source=d.get('source_head_sha')
-          force=os.environ.get('FORCE','false').lower()=='true'
-          aligned=False
-          try:
-              h=json.load(open('research/results/hunter-health-and-queue.json'))
-              aligned=(h.get('scan_generation_id')==d.get('generation_id') or h.get('scan_as_of_utc')==d.get('as_of_utc'))
-          except Exception:
-              pass
-          if event=='workflow_dispatch':
-              admitted=(force or not aligned)
-          else:
-              admitted=(bool(trigger_sha) and source==trigger_sha)
-          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-              print('should_run='+('true' if admitted else 'false'),file=f)
-              print('generation='+str(d.get('generation_id')),file=f)
-          if admitted:
-              print('HUNTER_GENERATION_ADMITTED',d['generation_id'],source)
-          else:
-              print('HUNTER_TRIGGER_SKIPPED',trigger_sha,'authoritative_source',source,'generation',d['generation_id'],'already_aligned',aligned,'force',force)
-          PY
+          python -m scripts.hunter_generation_admission
   research:
     needs: bind
     if: ${{ needs.bind.outputs.should_run == 'true' }}
@@ -242,125 +220,7 @@ jobs:
           entered=set(state.get('ever_entered_assets') or [])
           entered.update(x.get('asset') for x in state.get('events',[]) if x.get('type')=='SHADOW_V1_BUY' and x.get('asset'))
           missing=sorted(expected-(set(actual)|entered))
-          assert not duplicates, f'V1_DUPLICATE_OPEN_ASSETS {duplicates}'
-          assert not missing, f'V1_EARLY_COVERAGE_MISSING_NEVER_ENTERED count={len(missing)} sample={missing[:20]}'
-          assert len(expected)<=int(early.get('early_count') or 0), 'V1_EARLY_COUNT_MISMATCH'
-          assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
-          assert state.get('events'), 'V1_EVENTS_EMPTY'
-          assert len(state.get('decisions') or []) <= 1500, 'V1_DECISION_HISTORY_UNBOUNDED'
-          assert len(state.get('events') or []) <= 5000, 'V1_EVENT_HISTORY_UNBOUNDED'
-          active_assets=set(actual)|{x.get('asset') for x in state.get('closed_positions') or []}|{x.get('asset') for x in state.get('events') or []}|{x.get('asset') for x in state.get('decisions') or []}|set(state.get('ever_entered_assets') or [])
-          assert not (active_assets & excluded), f'V1_ACTIVE_BSTOCK_HISTORY {sorted(active_assets & excluded)}'
-          summary=json.load(open('research/results/hunter-shadow-summary.json'))
-          assert int(summary.get('open_positions') or 0)==len(opens), 'V1_SUMMARY_OPEN_MISMATCH'
-          assert int(summary.get('closed_positions') or 0)==len(state.get('closed_positions') or []), 'V1_SUMMARY_CLOSED_MISMATCH'
-          print(f'V1_EARLY_COVERAGE_OK executable_early={len(expected)} research_only_early={len(research_only)} open={len(actual)} entered_history={len(entered)} legacy_open={len(set(actual)-expected)} decisions={len(state.get("decisions") or [])}')
-          PY
-      - name: Run V2 executable shadow orders
-        env:
-          HUNTER_SHADOW_FREEZE: '0'
-        run: |
-          for attempt in 1 2 3; do
-            if python research/hunter_shadow_trader_v2.py; then exit 0; fi
-            echo "V2_SHADOW_ENGINE_RETRY attempt=$attempt"
-            sleep $((attempt*2))
-          done
-          exit 1
-      - name: Verify V2 shadow state integrity
-        run: |
-          python - <<'PY'
-          import json
-          state=json.load(open('research/results/hunter-shadow-v2-portfolio.json'))
-          review=json.load(open('research/results/hunter-tactical-capital-review.json'))
-          universe=json.load(open('research/results/hunter-cex-universe-run.json'))
-          excluded=set((((universe.get('venue_status') or {}).get('binance') or {}).get('excluded_bstocks') or []))
-          assert excluded, 'CRYPTO_SCOPE_BSTOCK_CLASSIFICATION_MISSING'
-          assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
-          assert state.get('schema')=='hunter_shadow_v2_portfolio_v2'
-          opens=state.get('open_positions') or []
-          assets=[x.get('asset') for x in opens if x.get('asset')]
-          assert len(assets)==len(set(assets)), f'V2_DUPLICATE_OPEN_ASSETS {assets}'
-          used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in opens)
-          assert used <= 20000.000001, f'V2_CAPITAL_POOL_EXCEEDED {used}'
-          buyset=set(review.get('executable_buy') or [])
-          current_generation=review.get('scan_generation_id')
-          current_open={x.get('asset') for x in opens if x.get('scan_generation_id')==current_generation}
-          assert current_open <= buyset, f'V2_ENTRY_NOT_AUTHORIZED_BY_CAPITAL_REVIEW {sorted(current_open-buyset)}'
-          assert all(x.get('trade_action') in ('BUY','WAIT','REJECT','SYSTEM_BLOCKED') for x in review.get('candidates') or []), 'V2_FINAL_ACTION_MISSING'
-          assert len(state.get('decisions') or []) <= 1500, 'V2_DECISION_HISTORY_UNBOUNDED'
-          assert len(state.get('events') or []) <= 5000, 'V2_EVENT_HISTORY_UNBOUNDED'
-          active_assets=set(assets)|{x.get('asset') for x in state.get('closed_positions') or []}|{x.get('asset') for x in state.get('events') or []}|{x.get('asset') for x in state.get('decisions') or []}|set(state.get('ever_entered_assets') or [])
-          assert not (active_assets & excluded), f'V2_ACTIVE_BSTOCK_HISTORY {sorted(active_assets & excluded)}'
-          assert buyset=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}, 'V2_EXECUTABLE_BUY_MISMATCH'
-          print(f'V2_SHADOW_ACTIVE_OK open={len(opens)} used_usdt={used:.2f} executable_buy={sorted(buyset)} decisions={len(state.get("decisions") or [])}')
-          PY
-      - name: Reject mixed-generation research
-        env:
-          EXPECTED: ${{ steps.generation.outputs.id }}
-        run: |
-          python - <<'PY'
-          import json,os
-          s=json.load(open('research/results/hunter-cex-universe-run.json'))
-          expected=os.environ['EXPECTED']; scan_at=s['as_of_utc']
-          assert s['generation_id']==expected
-          checks={
-            'early': json.load(open('research/results/hunter-early-signals.json')).get('scan_generation_id')==expected,
-            'forward': json.load(open('research/results/hunter-forward-research.json')).get('scan_generation_id')==expected,
-            'identity': json.load(open('research/results/hunter-identity-audit.json')).get('scan_generation_id')==expected,
-            'liquidity': json.load(open('research/results/hunter-liquidity-probe.json')).get('scan_generation_id')==expected,
-            'supply': json.load(open('research/results/hunter-tactical-supply-risk.json')).get('scan_generation_id')==expected,
-            'capital_review': json.load(open('research/results/hunter-tactical-capital-review.json')).get('scan_generation_id')==expected,
-            'health': json.load(open('research/results/hunter-health-and-queue.json')).get('scan_generation_id')==expected,
-          }
-          bad=[k for k,v in checks.items() if not v]
-          assert not bad, f'MIXED_GENERATION_STAGES {bad}'
-          print('DOWNSTREAM_GENERATION_VERIFIED',expected,sorted(checks))
-          PY
-      - name: Closed-loop acceptance guard
-        env:
-          EXPECTED: ${{ steps.generation.outputs.id }}
-        run: |
-          python - <<'PY'
-          import json,os
-          expected=os.environ['EXPECTED']
-          scan=json.load(open('research/results/hunter-cex-universe-run.json'))
-          identity=json.load(open('research/results/hunter-identity-audit.json'))
-          supply=json.load(open('research/results/hunter-tactical-supply-risk.json'))
-          review=json.load(open('research/results/hunter-tactical-capital-review.json'))
-          v1=json.load(open('research/results/hunter-shadow-portfolio.json'))
-          v2=json.load(open('research/results/hunter-shadow-v2-portfolio.json'))
-          assert scan.get('generation_id')==expected
-          at=scan.get('as_of_utc')
-          assert identity.get('scan_as_of_utc')==at
-          assert supply.get('scan_as_of_utc')==at
-          assert review.get('scan_generation_id')==expected
-          from research.hunter_policy import VERSION
-          for name in ('hunter-early-signals.json','hunter-liquidity-probe.json','hunter-health-and-queue.json','hunter-tactical-capital-review.json','hunter-shadow-summary.json','hunter-shadow-v2-summary.json'):
-              assert json.load(open('research/results/'+name)).get('policy_version')==VERSION, f'POLICY_VERSION_MISMATCH {name}'
-          actions={x.get('trade_action') for x in review.get('candidates') or []}
-          assert actions <= {'BUY','WAIT','REJECT','SYSTEM_BLOCKED'}
-          buy={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}
-          assert buy==set(review.get('executable_buy') or [])
-          for state,label in ((v1,'V1'),(v2,'V2')):
-              opens=state.get('open_positions') or []
-              names=[x.get('asset') for x in opens if x.get('asset')]
-              assert len(names)==len(set(names)),f'{label}_DUPLICATE_OPEN'
-              assert state.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'
-          used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in v2.get('open_positions') or [])
-          assert used<=20000.000001
-          print('HUNTER_CLOSED_LOOP_ACCEPTED',expected,'BUY',sorted(buy),'V1',len(v1.get('open_positions') or []),'V2',len(v2.get('open_positions') or []))
-          PY
-      - name: Persist Hunter state only after closed-loop acceptance
-        env:
-          EXPECTED: ${{ steps.generation.outputs.id }}
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          BASE_SHA="${HUNTER_EXECUTION_BASE_SHA:?LATEST_EXECUTION_BASE_REQUIRED}"
-          git fetch origin main
-          python -m scripts.hunter_research_rebind --generation "$EXPECTED" --check-base "$BASE_SHA"
-          CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
+          assert not duplicates, f'V1_DU…2165 tokens truncated…SHA"..origin/main || true)
           if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|tail_risk_replay|leading_risk|leading_risk_replay|cex_scan|early_signals|forward_research|identity_audit|liquidity_probe|tactical_supply_risk|tactical_capital_review|health_and_queue)\.py|research/results/hunter-(cex-universe|shadow-|position-monitor|leading-risk|early-signals|forward-research|identity-audit|liquidity-probe|tactical-supply-risk|tactical-capital-review|health-and-queue)|\.github/workflows/hunter-(cex-universe|research-pipeline|position-monitor)\.yml)'; then
             echo "HUNTER_STATE_REVISION_CONFLICT"
             printf '%s\n' "$CHANGED"
