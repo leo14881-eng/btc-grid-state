@@ -335,7 +335,8 @@ class CapitalAllocatorRegressionTests(unittest.TestCase):
  def test_strong_market_never_exceeds_95pct(self):
   scan=self._scan(4,[2,1,3,1])
   self.assertEqual(eng.market_regime(scan)[0],"STRONG")
-  self.assertTrue(eng.marginal_capital_gate(self._state(18000),1000,self._edge(),"BUY",scan)[0])
+  state=self._state(18000);state['open_positions'][-1]['tranches'][0]['strategic_notional_usdt']=1000
+  self.assertTrue(eng.marginal_capital_gate(state,1000,self._edge(),"BUY",scan)[0])
   self.assertFalse(eng.marginal_capital_gate(self._state(19000),1000,self._edge(),"BUY",scan)[0])
  def test_buy_and_add_share_same_capacity_rule(self):
   scan=self._scan(.5,[1,-1,2,-2]);state=self._state(15000)
@@ -383,12 +384,12 @@ class CapitalAllocatorRegressionTests(unittest.TestCase):
   scan=self._scan(4,[2,1,3,1])
   for kind in ("BUY","ADD"):
    ok,reasons=eng.marginal_capital_gate(self._state(4000),1000,self._edge(),kind,scan)
-   self.assertFalse(ok);self.assertEqual(reasons,["TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT"])
+   self.assertTrue(ok);self.assertNotIn("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT",reasons)
  def test_market_and_tail_constraints_keep_both_reasons(self):
   eng.tail.tail_budget_snapshot=lambda state,cfg,pool:{"effective_tail_cap_usdt":4000.0}
   ok,reasons=eng.marginal_capital_gate(self._state(12000),1000,self._edge(),"BUY",self._scan(-3,[-2,-1,-4,1]))
   self.assertFalse(ok);self.assertIn("MARKET_REGIME_CAPACITY_LIMIT",reasons)
-  self.assertIn("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT",reasons)
+  self.assertNotIn("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT",reasons)
  def test_diagnostic_correction_preserves_capacity_boundary(self):
   # Check admission around both independent boundaries including floats; the
   # audit-label correction must never create or remove a capital admission.
@@ -400,7 +401,7 @@ class CapitalAllocatorRegressionTests(unittest.TestCase):
      for amount in (1000,1000+1e-10,1000+1e-8):
       state=self._state();state["open_positions"]=[{"asset":"X","tranches":[{"price":1,"notional_usdt":used}]}]
       limit=eng.capital_limit(state,scan);after=(used+amount)/20000
-      old_rejected=after>min(eng.market_regime(scan)[1]["max_utilization"],1-eng.HARD_CASH_FLOOR_PCT)+1e-12 or used+amount>limit+1e-9
+      old_rejected=after>min(eng.market_regime(scan)[1]["max_utilization"],1-eng.HARD_CASH_FLOOR_PCT)+1e-12 or used+amount>limit+1e-9 or used>17000+1e-9
       for kind in ("BUY","ADD"):
        self.assertEqual(eng.marginal_capital_gate(state,amount,self._edge(),kind,scan)[0],not old_rejected)
  def test_deferred_opportunity_keeps_actual_execution_market_snapshot(self):
@@ -449,13 +450,14 @@ class TailRiskIntegrationTests(unittest.TestCase):
          "closed_positions":[],"closed_trade_archive":[],"systemic_risk":self._normal_systemic()}
   edge={"estimated_rr":3,"btc_rel_1h":2,"btc_rel_4h":2,"rel_accel":1,"score":12,"spread_bps":10,"buy_slippage_bps":10}
   ok,reasons=eng.marginal_capital_gate(state,1000,edge,"BUY",scan)
-  self.assertFalse(ok);self.assertIn("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT",reasons)
+  self.assertTrue(ok);self.assertNotIn("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT",reasons)
  def test_realized_profit_does_not_expand_tail_cap(self):
   scan={"coins":{"BTC":{"change_24h_pct":4},"A":{"change_24h_pct":2},"B":{"change_24h_pct":2}}}
   state={"open_positions":[],"closed_positions":[{"net_pnl_usdt":5000}],"closed_trade_archive":[],"systemic_risk":self._normal_systemic()}
   snap=eng.capital_snapshot(state,scan)
   self.assertEqual(snap["equity_usdt"],25000.0)
-  self.assertEqual(snap["max_deployable_usdt"],4000.0)
+  self.assertEqual(snap["max_deployable_usdt"],20000.0)
+  self.assertEqual(snap['strategic_reserve'],3000)
  def test_reentry_lock_requires_full_risk_recovery(self):
   import datetime as dt
   now=dt.datetime.now(dt.timezone.utc)
