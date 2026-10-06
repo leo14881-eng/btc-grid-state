@@ -207,7 +207,9 @@ class ResearchRebindTests(unittest.TestCase):
         self.publish_verified_monitor_metadata()
         good = json.loads((self.writer/r.PROOF_PATH).read_text())
         before = r.git("rev-parse", "HEAD").stdout
-        for key, value in [("source", "GITHUB_ACTIONS"), ("main_readback_verified", False),
+        for key, value in [("schema", "invalid"), ("job", "research"), ("status", "FAILURE"),
+                           ("capital_authority", "REAL"),
+                           ("source", "GITHUB_ACTIONS"), ("main_readback_verified", False),
                            ("real_trading_enabled", True), ("scheduler_health_sha256", "wrong"),
                            ("monitor_generation_id", "old"), ("completed_at_utc", "2020-01-01T00:00:00Z"),
                            ("main_readback_head_sha", "a"*40)]:
