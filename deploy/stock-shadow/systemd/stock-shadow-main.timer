@@ -1,0 +1,12 @@
+[Unit]
+Description=Stock Shadow hourly UTC minute 23 timer
+
+[Timer]
+OnCalendar=*-*-* *:23:00 UTC
+Unit=stock-shadow-main.service
+Persistent=false
+RandomizedDelaySec=0
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

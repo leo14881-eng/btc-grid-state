@@ -12,6 +12,10 @@ on:
       - 'research/stock_shadow/market_session.py'
       - 'research/stock_shadow/persist_results.sh'
       - 'tests/test_stock_shadow.py'
+      - 'tests/test_stock_server_migration.py'
+      - '.github/stock-runtime.json'
+      - 'research/stock_shadow/server/**'
+      - 'deploy/stock-shadow/**'
       - '.github/workflows/stock-shadow-replay.yml'
   schedule:
     # 22:30 UTC is safely after the regular US close in both EDT and EST.
@@ -21,7 +25,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: stock-shadow-replay
+  group: stock-shadow-main
   cancel-in-progress: false
 
 jobs:
@@ -32,24 +36,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+      - name: Admit authoritative stock writer
+        id: admission
+        run: python3 -m research.stock_shadow.server.runtime admit --owner github --job replay --run-id "${{ github.run_id }}" --run-attempt "${{ github.run_attempt }}"
       - uses: actions/setup-python@v5
+        if: steps.admission.outputs.should_run == 'true'
         with:
           python-version: '3.12'
       - name: Install test dependency
+        if: steps.admission.outputs.should_run == 'true'
         run: python -m pip install --disable-pip-version-check pytest
       - name: Test Stock Shadow replay and invariants
-        run: python -m pytest -q tests/test_stock_shadow.py
+        if: steps.admission.outputs.should_run == 'true'
+        run: python -m pytest -q tests/test_stock_shadow.py tests/test_stock_server_migration.py
       - name: P0 weekend and final mutation gate acceptance
+        if: steps.admission.outputs.should_run == 'true'
         run: python -m pytest -q tests/test_stock_shadow.py -k p0
       - name: Chronological Replay
+        if: steps.admission.outputs.should_run == 'true'
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
         run: python research/stock_shadow/stock_replay.py
       - name: Isolation guard
+        if: steps.admission.outputs.should_run == 'true'
         run: |
-          git diff --name-only | grep -Ev '^research/results/stock-shadow/replay-v1.json$' && { echo "Replay isolation violation"; exit 1; } || true
+          bash research/stock_shadow/isolation_guard.sh
       - name: Persist replay result only
+        if: steps.admission.outputs.should_run == 'true'
         run: bash research/stock_shadow/persist_results.sh replay
 
 # TEST_REPAIR_RERUN_20261005
