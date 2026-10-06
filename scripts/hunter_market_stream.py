@@ -185,7 +185,10 @@ def restore(watch, path, now):
         for key in watch.counterfactual:
             if key in old.get('counterfactual', {}) and old['counterfactual'][key]['tranches'] == watch.counterfactual[key]['tranches']:
                 watch.counterfactual[key] = old['counterfactual'][key]
-        watch.ab.update(old.get('ab', {}))
+        for key, evidence in old.get('ab', {}).items():
+            if (key in watch.ab and evidence.get('measurement_schema')=='LIVE_WINDOW_ONLY_V1'
+                and evidence.get('tranche_fingerprint')==watch.ab[key]['tranche_fingerprint']):
+                watch.ab[key]=evidence
         watch.metrics.update(old.get('metrics', {}))
         # Quote ordering high-watermarks survive reconnect/restart; freshness does not.
         for symbol, row in watch.symbols.items():
