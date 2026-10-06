@@ -35,13 +35,54 @@ def get_json(url):
         return json.load(response)
 
 def source(url, parser, get=get_json):
+    attempted = stamp()
     try:
-        fetched = stamp()
         raw = get(url)
+        fetched = stamp()
         result = parser(raw)
-        return {'source': url, 'fetched_at': fetched, **result}
+        return {'source': url, 'attempted_at': attempted, 'fetched_at': fetched, **result}
     except Exception as error:
-        return {'source': url, 'error': type(error).__name__ + ': ' + str(error), 'asof': None}
+        return {'source': url, 'attempted_at': attempted, 'fetched_at': None,
+                'error': type(error).__name__ + ': ' + str(error), 'asof': None}
+
+
+def depth_levels(bids, asks):
+    bids = [[float(price), float(size)] for price, size, *_ in bids]
+    asks = [[float(price), float(size)] for price, size, *_ in asks]
+    if not bids or not asks or bids[0][0] <= 0 or asks[0][0] < bids[0][0]:
+        raise ValueError('INVALID_ORDERBOOK')
+    mid = (bids[0][0] + asks[0][0]) / 2
+    return {'bid': bids[0][0], 'ask': asks[0][0], 'bids': bids, 'asks': asks,
+            'spread_bps': (asks[0][0] - bids[0][0]) / mid * 10000,
+            'bid_depth_usdt_returned_levels': sum(p * q for p, q in bids),
+            'ask_depth_usdt_returned_levels': sum(p * q for p, q in asks)}
+
+
+def bybit_spot_depth(data):
+    if data.get('retCode') != 0:
+        raise ValueError('BYBIT_ORDERBOOK_RESPONSE_REJECTED')
+    book = data['result']
+    if book.get('s') != 'BTCUSDT':
+        raise ValueError('ORDERBOOK_SYMBOL_MISMATCH')
+    return {'asof': millis(book['ts']), 'timestamp_quality': 'EXCHANGE_RESPONSE_TIMESTAMP',
+            'venue': 'BYBIT_SPOT', 'source_venue': 'BYBIT', 'market_type': 'SPOT',
+            'price_currency': 'USDT', 'quantity_currency': 'BTC', 'symbol': book['s'],
+            'last_update_id': book.get('u'), **depth_levels(book['b'], book['a'])}
+
+
+def collect_depth(get=get_json):
+    primary = source('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=20',
+        lambda d: {'asof': None, 'timestamp_quality': 'RECEIPT_TIME_ONLY_NOT_EXCHANGE_TIMESTAMP',
+                   'venue': 'BINANCE_SPOT', 'source_venue': 'BINANCE', 'market_type': 'SPOT',
+                   'price_currency': 'USDT', 'quantity_currency': 'BTC', 'symbol': 'BTCUSDT',
+                   'last_update_id': d['lastUpdateId'], **depth_levels(d['bids'], d['asks'])}, get)
+    # Binance REST spot depth has no event timestamp. Receipt time must not pass
+    # freshness. An independently timestamped venue is evidence, never Binance depth.
+    fallback = source('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=BTCUSDT&limit=25',
+                      bybit_spot_depth, get)
+    selected = fallback if fallback.get('asof') else primary
+    return {**selected, 'fallback_attempts': [primary, fallback],
+            'cross_venue_usage': 'EVIDENCE_ONLY_NOT_EXECUTION_VENUE_PROOF'}
 
 def millis(n):
     return stamp(dt.datetime.fromtimestamp(float(n) / 1000, UTC))
@@ -50,7 +91,6 @@ def collect(get=get_json):
     specs = {
       'btc_spot': ('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', lambda d: {'asof': millis(d['closeTime']), 'price': float(d['lastPrice']), 'volume_24h': float(d['volume']), 'price_change_pct_24h': float(d['priceChangePercent'])}),
       'btc_structure': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
-      'btc_depth': ('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=20', lambda d: {'asof': None, 'timestamp_quality': 'RECEIPT_TIME_ONLY_NOT_EXCHANGE_TIMESTAMP', 'bid': float(d['bids'][0][0]), 'ask': float(d['asks'][0][0]), 'last_update_id': d['lastUpdateId']}),
       'btc_oi': ('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', lambda d: {'asof': millis(d['time']), 'open_interest': float(d['openInterest'])}),
       'btc_funding': ('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', lambda d: {'asof': millis(d['time']), 'funding_rate': float(d['lastFundingRate']), 'mark_price': float(d['markPrice'])}),
       'axs_spot': ('https://api.binance.com/api/v3/ticker/24hr?symbol=AXSUSDT', lambda d: {'asof': millis(d['closeTime']), 'price': float(d['lastPrice']), 'volume_24h': float(d['volume']), 'quote_volume_24h': float(d['quoteVolume'])}),
@@ -61,7 +101,10 @@ def collect(get=get_json):
     }
     with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {key: pool.submit(source, url, parser, get) for key, (url, parser) in specs.items()}
-        return {key: future.result() for key, future in futures.items()}
+        depth = pool.submit(collect_depth, get)
+        evidence = {key: future.result() for key, future in futures.items()}
+        evidence['btc_depth'] = depth.result()
+        return evidence
 
 def fresh(record, now, seconds):
     try:

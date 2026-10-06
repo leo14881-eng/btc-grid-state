@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, UTC
+from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, collect_depth, UTC
 
 class RuntimeTest(unittest.TestCase):
     def setUp(self):
@@ -24,6 +24,34 @@ class RuntimeTest(unittest.TestCase):
         result=source('https://public.example.invalid',lambda d:d,get=failed)
         self.assertIsNone(result['asof'])
         self.assertIn('OSError: offline',result['error'])
+    def test_depth_fallback_keeps_venue_timestamp_and_failed_primary(self):
+        def get(url):
+            if 'binance.com' in url:
+                raise OSError('primary offline')
+            return {'retCode':0,'result':{'s':'BTCUSDT','ts':1791273600000,
+                    'u':123,'b':[['85000','2']],'a':[['85010','3']]}}
+        result=collect_depth(get)
+        self.assertEqual(result['venue'],'BYBIT_SPOT')
+        self.assertTrue(result['asof'])
+        self.assertIn('primary offline',result['fallback_attempts'][0]['error'])
+        self.assertIsNone(result['fallback_attempts'][0]['fetched_at'])
+        self.assertEqual(result['bid_depth_usdt_returned_levels'],170000)
+        self.assertEqual(result['cross_venue_usage'],'EVIDENCE_ONLY_NOT_EXECUTION_VENUE_PROOF')
+    def test_receipt_only_depth_does_not_pass_when_fallback_fails(self):
+        def get(url):
+            if 'bybit.com' in url: raise OSError('fallback offline')
+            return {'lastUpdateId':123,'bids':[['85000','2']],'asks':[['85010','3']]}
+        result=collect_depth(get)
+        self.assertIsNone(result['asof'])
+        self.assertFalse(fresh(result,self.now,600))
+        self.assertEqual(len(result['fallback_attempts']),2)
+    def test_wrong_symbol_fallback_is_rejected(self):
+        def get(url):
+            if 'binance.com' in url: raise OSError('offline')
+            return {'retCode':0,'result':{'s':'ETHUSDT','ts':1791273600000}}
+        result=collect_depth(get)
+        self.assertIsNone(result['asof'])
+        self.assertIn('SYMBOL_MISMATCH',result['fallback_attempts'][1]['error'])
     def test_secondary_failure_does_not_turn_unknown_to_pass(self):
         result=scan(self.old,{'btc_spot':{'asof':stamp(self.now)},'axs_korea':{'asof':None,'error':'timeout'}},self.now)
         self.assertFalse(result['freshness_gate']['sources']['axs_korea'])
