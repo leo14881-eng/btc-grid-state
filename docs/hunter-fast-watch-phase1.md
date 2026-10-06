@@ -92,6 +92,10 @@ deploy/systemd/hunter-market-stream.service采用独立hunter-fast-watch用户�
 
 ab按shadow_id记录ws/monitor arm、peak、exit review及理论净利润；source SHA固定到main读回。
 未出现的pair与执行成本保持null，不写0。delta=monitor时间-ws时间。
+A/B只统计各position/cashflow窗口启动后的真实新观察；启动前ARM/holding peak仅作baseline，
+不参与新检测延迟。Monitor sampled peak只累积后续MONITOR generation的last_price；
+不把Research observation或历史回填peak冒充5分钟样本。ADD重置配对窗口并保留旧episode。
+重启只恢复匹配cashflow的新版LIVE_WINDOW_ONLY_V1观察记录；旧schema不追认。
 WS uptime仅本次process观察窗口；exchange时间latency是clock-dependent估计，
 Binance receipt-only book没有exchange latency证据。实时统计不能证明成交或实际利润改善。
 missed-profit/capture delta仍须24小时以上配对证据裁定，当前UNKNOWN。

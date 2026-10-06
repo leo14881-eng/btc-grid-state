@@ -44,6 +44,16 @@ def utc(ts):
     return dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat()
 
 
+def in_live_window(at, started_at, now):
+    try:
+        observed=dt.datetime.fromisoformat(at)
+        started=dt.datetime.fromisoformat(started_at)
+        return (observed.tzinfo is not None and started.tzinfo is not None and
+                started.timestamp() <= observed.timestamp() <= now)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def finite(value):
     n = float(value)
     if not math.isfinite(n) or n <= 0:
@@ -171,24 +181,41 @@ class Watch:
                 self.counterfactual[key] = copy.deepcopy(p)
             elif self.counterfactual[key]['tranches'] != p['tranches']:
                 self.counterfactual[key] = copy.deepcopy(p)  # authoritative cashflow rebase
-            a = self.ab.setdefault(key, {'asset': p['asset'], 'ws_first_arm_seen_at': None,
-                'monitor_first_arm_seen_at': None, 'ws_exit_review_at': None,
-                'monitor_exit_review_at': None, 'ws_peak': None, 'monitor_sampled_peak': None,
-                'ws_theoretical_net_exit_pnl': None, 'monitor_theoretical_net_exit_pnl': None,
-                'potential_missed_profit_window': None, 'false_fast_trigger': 0})
-            life = p.get('protection_lifecycle', {})
-            if life.get('armed_at_utc'):
-                a['monitor_first_arm_seen_at'] = life['armed_at_utc']
-            if life.get('state') == 'EXIT_TRIGGERED':
-                a['monitor_exit_review_at'] = life.get('last_observed_at_utc')
-                a['monitor_theoretical_net_exit_pnl'] = p.get('last_exit_estimate', {}).get('net_pnl_usdt')
-            a['monitor_sampled_peak'] = p.get('holding_peak_price', p.get('last_price'))
-        # Closed positions supply the monitor exit baseline without watching them.
-        for p in portfolio.get('closed_positions', []):
-            if p['shadow_id'] in self.ab:
-                a = self.ab[p['shadow_id']]
-                a['monitor_exit_review_at'] = p.get('closed_at_utc', p.get('exit_at_utc'))
-                a['monitor_theoretical_net_exit_pnl'] = p.get('net_pnl_usdt')
+            fingerprint=hashlib.sha256(json.dumps(p['tranches'],sort_keys=True).encode()).hexdigest()
+            previous=self.ab.get(key)
+            if previous is None or previous.get('tranche_fingerprint') != fingerprint:
+                if previous is not None:
+                    self.record('AB_CASHFLOW_REBASE',now,position_id=key,previous_ab=copy.deepcopy(previous))
+                self.ab[key]={'measurement_schema':'LIVE_WINDOW_ONLY_V1','measurement_started_at':utc(now),
+                    'tranche_fingerprint':fingerprint,'asset':p['asset'],'ws_first_arm_seen_at':None,
+                    'monitor_first_arm_seen_at':None,'ws_exit_review_at':None,'monitor_exit_review_at':None,
+                    'ws_peak':None,'monitor_sampled_peak':None,'ws_theoretical_net_exit_pnl':None,
+                    'monitor_theoretical_net_exit_pnl':None,'potential_missed_profit_window':None,
+                    'false_fast_trigger':0,'baseline_monitor_armed_at_utc':p.get('protection_lifecycle',{}).get('armed_at_utc'),
+                    'baseline_holding_peak_price':p.get('holding_peak_price')}
+            a=self.ab[key]
+            life=p.get('protection_lifecycle',{})
+            if str(portfolio.get('active_observation_generation_id','')).startswith('MONITOR_'):
+                if in_live_window(life.get('armed_at_utc'),a['measurement_started_at'],now):
+                    a['monitor_first_arm_seen_at']=life['armed_at_utc']
+                if life.get('state')=='EXIT_TRIGGERED' and in_live_window(life.get('last_observed_at_utc'),a['measurement_started_at'],now):
+                    a['monitor_exit_review_at']=life['last_observed_at_utc']
+                    a['monitor_theoretical_net_exit_pnl']=p.get('last_exit_estimate',{}).get('net_pnl_usdt')
+                if in_live_window(p.get('last_marked_at_utc'),a['measurement_started_at'],now):
+                    try:
+                        price=finite(p['last_price'])
+                        a['monitor_sampled_peak']=max(a['monitor_sampled_peak'] or price,price)
+                    except (KeyError, ValueError, TypeError):pass
+        # Only subsequent Monitor closes with the same cashflow form live pairs.
+        if str(portfolio.get('active_observation_generation_id','')).startswith('MONITOR_'):
+            for p in portfolio.get('closed_positions',[]):
+                if p['shadow_id'] in self.ab:
+                    a=self.ab[p['shadow_id']]
+                    fingerprint=hashlib.sha256(json.dumps(p.get('tranches'),sort_keys=True).encode()).hexdigest()
+                    at=p.get('closed_at_utc',p.get('exit_at_utc'))
+                    if fingerprint==a['tranche_fingerprint'] and in_live_window(at,a['measurement_started_at'],now):
+                        a['monitor_exit_review_at']=at
+                        a['monitor_theoretical_net_exit_pnl']=p.get('net_pnl_usdt')
         self.positions = new
         self.counterfactual = {k: v for k, v in self.counterfactual.items() if k in new}
         self.pending = {k: v for k, v in self.pending.items() if k in new}
@@ -390,11 +417,12 @@ class Watch:
         if p.get('_last_event_id') == trigger['event_id']:
             return {'status': 'DEDUPLICATE'}
         p.update(_last_review_at=now, _last_event_id=trigger['event_id'])
+        previous_state=p.get('protection_lifecycle',{}).get('state','UNARMED')
         result = protect(p, trigger['price'], estimate['net_pnl_usdt'], estimate,
             dt.datetime.fromtimestamp(now, dt.timezone.utc), 'FAST_OBSERVATION_' + trigger['event_id'],
             utc(trigger['received_at']), PROTECT_ARM_PCT, GIVEBACK_MAX_PCT, MIN_PROTECTED_NET_PCT)
         a = self.ab[key]
-        if result['armed'] and a['ws_first_arm_seen_at'] is None:
+        if previous_state=='UNARMED' and result['armed'] and a['ws_first_arm_seen_at'] is None:
             a['ws_first_arm_seen_at'] = utc(now)
         if result['exit']:
             p['_observation_exited'] = True  # one hypothetical exit per episode, never a ledger event
