@@ -4,6 +4,11 @@ import argparse
 import json
 import pathlib
 import subprocess
+import sys
+
+# The installed host launcher invokes this file directly, not with -m.
+if not __package__:
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 RESULTS = 'research/results/'
 NAMES = (
@@ -89,7 +94,8 @@ def protected(path):
             path.startswith('tests/test_hunter_') or
             path.startswith('scripts/hunter_monitor_') or
             path.startswith('deploy/systemd/hunter-position-monitor.') or
-            path == '.github/workflows/hunter-position-monitor.yml')
+            path == '.github/workflows/hunter-position-monitor.yml' or
+            path == '.github/hunter-runtime.json')
 
 
 def cas(base):
@@ -108,6 +114,7 @@ def readback(expected, generation, commit=None):
     counts = validate(remote, generation)
     require(remote == expected, 'AUTHORITATIVE_SNAPSHOT_MISMATCH')
     print('SERVER_POST_PUSH_READBACK_OK', generation, *counts)
+    return commit or git('rev-parse', 'origin/main').stdout.strip()
 
 
 def persist(base, generation):
@@ -118,7 +125,9 @@ def persist(base, generation):
     cas(base)
     git('add', '-f', '--', *PATHS)
     if git('diff', '--cached', '--quiet', check=False).returncode == 0:
-        readback(expected, generation)
+        verified_commit = readback(expected, generation)
+        from scripts.hunter_monitor_runtime import publish_verified
+        publish_verified(expected, generation, verified_commit)
         return
     git('commit', '-m', 'state: five-minute Hunter position monitor')
     for attempt in range(1, 6):
@@ -127,7 +136,9 @@ def persist(base, generation):
         pushed = git('push', 'origin', 'HEAD:main', check=False)
         if pushed.returncode == 0:
             commit = git('rev-parse', 'HEAD').stdout.strip()
-            readback(expected, generation, commit)
+            verified_commit = readback(expected, generation, commit)
+            from scripts.hunter_monitor_runtime import publish_verified
+            publish_verified(expected, generation, verified_commit)
             print('SHADOW_STATE_PUSH_VERIFIED', f'attempt={attempt}')
             return
         print('SHADOW_STATE_PUSH_RACE', f'attempt={attempt}', flush=True)

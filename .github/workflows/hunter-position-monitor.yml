@@ -47,7 +47,11 @@ jobs:
         run: |
           git fetch origin main
           git checkout -B main origin/main
+      - name: Verified Vultr primary or GitHub fallback gate
+        id: runtime
+        run: python -m scripts.hunter_monitor_runtime gate
       - name: Generation idempotency gate
+        if: steps.runtime.outputs.run == 'true'
         id: generation
         env:
           TRIGGER_SOURCE: ${{ inputs.trigger_source || github.event_name }}
