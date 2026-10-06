@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import urllib.request
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
 UTC = dt.timezone.utc
@@ -34,6 +35,30 @@ def get_json(url):
     with urllib.request.urlopen(req, timeout=12) as response:
         return json.load(response)
 
+def get_text(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'sentinel-public-evidence/1.0'})
+    with urllib.request.urlopen(req, timeout=12) as response:
+        return response.read().decode('utf-8')
+
+
+def treasury_daily(xml):
+    records = []
+    for item in ET.fromstring(xml).iter():
+        if item.tag.rsplit('}', 1)[-1] == 'properties':
+            record = {child.tag.rsplit('}', 1)[-1]: child.text for child in item}
+            if record.get('NEW_DATE'):
+                records.append(record)
+    if not records:
+        raise ValueError('NO_TREASURY_DAILY_OBSERVATIONS')
+    latest = max(records, key=lambda record: record['NEW_DATE'])
+    day = dt.date.fromisoformat(latest['NEW_DATE'][:10])
+    return {'asof': None, 'asof_date': day.isoformat(),
+            'asof_definition': 'DAILY_OBSERVATION_DATE_NOT_INTRADAY_EVENT_TIMESTAMP',
+            'source_provider': 'US_TREASURY', 'yield_unit': 'PERCENT',
+            'us2y_pct': float(latest['BC_2YEAR']), 'us10y_pct': float(latest['BC_10YEAR']),
+            'us30y_pct': float(latest['BC_30YEAR']), 'dxy': None,
+            'limitation': 'TREASURY_YIELDS_ONLY; NO_DXY_OR_INTRADAY_MACRO_CONFIRMATION'}
+
 def source(url, parser, get=get_json):
     attempted = stamp()
     try:
@@ -45,6 +70,36 @@ def source(url, parser, get=get_json):
         return {'source': url, 'attempted_at': attempted, 'fetched_at': None,
                 'error': type(error).__name__ + ': ' + str(error), 'asof': None}
 
+
+def spot_source(url, parser, get=get_json):
+    """Same Binance spot feed via its official public market-data-only host."""
+    attempts = []
+    for endpoint in (url, url.replace('https://api.binance.com', 'https://data-api.binance.vision')):
+        record = source(endpoint, parser, get)
+        attempts.append(record)
+        if not record.get('error'):
+            break
+    result = dict(attempts[-1])
+    result.update(source_venue='BINANCE', market_type='SPOT',
+                  fallback_attempts=attempts)
+    return result
+
+
+def oi_history(data):
+    if not isinstance(data, list) or len(data) < 2:
+        raise ValueError('INSUFFICIENT_OI_HISTORY')
+    first, last = data[0], data[-1]
+    start, end = float(first['sumOpenInterest']), float(last['sumOpenInterest'])
+    if start <= 0 or int(first['timestamp']) >= int(last['timestamp']):
+        raise ValueError('INVALID_OI_HISTORY')
+    return {'asof': millis(last['timestamp']), 'source_venue': 'BINANCE',
+            'market_type': 'USD_M_FUTURES', 'open_interest': end,
+            'open_interest_value_usdt': float(last['sumOpenInterestValue']),
+            'change_pct_over_returned_window': (end / start - 1) * 100,
+            'window_start_asof': millis(first['timestamp']),
+            'window_end_asof': millis(last['timestamp']), 'samples': len(data),
+            'open_interest_unit': 'BASE_ASSET', 'value_unit': 'USDT',
+            'samples_raw': data}
 
 def depth_levels(bids, asks):
     bids = [[float(price), float(size)] for price, size, *_ in bids]
@@ -71,7 +126,7 @@ def bybit_spot_depth(data):
 
 
 def collect_depth(get=get_json):
-    primary = source('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=20',
+    primary = spot_source('https://api.binance.com/api/v3/depth?symbol=BTCUSDT&limit=20',
         lambda d: {'asof': None, 'timestamp_quality': 'RECEIPT_TIME_ONLY_NOT_EXCHANGE_TIMESTAMP',
                    'venue': 'BINANCE_SPOT', 'source_venue': 'BINANCE', 'market_type': 'SPOT',
                    'price_currency': 'USDT', 'quantity_currency': 'BTC', 'symbol': 'BTCUSDT',
@@ -80,8 +135,14 @@ def collect_depth(get=get_json):
     # freshness. An independently timestamped venue is evidence, never Binance depth.
     fallback = source('https://api.bybit.com/v5/market/orderbook?category=spot&symbol=BTCUSDT&limit=25',
                       bybit_spot_depth, get)
+    attempts = primary.get('fallback_attempts', [primary]) + [fallback]
+    if not fallback.get('asof'):
+        alternate = source('https://api.bytick.com/v5/market/orderbook?category=spot&symbol=BTCUSDT&limit=25', bybit_spot_depth, get)
+        attempts.append(alternate)
+        if alternate.get('asof'):
+            fallback = alternate
     selected = fallback if fallback.get('asof') else primary
-    return {**selected, 'fallback_attempts': [primary, fallback],
+    return {**selected, 'fallback_attempts': attempts,
             'cross_venue_usage': 'EVIDENCE_ONLY_NOT_EXECUTION_VENUE_PROOF'}
 
 def millis(n):
@@ -91,6 +152,10 @@ def collect(get=get_json):
     specs = {
       'btc_spot': ('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', lambda d: {'asof': millis(d['closeTime']), 'price': float(d['lastPrice']), 'volume_24h': float(d['volume']), 'price_change_pct_24h': float(d['priceChangePercent'])}),
       'btc_structure': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
+      'btc_structure_1h': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '1h', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
+      'btc_structure_daily': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '1d', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
+      'btc_oi_history': ('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=1h&limit=25', oi_history),
+      'axs_oi_history': ('https://fapi.binance.com/futures/data/openInterestHist?symbol=AXSUSDT&period=1h&limit=25', oi_history),
       'btc_oi': ('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', lambda d: {'asof': millis(d['time']), 'open_interest': float(d['openInterest'])}),
       'btc_funding': ('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', lambda d: {'asof': millis(d['time']), 'funding_rate': float(d['lastFundingRate']), 'mark_price': float(d['markPrice'])}),
       'axs_spot': ('https://api.binance.com/api/v3/ticker/24hr?symbol=AXSUSDT', lambda d: {'asof': millis(d['closeTime']), 'price': float(d['lastPrice']), 'volume_24h': float(d['volume']), 'quote_volume_24h': float(d['quoteVolume'])}),
@@ -100,10 +165,12 @@ def collect(get=get_json):
       'axs_korea_hours': ('https://api.upbit.com/v1/candles/minutes/60?market=KRW-AXS&count=25', lambda d: {'asof': millis(d[0]['timestamp']), 'candles': d}),
     }
     with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = {key: pool.submit(source, url, parser, get) for key, (url, parser) in specs.items()}
+        futures = {key: pool.submit(spot_source if url.startswith('https://api.binance.com/') else source, url, parser, get) for key, (url, parser) in specs.items()}
         depth = pool.submit(collect_depth, get)
+        treasury = pool.submit(source, 'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=' + str(dt.datetime.now(UTC).year), treasury_daily, get_text if get is get_json else get)
         evidence = {key: future.result() for key, future in futures.items()}
         evidence['btc_depth'] = depth.result()
+        evidence['macro_treasury_daily'] = treasury.result()
         return evidence
 
 def fresh(record, now, seconds):
@@ -124,10 +191,12 @@ def watchdog(previous, valid, now):
 
 def scan(previous, evidence, now=None):
     now = now or dt.datetime.now(UTC)
-    gates = {key: fresh(record, now, 14460 if key == 'btc_structure' else 600) for key, record in evidence.items()}
+    limits = {'btc_structure': 14460, 'btc_structure_1h': 3660, 'btc_structure_daily': 86460, 'btc_oi_history': 3660, 'axs_oi_history': 3660}
+    gates = {key: fresh(record, now, limits.get(key, 600)) for key, record in evidence.items()}
     valid = all(gates.get(key, False) for key in ('btc_spot', 'btc_structure', 'btc_oi', 'btc_funding'))
     gaps = [key + ': ' + record.get('error', 'SOURCE_TIMESTAMP_UNVERIFIED_OR_STALE') for key, record in evidence.items() if not gates[key]]
-    gaps += ['ETF_LATEST_COMPLETE_SESSION_NOT_ACQUIRED', 'MACRO_TIMESTAMPED_EVIDENCE_NOT_ACQUIRED', 'LIQUIDATIONS_AND_HOLDER_SUPPLY_UNVERIFIED', 'FULL_LEADING_WARNING_ENGINE_REMAINS_CHATGPT; server evidence scan does not replace strategy']
+    macro_gap = 'MACRO_INTRADAY_AND_DXY_UNVERIFIED; TREASURY_DAILY_OBSERVED_' + evidence['macro_treasury_daily']['asof_date'] if evidence.get('macro_treasury_daily', {}).get('asof_date') else 'MACRO_TIMESTAMPED_EVIDENCE_NOT_ACQUIRED'
+    gaps += ['ETF_LATEST_COMPLETE_SESSION_NOT_ACQUIRED', macro_gap, 'LIQUIDATIONS_AND_HOLDER_SUPPLY_UNVERIFIED', 'FULL_LEADING_WARNING_ENGINE_REMAINS_CHATGPT; server evidence scan does not replace strategy']
     # Collection is not a complete Leading Warning analysis. Never advance success.
     wd = watchdog(previous, False, now)
     axs = {'status': 'PARTIAL_DATA', 'capital_action': 'NO_AUTOMATIC_TRADE', 'left_side_research': 'UNKNOWN_REQUIRES_LOW_STRUCTURE_KOREAN_FLOW_AND_BTC_RISK', 'second_wave': 'UNCONFIRMED', 'strong_breakout': 'UNCONFIRMED'}

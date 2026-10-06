@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, collect_depth, UTC
+from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, collect_depth, spot_source, oi_history, treasury_daily, UTC
 
 class RuntimeTest(unittest.TestCase):
     def setUp(self):
@@ -44,14 +44,39 @@ class RuntimeTest(unittest.TestCase):
         result=collect_depth(get)
         self.assertIsNone(result['asof'])
         self.assertFalse(fresh(result,self.now,600))
-        self.assertEqual(len(result['fallback_attempts']),2)
+        self.assertEqual(len(result['fallback_attempts']),3)
     def test_wrong_symbol_fallback_is_rejected(self):
         def get(url):
             if 'binance.com' in url: raise OSError('offline')
             return {'retCode':0,'result':{'s':'ETHUSDT','ts':1791273600000}}
         result=collect_depth(get)
         self.assertIsNone(result['asof'])
-        self.assertIn('SYMBOL_MISMATCH',result['fallback_attempts'][1]['error'])
+        self.assertTrue(any('SYMBOL_MISMATCH' in x.get('error','') for x in result['fallback_attempts']))
+    def test_official_same_venue_spot_fallback_preserves_attempts(self):
+        def get(url):
+            if 'api.binance.com' in url: raise OSError('451 blocked')
+            return {'closeTime':1791273600000,'lastPrice':'85000'}
+        result=spot_source('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT',
+            lambda d:{'asof':stamp(self.now),'price':float(d['lastPrice'])},get)
+        self.assertIn('data-api.binance.vision',result['source'])
+        self.assertEqual(result['source_venue'],'BINANCE')
+        self.assertEqual(result['market_type'],'SPOT')
+        self.assertIn('451 blocked',result['fallback_attempts'][0]['error'])
+    def test_oi_history_retains_actual_window_and_units(self):
+        result=oi_history([{'timestamp':1791270000000,'sumOpenInterest':'10','sumOpenInterestValue':'800000'},
+                           {'timestamp':1791273600000,'sumOpenInterest':'12','sumOpenInterestValue':'960000'}])
+        self.assertAlmostEqual(result['change_pct_over_returned_window'],20)
+        self.assertEqual(result['source_venue'],'BINANCE')
+        self.assertEqual(result['value_unit'],'USDT')
+        self.assertNotEqual(result['window_start_asof'],result['window_end_asof'])
+    def test_treasury_daily_is_not_fabricated_intraday_dxy(self):
+        xml='<feed xmlns:d="x"><properties><d:NEW_DATE>2026-10-05T00:00:00</d:NEW_DATE><d:BC_2YEAR>4.84</d:BC_2YEAR><d:BC_10YEAR>5.31</d:BC_10YEAR><d:BC_30YEAR>5.66</d:BC_30YEAR></properties></feed>'
+        result=treasury_daily(xml)
+        self.assertEqual(result['asof_date'],'2026-10-05')
+        self.assertIsNone(result['asof'])
+        self.assertIsNone(result['dxy'])
+        self.assertEqual(result['us10y_pct'],5.31)
+        self.assertFalse(fresh(result,self.now,600))
     def test_secondary_failure_does_not_turn_unknown_to_pass(self):
         result=scan(self.old,{'btc_spot':{'asof':stamp(self.now)},'axs_korea':{'asof':None,'error':'timeout'}},self.now)
         self.assertFalse(result['freshness_gate']['sources']['axs_korea'])
