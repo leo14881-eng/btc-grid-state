@@ -111,15 +111,22 @@ def capital_limit(state,scan=None):
  if equity is None:return None
  regime,meta=market_regime(scan or {});util=min(meta["max_utilization"],1-HARD_CASH_FLOOR_PCT)
  market_cap=max(0.0,equity*util)
- risk=tail.tail_budget_snapshot(state,C,CAPITAL_POOL_USDT)
- tail_cap=risk.get("effective_tail_cap_usdt")
- # Tail loss budget is an independent hard ceiling. Realized profit may expand
- # ordinary equity but never expands this fixed stress-loss budget.
- return max(0.0,min(market_cap,tail_cap)) if tail_cap is not None else 0.0
+ # Tail stress calibration is a diagnostic, not a deployment/reserve budget.
+ # Retain existing market/cash-floor controls and the fixed principal ceiling.
+ quarantine=max(0,finite((state.get('circuit_breaker') or {}).get('quarantined_cash_usdt')) or 0)
+ ceiling=max(0,min(market_cap,float(CAPITAL_POOL_USDT),equity-quarantine))
+ risk=state.get('systemic_risk') or {}
+ if risk.get('recovery_mode'):ceiling*=max(0,min(1,finite(risk.get('risk_release_fraction')) or 0))
+ return ceiling
+
+def reserve_snapshot(state):
+ used=used_capital(state)
+ strategic=sum(float(t.get('strategic_notional_usdt',0)) for p in state.get('open_positions',[]) for t in p.get('tranches',[]))
+ return {'capital_pool':CAPITAL_POOL_USDT,'ordinary_opportunity_cap':17000 if CAPITAL_POOL_USDT is not None else None,'strategic_reserve':3000 if CAPITAL_POOL_USDT is not None else None,'strategic_reserve_used':round(strategic,2),'strategic_reserve_available':round(max(0,3000-strategic),2) if CAPITAL_POOL_USDT is not None else None,'ordinary_used':round(used-strategic,2),'ordinary_available':round(max(0,17000-(used-strategic)),2) if CAPITAL_POOL_USDT is not None else None,'tail_budget_role':'STRESS_DIAGNOSTIC_NOT_CAPITAL_ALLOCATION'}
 
 def capital_available(state,amount,purpose="BUY",scan=None):
  limit=capital_limit(state,scan)
- return True if limit is None else used_capital(state)+amount<=limit+1e-9
+ return True if limit is None else used_capital(state)+amount<=limit+1e-9 and reserve_snapshot(state)['ordinary_used']+amount<=17000+1e-9
 
 def opportunity_priority(e,kind):
  e=e or {};score=finite(e.get("score")) or 0.0;rr=finite(e.get("estimated_rr")) or 0.0
@@ -134,22 +141,24 @@ def marginal_capital_gate(state,amount,e,kind,scan):
  if after>min(meta["max_utilization"],1-HARD_CASH_FLOOR_PCT)+1e-12:reasons.append("MARKET_REGIME_CAPACITY_LIMIT")
  limit=capital_limit(state,scan)
  if limit is not None and after_used>limit+1e-9:
-  # Keep the same combined admission boundary; attribute the rejection to
-  # the actual constraint rather than calling every market cap a tail cap.
-  tail_cap=tail.tail_budget_snapshot(state,C,CAPITAL_POOL_USDT).get("effective_tail_cap_usdt")
-  if tail_cap is None or after_used>tail_cap+1e-9:reasons.append("TAIL_RISK_OR_QUARANTINE_CAPACITY_LIMIT")
-  elif "MARKET_REGIME_CAPACITY_LIMIT" not in reasons:reasons.append("MARKET_REGIME_CAPACITY_LIMIT")
+  reasons.append("FIXED_POOL_OR_MARKET_CAPACITY_LIMIT")
  rr=finite((e or {}).get("estimated_rr"));r1=finite((e or {}).get("btc_rel_1h"));r4=finite((e or {}).get("btc_rel_4h"));acc=finite((e or {}).get("rel_accel"))
  if after>0.60 and (rr is None or rr<1.8 or r4 is None or r4<0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_60PCT")
  if after>0.75 and (rr is None or rr<2.2 or r4 is None or r4<=0 or acc is None or acc<=0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_75PCT")
  if after>0.85 and (rr is None or rr<2.6 or r1 is None or r1<=0 or r4 is None or r4<0.5 or acc is None or acc<=0):reasons.append("MARGINAL_EDGE_INSUFFICIENT_ABOVE_85PCT")
+ reserve=reserve_snapshot(state);strategic_needed=max(0,amount-max(0,17000-reserve['ordinary_used']))
+ if reserve['ordinary_used']>17000+1e-9:reasons.append('LEGACY_ORDINARY_OVER_CAP_NO_NEW_ALLOCATION')
+ if strategic_needed>reserve['strategic_reserve_available']+1e-9:reasons.append('STRATEGIC_RESERVE_CAPACITY_LIMIT')
+ # Reuse the existing high-utilization edge qualification, never add an
+ # ordinary BUY filter. Reserve access needs this existing strongest standard.
+ if strategic_needed and (rr is None or rr<2.6 or r1 is None or r1<=0 or r4 is None or r4<.5 or acc is None or acc<=0):reasons.append('STRATEGIC_RESERVE_EXISTING_HIGH_QUALITY_EDGE_REQUIRED')
  return (not reasons),(reasons or ["PORTFOLIO_CAPITAL_ALLOCATOR_PASS",f"MARKET_REGIME_{regime}",f"POST_TRADE_UTILIZATION_{after:.4f}"])
 
 def capital_snapshot(state,scan=None):
  equity=capital_equity(state);used=used_capital(state);regime,meta=market_regime(scan or {});limit=capital_limit(state,scan)
  risk=tail.tail_budget_snapshot(state,C,CAPITAL_POOL_USDT) if equity is not None else None
  if equity is None:return {"initial_capital_usdt":None,"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":None,"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"max_deployable_usdt":None,"allocator_available_usdt":None,"systemic_risk":state.get("systemic_risk")}
- return {"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"max_deployable_usdt":round(limit,2),"allocator_available_usdt":round(max(0.0,limit-used),2),"total_cash_usdt":round(max(0.0,equity-used),2),"tail_risk_budget":risk,"systemic_risk":state.get("systemic_risk"),"circuit_breaker":state.get("circuit_breaker")}
+ return {**reserve_snapshot(state),"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"max_deployable_usdt":round(limit,2),"allocator_available_usdt":round(max(0.0,min(limit-used,17000-reserve_snapshot(state)['ordinary_used'])),2),"strategic_allocator_available_usdt":round(max(0,min(limit-used,reserve_snapshot(state)['strategic_reserve_available'])),2),"total_cash_usdt":round(max(0.0,equity-used),2),"tail_risk_budget":risk,"systemic_risk":state.get("systemic_risk"),"circuit_breaker":state.get("circuit_breaker")}
 
 def load(p,d=None):
  if p.name in PORTFOLIO_NAMES:return load_portfolio(p)
@@ -559,6 +568,10 @@ def profit_protection(pos,p):
 def position_health(pos,e,now=None,systemic_level="NORMAL",confirmed_systemic_shock=False):
  # Ordinary signal decay is not a stop-loss. It only becomes thesis invalidation
  # after several consecutive multi-factor weak observations.
+ old_state=pos.get('health_state')
+ meta=e.get('signal_evidence') or {}
+ if meta and not fresh(meta.get('observed_at_utc'),now or dt.datetime.now(dt.timezone.utc)):
+  return 'EVIDENCE_PENDING',['SIGNAL_EVIDENCE_MISSING_OR_STALE']
  hard=[]
  if e.get("supply_confirmed_major_risk"):hard.append("CONFIRMED_MAJOR_NEAR_TERM_SUPPLY_RISK")
  for b in e.get("blockers") or []:
@@ -577,17 +590,21 @@ def position_health(pos,e,now=None,systemic_level="NORMAL",confirmed_systemic_sh
   pos["systemic_liquidity_suppressed_reasons"]=liquidity_hard
  else:hard+=liquidity_hard
  if hard:
-  pos["health_state"]="HARD_INVALIDATION";pos["degraded_cycles"]=int(pos.get("degraded_cycles") or 0)+1
+  if meta.get('generation_id'):
+   if pos.get('last_health_generation_id')==meta['generation_id']:return 'EVIDENCE_PENDING',['SIGNAL_EVIDENCE_ALREADY_CONSUMED']
+   pos.update(last_health_generation_id=meta['generation_id'],last_health_evidence_id=meta.get('evidence_id'),last_health_observed_at_utc=meta.get('observed_at_utc'))
+  pos["health_state"]="HARD_INVALIDATION";pos["health_reasons"]=hard
   return "HARD_INVALIDATION",hard
  meta=e.get("signal_evidence") or {}
  if not meta.get("evidence_id") or not fresh(meta.get("observed_at_utc"),now or dt.datetime.now(dt.timezone.utc)):
   return "EVIDENCE_PENDING",["SIGNAL_EVIDENCE_MISSING_OR_STALE"]
- if pos.get("last_health_evidence_id")==meta["evidence_id"]:
+ if pos.get("last_health_evidence_id")==meta["evidence_id"] or (meta.get("generation_id") and pos.get("last_health_generation_id")==meta["generation_id"]):
   return "EVIDENCE_PENDING",["SIGNAL_EVIDENCE_ALREADY_CONSUMED"]
  # Start a new counter for pre-fix positions; old ticks cannot count as new observations.
  if not pos.get("last_health_evidence_id"):pos["degraded_cycles"]=0
  previous=pos.get("last_health_observed_at_utc")
  if previous and parse(meta["observed_at_utc"])<=parse(previous):return "EVIDENCE_PENDING",["SIGNAL_EVIDENCE_NOT_NEWER"]
+ if previous and (parse(meta['observed_at_utc'])-parse(previous)).total_seconds()>600:pos['degraded_cycles']=0
  pos["last_health_evidence_id"]=meta["evidence_id"];pos["last_health_observed_at_utc"]=meta["observed_at_utc"]
  pos["last_health_generation_id"]=meta.get("generation_id")
  weak=[]
@@ -600,8 +617,9 @@ def position_health(pos,e,now=None,systemic_level="NORMAL",confirmed_systemic_sh
   n=int(pos.get("degraded_cycles") or 0)+1;pos["degraded_cycles"]=n
   state="THESIS_INVALIDATED" if n>=DEGRADE_CONFIRM_CYCLES else ("DEGRADED" if n>=2 else "WEAKENING")
  else:
-  pos["degraded_cycles"]=0;state="STRONG"
+  pos["degraded_cycles"]=0;state="WEAKENING" if weak else "STRONG"
  pos["health_state"]=state;pos["health_reasons"]=weak
+ if state!=old_state:pos['health_transitions']=(pos.get('health_transitions',[])+[{'from':old_state,'to':state,'generation_id':meta.get('generation_id'),'observed_at_utc':meta.get('observed_at_utc'),'reasons':list(weak)}])[-32:]
  return state,weak
 
 def update_loss_exit_guard(state,pnl,reason,now,released_notional=0.0):
@@ -656,6 +674,8 @@ def compact_closed_history(state):
  for x in eligible:
   archive.append({"shadow_id":x.get("shadow_id"),"asset":x.get("asset"),"opened_at_utc":x.get("opened_at_utc"),"closed_at_utc":x.get("closed_at_utc"),
    "exit_reason":x.get("exit_reason"),"net_pnl_usdt":x.get("net_pnl_usdt"),"net_return_pct":x.get("net_return_pct"),"mfe_pct":x.get("mfe_pct"),"mae_pct":x.get("mae_pct"),"holding_mfe_pct":x.get("holding_mfe_pct"),"full_opportunity_mfe_pct":x.get("full_opportunity_mfe_pct"),"holding_profit_capture_ratio":x.get("holding_profit_capture_ratio"),"full_opportunity_capture_ratio":x.get("full_opportunity_capture_ratio"),"observation_complete":x.get("observation_complete"),"sample_cohort":x.get("sample_cohort"),"exit_evaluation":x.get("exit_evaluation"),"data_provenance":x.get("data_provenance")})
+  for key in ("protection_lifecycle","loss_recovery_lifecycle","health_lifecycle_snapshot","health_transitions","exit_execution_estimate"):
+   if key in x:archive[-1][key]=x[key]
   archive[-1]["post_exit_evaluation"]=x.get("post_exit_evaluation")
   archive[-1]["post_exit_observation"]=x.get("post_exit_observation")
  state["closed_positions"]=[x for x in closed if id(x) not in ids]
@@ -677,6 +697,7 @@ def record(state,pos,action,now,reasons,e,p):
   "price":p,"reasons":reasons,"evidence":e,"tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0})
 def trade_event(state,pos,action,now,p,reason=None,pnl=None):
  event={"type":EVENT_PREFIX+"_"+action,"at":now.isoformat(),"asset":pos["asset"],"shadow_id":pos.get("shadow_id"),"price":p,
+  "generation_id":state.get('active_observation_generation_id'),
   "tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0}
  if reason is not None:event["reason"]=reason
  if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
@@ -742,6 +763,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
  """Manage open positions only. Ordinary deterioration never forces a loss exit."""
  btc=btc or price(scan,"BTC");cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
+ state['active_observation_generation_id']=scan.get('generation_id')
  still=[]
  for pos in state["open_positions"]:
   p=price(scan,pos["asset"])
@@ -768,28 +790,41 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
     add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
-  protection=profit_protection(pos,p);pnl=net_pnl(pos,p);exit_reason=None;exit_reasons=None
-  if protection["exit"] and pnl<=0 and health!="HARD_INVALIDATION":
+  from research import hunter_lifecycle_state as lifecycle
+  pnl=net_pnl(pos,p);legacy_protection=profit_protection(pos,p)
+  execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,FEE_BPS)
+  pos['last_exit_estimate']=execution
+  protection=lifecycle.protect(pos,p,pnl,execution,now,scan.get('generation_id'),scan.get('as_of_utc'),PROTECT_ARM_PCT,GIVEBACK_MAX_PCT,MIN_PROTECTED_NET_PCT)
+  lifecycle.recovery(pos,e,now,pnl,pos.get('last_health_generation_id'),health)
+  exit_reason=None;exit_reasons=None
+  if legacy_protection["exit"] and pnl<=0 and health!="HARD_INVALIDATION":
    # Audit the blocked profit window without changing the net-positive-only exit policy.
-   protection_review={**protection,"observed_at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),
+   protection_review={**legacy_protection,"arm_provenance":"HISTORICAL_MFE_RECALCULATION_ONLY","historical_execution_window":"UNVERIFIABLE_HISTORICAL_EXECUTION_WINDOW","observed_at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),
     "reference_price":p,"net_pnl_usdt":pnl,"fee_bps_per_side":FEE_BPS,
     "tranche_cost_inputs":[{"price":t["price"],"notional_usdt":t["notional_usdt"],"buy_slippage_bps":t.get("buy_slippage_bps",0)} for t in pos["tranches"]],
     "sell_cost_model":"REFERENCE_PRICE_WITH_SELL_FEE_ONLY","sell_spread_and_slippage_modelled":False}
    pos["profit_protection_review"]=protection_review
    record(state,pos,"HOLD",now,["PROFIT_PROTECTION_BLOCKED_NET_NONPOSITIVE"],{**e,"profit_protection_review":protection_review},p)
   if health=="HARD_INVALIDATION":exit_reason="HARD_INVALIDATION";exit_reasons=health_reasons
-  elif protection["exit"] and pnl>0:exit_reason="PROFIT_PROTECTION";exit_reasons=["PROFIT_PROTECTION_ARMED","GIVEBACK_OR_PROTECTED_FLOOR"]
+  elif protection["exit"] and execution.get('net_pnl_usdt',0)>0:
+   pnl=execution['net_pnl_usdt'];exit_reason="PROFIT_PROTECTION";exit_reasons=["PERSISTED_PROFIT_PROTECTION","GIVEBACK_OR_PROTECTED_FLOOR","FULL_QUANTITY_SHADOW_RECEIPT_COST_ESTIMATE"]
   elif health=="THESIS_INVALIDATED":
    if pnl>0:exit_reason="PROFIT_STAGNATION" if pos.get("mfe_pct",0)<TARGET else "THESIS_INVALIDATED_PROFIT_EXIT";exit_reasons=["THESIS_INVALIDATED","NET_PROFIT_AVAILABLE"]
-   else:pos["recovery_state"]="LOSS_RECOVERY";record(state,pos,"HOLD",now,["LOSS_RECOVERY","NO_MECHANICAL_LOSS_EXIT"],e,p)
+   else:record(state,pos,"HOLD",now,["LOSS_RECOVERY","NO_MECHANICAL_LOSS_EXIT"],e,p)
   elif raw>=TARGET and signal_fresh:
    r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");accel=e.get("rel_accel");runner=r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
    if runner:record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
    else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
+  if exit_reason and scan.get('as_of_utc') and not lifecycle.fresh(scan['as_of_utc'],now):
+   record(state,pos,'HOLD',now,['EXIT_MARKET_EVIDENCE_STALE'],e,p);exit_reason=None
   if exit_reason:
    notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":exit_reason,"weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
-   if exit_reason=="PROFIT_PROTECTION":pos["profit_protection"]=protection
+   if exit_reason=="PROFIT_PROTECTION":
+    pos["profit_protection"]=protection
+    pos['protection_lifecycle']['state']='EXITED'
+    pos['protection_lifecycle'].update(exited_at_utc=now.isoformat(),exited_generation_id=scan.get('generation_id'))
+    pos['exit_execution_estimate']=execution
    pos.update(exit_analysis(pos,p,exit_reason));refresh_post_exit_status(pos,now);update_loss_exit_guard(state,pnl,exit_reason,now,notion);register_exit_for_reentry(state,pos,p,exit_reason,now)
    record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
@@ -807,10 +842,14 @@ def execute_capital_proposals(state,proposals,scan,now):
   if not ok:
    if kind=="BUY" and q.get("candidate") is not None:record_deferred_buy(state,q["candidate"],now,p,e,scan)
    record(state,pos if kind=="ADD" else {"asset":q["asset"],"tranches":[]},"HOLD",now,gate_reasons+["CAPITAL_ALLOCATOR_WAIT"],e,p);continue
+  reserve_amount=max(0,amount-max(0,17000-reserve_snapshot(state)['ordinary_used'])) if CAPITAL_POOL_USDT is not None else 0
   if kind=="ADD":
    add(pos,p,e,now);record(state,pos,"ADD",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"ADD",now,p,"PORTFOLIO_ALLOCATOR_ADD")
   else:
    add(pos,p,e,now);record(state,pos,"BUY",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);executed_buys+=1
+  pos['tranches'][-1]['strategic_notional_usdt']=reserve_amount
+  pos['tranches'][-1]['ordinary_notional_usdt']=amount-reserve_amount
+  if reserve_amount:pos['tranches'][-1]['strategic_qualification']='EXISTING_ABOVE_85PCT_EDGE_GATE'
  return executed_buys
 
 def opportunity_summary(rows,now=None):
@@ -845,6 +884,7 @@ def opportunity_summary(rows,now=None):
   "profit_giveback_count":sum(x.get("exit_evaluation")=="PROFIT_GIVEBACK" for x in rows),"full_opportunity_mfe_distribution":dist}
 
 def build_summary(state,now,guard_status="NORMAL",scan=None):
+ from research.hunter_lifecycle_state import mtm
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
  for x in state.get("open_positions") or []:
@@ -853,7 +893,7 @@ def build_summary(state,now,guard_status="NORMAL",scan=None):
  for x in closed:ensure_opportunity_observation(x,None,now)
  cohorts={"all_samples":opportunity_summary(all_closed,now),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"],now),
   "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"],now)}
- return {"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
+ return {**mtm(state,now,net_pnl,FEE_BPS),"generation_id":state.get('last_cycle_generation_id'),"schema":"hunter_shadow_v2_summary_v3","as_of_utc":now.isoformat(),"mode":"SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy":STRATEGY_ID,"policy_version":VERSION,"open_positions":len(state.get("open_positions") or []),"closed_positions":len(closed),"archived_closed_positions":len(arch),"total_closed_positions":len(all_closed),
   "net_pnl_usdt":round(sum(float(x.get("net_pnl_usdt") or 0) for x in all_closed),2),"profit_factor":round(gp/gl,3) if gl else ("INF" if gp else None),
   "policy":{"tranches_usdt":list(TRANCHES),"price_only_stop_loss":POLICY["price_only_stop_loss"],"time_exit_enabled":POLICY["time_exit_enabled"],"time_review_hours":list(REVIEW_HOURS),

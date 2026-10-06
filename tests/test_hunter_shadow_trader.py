@@ -49,6 +49,9 @@ class SharedShadowEngineTests(unittest.TestCase):
   strong={"coins":{"BTC":{"change_24h_pct":4},"A":{"change_24h_pct":2},"B":{"change_24h_pct":1}}}
   normal={"level":"NORMAL","raw_level":"NORMAL","last_observation_id":"ok","risk_release_fraction":1.0,"recovery_mode":False}
   state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":4000}]}],"systemic_risk":normal}
+  self.assertTrue(core.capital_available(state,1000,"BUY",strong))
+  self.assertTrue(core.capital_available(state,1000,"ADD",strong))
+  state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":17000}]}],"systemic_risk":normal}
   self.assertFalse(core.capital_available(state,1000,"BUY",strong))
   self.assertFalse(core.capital_available(state,1000,"ADD",strong))
   state={"open_positions":[{"tranches":[{"price":1,"notional_usdt":3000}]}],"systemic_risk":normal}

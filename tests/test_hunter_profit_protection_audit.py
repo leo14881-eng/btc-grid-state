@@ -10,14 +10,20 @@ from research import hunter_position_monitor as monitor
 
 
 class ProfitProtectionAuditTests(unittest.TestCase):
- def run_position(self, price, mfe=3.2054, health="THESIS_INVALIDATED"):
+ def run_position(self, price, mfe=3.2054, health="THESIS_INVALIDATED", armed=False):
   now=dt.datetime(2026,10,6,8,tzinfo=dt.timezone.utc)
   pos={"asset":"ENA","shadow_id":"audit-ena","opened_at_utc":"2026-10-05T07:51:47+00:00",
        "tranches":[{"price":0.2527,"notional_usdt":1000,"buy_slippage_bps":5.313}],"mfe_pct":mfe,"mae_pct":0}
   state={"open_positions":[pos],"events":[],"decisions":[],"closed_positions":[]}
-  scan={"generation_id":"audit-generation","coins":{"ENA":{"reference_price":price}}}
+  from research import hunter_lifecycle_state as life
+  def book(p,at):return {'exchange':'binance','market':'spot','symbol':'ENAUSDT','price_unit':'USDT','quantity_unit':'BASE','bids':[[p,100000]],'asks':[[p+.00001,100000]],'fetched_at':at.isoformat()}
+  if armed:
+   before=now-dt.timedelta(minutes=5);peak=.261
+   life.protect(pos,peak,eng.net_pnl(pos,peak),life.liquidation(pos,book(peak,before),before),before,'prior-real-fixture',before.isoformat())
+  scan={"generation_id":"audit-generation","as_of_utc":now.isoformat(),"coins":{"ENA":{"reference_price":price}}}
+  liq={'snapshots':{'ENA':{'raw_book_evidence':book(price,now)}}}
   with patch.object(eng,"ensure_opportunity_observation"),patch.object(eng,"decision",return_value=("HOLD",[],{})),patch.object(eng,"position_health",return_value=(health,[])),patch.object(eng,"refresh_post_exit_status"),patch.object(eng,"exit_analysis",return_value={}):
-   eng.manage_existing_positions(state,scan,{}, {},{},now)
+   eng.manage_existing_positions(state,scan,{}, liq,{},now)
   return state,pos
 
  def test_ena_missed_window_is_persisted_without_fabricating_sell(self):
@@ -43,13 +49,22 @@ class ProfitProtectionAuditTests(unittest.TestCase):
   self.assertIn("LOSS_RECOVERY",[r for x in saved["decisions"] for r in x["reasons"]])
 
  def test_profitable_giveback_still_sells_with_same_pnl(self):
-  state,pos=self.run_position(0.2555)
+  state,pos=self.run_position(0.2555,armed=True)
   self.assertEqual(state["open_positions"],[])
   self.assertEqual(state["closed_positions"],[pos])
   self.assertEqual(pos["exit_reason"],"PROFIT_PROTECTION")
   self.assertAlmostEqual(pos["net_pnl_usdt"],round(eng.net_pnl(pos,0.2555),2))
   self.assertEqual([x["type"] for x in state["events"]],["SHADOW_V2_SELL"])
+  self.assertEqual(state['events'][0]['generation_id'],pos['protection_lifecycle']['exited_generation_id'])
+  self.assertEqual(pos['protection_lifecycle']['state'],'EXITED')
+  self.assertGreater(pos['exit_execution_estimate']['net_pnl_usdt'],0)
   self.assertFalse(any("PROFIT_PROTECTION_BLOCKED_NET_NONPOSITIVE" in x["reasons"] for x in state["decisions"]))
+
+ def test_armed_gap_negative_never_closes_or_releases(self):
+  state,pos=self.run_position(.237,armed=True)
+  self.assertEqual(state['events'],[])
+  self.assertEqual(state['open_positions'],[pos])
+  self.assertEqual(pos['protection_lifecycle']['incident'],'GAPPED_THROUGH_PROTECTION_WINDOW')
 
  def test_monitor_persists_its_admitted_run_generation(self):
   state,pos=self.run_position(0.2533)
