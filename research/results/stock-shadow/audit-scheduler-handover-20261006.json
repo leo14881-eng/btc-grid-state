@@ -1,8 +1,8 @@
 {
   "audit_kind": "SCHEDULER_DEPLOYMENT_AND_PENDING_LIVE_ACCEPTANCE",
-  "checked_at_utc": "2026-10-06T17:36:15.643Z",
-  "checked_at_bangkok": "2026-10-07T00:36:15.643+07:00",
-  "inspected_main_sha": "0dabde4bfe66e2e95ddd89b424da951d2901c265",
+  "checked_at_utc": "2026-10-06T17:44:28.624Z",
+  "checked_at_bangkok": "2026-10-07T00:44:28.624+07:00",
+  "inspected_main_sha": "27c8bf61854a6b3528bf5bebd9da8f07b777131a",
   "simulation_only": true,
   "strategy_parameters_changed": false,
   "hunter_bybit_resources_changed": false,
@@ -64,8 +64,8 @@
     "deployed_source_sha": "ea81b3b81f91cd8740d443844f5ea795d399b5c7",
     "durable_object_binding_and_migration": "DEPLOYED_SQLITE_STOCK_SCHEDULER",
     "cron_is_live": "CONFIGURATION_VERIFIED_AUTOMATIC_EXECUTION_UNVERIFIED",
-    "credential_presence_and_permissions": "Cloudflare stock deploy and GitHub contents read PASS; GitHub Actions write not yet proved by automatic dispatch",
-    "health_endpoint": "GET responds without checked_at in first observer; separate default-client probe HTTP403; exact rejection reason unknown",
+    "credential_presence_and_permissions": "Cloudflare stock-only deploy PASS; GitHub stock workflow read and Actions dispatch HTTP204 PASS",
+    "health_endpoint": "2026-10-06T17:39:43Z GET returned NOT_STARTED; tail captured healthy stock HTTP/DO fetch events; no scheduled tick recorded",
     "blocker_layer": "AUTOMATIC_CRON_HEARTBEAT_NOT_OBSERVED",
     "browser_observation": "Cloudflare login verification error remained after one reload; no signed-in account",
     "user_report": "Cloudflare requires Google login and Google account login is unavailable",
@@ -106,7 +106,6 @@
   "next_acceptance_order": [
     "Finish current read-only three-cycle observer; record real cron decisions and uniquely correlated Actions runs",
     "If no heartbeat, preserve failed evidence and identify provider trigger/runtime layer; do not claim completion or rerun deployment blindly",
-    "Verify GitHub Actions write with an accepted stock-only simulation dispatch if automatic cron reaches that stage",
     "Record full versus partial monitor counts, persistence and main fairness; QRVO missing remains unhealthy",
     "Recovery injection remains simulation-only and isolated from forward ledger; proactive notification delivery unverified"
   ],
@@ -141,7 +140,11 @@
     "health": "HEALTHY",
     "trigger_source": "VULTR_SYSTEMD",
     "cloudflare_automatic_cron_proven_by_this_inspection": false,
-    "resource_changes": []
+    "resource_changes": [],
+    "current_remote_version_id": "ef48d85a-1a93-4c53-aa0c-0a9832690973",
+    "remote_metadata_read_run_id": "37504982057",
+    "remote_cron_verified": "2,7,12,17,22,27,32,37,42,47,52,57 * * * *",
+    "source_matches_deployed_commit": true
   },
   "recovery_attempts": [
     {
@@ -164,5 +167,29 @@
       "root_cause_of_no_heartbeat": "UNKNOWN",
       "guard": "Latest main checkout; expected inspected stock source diff must be unchanged"
     }
-  ]
+  ],
+  "stock_dispatch_permission_probe": {
+    "run_id": "37504982057",
+    "dispatched_monitor_run_id": "37504995585",
+    "accepted_at_utc": "2026-10-06T17:37:33Z",
+    "github_status": 204,
+    "monitor_conclusion": "success",
+    "updated_at_utc": "2026-10-06T17:37:59.148828+00:00",
+    "status": "PARTIAL",
+    "positions_before": 407,
+    "positions_updated": 406,
+    "missing_symbols": [
+      "QRVO"
+    ],
+    "counts_as_automatic_cron": false,
+    "counts_as_complete_monitor": false
+  },
+  "runtime_comparison": {
+    "run_id": "37505258704",
+    "status": "IN_PROGRESS",
+    "stock_fetch_runtime_observed": true,
+    "stock_scheduled_runtime_observed": false,
+    "coin_scheduled_runtime_observed": false,
+    "absence_is_provider_root_cause_proof": false
+  }
 }
