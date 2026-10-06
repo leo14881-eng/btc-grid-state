@@ -1,19 +1,19 @@
 {
-  "version": "3.39",
-  "updated_at": "2026-10-06T19:38:34+07:00",
-  "last_scan_at": "2026-10-06T19:38:34+07:00",
+  "version": "3.40",
+  "updated_at": "2026-10-06T19:52:42.051+07:00",
+  "last_scan_at": "2026-10-06T19:52:42.051+07:00",
   "persistence": {
     "provider": "github",
     "writable": true,
-    "verification": "VERIFIED_SHA_UPDATE_REREAD",
+    "verification": "PENDING_REREAD",
     "last_write_test_at": "2026-09-26T22:29:00+07:00",
-    "note": "Phase-1 CAS write reread from main with matching run_id, run_status, last_persisted_at, state ownership refs and AXS ownership constraints; phase-2 records closure.",
-    "last_verified_at": "2026-10-06T19:38:34+07:00",
-    "run_id": "sentinel-20261006T193603+0700",
-    "status": "VERIFIED",
-    "last_write_attempt_at": "2026-10-06T19:38:34+07:00",
-    "last_persisted_at": "2026-10-06T19:38:34+07:00",
-    "persist_verified": true
+    "note": "Phase-1 CAS write; awaiting main reread verification.",
+    "last_verified_at": null,
+    "run_id": "sentinel-20261006T194827+0700",
+    "status": "PENDING_REREAD",
+    "last_write_attempt_at": "2026-10-06T19:52:42.051+07:00",
+    "last_persisted_at": "2026-10-06T19:52:42.051+07:00",
+    "persist_verified": false
   },
   "state_ownership": {
     "purpose": "Sentinel market and signal state only",
@@ -34,15 +34,15 @@
   },
   "market_state_freshness": {
     "status": "PARTIAL_FRESH_VALID_ANALYSIS_NO_NEW_CAPITAL_ACTION",
-    "as_of": "2026-10-06T11:16:58Z",
-    "reason": "Current BTC quote, fresh derivatives, latest complete ETF day and current macro evidence obtained. Exact provider timestamp for the live spot quote and executable BTC spot order-book depth remain unavailable, so SUCCESS is not claimed."
+    "as_of": null,
+    "reason": "Fresh BTC/AXS quotes, timestamped derivatives, latest complete ETF session and current-session macro reporting were retrieved. Exact spot event timestamps and executable BTC order-book depth remain unavailable, so SUCCESS is not claimed."
   },
-  "last_price": 86177,
-  "last_price_quality": "Current cross-market crypto quote at fetch; provider did not expose an exact exchange-event timestamp. A timestamped 11:16:58 UTC BTC derivatives event printed near 86.35K corroborated the current 86.1K area.",
+  "last_price": 86216,
+  "last_price_quality": "Fresh quote retrieved during this run; provider did not expose an exchange-event timestamp. Receipt time is recorded separately and is not treated as market data_asof.",
   "last_regime": "bear_market_accumulation_watch_breakout_candidate_under_pullback_not_confirmed",
   "etf_flow_acceleration": {
     "status": "LATEST_COMPLETE_DAY_NET_OUTFLOW_VERIFIED_FARSIDE",
-    "last_checked_at": "2026-10-06T19:38:34+07:00",
+    "last_checked_at": "2026-10-06T19:52:42.051+07:00",
     "latest_complete_session": {
       "date": "2026-10-05",
       "net_flow_usd_m": -89.8,
@@ -88,7 +88,8 @@
         "as_of": "2026-10-06T10:02:19Z",
         "url": "https://www.reuters.com/business/slowdown-money-fund-cash-flow-hits-short-term-treasuries-2026-10-06/"
       }
-    ]
+    ],
+    "last_checked_at": "2026-10-06T19:52:42.051+07:00"
   },
   "derivatives_state": {
     "status": "FRESH_PARTIAL_NEUTRAL_WITH_MODEST_OI_EXPANSION",
@@ -114,7 +115,8 @@
         "as_of": "2026-10-06T10:13:00Z",
         "url": "https://xoomar.com/markets/funding-rates"
       }
-    ]
+    ],
+    "last_checked_at": "2026-10-06T19:52:42.051+07:00"
   },
   "pre_triggers": {
     "upside_squeeze": {
@@ -149,8 +151,8 @@
   },
   "allocation_gate": {
     "status": "NO_ACTION",
-    "recomputed_at": "2026-10-06T19:38:34+07:00",
-    "reason": "Market analysis remains valid but no executable positive-net BTC swing is proven: 87K-87.5K breakout is unconfirmed, live spot depth is missing, and executable cash/fees are UNKNOWN. Core, Grid and 20K extreme-crash reserve remain unchanged."
+    "recomputed_at": "2026-10-06T19:52:42.051+07:00",
+    "reason": "No new executable positive-net BTC swing is proven: 87K-87.5K acceptance is absent, exact live spot depth is unavailable, and executable cash/fees remain UNKNOWN."
   },
   "drawdown_budget": {
     "status": "NO_NEW_PROPOSAL_TO_STRESS_TEST",
@@ -182,17 +184,17 @@
   },
   "action": {
     "current": "HOLD_NO_NEW_CAPITAL_ACTION_NO_CORE_SELL_KEEP_GRID_UNCHANGED",
-    "reason": "BTC recovered within the range without confirming a breakout; ordinary short-term movement does not justify selling core. No sized swing until execution evidence and cash are verified."
+    "reason": "No material change from the prior scan; ordinary short-term movement does not justify selling core, and no fully evidenced swing setup is executable."
   },
   "leading_warning": {
     "primary_state": "EARLY_DISTRIBUTION_RISK",
     "first_detected_at": "2026-09-25T18:30:00+07:00",
     "main_path": "NEXT_24_72H__RANGE_OR_SUPPORT_RETEST_REMAINS_MORE_LIKELY_THAN_CONFIRMED_BREAKOUT_UNTIL_87K_87_5K_ACCEPTANCE",
     "leading_evidence": [
-      "BTC recovered to about 86.18K with an intraday high around 86.65K, but still has not accepted above 87K-87.5K.",
-      "Farside's latest complete ETF day, Oct 5, recorded -89.8M USD net outflow; the prior magnitude conflict is resolved and there is no verified ETF reacceleration.",
-      "Aggregate BTC perpetual OI rose 0.78% in 24h to 37.11B USD, while Binance funding was negative and liquidations were balanced; leverage expansion is modest rather than a clear crowded-long signal.",
-      "Counter-evidence: the 10Y yield and DXY eased intraday, and BTC reclaimed 86K; this prevents escalation to confirmed downside."
+      "BTC was about 86.22K with an intraday high around 86.65K, still without acceptance above 87K-87.5K.",
+      "Farside's latest complete ETF session, Oct 5, remained -89.8M USD; the Oct 6 row was not yet published and was not interpreted as zero flow.",
+      "Aggregate BTC perpetual OI was 37.11B USD at 12:00 UTC, +0.45% over 1h and +0.78% over 24h; 24h liquidations were balanced, so no fresh crowded-long or capitulation confirmation.",
+      "Counter-evidence: BTC held above 86K and DXY was near 102.0 after easing from Monday's high, preventing downside escalation."
     ],
     "reversal_triggers": [
       "Flip toward EARLY_UPSIDE_BUILDING only after sustained acceptance above 87K-87.5K with stronger verified spot demand/ETF flows and no aggressive leverage expansion.",
@@ -202,8 +204,8 @@
     "confirmation_status": "DISTRIBUTION_RISK_PERSISTS__NO_CONFIRMED_BREAKOUT__NO_CONFIRMED_DOWNSIDE_BREAK",
     "data_gaps": [
       "Exact live BTC spot order-book spread/depth not obtained.",
-      "Current spot quote provider did not expose an exact exchange-event timestamp.",
-      "Fresh same-venue spot-volume/OI/funding alignment remains incomplete.",
+      "Current BTC spot quote provider did not expose an exact exchange-event timestamp.",
+      "Fresh same-venue Binance spot-volume/OI/funding alignment remains incomplete.",
       "Current verified ordinary USDT balance and fees remain unavailable for concrete sizing.",
       "Fresh Bybit custody/counterparty review was not completed in this run."
     ]
@@ -221,49 +223,46 @@
     ],
     "note": "Do not alter last_scan_at or old market evidence; accounting reconciliation only."
   },
-  "run_id": "sentinel-20261006T193603+0700",
-  "last_run_at": "2026-10-06T19:36:03+07:00",
-  "last_successful_scan_at": "2026-10-06T19:38:34+07:00",
-  "market_data_asof": "2026-10-06T11:16:58Z",
+  "run_id": "sentinel-20261006T194827+0700",
+  "last_run_at": "2026-10-06T19:48:27+07:00",
+  "last_successful_scan_at": "2026-10-06T19:52:42.051+07:00",
+  "market_data_asof": null,
   "etf_data_asof": "2026-10-05",
   "derivatives_data_asof": "2026-10-06T12:00:00Z",
   "macro_data_asof": "2026-10-06T11:34:00Z",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": "2026-10-06T19:38:34+07:00",
+  "last_persisted_at": "2026-10-06T19:52:42.051+07:00",
   "persisted": true,
-  "persist_verified": true,
+  "persist_verified": false,
   "market_snapshot": {
-    "run_id": "sentinel-20261006T193603+0700",
-    "btc_price_usd": 86177,
+    "run_id": "sentinel-20261006T194827+0700",
+    "btc_price_usd": 86216,
     "btc_intraday_range_usd": [
       85050,
       86645
     ],
-    "btc_change_pct_24h_approx": 0.31,
+    "btc_change_pct_24h_approx": 0.424,
     "structure": "RECOVERED_86K_BUT_STILL_BELOW_87K_87_5K_BREAKOUT_CONFIRMATION",
     "spot_orderbook": "UNKNOWN_EXACT_SPREAD_AND_DEPTH",
     "source_timestamp_quality": "PARTIAL__CURRENT_QUOTE_HAS_NO_PROVIDER_EVENT_TIMESTAMP",
     "sources": [
       {
         "name": "Finance BTC current quote",
-        "as_of": "PROVIDER_TIMESTAMP_NOT_EXPOSED",
-        "fetched_at": "2026-10-06T19:38:34+07:00"
+        "as_of": null,
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "receipt_bound": true
       },
       {
-        "name": "Newhedge timestamped liquidation tape",
-        "as_of": "2026-10-06T11:16:58Z",
-        "url": "https://newhedge.io/futures"
-      },
-      {
-        "name": "Barrons/LSEG BTC report",
-        "as_of": "2026-10-06T08:58:57Z",
-        "url": "https://www.barrons.com/livecoverage/stock-market-news-today-100626/card/bitcoin-falls-as-dollar-rises-geopolitical-tensions-persist-2BCsSnRPAVsAIU5GKEKi"
+        "name": "Trnd Tools BTC OI",
+        "as_of": "2026-10-06T12:00:00Z",
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "url": "https://trndtools.com/open-interest"
       }
     ]
   },
   "axs_korea_monitor": {
-    "run_id": "sentinel-20261006T193603+0700",
-    "as_of": "2026-10-06T19:38:34+07:00",
+    "run_id": "sentinel-20261006T194827+0700",
+    "as_of": "2026-10-06T19:52:42.051+07:00",
     "status": "UPBIT_HIGH_TURNOVER_PRICE_DECLINE__SECOND_WAVE_NOT_CONFIRMED",
     "spot_price_usdt_approx": 1.27,
     "spot_intraday_range_usdt": [
@@ -293,18 +292,20 @@
       "conclusion": "HIGH_KOREAN_TURNOVER_WITH_PRICE_DECLINE__SELLING_PRESSURE_NOT_SECOND_WAVE"
     },
     "action": "CONTINUE_NO_ADD__DO_NOT_MECHANICALLY_AVERAGE_DOWN",
-    "left_side_research": "NOT_QUALIFIED: price is lower, but Upbit turnover surged while price fell and a stable low/absorption structure is not confirmed.",
+    "left_side_research": "NOT_QUALIFIED: no fresh stable low/absorption structure; Korean turnover remained elevated while price was down.",
     "sources": [
       {
         "name": "Upbit Data Lab AXS turnover",
-        "as_of": "PROVIDER_TIMESTAMP_NOT_EXPOSED",
-        "fetched_at": "2026-10-06T19:38:34+07:00",
+        "as_of": null,
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "receipt_bound": true,
         "url": "https://datalab.upbit.com/assets/AXS/upbit-trade-volume"
       },
       {
-        "name": "JustScreener AXS",
-        "as_of": "2026-10-06T10:24:00Z",
-        "url": "https://justscreener.com/en/market/AXS"
+        "name": "Finance AXS current quote",
+        "as_of": null,
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "receipt_bound": true
       }
     ],
     "data_gaps": [
@@ -316,9 +317,9 @@
   "watchdog": {
     "status": "HEALTHY",
     "state": "HEALTHY",
-    "prior_status": "RECOVERED",
-    "reason": "A second current partial-but-valid scan completed and is being persisted; no stale interval remains.",
-    "last_successful_scan_at": "2026-10-06T19:38:34+07:00",
+    "prior_status": "HEALTHY",
+    "reason": "A fresh partial-but-valid scan completed within one execution interval; no stale interval or consecutive invalid scans.",
+    "last_successful_scan_at": "2026-10-06T19:52:42.051+07:00",
     "consecutive_invalid_scans": 0,
     "recovery_event": {
       "event_id": "sentinel-recovered-20261006T144335+0700",
@@ -327,13 +328,15 @@
     }
   },
   "notification": {
-    "decision": "NOTIFY",
+    "decision": "SILENT_NO_MATERIAL_CHANGE",
     "reasons": [
-      "AXS_UPBIT_HIGH_TURNOVER_WITH_PRICE_DECLINE__SECOND_WAVE_NOT_CONFIRMED"
+      "NO_NEW_EXECUTABLE_BTC_ACTION",
+      "NO_NEW_AXS_SIGNAL_CHANGE",
+      "NO_NEW_OPERATIONAL_FAULT"
     ],
-    "event_id": "axs-upbit-sell-pressure-20261006T193603+0700",
-    "delivery_status": "AUTOMATION_RESPONSE_QUEUED",
-    "dedupe_key": "AXS_UPBIT_TURNOVER_PLUS75_PRICE_MINUS5_93_BELOW1_35",
+    "event_id": null,
+    "delivery_status": "NOT_REQUIRED_THIS_RUN",
+    "dedupe_key": null,
     "pending_events": [
       {
         "event_id": "sentinel-recovered-20261006T144335+0700",
@@ -361,6 +364,67 @@
     "btc_market_analysis": "VALID_WITH_PARTIAL_EXECUTION_DATA",
     "capital_execution_readiness": "LIMITED",
     "axs_korea_signal": "VALID_WITH_TIMESTAMP_LIMITATION",
-    "explanation": "Core market direction can be assessed from current price, fresh derivatives, latest complete ETF day and macro evidence. Exact trade sizing remains blocked by live depth and verified cash/fees."
+    "explanation": "Direction was reassessed from fresh quotes, timestamped derivatives, latest complete ETF data and current macro reporting; exact trade sizing remains blocked by live depth and verified cash/fees."
+  },
+  "source_audit": {
+    "run_id": "sentinel-20261006T194827+0700",
+    "scan_completed_at": "2026-10-06T19:52:42.051+07:00",
+    "sources": [
+      {
+        "source_url": "finance://BTC-USD",
+        "source_venue": "FINANCE_AGGREGATE",
+        "symbol": "BTC-USD",
+        "market_type": "spot_reference",
+        "unit": "USD",
+        "attempted_at": "2026-10-06T19:52:42.051+07:00",
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "data_asof": null,
+        "freshness_result": "PARTIAL_MISSING_PROVIDER_EVENT_TIMESTAMP"
+      },
+      {
+        "source_url": "https://farside.co.uk/btc/",
+        "source_venue": "FARSIDE",
+        "symbol": "US_SPOT_BTC_ETF",
+        "market_type": "etf_flow",
+        "unit": "USD_M",
+        "attempted_at": "2026-10-06T19:52:42.051+07:00",
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "data_asof": "2026-10-05",
+        "freshness_result": "PASS_LATEST_COMPLETE_SESSION__2026_10_06_NOT_PUBLISHED"
+      },
+      {
+        "source_url": "https://trndtools.com/open-interest",
+        "source_venue": "TRND_AGGREGATE",
+        "symbol": "BTC",
+        "market_type": "perpetual_derivatives",
+        "unit": "USD",
+        "attempted_at": "2026-10-06T19:52:42.051+07:00",
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "data_asof": "2026-10-06T12:00:00Z",
+        "freshness_result": "PASS"
+      },
+      {
+        "source_url": "https://datalab.upbit.com/assets/AXS/upbit-trade-volume",
+        "source_venue": "UPBIT",
+        "symbol": "AXS/KRW",
+        "market_type": "spot_turnover",
+        "unit": "KRW",
+        "attempted_at": "2026-10-06T19:52:42.051+07:00",
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "data_asof": null,
+        "freshness_result": "PARTIAL_MISSING_SOURCE_TIMESTAMP"
+      },
+      {
+        "source_url": "https://www.reuters.com/world/china/global-markets-global-markets-2026-10-06/",
+        "source_venue": "REUTERS",
+        "symbol": "DXY_US_TREASURY",
+        "market_type": "macro",
+        "unit": "INDEX_PERCENT",
+        "attempted_at": "2026-10-06T19:52:42.051+07:00",
+        "fetched_at": "2026-10-06T19:52:42.051+07:00",
+        "data_asof": "2026-10-06T01:48:12Z",
+        "freshness_result": "PASS_CURRENT_SESSION_REPORT"
+      }
+    ]
   }
 }
