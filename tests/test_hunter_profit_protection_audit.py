@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from research import hunter_shadow_trader_v2 as eng
+from research import hunter_position_monitor as monitor
 
 
 class ProfitProtectionAuditTests(unittest.TestCase):
@@ -49,6 +50,17 @@ class ProfitProtectionAuditTests(unittest.TestCase):
   self.assertAlmostEqual(pos["net_pnl_usdt"],round(eng.net_pnl(pos,0.2555),2))
   self.assertEqual([x["type"] for x in state["events"]],["SHADOW_V2_SELL"])
   self.assertFalse(any("PROFIT_PROTECTION_BLOCKED_NET_NONPOSITIVE" in x["reasons"] for x in state["decisions"]))
+
+ def test_monitor_persists_its_admitted_run_generation(self):
+  state,pos=self.run_position(0.2533)
+  now=dt.datetime(2026,10,6,8,5,tzinfo=dt.timezone.utc)
+  with tempfile.TemporaryDirectory() as d:
+   path=Path(d)/"v2.json";eng.atomic_json_write(path,state)
+   with patch.object(eng,"ensure_opportunity_observation"),patch.object(eng,"decision",return_value=("HOLD",[],{})),patch.object(eng,"position_health",return_value=("THESIS_INVALIDATED",[])),patch.object(eng,"refresh_closed_observations"),patch.object(eng,"build_summary",return_value={}):
+    monitor.run_lane(path,"SHADOW_V2",{"ENA":{"reference_price":0.2533}}, {},{}, {},now,False,regime_scan={"generation_id":"MONITOR_ACTUAL_EVIDENCE_REFRESH"})
+   saved=json.loads(path.read_text())
+  self.assertEqual(saved["open_positions"][0]["profit_protection_review"]["generation_id"],"MONITOR_ACTUAL_EVIDENCE_REFRESH")
+  self.assertEqual(saved["events"],[])
 
  def test_unarmed_loss_does_not_claim_profit_protection_trigger(self):
   state,pos=self.run_position(0.24,mfe=1)
