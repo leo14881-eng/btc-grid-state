@@ -4,10 +4,12 @@ import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
+ from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 except ModuleNotFoundError as exc:
  if exc.name != 'research':raise
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  import hunter_tail_risk as tail
+ from hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
 LIQ=ROOT/"hunter-liquidity-probe.json"; SUPPLY=ROOT/"hunter-tactical-supply-risk.json"
@@ -145,10 +147,12 @@ def capital_snapshot(state,scan=None):
  return {"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"max_deployable_usdt":round(limit,2),"allocator_available_usdt":round(max(0.0,limit-used),2),"total_cash_usdt":round(max(0.0,equity-used),2),"tail_risk_budget":risk,"systemic_risk":state.get("systemic_risk"),"circuit_breaker":state.get("circuit_breaker")}
 
 def load(p,d=None):
+ if p.name in PORTFOLIO_NAMES:return load_portfolio(p)
  try:return json.loads(p.read_text())
  except (OSError,ValueError):return {} if d is None else d
 def atomic_json_write(p,obj):
  # Never expose a partially-written portfolio/summary to a concurrent reader.
+ if p.name in PORTFOLIO_NAMES:require_nonempty_history_transition(p,obj)
  tmp=p.with_suffix(p.suffix+".tmp")
  tmp.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+"\n")
  json.loads(tmp.read_text())

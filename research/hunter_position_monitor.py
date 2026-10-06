@@ -20,6 +20,7 @@ def timed(stage,fn,*args,**kwargs):
   seconds=round(time.perf_counter()-start,6);TIMINGS[stage]=seconds
   print("HUNTER_STAGE_TIMING "+json.dumps({"stage":stage,"seconds":seconds}),flush=True)
 def load(p):
+ if p.name in eng.PORTFOLIO_NAMES:return eng.load_portfolio(p)
  try:return json.loads(p.read_text())
  except (OSError,ValueError):return {}
 def get(url):
