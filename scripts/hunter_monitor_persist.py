@@ -2,6 +2,7 @@
 """Infrastructure-only, fail-closed publication of a monitor generation."""
 import argparse
 import json
+import math
 import pathlib
 import subprocess
 import sys
@@ -83,6 +84,19 @@ def validate(raw, generation):
             require(policy.get('capital_pool_usdt') == 20000 and
                     (policy.get('capital_management') or {}).get('initial_capital_usdt') == 20000,
                     'V2_INITIAL_CAPITAL_MISMATCH')
+            # Validate actual open exposure, not just the configured principal.
+            # Realized profit must never enlarge the user's fixed 20K ceiling.
+            exposure = 0.0
+            for position in opened:
+                tranches = position.get('tranches')
+                require(isinstance(tranches, list) and bool(tranches),
+                        'V2_EXPOSURE_UNVERIFIABLE')
+                for tranche in tranches:
+                    amount = tranche.get('notional_usdt')
+                    require(type(amount) in (int, float) and math.isfinite(amount)
+                            and amount > 0, 'V2_INVALID_TRANCHE_NOTIONAL')
+                    exposure += amount
+            require(exposure <= 20000.000001, 'V2_EXPOSURE_HARD_CAP_EXCEEDED')
         counts.append(len(opened))
     return counts
 

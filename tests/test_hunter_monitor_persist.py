@@ -21,7 +21,8 @@ def fixture():
     d = {}
     for prefix in ('hunter-shadow', 'hunter-shadow-v2'):
         d[prefix + '-portfolio.json'] = dict(schema='hunter_shadow_v2_portfolio_v2',
-            mode='SIMULATION_ONLY_NO_REAL_ORDERS', open_positions=[{'asset': 'BTC'}],
+            mode='SIMULATION_ONLY_NO_REAL_ORDERS', open_positions=[{'asset': 'BTC',
+                'tranches': [{'notional_usdt': 1000}]}],
             closed_positions=[], updated_at_utc=GEN)
         d[prefix + '-summary.json'] = dict(mode='SIMULATION_ONLY_NO_REAL_ORDERS',
             capital_authority='NONE_SHADOW_ONLY', open_positions=1, closed_positions=0,
@@ -78,6 +79,28 @@ class ValidationTests(unittest.TestCase):
             target[field] = 50000
             raw['hunter-shadow-v2-summary.json'] = json.dumps(doc)
             with self.assertRaisesRegex(RuntimeError, 'V2_INITIAL_CAPITAL'):
+                m.validate(raw, GEN)
+
+    def test_actual_exposure_hard_cap_and_invalid_amounts(self):
+        for amount in (20000, 20001, -1, 0, None, True, '1000', float('nan'), float('inf')):
+            with self.subTest(amount=amount):
+                raw = fixture()
+                doc = json.loads(raw['hunter-shadow-v2-portfolio.json'])
+                doc['open_positions'][0]['tranches'] = [{'notional_usdt': amount}]
+                raw['hunter-shadow-v2-portfolio.json'] = json.dumps(doc)
+                if amount == 20000:
+                    self.assertEqual(m.validate(raw, GEN), [1, 1])
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'V2_(EXPOSURE|INVALID_TRANCHE)'):
+                        m.validate(raw, GEN)
+
+    def test_exposure_sums_all_tranches_and_rejects_missing(self):
+        for tranches in (None, [], [{'notional_usdt': 11000}, {'notional_usdt': 10000}]):
+            raw = fixture()
+            doc = json.loads(raw['hunter-shadow-v2-portfolio.json'])
+            doc['open_positions'][0]['tranches'] = tranches
+            raw['hunter-shadow-v2-portfolio.json'] = json.dumps(doc)
+            with self.assertRaisesRegex(RuntimeError, 'V2_EXPOSURE'):
                 m.validate(raw, GEN)
 
     def test_readback_failure_never_prints_success(self):
