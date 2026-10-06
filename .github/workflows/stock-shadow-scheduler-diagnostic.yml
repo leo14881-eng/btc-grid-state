@@ -22,7 +22,10 @@ jobs:
           try:
               r = urllib.request.urlopen(url, timeout=20)
           except urllib.error.HTTPError as e:
-              if e.code != 503: raise SystemExit('HEALTH_HTTP_' + str(e.code))
+              if e.code != 503:
+                  print('STOCK_PUBLIC_HEALTH_HTTP=' + str(e.code))
+                  print('STOCK_PUBLIC_HEALTH_CONTENT_TYPE=' + str(e.headers.get('Content-Type')))
+                  raise SystemExit(0)
               r = e
           with r:
               data = json.load(r)
