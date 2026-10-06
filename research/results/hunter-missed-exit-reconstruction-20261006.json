@@ -1,0 +1,537 @@
+{
+  "schema": "MISSED_PROFIT_PROTECTION_COUNTERFACTUAL_V1",
+  "status": "COUNTERFACTUAL_REFERENCE_CLOSE_NOT_EXECUTED",
+  "baseline_commit": "6ad66632cd47dd09dffbc3fac28c4b8f40c0ce11",
+  "actual_ledger_modified": false,
+  "actual_sell_executed": false,
+  "evidence_sha256": {
+    "ena-pendle-history.json": "fed9eaedb4ed86c37d39fe601582c930e2c4190441197bc15a804bd2dc02ba01",
+    "binance-history.json": "de1fb0bf404f5103e179027da948619ee704c9bb4a3e151b80b0481d011862d5"
+  },
+  "source": "BINANCE_SPOT_1M_HISTORICAL_KLINES",
+  "source_limitations": [
+    "Historical bid/ask, depth, spread and sell slippage unavailable",
+    "Closed candle price is not verified executable quote",
+    "Assumed cadence boundaries and immediate execution cannot prove actual timer process time",
+    "Existing ledger fees and buy slippage formula used, not real fee proof"
+  ],
+  "scenarios": [
+    {
+      "asset": "ENA",
+      "mode": "FIVE_MINUTE_CLOSED_CLOSE_SEQUENTIAL_MFE",
+      "anchor_commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89",
+      "anchor_asof": "2026-10-05T12:14:50.420153+00:00",
+      "anchor_mfe_pct": 3.2054,
+      "buy_tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-05T07:51:47.857517+00:00",
+          "price": 0.2527,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 5.313,
+          "reason": "INITIAL"
+        }
+      ],
+      "first_qualifying_completed_close_utc": "2026-10-05T12:34:59.999000+00:00",
+      "reference_price": 0.2555,
+      "pre_trigger_peak_evidence": {
+        "price": 0.2608,
+        "at": "2026-10-05T12:01:19.446565+00:00",
+        "mfe_pct": 3.2054,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      },
+      "profit_protection": {
+        "armed": true,
+        "raw_pct": 1.1080332409972415,
+        "mfe_pct": 3.2054,
+        "giveback_pct": 2.0973667590027585,
+        "protect_floor_pct": 0.55,
+        "exit": true
+      },
+      "gross_no_cost_pnl_usdt": 11.080332409972415,
+      "ledger_effective_quantity": 3951.2110854549505,
+      "sell_fee_usdt": 1.0095344323337399,
+      "fee_bps_per_side": 10,
+      "model_net_usdt_before_additional_sell_friction": 8.52489790140612,
+      "additional_sell_friction_assumptions": [
+        {
+          "bps": 0,
+          "net_usdt": 8.52489790140612
+        },
+        {
+          "bps": 5,
+          "net_usdt": 8.020635452455508
+        },
+        {
+          "bps": 10,
+          "net_usdt": 7.516373003504668
+        },
+        {
+          "bps": 25,
+          "net_usdt": 6.003585656652717
+        },
+        {
+          "bps": 50,
+          "net_usdt": 3.4822734118990866
+        }
+      ],
+      "comparison_current_reference_asof": "2026-10-06T14:55:17.501893+00:00",
+      "comparison_current_reference_price": 0.2401,
+      "comparison_current_model_net_usdt": -52.26290416388406,
+      "reference_close_model_opportunity_difference_usdt": 60.78780206529018,
+      "is_actual_trade": false,
+      "original_shadow_id": "SHV2-20261005T075147-ENA-b10cd5",
+      "entry_reference_quantity_without_cost": 3957.261574990107,
+      "buy_fee_and_slippage_quantity_adjustment_included": true,
+      "buy_slippage_bps": 5.313,
+      "buy_fee_bps": 10,
+      "sell_fee_bps": 10,
+      "sell_spread_bps": null,
+      "sell_slippage_bps": null,
+      "historical_book_depth_usdt": null,
+      "net_breakeven_additional_sell_friction_bps": 84.52838317769995,
+      "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+      "anchor_mark_reference_price": 0.2599,
+      "anchor_peak_evidence": {
+        "price": 0.2608,
+        "at": "2026-10-05T12:01:19.446565+00:00",
+        "mfe_pct": 3.2054,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      }
+    },
+    {
+      "asset": "ENA",
+      "mode": "ONE_MINUTE_CLOSED_CLOSE_SEQUENTIAL_MFE",
+      "anchor_commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89",
+      "anchor_asof": "2026-10-05T12:14:50.420153+00:00",
+      "anchor_mfe_pct": 3.2054,
+      "buy_tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-05T07:51:47.857517+00:00",
+          "price": 0.2527,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 5.313,
+          "reason": "INITIAL"
+        }
+      ],
+      "first_qualifying_completed_close_utc": "2026-10-05T12:34:59.999000+00:00",
+      "reference_price": 0.2555,
+      "pre_trigger_peak_evidence": {
+        "price": 0.2608,
+        "at": "2026-10-05T12:01:19.446565+00:00",
+        "mfe_pct": 3.2054,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      },
+      "profit_protection": {
+        "armed": true,
+        "raw_pct": 1.1080332409972415,
+        "mfe_pct": 3.2054,
+        "giveback_pct": 2.0973667590027585,
+        "protect_floor_pct": 0.55,
+        "exit": true
+      },
+      "gross_no_cost_pnl_usdt": 11.080332409972415,
+      "ledger_effective_quantity": 3951.2110854549505,
+      "sell_fee_usdt": 1.0095344323337399,
+      "fee_bps_per_side": 10,
+      "model_net_usdt_before_additional_sell_friction": 8.52489790140612,
+      "additional_sell_friction_assumptions": [
+        {
+          "bps": 0,
+          "net_usdt": 8.52489790140612
+        },
+        {
+          "bps": 5,
+          "net_usdt": 8.020635452455508
+        },
+        {
+          "bps": 10,
+          "net_usdt": 7.516373003504668
+        },
+        {
+          "bps": 25,
+          "net_usdt": 6.003585656652717
+        },
+        {
+          "bps": 50,
+          "net_usdt": 3.4822734118990866
+        }
+      ],
+      "comparison_current_reference_asof": "2026-10-06T14:55:17.501893+00:00",
+      "comparison_current_reference_price": 0.2401,
+      "comparison_current_model_net_usdt": -52.26290416388406,
+      "reference_close_model_opportunity_difference_usdt": 60.78780206529018,
+      "is_actual_trade": false,
+      "original_shadow_id": "SHV2-20261005T075147-ENA-b10cd5",
+      "entry_reference_quantity_without_cost": 3957.261574990107,
+      "buy_fee_and_slippage_quantity_adjustment_included": true,
+      "buy_slippage_bps": 5.313,
+      "buy_fee_bps": 10,
+      "sell_fee_bps": 10,
+      "sell_spread_bps": null,
+      "sell_slippage_bps": null,
+      "historical_book_depth_usdt": null,
+      "net_breakeven_additional_sell_friction_bps": 84.52838317769995,
+      "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+      "anchor_mark_reference_price": 0.2599,
+      "anchor_peak_evidence": {
+        "price": 0.2608,
+        "at": "2026-10-05T12:01:19.446565+00:00",
+        "mfe_pct": 3.2054,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      }
+    },
+    {
+      "asset": "ENA",
+      "mode": "ONE_MINUTE_CLOSED_CLOSE_FIXED_PERSISTED_MFE",
+      "anchor_commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89",
+      "anchor_asof": "2026-10-05T12:14:50.420153+00:00",
+      "anchor_mfe_pct": 3.2054,
+      "buy_tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-05T07:51:47.857517+00:00",
+          "price": 0.2527,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 5.313,
+          "reason": "INITIAL"
+        }
+      ],
+      "first_qualifying_completed_close_utc": "2026-10-05T12:34:59.999000+00:00",
+      "reference_price": 0.2555,
+      "pre_trigger_peak_evidence": {
+        "price": 0.2608,
+        "at": "2026-10-05T12:01:19.446565+00:00",
+        "mfe_pct": 3.2054,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      },
+      "profit_protection": {
+        "armed": true,
+        "raw_pct": 1.1080332409972415,
+        "mfe_pct": 3.2054,
+        "giveback_pct": 2.0973667590027585,
+        "protect_floor_pct": 0.55,
+        "exit": true
+      },
+      "gross_no_cost_pnl_usdt": 11.080332409972415,
+      "ledger_effective_quantity": 3951.2110854549505,
+      "sell_fee_usdt": 1.0095344323337399,
+      "fee_bps_per_side": 10,
+      "model_net_usdt_before_additional_sell_friction": 8.52489790140612,
+      "additional_sell_friction_assumptions": [
+        {
+          "bps": 0,
+          "net_usdt": 8.52489790140612
+        },
+        {
+          "bps": 5,
+          "net_usdt": 8.020635452455508
+        },
+        {
+          "bps": 10,
+          "net_usdt": 7.516373003504668
+        },
+        {
+          "bps": 25,
+          "net_usdt": 6.003585656652717
+        },
+        {
+          "bps": 50,
+          "net_usdt": 3.4822734118990866
+        }
+      ],
+      "comparison_current_reference_asof": "2026-10-06T14:55:17.501893+00:00",
+      "comparison_current_reference_price": 0.2401,
+      "comparison_current_model_net_usdt": -52.26290416388406,
+      "reference_close_model_opportunity_difference_usdt": 60.78780206529018,
+      "is_actual_trade": false,
+      "original_shadow_id": "SHV2-20261005T075147-ENA-b10cd5",
+      "entry_reference_quantity_without_cost": 3957.261574990107,
+      "buy_fee_and_slippage_quantity_adjustment_included": true,
+      "buy_slippage_bps": 5.313,
+      "buy_fee_bps": 10,
+      "sell_fee_bps": 10,
+      "sell_spread_bps": null,
+      "sell_slippage_bps": null,
+      "historical_book_depth_usdt": null,
+      "net_breakeven_additional_sell_friction_bps": 84.52838317769995,
+      "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+      "anchor_mark_reference_price": 0.2599,
+      "anchor_peak_evidence": {
+        "price": 0.2608,
+        "at": "2026-10-05T12:01:19.446565+00:00",
+        "mfe_pct": 3.2054,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      }
+    },
+    {
+      "asset": "PENDLE",
+      "mode": "FIVE_MINUTE_CLOSED_CLOSE_SEQUENTIAL_MFE",
+      "anchor_commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89",
+      "anchor_asof": "2026-10-05T12:14:50.420153+00:00",
+      "anchor_mfe_pct": 2.6704,
+      "buy_tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-05T07:51:47.857517+00:00",
+          "price": 2.509,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 4.433,
+          "reason": "INITIAL"
+        }
+      ],
+      "first_qualifying_completed_close_utc": "2026-10-05T13:34:59.999000+00:00",
+      "reference_price": 2.53,
+      "pre_trigger_peak_evidence": {
+        "price": 2.583,
+        "mfe_pct": 2.949382223993635,
+        "at": "2026-10-05T12:34:59.999000+00:00",
+        "evidence": "PREVIOUS_COMPLETED_CLOSE_IN_THIS_SCENARIO"
+      },
+      "profit_protection": {
+        "armed": true,
+        "raw_pct": 0.8369868473495412,
+        "mfe_pct": 2.949382223993635,
+        "giveback_pct": 2.112395376644094,
+        "protect_floor_pct": 0.55,
+        "exit": true
+      },
+      "gross_no_cost_pnl_usdt": 8.369868473495412,
+      "ledger_effective_quantity": 397.990745361763,
+      "sell_fee_usdt": 1.0069165857652604,
+      "fee_bps_per_side": 10,
+      "model_net_usdt_before_additional_sell_friction": 5.909669179495154,
+      "additional_sell_friction_assumptions": [
+        {
+          "bps": 0,
+          "net_usdt": 5.909669179495154
+        },
+        {
+          "bps": 5,
+          "net_usdt": 5.406714344905481
+        },
+        {
+          "bps": 10,
+          "net_usdt": 4.903759510315695
+        },
+        {
+          "bps": 25,
+          "net_usdt": 3.3948950065464487
+        },
+        {
+          "bps": 50,
+          "net_usdt": 0.8801208335976298
+        }
+      ],
+      "comparison_current_reference_asof": "2026-10-06T14:55:17.501893+00:00",
+      "comparison_current_reference_price": 2.458,
+      "comparison_current_model_net_usdt": -22.71700915288568,
+      "reference_close_model_opportunity_difference_usdt": 28.626678332380834,
+      "is_actual_trade": false,
+      "original_shadow_id": "SHV2-20261005T075147-PENDLE-ea9b45",
+      "entry_reference_quantity_without_cost": 398.5651654045437,
+      "buy_fee_and_slippage_quantity_adjustment_included": true,
+      "buy_slippage_bps": 4.433,
+      "buy_fee_bps": 10,
+      "sell_fee_bps": 10,
+      "sell_spread_bps": null,
+      "sell_slippage_bps": null,
+      "historical_book_depth_usdt": null,
+      "net_breakeven_additional_sell_friction_bps": 58.74950167558901,
+      "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+      "anchor_mark_reference_price": 2.564,
+      "anchor_peak_evidence": {
+        "price": 2.576,
+        "at": "2026-10-05T12:09:53.689543+00:00",
+        "mfe_pct": 2.6704,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      }
+    },
+    {
+      "asset": "PENDLE",
+      "mode": "ONE_MINUTE_CLOSED_CLOSE_SEQUENTIAL_MFE",
+      "anchor_commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89",
+      "anchor_asof": "2026-10-05T12:14:50.420153+00:00",
+      "anchor_mfe_pct": 2.6704,
+      "buy_tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-05T07:51:47.857517+00:00",
+          "price": 2.509,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 4.433,
+          "reason": "INITIAL"
+        }
+      ],
+      "first_qualifying_completed_close_utc": "2026-10-05T12:58:59.999000+00:00",
+      "reference_price": 2.537,
+      "pre_trigger_peak_evidence": {
+        "price": 2.593,
+        "mfe_pct": 3.347947389398165,
+        "at": "2026-10-05T12:33:59.999000+00:00",
+        "evidence": "PREVIOUS_COMPLETED_CLOSE_IN_THIS_SCENARIO"
+      },
+      "profit_protection": {
+        "armed": true,
+        "raw_pct": 1.1159824631327142,
+        "mfe_pct": 3.347947389398165,
+        "giveback_pct": 2.2319649262654506,
+        "protect_floor_pct": 0.55,
+        "exit": true
+      },
+      "gross_no_cost_pnl_usdt": 11.159824631327142,
+      "ledger_effective_quantity": 397.990745361763,
+      "sell_fee_usdt": 1.0097025209827928,
+      "fee_bps_per_side": 10,
+      "model_net_usdt_before_additional_sell_friction": 8.692818461809907,
+      "additional_sell_friction_assumptions": [
+        {
+          "bps": 0,
+          "net_usdt": 8.692818461809907
+        },
+        {
+          "bps": 5,
+          "net_usdt": 8.188472052579073
+        },
+        {
+          "bps": 10,
+          "net_usdt": 7.684125643348125
+        },
+        {
+          "bps": 25,
+          "net_usdt": 6.171086415655509
+        },
+        {
+          "bps": 50,
+          "net_usdt": 3.649354369500884
+        }
+      ],
+      "comparison_current_reference_asof": "2026-10-06T14:55:17.501893+00:00",
+      "comparison_current_reference_price": 2.458,
+      "comparison_current_model_net_usdt": -22.71700915288568,
+      "reference_close_model_opportunity_difference_usdt": 31.409827614695587,
+      "is_actual_trade": false,
+      "original_shadow_id": "SHV2-20261005T075147-PENDLE-ea9b45",
+      "entry_reference_quantity_without_cost": 398.5651654045437,
+      "buy_fee_and_slippage_quantity_adjustment_included": true,
+      "buy_slippage_bps": 4.433,
+      "buy_fee_bps": 10,
+      "sell_fee_bps": 10,
+      "sell_spread_bps": null,
+      "sell_slippage_bps": null,
+      "historical_book_depth_usdt": null,
+      "net_breakeven_additional_sell_friction_bps": 86.17904581759484,
+      "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+      "anchor_mark_reference_price": 2.564,
+      "anchor_peak_evidence": {
+        "price": 2.576,
+        "at": "2026-10-05T12:09:53.689543+00:00",
+        "mfe_pct": 2.6704,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      }
+    },
+    {
+      "asset": "PENDLE",
+      "mode": "ONE_MINUTE_CLOSED_CLOSE_FIXED_PERSISTED_MFE",
+      "anchor_commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89",
+      "anchor_asof": "2026-10-05T12:14:50.420153+00:00",
+      "anchor_mfe_pct": 2.6704,
+      "buy_tranches": [
+        {
+          "tranche": 1,
+          "at": "2026-10-05T07:51:47.857517+00:00",
+          "price": 2.509,
+          "notional_usdt": 1000.0,
+          "buy_slippage_bps": 4.433,
+          "reason": "INITIAL"
+        }
+      ],
+      "first_qualifying_completed_close_utc": "2026-10-05T13:30:59.999000+00:00",
+      "reference_price": 2.524,
+      "pre_trigger_peak_evidence": {
+        "price": 2.576,
+        "at": "2026-10-05T12:09:53.689543+00:00",
+        "mfe_pct": 2.6704,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      },
+      "profit_protection": {
+        "armed": true,
+        "raw_pct": 0.5978477481068278,
+        "mfe_pct": 2.6704,
+        "giveback_pct": 2.072552251893172,
+        "protect_floor_pct": 0.55,
+        "exit": true
+      },
+      "gross_no_cost_pnl_usdt": 5.978477481068278,
+      "ledger_effective_quantity": 397.990745361763,
+      "sell_fee_usdt": 1.0045286412930898,
+      "fee_bps_per_side": 10,
+      "model_net_usdt_before_additional_sell_friction": 3.524112651796713,
+      "additional_sell_friction_assumptions": [
+        {
+          "bps": 0,
+          "net_usdt": 3.524112651796713
+        },
+        {
+          "bps": 5,
+          "net_usdt": 3.0223505954708116
+        },
+        {
+          "bps": 10,
+          "net_usdt": 2.52058853914491
+        },
+        {
+          "bps": 25,
+          "net_usdt": 1.0153023701672055
+        },
+        {
+          "bps": 50,
+          "net_usdt": -1.4935079114623022
+        }
+      ],
+      "comparison_current_reference_asof": "2026-10-06T14:55:17.501893+00:00",
+      "comparison_current_reference_price": 2.458,
+      "comparison_current_model_net_usdt": -22.71700915288568,
+      "reference_close_model_opportunity_difference_usdt": 26.241121804682393,
+      "is_actual_trade": false,
+      "original_shadow_id": "SHV2-20261005T075147-PENDLE-ea9b45",
+      "entry_reference_quantity_without_cost": 398.5651654045437,
+      "buy_fee_and_slippage_quantity_adjustment_included": true,
+      "buy_slippage_bps": 4.433,
+      "buy_fee_bps": 10,
+      "sell_fee_bps": 10,
+      "sell_spread_bps": null,
+      "sell_slippage_bps": null,
+      "historical_book_depth_usdt": null,
+      "net_breakeven_additional_sell_friction_bps": 35.11736895373985,
+      "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+      "anchor_mark_reference_price": 2.564,
+      "anchor_peak_evidence": {
+        "price": 2.576,
+        "at": "2026-10-05T12:09:53.689543+00:00",
+        "mfe_pct": 2.6704,
+        "evidence": "PERSISTED_PEAK_FIELDS_IN_ANCHOR_COMMIT",
+        "commit": "c598d38d0d91f98dc346e79f37b9f9d202593c89"
+      }
+    }
+  ],
+  "authority": "NON_AUTHORITATIVE_AUDIT_ONLY",
+  "model_never_include_in_official_pnl": true,
+  "capital_release": false,
+  "creates_trade_events": false,
+  "creates_second_portfolio": false,
+  "primary_scenario": "FIVE_MINUTE_CLOSED_CLOSE_SEQUENTIAL_MFE",
+  "full_timestamp_is_candle_close_not_execution_time": true,
+  "first_trigger_scope": "FIRST_WITHIN_DOCUMENTED_POST_121450_MONITOR_GAP; NOT_PROVEN_FIRST_ENTIRE_HOLDING",
+  "full_holding_one_minute_coverage": false
+}
