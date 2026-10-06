@@ -140,7 +140,7 @@ class ResearchRebindTests(unittest.TestCase):
     def test_cannot_reset_non_ci_or_unconfirmed_checkout(self):
         with self.assertRaisesRegex(RuntimeError, "DISPOSABLE_CI"):
             r.rebind("scan")
-        with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "HUNTER_RESEARCH_ISOLATED_CHECKOUT": "0"}):
             with self.assertRaisesRegex(RuntimeError, "DISPOSABLE_CI"):
                 r.rebind("scan", isolated=True)
 

@@ -1,0 +1,14 @@
+[Unit]
+Description=Hunter blind-replay shadow scheduled job
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/shadow-runner/btc-grid-state
+ExecStart=/usr/local/bin/hunter-scheduled-job.sh blind-replay
+TimeoutStartSec=7200
+Nice=10
+CPUWeight=20
+MemoryMax=768M
+StandardOutput=journal
+StandardError=journal

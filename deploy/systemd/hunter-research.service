@@ -1,0 +1,14 @@
+[Unit]
+Description=Hunter research shadow scheduled job
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/shadow-runner/btc-grid-state
+ExecStart=/usr/local/bin/hunter-scheduled-job.sh research
+TimeoutStartSec=1800
+Nice=10
+CPUWeight=20
+MemoryMax=768M
+StandardOutput=journal
+StandardError=journal

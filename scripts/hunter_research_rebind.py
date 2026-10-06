@@ -25,7 +25,8 @@ def research_output(path):
 
 def rebind(expected, isolated=False):
     # This reset is permitted only in the disposable CI checkout, never production.
-    require(isolated and os.environ.get("GITHUB_ACTIONS") == "true",
+    require(isolated and (os.environ.get("GITHUB_ACTIONS") == "true" or
+                         os.environ.get("HUNTER_RESEARCH_ISOLATED_CHECKOUT") == "1"),
             "DISPOSABLE_CI_CHECKOUT_REQUIRED")
     base = git("rev-parse", "HEAD").stdout.strip()
     dirty = git("diff", "--name-only", "HEAD").stdout.splitlines()
