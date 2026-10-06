@@ -1,0 +1,24 @@
+name: Stock Scheduler P0 Validation
+on:
+  push:
+    branches: ['fix/stock-shadow-scheduler-p0-20261006']
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install test runner
+        run: python -m pip install -q pytest
+      - name: Python stock + scheduler tests
+        run: python -m pytest -q tests/test_stock_shadow.py tests/test_stock_shadow_scheduler_health.py
+      - name: Worker isolation tests
+        run: node --test research/stock_shadow_scheduler/worker.test.mjs
+      - name: Static safety boundary
+        run: |
+          ! grep -R "hunter-bybit-market-v3\|bybit-api-test\|hunter-position-monitor-heartbeat" research/stock_shadow_scheduler
+          grep -q '"name":"stock-shadow-scheduler"' research/stock_shadow_scheduler/wrangler.jsonc

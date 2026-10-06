@@ -20,7 +20,7 @@ git config user.name "stock-shadow-bot"
 git config user.email "stock-shadow-bot@users.noreply.github.com"
 for attempt in 1 2 3; do
   git fetch origin main
-  if ! git diff --quiet "$source_ref" origin/main -- research/stock_shadow tests/test_stock_shadow.py .github/workflows/stock-shadow.yml .github/workflows/stock-shadow-position-monitor.yml .github/workflows/stock-shadow-replay.yml; then
+  if ! git diff --quiet "$source_ref" origin/main -- research/stock_shadow research/stock_shadow_scheduler_health.py tests/test_stock_shadow.py tests/test_stock_shadow_scheduler_health.py .github/workflows/stock-shadow.yml .github/workflows/stock-shadow-position-monitor.yml .github/workflows/stock-shadow-replay.yml; then
     echo "Stock Shadow code changed during this run; refusing stale-result persistence"
     exit 42
   fi
