@@ -51,32 +51,7 @@ jobs:
         run: |
           git fetch origin main
           git checkout -B main origin/main
-          python - <<'PY'
-          import json,os
-          d=json.load(open('research/results/hunter-cex-universe-run.json'))
-          assert d.get('generation_id') and d.get('binance_complete') is True
-          trigger_sha=os.environ.get('TRIGGER_SHA')
-          event=os.environ.get('TRIGGER_EVENT')
-          source=d.get('source_head_sha')
-          force=os.environ.get('FORCE','false').lower()=='true'
-          aligned=False
-          try:
-              h=json.load(open('research/results/hunter-health-and-queue.json'))
-              aligned=(h.get('scan_generation_id')==d.get('generation_id') or h.get('scan_as_of_utc')==d.get('as_of_utc'))
-          except Exception:
-              pass
-          if event=='workflow_dispatch':
-              admitted=(force or not aligned)
-          else:
-              admitted=(bool(trigger_sha) and source==trigger_sha)
-          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-              print('should_run='+('true' if admitted else 'false'),file=f)
-              print('generation='+str(d.get('generation_id')),file=f)
-          if admitted:
-              print('HUNTER_GENERATION_ADMITTED',d['generation_id'],source)
-          else:
-              print('HUNTER_TRIGGER_SKIPPED',trigger_sha,'authoritative_source',source,'generation',d['generation_id'],'already_aligned',aligned,'force',force)
-          PY
+          python -m scripts.hunter_generation_admission
   research:
     needs: bind
     if: ${{ needs.bind.outputs.should_run == 'true' }}
