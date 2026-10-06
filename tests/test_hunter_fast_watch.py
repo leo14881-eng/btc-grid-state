@@ -2,6 +2,7 @@ import asyncio
 import copy
 import datetime as dt
 import json
+import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
@@ -233,6 +234,7 @@ class DualVenueTests(unittest.TestCase):
 
 
 class TransportTests(unittest.IsolatedAsyncioTestCase):
+    @unittest.skipUnless(importlib.util.find_spec('aiohttp'), 'resident Fast Watch transport dependency not installed')
     async def test_real_local_websocket_ping_pong_and_disconnect(self):
         import aiohttp
         from aiohttp import web
