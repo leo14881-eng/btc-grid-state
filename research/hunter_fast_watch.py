@@ -217,8 +217,10 @@ class Watch:
                     self.metrics['ws_recovery_count'] += 1
                     self.record('WS_RECOVERED', now, symbol=symbol,
                         fallback_duration_seconds=now - row['fallback_started'])
+                    row['last_stale_detected_at'] = row.pop('stale_detected_at', None)
             else:
                 row['state'] = 'FAST_PATH_HEALTHY'
+                row['last_stale_detected_at'] = row.pop('stale_detected_at', None)
             self.metrics['event_count'] += 1
             if allow_candidate:
                 self.candidate(symbol, bid, now, 'WS', sequence)
@@ -262,6 +264,9 @@ class Watch:
                 raise ValueError('REST_EXCHANGE_TIME_INVALID')
             if bid >= ask or (ask / bid - 1) * 10000 > self.config.max_spread_bps:
                 raise ValueError('BOOK_INVALID')
+            if not row['fallback'] and row['last_valid_event_at'] is not None and row['last_valid_event_at'] >= started:
+                row.update(last_rest_at=completed, rest_bid=bid, rest_ask=ask)
+                return 'REST_PROBE_COMPLETED_WS_RECOVERED'
             if not row['fallback']:
                 row.update(fallback=True, fallback_started=completed, fallback_activated_at=utc(completed))
                 self.metrics['rest_fallback_count'] += 1
@@ -273,7 +278,8 @@ class Watch:
             return 'REST_FALLBACK_ACTIVE'
         except (ValueError, TypeError, KeyError) as exc:
             self.metrics['both_sources_failed_count'] += 1
-            row.update(state='MARKET_DATA_UNAVAILABLE' if completed - row['first_seen'] >= self.config.unavailable_seconds else 'FAST_MARKET_DATA_DEGRADED', rest_error=str(exc), recovery_count=0)
+            stale_since=row['last_valid_event_at'] if row['last_valid_event_at'] is not None else row['first_seen']
+            row.update(state='MARKET_DATA_UNAVAILABLE' if completed - stale_since >= self.config.unavailable_seconds else 'FAST_MARKET_DATA_DEGRADED', rest_error=str(exc), recovery_count=0)
             return row['state']
 
     def candidate(self, symbol, price, now, source, sequence):

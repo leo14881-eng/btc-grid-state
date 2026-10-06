@@ -105,6 +105,11 @@ class FastWatchTests(unittest.TestCase):
         self.w.event(event(8),100);self.w.probe_due(112)
         self.w.rest('ENAUSDT',dict(symbol='ENAUSDT',bidPrice='1.04',askPrice='1.041'),112,113)
         self.w.event(event(7,at=114),114);self.assertEqual(self.w.symbols['ENAUSDT']['recovery_count'],0)
+    def test_second_stale_episode_counted(self):
+        self.w.probe_due(112);self.w.rest('ENAUSDT',dict(symbol='ENAUSDT',bidPrice='1.04',askPrice='1.041'),112,113)
+        for seq in (1,2,3):self.w.event(event(seq,at=113+seq),113+seq)
+        self.w.probe_due(128)
+        self.assertEqual(self.w.metrics['stale_incident_count'],3)  # BTC episode plus two ENA episodes
     def test_rest_conflict_does_not_trigger(self):
         self.w.probe_due(112);self.w.rest('ENAUSDT',dict(symbol='ENAUSDT',bidPrice='1',askPrice='1.001'),112,113)
         self.w.event(event(1,1.04,at=114),114)
