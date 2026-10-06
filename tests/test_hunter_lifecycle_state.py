@@ -1,6 +1,9 @@
 import copy
 import datetime as dt
 import json
+import os
+import subprocess
+import sys
 import unittest
 from research import hunter_lifecycle_state as h
 from research import hunter_shadow_trader_v2 as e
@@ -13,6 +16,12 @@ class PersistentProtectionTests(unittest.TestCase):
  def observe(self,pos,p,i,at=None):
   now=at or NOW+dt.timedelta(minutes=5*i)
   return h.protect(pos,p,e.net_pnl(pos,p),h.liquidation(pos,book(p,now),now),now,'g'+str(i),now.isoformat())
+ def test_research_direct_entrypoint_imports_lifecycle_without_pythonpath(self):
+  env=dict(os.environ);env.pop('PYTHONPATH',None);env['HUNTER_SHADOW_FREEZE']='1'
+  r=subprocess.run([sys.executable,'research/hunter_shadow_trader_v2.py'],env=env,capture_output=True,text=True)
+  self.assertEqual(r.returncode,0,r.stderr)
+  self.assertEqual(json.loads(r.stdout)['writes'],0)
+
  def test_under_arm_and_historical_mfe_do_not_create_live_arm(self):
   p=position();p['mfe_pct']=20
   self.assertFalse(self.observe(p,101,0)['armed'])
