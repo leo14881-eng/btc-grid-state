@@ -14,6 +14,9 @@ on:
     paths:
       - 'research/stock_shadow/stock_position_monitor.py'
       - 'research/stock_shadow/market_session.py'
+      - 'research/stock_shadow/state_safety.py'
+      - 'research/stock_shadow/stock_review.py'
+      - 'research/stock_shadow/isolation_guard.sh'
       - 'research/stock_shadow/persist_results.sh'
       - 'tests/test_stock_shadow.py'
       - '.github/workflows/stock-shadow-position-monitor.yml'
@@ -49,6 +52,7 @@ jobs:
       - name: P0 weekend and final mutation gate acceptance
         run: python -m pytest -q tests/test_stock_shadow.py -k p0
       - name: Position-only 5m monitor
+        id: stock_monitor
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
@@ -58,9 +62,11 @@ jobs:
           else
             python research/stock_shadow/stock_position_monitor.py --force
           fi
+      - name: Winner loser review
+        run: python research/stock_shadow/stock_review.py
       - name: Isolation guard
         run: |
-          git diff --name-only | grep -Ev '^research/results/stock-shadow/' && { echo "Isolation violation"; exit 1; } || true
+          bash research/stock_shadow/isolation_guard.sh
       - name: Persist Stock Shadow position state only
         run: bash research/stock_shadow/persist_results.sh monitor
 
@@ -72,3 +78,9 @@ jobs:
 
 # MONITOR_FINAL_TRIGGER_R5
 
+
+      - name: Persist failure health only
+        if: ${{ failure() && steps.stock_monitor.outcome == 'failure' }}
+        run: |
+          bash research/stock_shadow/isolation_guard.sh
+          bash research/stock_shadow/persist_results.sh health

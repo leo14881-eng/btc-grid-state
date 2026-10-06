@@ -12,6 +12,14 @@ except ImportError:
         from research.stock_shadow.market_session import session_allows_trade
 from pathlib import Path
 
+try:
+    from .state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+except ImportError:
+    try:
+        from state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+    except ImportError:
+        from research.stock_shadow.state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
 MARKET_CACHE=ROOT/"market-daily-cache-v1.json"
@@ -81,7 +89,9 @@ def first_json(urls):
     raise last
 def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
-    except Exception: return d
+    except Exception:
+        if p in (STATE, EVENTS): raise
+        return d
 def save(p,o):
     p.parent.mkdir(parents=True,exist_ok=True)
     tmp=p.with_suffix(p.suffix+".tmp")
@@ -317,18 +327,20 @@ def profit_floor_net_pct(mfe):
 
 def recovery_add_signal(p, m, ps):
     """ADD only after a real pullback has happened and the position is improving again."""
-    price=m["price"]
-    high=max(float(p.get("swing_high_price",price)),price)
+    price=number(m.get("price"),"recovery.price",positive=True)
+    high=max(number(p.get("swing_high_price"),"swing_high_price",default=price,positive=True),price)
     p["swing_high_price"]=high
     dd=(price/high-1.0)*100 if high else 0.0
     if dd < -1.0:
-        low=min(float(p.get("pullback_low_price",price)),price)
+        low=min(number(p.get("pullback_low_price"),"pullback_low_price",default=price,positive=True),price)
         p["pullback_low_price"]=low
         p["pullback_seen"]=True
-    low=p.get("pullback_low_price")
+    low=optional_number(p.get("pullback_low_price"),"pullback_low_price",positive=True)
     recovery=((price/low-1.0)*100) if low else 0.0
     prev_rel=(p.get("position_state_v2") or {}).get("market_relative20")
-    rel_improving=prev_rel is not None and ps["market_relative20"] > prev_rel
+    prev_rel=optional_number(prev_rel,"previous.market_relative20")
+    current_rel=optional_number(ps.get("market_relative20"),"current.market_relative20")
+    rel_improving=prev_rel is not None and current_rel is not None and current_rel > prev_rel
     price_improving=bool(low and price > low)
     eligible=bool(p.get("pullback_seen") and ps["state"]!="BROKEN" and price_improving and rel_improving)
     return {"eligible":eligible,"drawdown_from_swing_high_pct":round(dd,4),
@@ -362,7 +374,7 @@ def position_state_v2(m, spy=None, qqq=None):
 
 def position_state_v3(p, market_state, net_return_pct):
     """Position-relative state; market strength and our trade outcome are separate dimensions."""
-    mae=float(p.get("mae_net_pct",net_return_pct))
+    mae=number(p.get("mae_net_pct"),"mae_net_pct",default=net_return_pct)
     if market_state.get("state")=="BROKEN":
         state="BROKEN"
     elif net_return_pct <= -8.0 or mae <= -10.0:
@@ -490,6 +502,7 @@ def net_pct(p,price):
 def main():
     state=load(STATE,{"version":2,"simulation_only":True,"positions":{},"closed":[]})
     events=load(EVENTS,[])
+    validate_inputs(state,events)
     starting_positions=len(state.get("positions",{}))
     starting_events=len(events)
     starting_closed=len(state.get("closed",[]))
@@ -527,7 +540,9 @@ def main():
         m=market.get(s)
         if not m: continue
         price=m["price"]; r=net_pct(p,price)
-        p["mfe_net_pct"]=max(p.get("mfe_net_pct",r),r); p["mae_net_pct"]=min(p.get("mae_net_pct",r),r)
+        if p.get("mfe_net_pct") is None or p.get("mae_net_pct") is None:
+            p["extrema_history_status"]="INITIALIZED_FROM_CURRENT_OBSERVATION"
+        p["mfe_net_pct"]=max(number(p.get("mfe_net_pct"),f"{s}.mfe_net_pct",default=r),r); p["mae_net_pct"]=min(number(p.get("mae_net_pct"),f"{s}.mae_net_pct",default=r),r)
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6)})
         # V3 lifecycle: worsening never ADDs; ADD waits for pullback + observable recovery.
         n=len(p["tranches"]); decision=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
@@ -555,8 +570,8 @@ def main():
                 p.pop("rebound_exit_pending_v3",None)
             else:
                 # Hard rule: never realize a loss into a breakdown. Wait for a rebound.
-                p["rebound_exit_pending_v3"]={"armed_at":p.get("rebound_exit_pending_v3",{}).get("armed_at",now()),
-                    "reason":"FUNDAMENTAL_OR_STRUCTURE_DETERIORATION","lowest_net_return_pct":round(min(r,(p.get("rebound_exit_pending_v3") or {}).get("lowest_net_return_pct",r)),6)}
+                p["rebound_exit_pending_v3"]={"armed_at":(p.get("rebound_exit_pending_v3") or {}).get("armed_at") or now(),
+                    "reason":"FUNDAMENTAL_OR_STRUCTURE_DETERIORATION","lowest_net_return_pct":round(min(r,number((p.get("rebound_exit_pending_v3") or {}).get("lowest_net_return_pct"),f"{s}.lowest_net_return_pct",default=r)),6)}
         elif p.get("rebound_exit_pending_v3"):
             # Rebound exits are profit-only too. A losing rebound remains pending.
             if r > 0:
@@ -589,7 +604,7 @@ def main():
             raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
+    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,**portfolio_statistics(state,events),"scan_state_stale":False,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
     "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":json.loads(json.dumps(API_USAGE)),
     "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in sorted({(x.get("error") or {}).get("history_gap_classification") for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")})},
     "universe_exclusion_count":universe_exclusion_count,
@@ -597,5 +612,6 @@ def main():
     "failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
-if __name__=="__main__": main()
+if __name__=="__main__":
+    run_with_health(main,ROOT/"main-run-health-v1.json",SOURCE_COMMIT,RUN_ID,save)
 

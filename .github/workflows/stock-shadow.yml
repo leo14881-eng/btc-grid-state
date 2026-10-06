@@ -56,6 +56,7 @@ jobs:
           STOCKFIT_API_KEY: ${{ secrets.STOCKFIT_API_KEY }}
         run: python research/stock_shadow/fundamentals_observer.py
       - name: Run Stock Shadow V1
+        id: stock_scan
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
@@ -64,7 +65,7 @@ jobs:
         run: python research/stock_shadow/stock_review.py
       - name: Isolation guard
         run: |
-          git diff --name-only | grep -Ev '^research/results/stock-shadow/' && { echo "Isolation violation"; exit 1; } || true
+          bash research/stock_shadow/isolation_guard.sh
       - name: Persist Stock Shadow state only
         run: bash research/stock_shadow/persist_results.sh main
 
@@ -78,3 +79,9 @@ jobs:
 
 # CLEAN_WEEKEND_BASELINE_FINAL_ACCEPTANCE_20261005
 
+
+      - name: Persist failure health only
+        if: ${{ failure() && steps.stock_scan.outcome == 'failure' }}
+        run: |
+          bash research/stock_shadow/isolation_guard.sh
+          bash research/stock_shadow/persist_results.sh health

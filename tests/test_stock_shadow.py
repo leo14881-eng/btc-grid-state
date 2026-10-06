@@ -974,3 +974,110 @@ def test_p0_push_race_retries_only_own_outputs(tmp_path):
     assert result.returncode==0,result.stdout+result.stderr
     assert 'race winner' in git(work,'show','origin/main:unrelated.txt').stdout
     assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/portfolio-v1.json').stdout
+
+
+@pytest.mark.parametrize('field', ['swing_high_price','pullback_low_price'])
+def test_recovery_optional_prices_accept_null_and_missing(field):
+    for value in [None, 'MISSING']:
+        p={'swing_high_price':100.0,'pullback_seen':False}
+        if value != 'MISSING': p[field]=value
+        out=ss.recovery_add_signal(p,{'price':98.0},{'state':'STRONG','market_relative20':1.0})
+        assert out['eligible'] is False
+        assert p['swing_high_price'] >= 98.0
+
+
+def test_add_reset_then_new_pullback_requires_new_recovery():
+    p={'swing_high_price':100.0,'pullback_low_price':None,'pullback_seen':False,
+       'position_state_v2':{'market_relative20':0.0}}
+    ps={'state':'STRONG','market_relative20':1.0}
+    first=ss.recovery_add_signal(p,{'price':98.0},ps)
+    assert p['pullback_low_price']==98.0 and not first['eligible']
+    assert not ss.recovery_add_signal(p,{'price':97.0},ps)['eligible']
+    assert p['pullback_low_price']==97.0
+    assert ss.recovery_add_signal(p,{'price':98.0},ps)['eligible']
+
+
+@pytest.mark.parametrize('field,value', [('swing_high_price',0),('pullback_low_price',-1),
+    ('pullback_low_price','bad'),('pullback_low_price',float('nan')),('swing_high_price',float('inf'))])
+def test_recovery_rejects_invalid_numbers(field,value):
+    p={'swing_high_price':100.0,field:value}
+    with pytest.raises(ValueError,match='stock_state:'):
+        ss.recovery_add_signal(p,{'price':98.0},{'state':'STRONG','market_relative20':1.0})
+
+
+def test_missing_relative_strength_never_adds():
+    p={'swing_high_price':100.0,'pullback_low_price':90.0,'pullback_seen':True,
+       'position_state_v2':{'market_relative20':0.0}}
+    assert not ss.recovery_add_signal(p,{'price':98.0},{'state':'STRONG','market_relative20':None})['eligible']
+    assert ss.position_state_v3({'mae_net_pct':None},{'state':'STRONG'},-4)['mae_net_pct']==-4
+
+
+def test_full_scan_null_derived_state_and_pending_rebound(monkeypatch):
+    book=_p0_book(ss,monkeypatch)
+    _p0_clock(ss,monkeypatch,'2026-10-05T17:00:00+00:00','2026-10-05T17:00:01+00:00')
+    monkeypatch.setattr(ss,'_alpaca_exchange_session',lambda ts=None:None)
+    for p in book[ss.STATE]['positions'].values():
+        p.update(mfe_net_pct=None,mae_net_pct=None,swing_high_price=100.0,pullback_low_price=None,
+                 rebound_exit_pending_v3=None)
+    monkeypatch.setattr(ss,'stock_universe',lambda:({s:{**_m(price=80,r5=-10,r20=-20,sma20=100),'base':s} for s in ['ADD','EXIT']},[],{'discovered':2,'source_errors':[]}))
+    ss.main()
+    assert book[ss.EVENTS]==[]
+    for p in book[ss.STATE]['positions'].values():
+        assert p['pullback_low_price']==80.0
+        assert p['rebound_exit_pending_v3']['lowest_net_return_pct'] < 0
+
+
+def test_failure_health_keeps_authoritative_book_untouched(monkeypatch):
+    import copy
+    book=_p0_book(ss,monkeypatch);book[ss.STATE]['positions']['ADD']['tranches'][0]['price']=None
+    before=copy.deepcopy(book)
+    health=ss.ROOT/'main-run-health-v1.json'
+    with pytest.raises(ValueError,match='ADD.tranches'):
+        ss.run_with_health(ss.main,health,'commit','run',ss.save)
+    assert book[ss.STATE]==before[ss.STATE] and book[ss.EVENTS]==before[ss.EVENTS]
+    assert book[health]['status']=='FAILED'
+    assert 'ADD.tranches' in book[health]['error']
+
+
+def test_monitor_null_extremes_and_summary_binding(monkeypatch):
+    monitor=_load_position_monitor();book=_p0_book(monitor,monkeypatch)
+    for p in book[monitor.STATE]['positions'].values(): p.update(mfe_net_pct=None,mae_net_pct=None)
+    _p0_clock(monitor,monkeypatch,'2026-10-05T17:00:00+00:00','2026-10-05T17:00:01+00:00')
+    monkeypatch.setattr(monitor,'_alpaca_exchange_session',lambda ts=None:None)
+    monkeypatch.setattr(monitor,'alpaca_snapshot_quotes',lambda symbols:({s:89.0 for s in symbols},[],1,1))
+    summary=monitor.ROOT/'summary-v1.json';book[summary]={'run_id':'old','updated_at':'old scan'}
+    monitor.main(force=True)
+    assert book[summary]['open_positions']==2
+    assert book[summary]['portfolio_run_id']==monitor.RUN_ID
+    assert book[summary]['updated_at']=='old scan' and book[summary]['scan_state_stale'] is True
+    assert book[monitor.EVENTS]==[]
+
+
+def test_health_only_persistence_excludes_partial_ledger_and_accepts_newer_book(tmp_path):
+    import subprocess
+    git,remote,work,writer=_p0_git_pair(tmp_path)
+    path='research/results/stock-shadow/portfolio-v1.json'
+    (work/path).write_text('{"positions":{"PARTIAL":{}}}\n')
+    health='research/results/stock-shadow/main-run-health-v1.json'
+    (work/health).write_text('{"status":"FAILED"}\n')
+    (writer/path).write_text('{"positions":{"FRESH":{}}}\n')
+    git(writer,'add','.');git(writer,'commit','-m','fresh book');git(writer,'push','origin','main')
+    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'health'],cwd=work,capture_output=True,text=True)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert 'FRESH' in git(work,'show','origin/main:'+path).stdout
+    assert 'FAILED' in git(work,'show','origin/main:'+health).stdout
+
+
+def test_isolation_guard_really_fails_for_tracked_and_untracked_files(tmp_path):
+    import subprocess
+    git,remote,work,writer=_p0_git_pair(tmp_path)
+    guard=str(Path('research/stock_shadow/isolation_guard.sh').resolve())
+    (work/'research/results/stock-shadow/new-health.json').write_text('{}')
+    cache=work/'research/stock_shadow/__pycache__';cache.mkdir(parents=True)
+    (cache/'stock_shadow_v1.cpython-312.pyc').write_bytes(b'cache')
+    assert subprocess.run(['bash',guard],cwd=work,capture_output=True).returncode==0
+    (work/'unrelated.txt').write_text('changed')
+    assert subprocess.run(['bash',guard],cwd=work,capture_output=True).returncode==1
+    git(work,'checkout','--','unrelated.txt')
+    (work/'untracked.py').write_text('unexpected')
+    assert subprocess.run(['bash',guard],cwd=work,capture_output=True).returncode==1

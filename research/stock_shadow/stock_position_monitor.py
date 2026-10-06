@@ -12,6 +12,14 @@ except ImportError:
     except ImportError:
         from research.stock_shadow.market_session import session_allows_trade
 
+try:
+    from .state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+except ImportError:
+    try:
+        from state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+    except ImportError:
+        from research.stock_shadow.state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"; CALENDAR_CACHE=ROOT/"calendar-session-cache-v1.json"
 FEE_RATE=0.002; MAX_REQUEST_TARGET_CHARS=7000
@@ -26,7 +34,9 @@ CALENDAR_USAGE={"http_requests":0,"cache_hits":0,"cache_misses":0,"errors":0}
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
-    except Exception: return d
+    except Exception:
+        if p in (STATE, EVENTS): raise
+        return d
 def save(p,o):
     p.parent.mkdir(parents=True,exist_ok=True)
     tmp=p.with_suffix(p.suffix+".tmp")
@@ -162,6 +172,7 @@ def alpaca_snapshot_quotes(symbols):
 
 def main(force=False):
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
+    validate_inputs(state,events)
     if state.get("reset_reason") or state.get("reset_at"):
         raise RuntimeError("state_continuity:manual_reset_marker_present")
     positions=state.get("positions",{}); symbols=sorted(positions)
@@ -180,7 +191,9 @@ def main(force=False):
         if price is None: continue
         p=positions.get(s)
         if not p: continue
-        r=net_pct(p,price); mfe=max(p.get("mfe_net_pct",r),r); mae=min(p.get("mae_net_pct",r),r)
+        if p.get("mfe_net_pct") is None or p.get("mae_net_pct") is None:
+            p["extrema_history_status"]="INITIALIZED_FROM_CURRENT_OBSERVATION"
+        r=net_pct(p,price); mfe=max(number(p.get("mfe_net_pct"),f"{s}.mfe_net_pct",default=r),r); mae=min(number(p.get("mae_net_pct"),f"{s}.mae_net_pct",default=r),r)
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6),"mfe_net_pct":mfe,"mae_net_pct":mae})
         updated+=1
         giveback=mfe-r
@@ -223,8 +236,14 @@ def main(force=False):
             raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
+    summary=load(ROOT/"summary-v1.json",{})
+    summary.update(portfolio_statistics(state,events))
+    summary["scan_state_stale"]=summary.get("run_id") != state.get("run_id")
+    save(ROOT/"summary-v1.json",summary)
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
     save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
-if __name__=="__main__": main(force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
+if __name__=="__main__":
+    run_with_health(main,ROOT/"monitor-run-health-v1.json",SOURCE_COMMIT,RUN_ID,save,
+                    force="--force" in __import__("sys").argv or os.getenv("STOCK_SHADOW_FORCE_MONITOR")=="1")
 
