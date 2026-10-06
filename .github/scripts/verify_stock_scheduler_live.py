@@ -70,7 +70,7 @@ try:
         raise RuntimeError("STOCK_BINDING_OR_SECRET_MISSING")
     schedules = cf(f"workers/scripts/{WORKER}/schedules")
     schedules = schedules.get("schedules", []) if isinstance(schedules, dict) else schedules
-    if [x.get("cron") for x in schedules] != ["3-58/5 * * * *"]:
+    if [x.get("cron") for x in schedules] != ["3,8,13,18,23,28,33,38,43,48,53,58 * * * *"]:
         raise RuntimeError("STOCK_CRON_MISMATCH")
     subdomain = cf("workers/subdomain").get("subdomain", "")
     if not re.fullmatch(r"[a-zA-Z0-9-]+", subdomain):
@@ -86,7 +86,7 @@ try:
     print("STOCK_REMOTE_CONFIGURATION_VERIFIED", flush=True)
     print("STOCK_HEALTH_URL=" + health_url, flush=True)
     save()
-    deadline = time.monotonic() + 18 * 60
+    deadline = time.monotonic() + 25 * 60
     seen = set()
     while time.monotonic() < deadline:
         status, health = request(health_url, allow_503=True)

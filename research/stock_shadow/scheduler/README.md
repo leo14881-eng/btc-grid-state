@@ -28,7 +28,7 @@
 
 先以默认 `read_only=true` 检查账户和已有股票 Worker，凭据仅在 Runner 内使用；确认后输入最新 main SHA、Worker 是否已存在及 `read_only=false` 部署。部署工作流会检查源码、固定 Worker/DO/Cron 配置、账户 Worker 清单和预期存在状态；不符则停止。Wrangler 4.147.0 用 `--strict` 防止无提示覆盖远端配置，`--secrets-file` 将代码和 secret 一起部署，临时 secret 文件不输出并在退出时删除。此工作流没有 push 或 schedule 部署触发，也不通过手动 dispatch 股票流程制造自动周期证据。部署上传成功仍需下述实跑验收。
 
-1. 在 Cloudflare 部署独立 `stock-shadow-scheduler` Worker，应用 `StockScheduler` 的 SQLite Durable Object 绑定 `STOCK_SCHEDULER` 和 v1 migration；Cron 为 `3-58/5 * * * *`。
+1. 在 Cloudflare 部署独立 `stock-shadow-scheduler` Worker，应用 `StockScheduler` 的 SQLite Durable Object 绑定 `STOCK_SCHEDULER` 和 v1 migration；Cron 为 `3,8,13,18,23,28,33,38,43,48,53,58 * * * *`。
 2. 通过 Cloudflare Secret 设置 `GITHUB_ACTIONS_TOKEN`，不要放进代码、仓库、URL、日志或聊天。Token 只选择这个仓库，最少需要 Actions 写入和读取仓库内容权限；不需要交易权限或其他仓库权限。创建/扩大凭据权限须在操作前获得确认。
 3. 执行 `node --test worker.test.mjs`。仓库独立 Actions 验证工作流会运行相同测试。
 4. 验证实际 Cron 自动生成 GitHub `workflow_dispatch` 运行，运行成功且健康文件写回；至少连续观察 3 个 5 分钟周期，检查 `/health`。
@@ -39,3 +39,5 @@
 `/health` 与 Workers 错误日志提供失联信号；尚未连接主动消息推送渠道。不能把“有健康接口”描述为“用户会自动收到即时告警”。另一个原生 GitHub cron watchdog 无法解决 GitHub cron 整体停发的问题。
 
 部署完成之前只能称代码和测试完成；外部 Token、Durable Object 绑定、Cron 及连续实跑全部确认后才能称独立调度接通。Token 过期/撤销会显示错误并停止派发；应在到期前轮换。
+
+2026-10-06 首次部署成功，但随后的 18 分钟只读验收未记录到自动心跳。随后改用与原表达式完全相同的显式分钟列表重新发布，属于配置恢复尝试，不据此认定原表达式是根因；须继续用自动周期和持久化证据验收。

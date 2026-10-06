@@ -46,7 +46,7 @@ jobs:
           from pathlib import Path
           c = json.loads(Path('research/stock_shadow/scheduler/wrangler.jsonc').read_text())
           assert c['name'] == 'stock-shadow-scheduler'
-          assert c['triggers']['crons'] == ['3-58/5 * * * *']
+          assert c['triggers']['crons'] == ['3,8,13,18,23,28,33,38,43,48,53,58 * * * *']
           assert c['durable_objects']['bindings'] == [{'name': 'STOCK_SCHEDULER', 'class_name': 'StockScheduler'}]
           assert not any(k in c for k in ('routes', 'route', 'services', 'env'))
           PY
@@ -99,6 +99,7 @@ jobs:
           if exists:
               script = next(s for s in scripts if s.get('id') == 'stock-shadow-scheduler')
               print(json.dumps({'stock_modified_on': script.get('modified_on')}))
+              print(json.dumps({'stock_worker_subdomain': cf('workers/scripts/stock-shadow-scheduler/subdomain')}))
               settings = cf('workers/scripts/stock-shadow-scheduler/settings')
               bindings = settings.get('bindings', [])
               print(json.dumps({'stock_binding_names_and_types': [
