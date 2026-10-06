@@ -1,32 +1,54 @@
 {
   "capital_authority": "NONE_SHADOW_ONLY",
-  "completed_at_utc": "2026-10-06T14:31:57.108605+00:00",
-  "duration_seconds": 46.972,
+  "completed_at_utc": "2026-10-06T15:31:56.497651+00:00",
+  "duration_seconds": 46.088,
   "error": null,
   "job": "blind-replay",
-  "main_readback_head_sha": "5485455a743fcafaf42e6b72ecc43a7c245e7aa7",
+  "main_readback_head_sha": "1d3218b0ff469e02c1991a9b157d12675d655ac2",
   "main_readback_verified": true,
   "real_trading_enabled": false,
   "schema": "hunter_runtime_job_health_v1",
   "source": "VULTR_SYSTEMD",
-  "source_head_sha": "6bc535cf6caad4a1f01fcc9756f5579c24ea7687",
-  "started_at_utc": "2026-10-06T14:31:10.136559+00:00",
+  "source_head_sha": "c844e98ef34cee267f1be723cda1b7bd925f127b",
+  "started_at_utc": "2026-10-06T15:31:10.409736+00:00",
   "status": "SUCCESS",
   "steps": [
     {
+      "completed_at_utc": "2026-10-06T15:31:10.487100+00:00",
       "exit": 0,
+      "job": "blind-replay",
       "name": "Normalize Binance archive timestamps",
-      "seconds": 0.063
+      "seconds": 0.062,
+      "started_at_utc": "2026-10-06T15:31:10.425343+00:00",
+      "status": "SUCCESS"
     },
     {
+      "completed_at_utc": "2026-10-06T15:31:48.789452+00:00",
       "exit": 0,
+      "job": "blind-replay",
       "name": "Run blind replay",
-      "seconds": 39.286
+      "seconds": 38.302,
+      "started_at_utc": "2026-10-06T15:31:10.487201+00:00",
+      "status": "SUCCESS"
     },
     {
+      "completed_at_utc": "2026-10-06T15:31:55.123098+00:00",
       "exit": 0,
+      "job": "blind-replay",
       "name": "Persist replay outputs from clean latest main",
-      "seconds": 6.227
+      "seconds": 6.334,
+      "started_at_utc": "2026-10-06T15:31:48.789585+00:00",
+      "status": "SUCCESS",
+      "stderr_tail": "Note: switching to 'c844e98ef34cee267f1be723cda1b7bd925f127b'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\n"
+    },
+    {
+      "completed_at_utc": "2026-10-06T15:31:56.496729+00:00",
+      "exit": 0,
+      "job": "blind-replay",
+      "name": "Authoritative main read-back",
+      "seconds": 1.374,
+      "started_at_utc": "2026-10-06T15:31:55.123171+00:00",
+      "status": "SUCCESS"
     }
   ]
 }
