@@ -65,7 +65,8 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
  if risk_evidence is not None:eng.tail.update_risk_controls(state,risk_evidence,now,eng.C)
- scan={"coins":market,"generation_id":(regime_scan or {}).get("generation_id") or "MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")};btc=(market.get("BTC") or {}).get("reference_price")
+ scan={"coins":market,"as_of_utc":(regime_scan or {}).get('as_of_utc') or now.isoformat(),"generation_id":(regime_scan or {}).get("generation_id") or "MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")};btc=(market.get("BTC") or {}).get("reference_price")
+ state['last_cycle_generation_id']=scan['generation_id']
  capital_proposals=[] if not v1_mode else None
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
  # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit
@@ -166,7 +167,29 @@ def main():
               "shadow_only":True,"real_position_mutation":False,"ordinary_buy_sell_signals_unchanged":True,
               "capital_authority":"NONE_SHADOW_ONLY"}
  eng.atomic_json_write(LEADING,leading_doc)
- results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,now,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,now,False,excluded,regime_scan,risk_evidence)]
+ # Exit responsiveness is independent of the rotating fundamental review batch.
+ # Fetch all V2 books and any V1 armed/armable position before exit evaluation.
+ exit_assets={p['asset'] for p in states[1].get('open_positions',[])}
+ exit_assets.update(p['asset'] for p in states[0].get('open_positions',[]) if (p.get('protection_lifecycle',{}).get('state','UNARMED')!='UNARMED' or ((market.get(p['asset']) or {}).get('reference_price') and eng.raw_return(p,market[p['asset']]['reference_price'])>=eng.PROTECT_ARM_PCT)))
+ exit_failures={}
+ def exit_book(asset):
+  query=urllib.parse.urlencode({'symbol':asset+'USDT','limit':100})
+  return books.measure(books.live_fetch(books.BN+'/api/v3/depth?'+query),dt.datetime.now(dt.timezone.utc),pair=asset+'USDT')
+ with ThreadPoolExecutor(max_workers=8) as executor:
+  futures={executor.submit(exit_book,a):a for a in exit_assets}
+  for future in as_completed(futures):
+   a=futures[future]
+   try:
+    snapshot=future.result();liq.setdefault('snapshots',{})[a]=snapshot
+    refresh.setdefault('observed_exit_raw_books',{})[a]=snapshot['raw_book_evidence']
+   except Exception as ex:
+    exit_failures[a]=type(ex).__name__
+    liq.setdefault('snapshots',{})[a]={}  # never reuse an old book after a failed attempt
+ refresh['exit_book_refresh_failures']=exit_failures
+ # Evaluate after acquisitions finish: a just-fetched book must not appear to
+ # come from the future relative to the scan's initial clock snapshot.
+ evaluated_at=dt.datetime.now(dt.timezone.utc)
+ results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence)]
  TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"timing_seconds":dict(TIMINGS),"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
  print(json.dumps({"assets":wanted,"results":results}))
