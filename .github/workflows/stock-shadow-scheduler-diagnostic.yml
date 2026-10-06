@@ -76,7 +76,7 @@ jobs:
                           'script':{k:resources.get('script',{}).get(k) for k in ('etag','handlers','named_handlers')},
                           'settings':{k:resources.get('script_runtime',{}).get(k) for k in ('compatibility_date','compatibility_flags')}}), flush=True)
               # Read source only in memory; log hashes and known-source match booleans, never code or secret values.
-              body, kind = read('workers/scripts/' + worker + '/content', raw=True)
+              body, kind = read('workers/scripts/' + worker, raw=True)
               modules = []
               if 'multipart/' in kind:
                   msg = BytesParser(policy=default).parsebytes(('Content-Type: '+kind+'\r\nMIME-Version: 1.0\r\n\r\n').encode()+body)
@@ -97,6 +97,7 @@ jobs:
               raise SystemExit(1) from None
           PYCODE
       - name: Read public stock health
+        if: always()
         run: |
           python - <<'PY'
           import json, urllib.request, urllib.error
@@ -116,6 +117,7 @@ jobs:
           print('STOCK_RUNTIME_HEALTH=' + json.dumps({k: data.get(k) for k in allowed}))
           PY
       - name: Observe stock runtime traces read only
+        if: always()
         working-directory: research/stock_shadow/scheduler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
