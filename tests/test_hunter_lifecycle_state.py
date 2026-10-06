@@ -99,6 +99,45 @@ class HealthRecoveryTests(unittest.TestCase):
   self.assertEqual(p['loss_recovery_lifecycle']['persistent_invalidation_count'],0)
   self.assertEqual(p['recovery_state'],'LOSS_RECOVERY')
 
+ def test_recovered_to_none_clears_active_counters_preserves_history_and_restarts(self):
+  p=position();p['recovery_state']='LOSS_RECOVERY'
+  for i in range(3):self.tick(p,i,True)
+  row=p['loss_recovery_lifecycle']
+  self.assertEqual(p['recovery_state'],'RECOVERED')
+  recovered_at=row['last_recovered_at_utc'];recovered_generation=row['last_recovered_generation_id']
+  self.tick(p,3)
+  self.assertEqual(p['recovery_state'],'NONE')
+  self.assertEqual((row['recovery_observations'],row['persistent_invalidation_count']),(0,0))
+  self.assertEqual(row['last_recovered_at_utc'],recovered_at)
+  self.assertEqual(row['last_recovered_generation_id'],recovered_generation)
+  self.assertEqual([t['to'] for t in row['transitions']],['RECOVERING','RECOVERED','NONE'])
+  before=copy.deepcopy(p);self.tick(p,3);self.assertEqual(p,before)
+  self.tick(p,4);self.tick(p,5)
+  self.assertEqual(p['recovery_state'],'LOSS_RECOVERY')
+  self.assertEqual(row['persistent_invalidation_count'],1)
+  self.assertEqual(row['recovery_observations'],0)
+  before=copy.deepcopy(p);self.tick(p,5);self.assertEqual(p,before)
+
+ def test_legacy_none_counter_cleanup_retains_recorded_recovery(self):
+  p=position();p['recovery_state']='NONE'
+  transition={'from':'RECOVERING','to':'RECOVERED','at':NOW.isoformat(),'generation_id':'recorded-history'}
+  p['loss_recovery_lifecycle']={'schema':'hunter_loss_recovery_v1','persistent_invalidation_count':4,'recovery_observations':3,'transitions':[transition]}
+  self.tick(p,1)
+  row=p['loss_recovery_lifecycle']
+  self.assertEqual(p['recovery_state'],'NONE')
+  self.assertEqual((row['recovery_observations'],row['persistent_invalidation_count']),(0,0))
+  self.assertEqual(row['transitions'],[transition])
+  self.assertEqual(row['last_recovered_at_utc'],transition['at'])
+  self.assertEqual(row['last_recovered_generation_id'],transition['generation_id'])
+
+ def test_new_invalidation_does_not_inherit_stale_none_episode_counter(self):
+  p=position();p['recovery_state']='NONE'
+  p['loss_recovery_lifecycle']={'persistent_invalidation_count':4,'recovery_observations':3,'transitions':[]}
+  h.recovery(p,self.evidence(0),NOW,-20,'new','THESIS_INVALIDATED')
+  self.assertEqual(p['recovery_state'],'LOSS_RECOVERY')
+  self.assertEqual(p['loss_recovery_lifecycle']['persistent_invalidation_count'],1)
+  self.assertEqual(p['loss_recovery_lifecycle']['recovery_observations'],0)
+
  def test_missing_observation_breaks_degrade_confirmation(self):
   p=position();self.tick(p,0);self.tick(p,1)
   self.tick(p,10)
