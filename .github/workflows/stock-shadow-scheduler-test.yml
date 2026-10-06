@@ -1,17 +1,25 @@
 name: Stock Shadow Scheduler Validation
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'research/stock_shadow/scheduler/**'
+      - '.github/scripts/verify_stock_scheduler_live.py'
+      - 'tests/test_stock_scheduler_live_acceptance.py'
+      - '.github/workflows/stock-shadow-scheduler-test.yml'
   push:
     branches: [main]
     paths:
       - 'research/stock_shadow/scheduler/**'
       - '.github/workflows/stock-shadow-scheduler-test.yml'
+      - '.github/scripts/verify_stock_scheduler_live.py'
+      - 'tests/test_stock_scheduler_live_acceptance.py'
 permissions:
   contents: read
 jobs:
   scheduler:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,3 +27,12 @@ jobs:
           node-version: '24'
       - name: Scheduler fault and isolation acceptance
         run: node --test research/stock_shadow/scheduler/worker.test.mjs
+      - name: Fail-closed live evidence verifier regression
+        run: python -m unittest discover -s tests -p test_stock_scheduler_live_acceptance.py -q
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing stock regression dependency
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Frozen stock regression and final gate safety
+        run: python -m pytest -q tests/test_stock_shadow.py

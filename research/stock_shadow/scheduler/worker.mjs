@@ -68,7 +68,9 @@ export function decide(ms, snapshot, lease = {}) {
 export class GitHub {
   constructor(token, fetcher = fetch) { this.token = token; this.fetcher = fetcher; }
   async request(path, method = 'GET', body) {
-    const response = await this.fetcher(`https://api.github.com/repos/${REPO}/${path}`, {
+    // Runtime fetch must retain its global receiver, not the GitHub client.
+    const fetcher = this.fetcher;
+    const response = await fetcher(`https://api.github.com/repos/${REPO}/${path}`, {
       method, redirect: 'error', signal: AbortSignal.timeout(10_000),
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${this.token}`,
         'User-Agent': 'stock-shadow-independent-scheduler', 'X-GitHub-Api-Version': '2022-11-28',
@@ -117,7 +119,7 @@ export class GitHub {
   }
 }
 
-export async function tick(storage, github, ms) {
+export async function tick(storage, github, ms, provenance = {}) {
   let result;
   try {
     const snapshot = await github.snapshot();
@@ -152,7 +154,7 @@ export async function tick(storage, github, ms) {
     // Ambiguous POST timeouts keep the reservation: never immediately duplicate a dispatch.
     result = { ...result, action: 'ERROR', error: /^[A-Z0-9_]+$/.test(e.message) ? e.message : 'SCHEDULER_REQUEST_FAILED' };
   }
-  result = { ...result, checked_at: new Date(ms).toISOString(), simulation_only: true };
+  result = { ...result, ...provenance, checked_at: new Date(ms).toISOString(), simulation_only: true };
   const history = (await storage.get('history') ?? []).slice(-31);
   history.push(result);
   await storage.put({ health: result, history });
@@ -167,22 +169,35 @@ export class StockScheduler {
       const seconds = age(Date.now(), health.checked_at) / 1000;
       const healthy = Number.isFinite(seconds) && seconds <= 600 && health.action !== 'ERROR' && !health.stale;
       return Response.json({ ...health, scheduler_healthy: healthy,
-        scheduler_age_seconds: Number.isFinite(seconds) ? Math.round(seconds) : null }, { status: healthy ? 200 : 503 });
+        scheduler_age_seconds: Number.isFinite(seconds) ? Math.round(seconds) : null }, { status: healthy ? 200 : 503, headers: { 'Cache-Control': 'no-store' } });
     }
     if (request.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+    const payload = await request.json().catch(() => null);
+    const provenance = scheduledProvenance(payload);
     if (!this.env.GITHUB_ACTIONS_TOKEN) {
-      const result = { action: 'ERROR', error: 'GITHUB_TOKEN_MISSING', checked_at: new Date().toISOString() };
+      const result = { ...provenance, action: 'ERROR', error: 'GITHUB_TOKEN_MISSING', checked_at: new Date().toISOString() };
       await this.ctx.storage.put('health', result);
       return Response.json(result, { status: 503 });
     }
-    return Response.json(await tick(this.ctx.storage, new GitHub(this.env.GITHUB_ACTIONS_TOKEN), Date.now()));
+    return Response.json(await tick(this.ctx.storage, new GitHub(this.env.GITHUB_ACTIONS_TOKEN), Date.now(), provenance));
   }
+}
+
+export function scheduledProvenance(payload) {
+  const cron = '3,8,13,18,23,28,33,38,43,48,53,58 * * * *';
+  if (payload?.trigger_source !== 'scheduled' || payload.cron !== cron ||
+      !Number.isFinite(payload.scheduledTime) || payload.scheduledTime < 0 ||
+      payload.scheduledTime > 8.64e15) return { trigger_source: 'diagnostic' };
+  return { trigger_source: 'scheduled', cron, scheduled_at: new Date(payload.scheduledTime).toISOString() };
 }
 
 export default {
   async scheduled(event, env, ctx) {
+    const payload = { trigger_source: 'scheduled', cron: event.cron, scheduledTime: event.scheduledTime };
+    console.log(JSON.stringify({ stage: 'SCHEDULED_EVENT_RECEIVED', ...scheduledProvenance(payload) }));
     const stub = env.STOCK_SCHEDULER.get(env.STOCK_SCHEDULER.idFromName('stock-shadow-main'));
-    ctx.waitUntil(stub.fetch('https://scheduler.internal/tick', { method: 'POST' }).then(async r => {
+    ctx.waitUntil(stub.fetch('https://scheduler.internal/tick', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(async r => {
       const result = await r.json();
       console.log(JSON.stringify(result));
       if (!r.ok || result.action === 'ERROR') throw new Error('STOCK_SCHEDULER_FAILED');
