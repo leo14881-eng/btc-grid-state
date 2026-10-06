@@ -66,6 +66,7 @@ def recovery(pos, e, now, pnl, generation, health):
   row['persistent_invalidation_count']+=1;row['recovery_observations']=0
   state='PERSISTENT_INVALIDATION' if row['persistent_invalidation_count']>=3 else 'LOSS_RECOVERY'
  elif old in ('LOSS_RECOVERY','PERSISTENT_INVALIDATION','RECOVERING'):
+  row['persistent_invalidation_count']=0  # current generation is not invalidated
   quality=health=='STRONG' and all(e.get(k) is not None and e[k]>0 for k in ('btc_rel_1h','btc_rel_4h','rel_accel'))
   row['recovery_observations']=row['recovery_observations']+1 if quality else 0
   row['persistent_invalidation_count']=0 if quality else row['persistent_invalidation_count']
