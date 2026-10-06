@@ -97,7 +97,7 @@ def refresh_management_evidence(states,market,review,liq,now):
  selected=[wanted[(cursor+i)%len(wanted)] for i in range(count)] if wanted else []
  pairs=[a+"USDT" for a in selected]+["BTCUSDT"]
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
- current={};failures={}
+ current={};failures={};raw_books={}
  try:
   r1=timed("evidence_1h",signals.rolling,pairs,"1h");r4=timed("evidence_4h",signals.rolling,pairs,"4h");micro=timed("evidence_micro",signals.micro,pairs)
   for a in selected:
@@ -109,7 +109,7 @@ def refresh_management_evidence(states,market,review,liq,now):
  by={x.get("asset"):x for x in review.get("candidates") or []}
  def book(a):
   raw=books.live_fetch(books.BN+"/api/v3/depth?symbol="+a+"USDT&limit=100")
-  row=books.measure(raw,dt.datetime.now(dt.timezone.utc));row["execution_scenarios"]={}
+  row=books.measure(raw,dt.datetime.now(dt.timezone.utc),pair=a+"USDT");row["execution_scenarios"]={}
   for amount in (1000,2000,3000,4000):
    try:row["execution_scenarios"][str(amount)]=books.estimate(raw,amount)
    except ValueError:pass
@@ -120,6 +120,7 @@ def refresh_management_evidence(states,market,review,liq,now):
    a=futures[future]
    try:
     snapshot=future.result();liq.setdefault("snapshots",{})[a]=snapshot
+    raw_books[a]=snapshot["raw_book_evidence"]
     c=by.setdefault(a,{"asset":a,"blockers":[]})
     c["signal"]=current[a];c["signal_evidence"]=stamp(a,generation,now.isoformat())
     c["execution_scenario"]=snapshot["execution_scenarios"].get("3000",{})
@@ -132,6 +133,7 @@ def refresh_management_evidence(states,market,review,liq,now):
   c=by.setdefault(a,{"asset":a,"blockers":[]});c["signal_evidence"]={};c["management_refresh_error"]=failures[a]
  review["candidates"]=list(by.values())
  return review,liq,{"generation_id":generation,"observed_at_utc":now.isoformat(),"attempted":selected,"failures":failures,
+                   "observed_raw_books":raw_books,
                    "evidence_refresh_cursor":(cursor+count)%len(wanted) if wanted else 0,"policy_version":VERSION}
 
 def main():

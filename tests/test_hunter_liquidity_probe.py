@@ -12,6 +12,21 @@ NOW=dt.datetime(2026,9,26,9,0,tzinfo=dt.timezone.utc)
 AT=NOW.isoformat()
 
 class LiquidityTests(unittest.TestCase):
+    def test_raw_depth_retained_without_fabricating_source_timestamp(self):
+        book={'lastUpdateId':123, 'bids':[['99','10'],['98','30']],
+              'asks':[['101','10'],['102','40']], 'E':9999999999999}
+        evidence=h.measure(book,NOW,pair='AAAUSDT')['raw_book_evidence']
+        self.assertEqual(evidence['bids'],book['bids'])
+        self.assertEqual(evidence['asks'],book['asks'])
+        self.assertEqual(evidence['symbol'],'AAAUSDT')
+        self.assertEqual(evidence['last_update_id'],123)
+        self.assertEqual(evidence['fetched_at'],AT)
+        self.assertIsNone(evidence['source_timestamp'])
+        self.assertEqual(evidence['execution_evidence_status'],'UNVERIFIABLE')
+        self.assertFalse(evidence['execution_verified'])
+        book['bids'][0][1]='1'
+        self.assertEqual(evidence['bids'][0][1],'10')
+
     def test_parallel_books_keep_all_targets_and_individual_failures(self):
         symbols=['AAA','BBB','CCC','DDD']
         scan={'as_of_utc':AT,'coins':{s:{'pairs':[{'venue':'binance','pair':s+'USDT'}]} for s in symbols}}
@@ -93,6 +108,7 @@ class LiquidityTests(unittest.TestCase):
         report=h.build(s,d,lambda url:book,NOW)
         self.assertEqual(report["successful_count"],1)
         scenarios=report["snapshots"]["AAA"]["execution_scenarios"]
+        self.assertEqual(report['snapshots']['AAA']['raw_book_evidence']['symbol'],'AAAUSDT')
         self.assertEqual(set(scenarios),{"2000","3000","4000"})
         self.assertTrue(all(scenarios[n]["roundtrip_cost_usdt"]>0 for n in scenarios))
 

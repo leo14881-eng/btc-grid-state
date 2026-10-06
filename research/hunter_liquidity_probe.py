@@ -5,6 +5,7 @@ A public depth response is market microstructure evidence, NOT verified project
 fundamentals or a capital authorization. All failures are explicit.
 """
 import datetime as dt
+import copy
 import json
 import math
 import os
@@ -43,7 +44,7 @@ def finite(v):
     except (TypeError,ValueError,OverflowError):
         return None
 
-def measure(book,now):
+def measure(book,now,*,pair=None):
     bids=book.get("bids") or []
     asks=book.get("asks") or []
     if not bids or not asks:
@@ -68,6 +69,19 @@ def measure(book,now):
             "ask_depth_2pct_usdt":side_depth(asks,"ask"),
             "depth_levels_per_side":min(len(bids),len(asks)),
             "partial_book":True,
+            # REST depth supplies an update sequence, not an exchange event
+            # timestamp. Preserve the levels without upgrading receipt time
+            # into historical execution evidence.
+            "raw_book_evidence":{
+                "schema":"binance_spot_rest_depth_receipt_v1",
+                "exchange":"binance","market":"spot","symbol":pair,
+                "price_unit":"USDT","quantity_unit":"BASE",
+                "fetched_at":now.isoformat(),"source_timestamp":None,
+                "last_update_id":copy.deepcopy(book.get("lastUpdateId")),
+                "bids":copy.deepcopy(bids),"asks":copy.deepcopy(asks),
+                "timestamp_status":"EXCHANGE_TIMESTAMP_NOT_PROVIDED",
+                "execution_evidence_status":"UNVERIFIABLE",
+                "execution_verified":False,"real_trading_enabled":False},
             "capital_authority":"NONE__MARKET_EVIDENCE_ONLY"}
 
 def targets(dossiers,scan,early=None):
@@ -104,7 +118,7 @@ def build(scan,dossiers,fetch,now,early=None,workers=8):
         url=BN+"/api/v3/depth?"+urllib.parse.urlencode({"symbol":pair,"limit":100})
         try:
             book=fetch(url)
-            snapshot=measure(book,dt.datetime.now(dt.timezone.utc))
+            snapshot=measure(book,dt.datetime.now(dt.timezone.utc),pair=pair)
             snapshot.update(pair=pair,venue="binance",lane=lane)
             snapshot["execution_scenarios"]={}
             for amount in (2000,3000,4000):

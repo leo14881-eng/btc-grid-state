@@ -62,12 +62,15 @@ class ChainConsistencyTests(unittest.TestCase):
  def test_monitor_refreshes_watch_holdings_without_new_entry(self):
   states=[{'open_positions':[{'asset':'X'}]}];market={'X':{'reference_price':100}}
   values={'XUSDT':{'return_pct':2},'BTCUSDT':{'return_pct':0}}
-  book={'as_of_utc':NOW.isoformat(),'spread_bps':10,'bid_depth_2pct_usdt':50000,'ask_depth_2pct_usdt':50000}
+  raw={'source_timestamp':None,'execution_verified':False,'symbol':'XUSDT','bids':[['99','10']],'asks':[['101','10']]}
+  book={'as_of_utc':NOW.isoformat(),'spread_bps':10,'bid_depth_2pct_usdt':50000,'ask_depth_2pct_usdt':50000,'raw_book_evidence':raw}
   with patch.object(monitor,'load',return_value={}),patch.object(monitor.signals,'rolling',return_value=values),patch.object(monitor.signals,'micro',return_value={}),patch.object(monitor.books,'live_fetch',return_value={}),patch.object(monitor.books,'measure',return_value=book),patch.object(monitor.books,'estimate',return_value={'estimated_rr':2,'buy_slippage_bps':10}):
    r,l,meta=monitor.refresh_management_evidence(states,market,{'candidates':[]},{},NOW)
   self.assertEqual(meta['attempted'],['X']);self.assertTrue(r['candidates'][0]['management_only']);self.assertIn('signal_evidence',r['candidates'][0]);self.assertIn('X',l['snapshots'])
+  self.assertEqual(meta['observed_raw_books'],{'X':raw})
  def test_failed_refresh_does_not_reuse_old_signal(self):
   with patch.object(monitor,'load',return_value={}),patch.object(monitor.signals,'rolling',side_effect=RuntimeError('offline')):
    r,_,meta=monitor.refresh_management_evidence([{'open_positions':[{'asset':'X'}]}],{}, {'candidates':[{'asset':'X','signal_evidence':policy.stamp('X','old',NOW.isoformat())}]},{},NOW)
   self.assertEqual(r['candidates'][0]['signal_evidence'],{});self.assertIn('X',meta['failures'])
+  self.assertEqual(meta['observed_raw_books'],{})
 if __name__=='__main__':unittest.main()
