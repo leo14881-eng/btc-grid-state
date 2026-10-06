@@ -10,10 +10,92 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Inspect stock deployed handlers and trigger metadata read only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python - <<'PYCODE'
+          import hashlib, json, os, re, urllib.request, urllib.error
+          from email.parser import BytesParser
+          from email.policy import default
+          from pathlib import Path
+          account = os.environ['CLOUDFLARE_ACCOUNT_ID']
+          if not re.fullmatch(r'[a-fA-F0-9]{32}', account):
+              raise SystemExit('INVALID_ACCOUNT_ID')
+          worker = 'stock-shadow-scheduler'
+          base = 'https://api.cloudflare.com/client/v4/accounts/' + account + '/'
+          def read(path, raw=False):
+              req = urllib.request.Request(base + path, headers={
+                  'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN'],
+                  'User-Agent': 'stock-scheduler-read-only-diagnostic'})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      content, kind = r.read(), r.headers.get('Content-Type', '')
+              except urllib.error.HTTPError as e:
+                  raise RuntimeError('CF_READ_HTTP_' + str(e.code)) from None
+              except Exception:
+                  raise RuntimeError('CF_READ_FAILED') from None
+              if raw:
+                  return content, kind
+              d = json.loads(content)
+              if not d.get('success'):
+                  raise RuntimeError('CF_READ_REJECTED')
+              return d['result']
+          try:
+              scripts = read('workers/scripts?per_page=1000')
+              script = next((s for s in scripts if s.get('id') == worker), None)
+              if script is None:
+                  raise RuntimeError('STOCK_WORKER_NOT_FOUND')
+              safe = {k: script.get(k) for k in ('id','handlers','named_handlers','etag',
+                  'created_on','modified_on','has_modules','last_deployed_from','migration_tag')}
+              print('STOCK_DEPLOYED_SCRIPT=' + json.dumps(safe), flush=True)
+              settings = read('workers/scripts/' + worker + '/settings')
+              print('STOCK_DEPLOYED_SETTINGS=' + json.dumps({k: settings.get(k) for k in
+                  ('compatibility_date','compatibility_flags','limits','placement','observability')}), flush=True)
+              print('STOCK_DEPLOYED_BINDINGS=' + json.dumps([
+                  {k:b.get(k) for k in ('name','type','class_name','script_name','environment','namespace_id') if k in b}
+                  for b in settings.get('bindings',[])]), flush=True)
+              print('STOCK_DEPLOYED_SCHEDULES=' + json.dumps(read('workers/scripts/' + worker + '/schedules')), flush=True)
+              deployments = read('workers/scripts/' + worker + '/deployments')
+              for d in deployments.get('deployments',[])[:3]:
+                  print('STOCK_DEPLOYMENT=' + json.dumps({k:d.get(k) for k in ('id','created_on','strategy','versions')}), flush=True)
+                  for v in d.get('versions',[]):
+                      vid = v.get('version_id','')
+                      if not re.fullmatch(r'[a-fA-F0-9-]{36}', vid):
+                          raise RuntimeError('INVALID_VERSION_ID')
+                      version = read('workers/scripts/' + worker + '/versions/' + vid)
+                      resources = version.get('resources',{})
+                      metadata = version.get('metadata',{})
+                      print('STOCK_VERSION=' + json.dumps({'id':version.get('id'),
+                          'metadata':{k:metadata.get(k) for k in ('created_on','modified_on','source')},
+                          'script':{k:resources.get('script',{}).get(k) for k in ('etag','handlers','named_handlers')},
+                          'settings':{k:resources.get('script_runtime',{}).get(k) for k in ('compatibility_date','compatibility_flags')}}), flush=True)
+              # Read source only in memory; log hashes and known-source match booleans, never code or secret values.
+              body, kind = read('workers/scripts/' + worker + '/content', raw=True)
+              modules = []
+              if 'multipart/' in kind:
+                  msg = BytesParser(policy=default).parsebytes(('Content-Type: '+kind+'\r\nMIME-Version: 1.0\r\n\r\n').encode()+body)
+                  for part in msg.iter_parts():
+                      payload = part.get_payload(decode=True) or b''
+                      modules.append({'sha256':hashlib.sha256(payload).hexdigest(), 'bytes':len(payload),
+                          'has_scheduled_handler':b'async scheduled(' in payload,
+                          'has_stock_do_name':b'stock-shadow-main' in payload,
+                          'has_stock_workflow':b'stock-shadow-position-monitor.yml' in payload})
+              else:
+                  modules = [{'sha256':hashlib.sha256(body).hexdigest(),'bytes':len(body),
+                      'has_scheduled_handler':b'async scheduled(' in body,'has_stock_do_name':b'stock-shadow-main' in body,
+                      'has_stock_workflow':b'stock-shadow-position-monitor.yml' in body}]
+              print('STOCK_REMOTE_MODULE_HASHES=' + json.dumps(modules), flush=True)
+              print('STOCK_LOCAL_SOURCE_SHA256=' + hashlib.sha256(Path('research/stock_shadow/scheduler/worker.mjs').read_bytes()).hexdigest(), flush=True)
+          except Exception as e:
+              print('STOCK_METADATA_ERROR=' + (str(e) if re.fullmatch(r'[A-Z0-9_]+',str(e)) else 'READ_FAILED'), flush=True)
+              raise SystemExit(1) from None
+          PYCODE
       - name: Read public stock health
         run: |
           python - <<'PY'
@@ -33,7 +115,7 @@ jobs:
           allowed = ['checked_at','action','error','market','stale','workflow','dispatched','scheduler_healthy']
           print('STOCK_RUNTIME_HEALTH=' + json.dumps({k: data.get(k) for k in allowed}))
           PY
-      - name: Compare stock and coin runtime traces read only
+      - name: Observe stock runtime traces read only
         working-directory: research/stock_shadow/scheduler
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
@@ -42,7 +124,7 @@ jobs:
         run: |
           python - <<'PY'
           import json, subprocess, time, select, os
-          names=['stock-shadow-scheduler','hunter-position-monitor-heartbeat-v1']
+          names=['stock-shadow-scheduler']
           streams={}
           processes=[]
           for name in names:
