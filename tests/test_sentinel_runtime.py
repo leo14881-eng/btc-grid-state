@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, collect_depth, spot_source, oi_history, treasury_daily, UTC
+from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, collect_depth, spot_source, oi_history, treasury_daily, etf_latest_complete, UTC
 
 class RuntimeTest(unittest.TestCase):
     def setUp(self):
@@ -77,6 +77,19 @@ class RuntimeTest(unittest.TestCase):
         self.assertIsNone(result['dxy'])
         self.assertEqual(result['us10y_pct'],5.31)
         self.assertFalse(fresh(result,self.now,600))
+    def test_etf_source_complete_row_and_pending_zero_are_separate(self):
+        html='<table><tr><td></td><td>IBIT</td><td>FBTC</td><td>ARKB</td><td></td></tr><tr><td>05 Oct 2026</td><td>69.9</td><td>(74.5)</td><td>(85.2)</td><td>(89.8)</td></tr><tr><td>06 Oct 2026</td><td>-</td><td>-</td><td>-</td><td>0.0</td></tr></table>'
+        result=etf_latest_complete(html,self.now)
+        self.assertEqual(result['latest_complete_session']['date'],'2026-10-05')
+        self.assertEqual(result['latest_complete_session']['net_flow_usd_m'],-89.8)
+        self.assertEqual(result['unpublished_or_incomplete_sessions'][0]['status'],'NOT_PUBLISHED_OR_PARTIAL')
+        self.assertIsNone(result['asof'])
+    def test_etf_total_mismatch_is_not_silently_accepted(self):
+        html='<table><tr><td></td><td>IBIT</td><td>FBTC</td><td></td></tr><tr><td>05 Oct 2026</td><td>69.9</td><td>(74.5)</td><td>(159.7)</td></tr></table>'
+        with self.assertRaisesRegex(ValueError,'TOTAL_MISMATCH'): etf_latest_complete(html,self.now)
+    def test_etf_all_numeric_today_before_close_is_not_complete(self):
+        html='<table><tr><td></td><td>IBIT</td><td>FBTC</td><td></td></tr><tr><td>06 Oct 2026</td><td>0</td><td>0</td><td>0</td></tr></table>'
+        with self.assertRaisesRegex(ValueError,'NO_COMPLETE'): etf_latest_complete(html,self.now)
     def test_secondary_failure_does_not_turn_unknown_to_pass(self):
         result=scan(self.old,{'btc_spot':{'asof':stamp(self.now)},'axs_korea':{'asof':None,'error':'timeout'}},self.now)
         self.assertFalse(result['freshness_gate']['sources']['axs_korea'])
