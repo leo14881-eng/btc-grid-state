@@ -107,69 +107,21 @@ jobs:
         env:
           MONITOR_STARTED_AT: ${{ steps.generation.outputs.started_at }}
           TRIGGER_SOURCE: ${{ steps.generation.outputs.trigger_source }}
+          ADMITTED_GENERATION: ${{ steps.generation.outputs.generation_id }}
         run: |
           python -m research.hunter_scheduler_health success --started-at "$MONITOR_STARTED_AT" --trigger-source "$TRIGGER_SOURCE" --state-revision "$(git rev-parse HEAD)"
+          python - <<'PYGEN'
+          import json,os,pathlib
+          p=pathlib.Path('research/results/hunter-scheduler-health.json')
+          h=json.loads(p.read_text())
+          h['current_generation_id']=h['last_successful_monitor_generation_id']=os.environ['ADMITTED_GENERATION']
+          p.write_text(json.dumps(h,indent=2,sort_keys=True)+'\n')
+          PYGEN
       - name: Persist monitored shadow state
         if: steps.generation.outputs.process == 'true'
+        env:
+          ADMITTED_GENERATION: ${{ steps.generation.outputs.generation_id }}
         run: |
-          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          BASE_SHA=$(git rev-parse HEAD)
-          git fetch origin main
-          CHANGED=$(git diff --name-only "$BASE_SHA"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor|leading-risk)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
-            echo "SHADOW_STATE_REVISION_CONFLICT"
-            printf '%s\n' "$CHANGED"
-            exit 1
-          fi
-          git add -f research/results/hunter-position-monitor.json research/results/hunter-leading-risk.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json research/results/hunter-scheduler-health.json
-          for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json; do
-            [ -s "$p" ] || { echo "REFUSE_EMPTY_PORTFOLIO $p"; exit 1; }
-            python -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('schema')=='hunter_shadow_v2_portfolio_v2'; assert d.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'" "$p"
-            git add -f "$p"
-          done
-          verify_main () {
-            git fetch origin main
-            for p in research/results/hunter-shadow-portfolio.json research/results/hunter-shadow-v2-portfolio.json research/results/hunter-shadow-summary.json research/results/hunter-shadow-v2-summary.json research/results/hunter-position-monitor.json research/results/hunter-scheduler-health.json; do
-              git show "origin/main:$p" > "/tmp/$(basename "$p")"
-              [ -s "/tmp/$(basename "$p")" ] || { echo "POST_PUSH_EMPTY $p"; return 1; }
-              python -c "import json,sys; json.load(open(sys.argv[1]))" "/tmp/$(basename "$p")" || return 1
-            done
-            python -c "import json; v1=json.load(open('/tmp/hunter-shadow-portfolio.json')); v2=json.load(open('/tmp/hunter-shadow-v2-portfolio.json')); s1=json.load(open('/tmp/hunter-shadow-summary.json')); s2=json.load(open('/tmp/hunter-shadow-v2-summary.json')); m=json.load(open('/tmp/hunter-position-monitor.json')); lanes={x.get('lane'):x for x in m.get('results') or []}; assert lanes['SHADOW_V1']['open']==len(v1.get('open_positions') or []); assert lanes['SHADOW_V2']['open']==len(v2.get('open_positions') or []); assert s1.get('open_positions')==len(v1.get('open_positions') or []) and s1.get('closed_positions')==len(v1.get('closed_positions') or []); assert s2.get('open_positions')==len(v2.get('open_positions') or []) and s2.get('closed_positions')==len(v2.get('closed_positions') or []); assert s1.get('as_of_utc')==v1.get('updated_at_utc') and s2.get('as_of_utc')==v2.get('updated_at_utc'); h=json.load(open('/tmp/hunter-scheduler-health.json')); assert h.get('last_successful_monitor_generation_id')==h.get('current_generation_id'); assert h.get('shadow_only') is True and h.get('real_order_count')==0; print('POST_PUSH_SHADOW_STATE_VERIFIED',lanes['SHADOW_V1']['open'],lanes['SHADOW_V2']['open'],h.get('current_generation_id'))"
-          }
-          if git diff --cached --quiet; then
-            echo NO_POSITION_STATE_CHANGE
-            verify_main
-            exit $?
-          fi
-          git commit -m 'state: five-minute Hunter position monitor'
-          git fetch origin main
-          BASE_PARENT=$(git rev-parse HEAD^)
-          CHANGED=$(git diff --name-only "$BASE_PARENT"..origin/main || true)
-          if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor|leading-risk)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
-            echo "SHADOW_STATE_REVISION_CHANGED_BEFORE_PUSH"
-            printf '%s\n' "$CHANGED"
-            exit 1
-          fi
-          git rebase origin/main
-          for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then
-              echo "SHADOW_STATE_PUSH_VERIFIED attempt=$attempt"
-              verify_main
-              exit $?
-            fi
-            echo "SHADOW_STATE_PUSH_RACE attempt=$attempt"
-            PRE_REBASE_PARENT=$(git rev-parse HEAD^)
-            git fetch origin main
-            CHANGED=$(git diff --name-only "$PRE_REBASE_PARENT"..origin/main || true)
-            if printf '%s\n' "$CHANGED" | grep -Eq '^(research/hunter_policy\.py|research/results/hunter-shadow-rules\.json|research/hunter_(shadow_trader|shadow_trader_v2|position_monitor|tail_risk|leading_risk)\.py|research/results/hunter-(shadow-portfolio|shadow-v2-portfolio|shadow-summary|shadow-v2-summary|position-monitor|leading-risk)\.json|\.github/workflows/hunter-position-monitor\.yml)'; then
-              echo "SHADOW_STATE_CAS_REJECTED_STALE_WRITER"
-              printf '%s\n' "$CHANGED"
-              exit 1
-            fi
-            git rebase origin/main
-            sleep $attempt
-          done
-          echo "SHADOW_STATE_PUSH_RETRY_EXHAUSTED"
-          exit 1
+          python -m scripts.hunter_monitor_persist persist --base "$(git rev-parse HEAD)" --generation "$ADMITTED_GENERATION"
