@@ -100,13 +100,22 @@ def scan(previous, evidence, now=None):
         axs['status'] = 'OBSERVED_NOT_STRATEGY_CONFIRMED'
         axs['note'] = 'Price zone is evidence only; Korean flow and OI/price confirmation require full analysis. Lower-cost left-side research is separate.'
     at = stamp(now)
+    previous_notification = previous.get('notification_decision', {})
+    pending_type = wd['transition']
+    if not pending_type and previous_notification.get('delivery_status') != 'DELIVERED':
+        expected_type = 'SENTINEL_DEGRADED' if wd['state'] == 'SENTINEL_DEGRADED' else 'SENTINEL_RECOVERED'
+        if previous_notification.get('type') == expected_type:
+            pending_type = expected_type
+    notification = {'required': bool(pending_type), 'type': pending_type, 'delivery_status': 'NOT_DELIVERED_NO_SERVER_CHATGPT_NOTIFICATION_TRANSPORT'}
+    if pending_type:
+        notification['event_id'] = previous_notification.get('event_id') if not wd['transition'] else 'sentinel-health-' + at
     result = {'run_id': 'sentinel-' + now.strftime('%Y%m%dT%H%M%S.%fZ'), 'last_run_at': at, 'last_scan_at': at, 'updated_at': at,
       'run_status': 'ANALYSIS_FAILED' if valid else 'DATA_STALE', 'market_data_asof': evidence.get('btc_spot', {}).get('asof'),
       'derivatives_data_asof': evidence.get('btc_oi', {}).get('asof'), 'etf_data_asof': None, 'macro_data_asof': None,
       'early_action': 'NO_NEW_CAPITAL_ACTION', 'confirmation_status': 'ANALYSIS_NOT_PORTED',
       'data_gaps': gaps, 'evidence': evidence, 'freshness_gate': {'sources': gates, 'valid_evidence_scan': valid, 'valid_partial_scan': False, 'new_capital_action_allowed': False},
       'watchdog': wd, 'axs_monitor': axs, 'runtime': {'source': 'VULTR_SYSTEMD', 'scope': 'EVIDENCE_SCAN_ACCEPTANCE_ONLY', 'execution_authority': 'USER_ONLY', 'real_trading_enabled': False},
-      'notification_decision': {'required': bool(wd['transition']), 'type': wd['transition'], 'delivery_status': 'NOT_DELIVERED_NO_SERVER_CHATGPT_NOTIFICATION_TRANSPORT'}}
+      'notification_decision': notification}
     return result
 
 def merge_owned(previous, mutation):
