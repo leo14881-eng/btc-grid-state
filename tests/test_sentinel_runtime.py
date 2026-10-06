@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, UTC
+from scripts.sentinel_runtime import scan, stamp, merge_owned, watchdog, persist, fresh, source, UTC
 
 class RuntimeTest(unittest.TestCase):
     def setUp(self):
@@ -19,6 +19,15 @@ class RuntimeTest(unittest.TestCase):
         self.assertNotIn('leading_warning', result)
         self.assertFalse(result['freshness_gate']['new_capital_action_allowed'])
         self.assertEqual(merge_owned(self.old, result)['leading_warning'], self.old['leading_warning'])
+    def test_market_transport_failure_is_explicit(self):
+        def failed(url): raise OSError('offline')
+        result=source('https://public.example.invalid',lambda d:d,get=failed)
+        self.assertIsNone(result['asof'])
+        self.assertIn('OSError: offline',result['error'])
+    def test_secondary_failure_does_not_turn_unknown_to_pass(self):
+        result=scan(self.old,{'btc_spot':{'asof':stamp(self.now)},'axs_korea':{'asof':None,'error':'timeout'}},self.now)
+        self.assertFalse(result['freshness_gate']['sources']['axs_korea'])
+        self.assertIn('axs_korea: timeout',result['data_gaps'])
     def test_stale_source_blocks(self):
         self.assertFalse(fresh({'asof': None}, self.now, 600))
         self.assertFalse(fresh({'asof': stamp(self.now+dt.timedelta(hours=1))},self.now,600))
@@ -74,6 +83,26 @@ class GitCASTest(unittest.TestCase):
                 self.commit(self.b); self.cmd('git','-C',str(self.b),'push','origin','main')
         with self.assertRaisesRegex(ValueError,'STALE_RUN'):
             persist(self.a,self.mutation,attempt_hook=overlap)
+    def test_write_failure_does_not_claim_cas_conflict(self):
+        hook=self.remote/'hooks'/'pre-receive'
+        hook.write_text('#!/bin/sh\nexit 1\n'); hook.chmod(0o755)
+        with self.assertRaisesRegex(RuntimeError,'GITHUB_WRITE_FAILED'):
+            persist(self.a,self.mutation)
+        self.assertNotIn('run_id',json.loads(self.run_remote_state()))
+    def run_remote_state(self):
+        return self.cmd('git','--git-dir',str(self.remote),'show','main:sentinel-state.json')
+    def test_three_real_conflicts_exhaust(self):
+        def conflict(attempt):
+            self.cmd('git','-C',str(self.b),'pull','--ff-only')
+            self.write(self.b,{'portfolio_ref':str(attempt)})
+            self.commit(self.b); self.cmd('git','-C',str(self.b),'push','origin','main')
+        with self.assertRaisesRegex(RuntimeError,'CONCURRENCY_EXHAUSTED'):
+            persist(self.a,self.mutation,attempt_hook=conflict)
+    def test_registry_change_revokes_admission(self):
+        (self.b/'sentinel-runtime.json').write_text('{"writer":"CHATGPT_AUTOMATION"}')
+        self.commit(self.b); self.cmd('git','-C',str(self.b),'push','origin','main')
+        with self.assertRaisesRegex(RuntimeError,'SINGLE_WRITER_ADMISSION_CHANGED'):
+            persist(self.a,self.mutation,required_registry={'writer':'VULTR_SYSTEMD'})
     def test_readback_difference_fails_closed(self):
         def corrupt_readback():
             self.cmd('git','-C',str(self.b),'pull','--ff-only')
