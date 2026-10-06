@@ -60,6 +60,13 @@ def recovery(pos, e, now, pnl, generation, health):
  """Observation only: no new loss SELL, time/price stops or partial reductions."""
  if health=='EVIDENCE_PENDING' or not generation or pos.get('recovery_generation_id')==generation:return
  old=pos.get('recovery_state','NONE');row=pos.setdefault('loss_recovery_lifecycle',{'schema':'hunter_loss_recovery_v1','persistent_invalidation_count':0,'recovery_observations':0,'transitions':[]})
+ # Historical recovery confirmation is separate from the active episode counters.
+ if not row.get('last_recovered_at_utc'):
+  recovered=next((t for t in reversed(row.get('transitions',[])) if t.get('to')=='RECOVERED'),None)
+  if recovered:
+   row.update(last_recovered_at_utc=recovered['at'],last_recovered_generation_id=recovered['generation_id'])
+ if old=='NONE':
+  row['persistent_invalidation_count']=0;row['recovery_observations']=0
  if row.get('observed_at_utc') and not fresh(row['observed_at_utc'],now):
   row['persistent_invalidation_count']=0;row['recovery_observations']=0
  if pnl<0 and health=='THESIS_INVALIDATED':
@@ -72,6 +79,10 @@ def recovery(pos, e, now, pnl, generation, health):
   row['persistent_invalidation_count']=0 if quality else row['persistent_invalidation_count']
   state='RECOVERED' if row['recovery_observations']>=3 else ('RECOVERING' if quality else 'LOSS_RECOVERY')
  else:state='NONE'
+ if state=='RECOVERED' and state!=old:
+  row.update(last_recovered_at_utc=now.isoformat(),last_recovered_generation_id=generation)
+ if state=='NONE':
+  row['persistent_invalidation_count']=0;row['recovery_observations']=0
  row.update(generation_id=generation,observed_at_utc=now.isoformat(),health_state=health,health_reasons=list(pos.get('health_reasons',[])),score=e.get('score'),independent=e.get('independent'),btc_relative_1h=e.get('btc_rel_1h'),btc_relative_4h=e.get('btc_rel_4h'),relative_acceleration=e.get('rel_accel'),spread_bps=e.get('spread_bps'),bid_depth=e.get('bid_depth_2pct_usdt'),supply_identity_risk=e.get('blockers'),mfe_pct=pos.get('mfe_pct'),mae_pct=pos.get('mae_pct'),capital_locked_usdt=sum(t['notional_usdt'] for t in pos['tranches']) if pnl<0 else 0,risk_reduction_authorized=False,counterfactual={'scope':'OBSERVATION_ONLY','current_net_pnl_usdt':pnl,'future_recovery':'UNKNOWN'})
  if state!=old:row['transitions']=(row['transitions']+[{'from':old,'to':state,'generation_id':generation,'at':now.isoformat()}])[-32:]
  pos.update(recovery_state=state,recovery_generation_id=generation)
