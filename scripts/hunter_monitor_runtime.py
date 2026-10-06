@@ -20,7 +20,7 @@ def digest(raw):
 
 
 def should_run(config, proof, health_raw, now, is_ancestor):
-    if config.get('primary_jobs', {}).get('monitor') is not True:
+    if config.get('shadow_only') is not True or config.get('primary_jobs', {}).get('monitor') is not True:
         return True
     try:
         h = json.loads(health_raw)
@@ -83,7 +83,12 @@ def publish_verified(expected, generation, commit):
             aux('config', 'user.email', 'hunter-vultr-shadow@localhost')
             aux('add', '-f', '--', PROOF_PATH)
             aux('commit', '-m', 'ops: verified Hunter monitor primary health')
-            if aux('push', 'origin', 'HEAD:main', check=False).returncode:
+            pushed = aux('push', 'origin', 'HEAD:main', check=False)
+            if pushed.returncode:
+                require(not any(token in pushed.stderr for token in
+                                ('could not read Username', 'Authentication failed',
+                                 'Permission denied', 'error: 403')),
+                        'MONITOR_PROOF_PUSH_AUTHENTICATION_FAILED')
                 continue
             aux('fetch', 'origin', 'main')
             require(aux('show', 'origin/main:' + PROOF_PATH).stdout == raw,

@@ -20,7 +20,7 @@ def documents():
                  real_trading_enabled=False, main_readback_verified=True,
                  main_readback_head_sha='a'*40, monitor_generation_id=GEN,
                  scheduler_health_sha256=runtime.digest(raw), completed_at_utc=NOW.isoformat())
-    return {'primary_jobs': {'monitor': True}}, proof, raw
+    return {'shadow_only': True, 'primary_jobs': {'monitor': True}}, proof, raw
 
 
 class AdmissionTests(unittest.TestCase):
@@ -33,6 +33,7 @@ class AdmissionTests(unittest.TestCase):
     def test_unconfirmed_or_invalid_primary_runs_fallback(self):
         c, p, raw = documents()
         self.assertTrue(self.check({}, p, raw))
+        self.assertTrue(self.check(dict(c, shadow_only=False), p, raw))
         self.assertTrue(self.check(c, {}, raw))
         self.assertTrue(self.check(c, p, raw, ancestor=False))
         for key, value in [('main_readback_verified', False), ('source', 'GITHUB_ACTIONS'),
@@ -63,6 +64,15 @@ class AdmissionTests(unittest.TestCase):
 
 class ProofGitTests(GitRaceTests):
     # Inherit real bare-Git race/read-back tests, then exercise proof publication.
+    def setUp(self):
+        super().setUp()
+        self.vultr_environment = mock.patch.dict('os.environ', {'GITHUB_ACTIONS': 'false'})
+        self.vultr_environment.start()
+
+    def tearDown(self):
+        self.vultr_environment.stop()
+        super().tearDown()
+
     def prepare_proof(self):
         raw = fixture()
         c, proof, health_raw = documents()
