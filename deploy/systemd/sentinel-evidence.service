@@ -1,0 +1,11 @@
+[Unit]
+Description=Sentinel public evidence scan (read-only; original ChatGPT analysis retained)
+Wants=network-online.target
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sentinel-scheduled-job.sh
+TimeoutStartSec=180
+Nice=10
+MemoryMax=192M
+NoNewPrivileges=true
