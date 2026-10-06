@@ -17,8 +17,23 @@ concurrency:
   cancel-in-progress: false
   queue: max
 jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - id: gate
+        name: Check authoritative Vultr primary health
+        run: |
+          git fetch origin main
+          git checkout --detach origin/main
+          python -m scripts.hunter_runtime_gate research
   bind:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: runtime
+    if: ${{ needs.runtime.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.bind.outputs.should_run }}

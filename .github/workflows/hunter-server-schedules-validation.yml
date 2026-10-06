@@ -1,0 +1,50 @@
+name: Hunter Server Schedule Migration Validation
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_job_runner.py'
+      - 'scripts/hunter_runtime_gate.py'
+      - 'scripts/hunter_scheduled_job.sh'
+      - 'scripts/hunter_monitor_runner.sh'
+      - 'scripts/hunter_research_rebind.py'
+      - 'tests/test_hunter_job_runner.py'
+      - 'tests/test_hunter_research_rebind.py'
+      - 'deploy/systemd/**'
+      - '.github/workflows/hunter-*.yml'
+      - '.github/hunter-runtime.json'
+  push:
+    branches: ['fix/hunter-server-schedules-20261006']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Complete Hunter and routing regressions
+        run: |
+          python -m py_compile scripts/hunter_job_runner.py scripts/hunter_runtime_gate.py scripts/hunter_research_rebind.py
+          bash -n scripts/hunter_scheduled_job.sh
+          bash -n scripts/hunter_monitor_runner.sh
+          python -m unittest discover -s tests -p 'test_hunter*.py' -v
+          node --test research/hunter_scheduler/worker.test.mjs
+          node tests/test_hunter_bybit_proxy.mjs
+      - name: Require inactive primaries and unchanged shadow capital
+        run: |
+          python - <<'PY'
+          import json
+          c=json.load(open('.github/hunter-runtime.json'))
+          assert c['shadow_only'] is True
+          d=json.load(open('research/results/hunter-shadow-rules.json'))
+          assert d['lanes']['V2']['capital_pool_usdt']==20000
+          assert d['capital_authority']=='NONE_SHADOW_ONLY'
+          assert d['tail_risk_phase1']['real_trading_enabled'] is False
+          print('SERVER_MIGRATION_SHADOW_BOUNDARIES_OK')
+          PY
