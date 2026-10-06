@@ -22,12 +22,18 @@ BUY门槛、V1、Profit Protection参数、Loss Recovery及任何BTC策略均未
 market_type=spot。Bybit执行估算还需明确execution_fee_bps模型；缺失标UNKNOWN。
 程序不从asset或Bybit可用性标签猜执行Venue。
 
-核验基线883ad8103fbb4fea8437fcae176c69fe9b57a707：10个open positions均缺上述三字段。
-execution_channel是bybit_channel()可用性输出；原生命周期读取Binance raw_book_evidence。
-二者不是已验证的同一执行Venue，不能静默把可用性当成交身份。
-这10个仓位在新组件中为PRIMARY_VENUE_IDENTITY_MISSING，不能假称均已受Fast Watch保护。
-必须基于各仓原始执行证据补齐正式身份，或明确做前向model venue admission，
-不能伪造历史成交。本PR不向旧账本猜测补写。
+旧position可能缺上述三字段。execution_channel是bybit_channel()可用性输出，
+不是实际执行身份。只读前向model admission需同一main snapshot内匹配：
+portfolio active generation、Monitor generation（或Hourly Research scan/liquidity generation）、
+原始Binance Spot depth receipt的symbol/market、持仓last_exit_estimate的receipt时间、
+完整quantity/capital/VWAP/net PnL重算及既有fee模型。Research还须reference_venue与
+明确pair/base相符。身份回执限600秒，不能被当作Fast Review的新报价。
+全部匹配才在副本赋CURRENT_SHADOW_EXECUTION_MODEL，保留source SHA、generation、
+source_kind、raw book hash；historical_entry_execution_venue仍UNKNOWN。
+不改正式portfolio，不把Bybit可用性当成交Venue，不覆盖已有/部分显式身份。
+证据不匹配则PRIMARY_VENUE_IDENTITY_MISSING，缺证据不能假称保护覆盖。
+实测main b75e7f23890a5843835a9395d42029bdaf159895：10个现有open positions
+均凭匹配Monitor回执进入Binance当前模型观察路由；不是历史成交或真实行情运行验收。
 
 可选verified_spot_markets必须含venue、symbol、market_type、base_asset、quote_asset、
 verified=true。仅匹配仓位资产/USDT的验证记录允许secondary订阅。
@@ -57,8 +63,9 @@ Bybit采用保守300请求/min、3并发，403/429冷却600秒。
 不创造盈利SELL。ADD改变cashflow fingerprint时丢弃在途旧review。
 
 普通tick仅memory；runtime JSON原子写间隔5秒、单进程flock。
-history限2000条，计数累计；不是无限历史档案。24小时分析须采集runtime快照到独立
-只读观察档案，不能用有限history冒充所有历史。重启恢复fresh本地counterfactual history；
+history限2000条，计数累计；每60秒另追加每日gzip JSONL观察档案（UTC日轮换、fsync），
+保留完整runtime snapshot及source SHA，重启不会覆盖先前记录。档案不自动删除，需运维
+监控磁盘与保留政策。档案仍是分钟快照，不是完整tick tape；不得据此虚构逐tick成交路径。重启恢复fresh本地counterfactual history；
 报价、connected、pending不恢复。旧runtime超过60秒丢弃，重新fresh观察，不追认历史窗口。
 
 订阅每30秒从最新main重新对账，因而包含5分钟Monitor的新snapshot；没有改动Monitor writer。
@@ -102,5 +109,5 @@ missed-profit/capture delta仍须24小时以上配对证据裁定，当前UNKNOW
 - https://bybit-exchange.github.io/docs/v5/ws/connect
 - https://bybit-exchange.github.io/docs/v5/market/orderbook
 
-未验收事项：旧仓执行身份、服务器部署、两Venue官方真实连接/断流接管、完整24h A/B、
+未验收事项：历史成交身份（UNKNOWN）、服务器部署、两Venue官方真实连接/断流接管、完整24h A/B、
 Fast review到正式Single Writer的future admission、真实ARM/EXIT样本。

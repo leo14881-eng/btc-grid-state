@@ -6,6 +6,8 @@ frames with identical payloads. REST tasks and reconciliation survive WS outages
 import argparse
 import asyncio
 import collections
+import copy
+import gzip
 import fcntl
 import json
 import os
@@ -14,7 +16,7 @@ import random
 import subprocess
 import time
 
-from research.hunter_fast_watch import Config, Watch, DualWatch, utc
+from research.hunter_fast_watch import Config, Watch, DualWatch, utc, bind_observed_model_routes
 
 WS_URL = 'wss://data-stream.binance.vision/ws'
 REST_URL = 'https://data-api.binance.vision'
@@ -124,7 +126,20 @@ def read_main(repo):
     sha = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'origin/main'], text=True).strip()
     raw = subprocess.check_output(['git', '-C', str(repo), 'show',
         sha + ':research/results/hunter-shadow-v2-portfolio.json'], text=True)
-    return json.loads(raw), sha
+    portfolio = json.loads(raw)
+    try:
+        monitor = json.loads(subprocess.check_output(['git','-C',str(repo),'show',
+            sha+':research/results/hunter-position-monitor.json'],text=True))
+        scan = json.loads(subprocess.check_output(['git','-C',str(repo),'show',
+            sha+':research/results/hunter-cex-universe-run.json'],text=True))
+        liquidity = json.loads(subprocess.check_output(['git','-C',str(repo),'show',
+            sha+':research/results/hunter-liquidity-probe.json'],text=True))
+        portfolio, admitted = bind_observed_model_routes(portfolio,monitor,sha,time.time(),
+            research_scan=scan,research_liquidity=liquidity)
+        portfolio['model_route_admitted_ids'] = admitted
+    except (subprocess.CalledProcessError, ValueError):
+        portfolio['model_route_admitted_ids'] = []
+    return portfolio, sha
 
 
 def atomic_state(path, value):
@@ -136,6 +151,26 @@ def atomic_state(path, value):
         stream.flush()
         os.fsync(stream.fileno())
     temporary.replace(path)
+
+
+def archive_state(path, value):
+    """Durable daily observation snapshots; never a portfolio/trade writer.
+
+    Append gzip members so an interrupted append preserves previous members.
+    Invalid/incomplete trailing members must be reported by downstream audits.
+    No automatic deletion: observation retention is an operator decision.
+    """
+    if value.get('mode') != 'OBSERVATION_ONLY' or value.get('capital_authority') != 'NONE_SHADOW_ONLY':
+        raise ValueError('ARCHIVE_SHADOW_BOUNDARY_INVALID')
+    day = __import__('datetime').datetime.fromisoformat(value['generated_at']).astimezone(
+        __import__('datetime').timezone.utc).strftime('%Y%m%d')
+    target = Path(str(path)+'.observations.'+day+'.jsonl.gz')
+    payload = (json.dumps(value,ensure_ascii=False,allow_nan=False)+'\n').encode()
+    target.parent.mkdir(parents=True,exist_ok=True)
+    with target.open('ab') as output:
+        output.write(gzip.compress(payload,compresslevel=6,mtime=0))
+        output.flush();os.fsync(output.fileno())
+    return target
 
 
 def restore(watch, path, now):
@@ -235,10 +270,14 @@ async def run(repo, state_path, duration=None, venue='BINANCE_SPOT'):
                 await asyncio.sleep(1)
 
         async def save():
+            next_archive = 0
             while not stop.is_set():
                 row = watch.snapshot(time.time())
-                row['counterfactual'] = watch.counterfactual
+                row['counterfactual'] = copy.deepcopy(watch.counterfactual)
                 await asyncio.to_thread(atomic_state, state_path, row)
+                if time.time() >= next_archive:
+                    await asyncio.to_thread(archive_state, state_path, row)
+                    next_archive = time.time()+watch.config.archive_seconds
                 await asyncio.sleep(watch.config.save_seconds)
 
         async def reconcile():

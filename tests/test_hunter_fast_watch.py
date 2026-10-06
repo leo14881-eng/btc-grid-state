@@ -8,8 +8,9 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from research.hunter_fast_watch import Config, Watch, DualWatch, utc
-from scripts.hunter_market_stream import PublicREST, BybitREST, atomic_state, restore, watchdog
+from research.hunter_fast_watch import Config, Watch, DualWatch, utc, bind_observed_model_routes
+from research.hunter_lifecycle_state import liquidation
+from scripts.hunter_market_stream import PublicREST, BybitREST, atomic_state, archive_state, restore, watchdog
 
 
 def position(venue='BINANCE_SPOT', key='p', asset='ENA'):
@@ -280,6 +281,94 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
                 active+=1;peak=max(peak,active);await asyncio.sleep(.01);active-=1
         await asyncio.gather(*(job() for _ in range(8)))
         self.assertEqual(peak,2)
+
+
+class ObservedModelRouteTests(unittest.TestCase):
+    def setUp(self):
+        p=position();p.pop('execution_venue');p.pop('market_symbol');p.pop('market_type')
+        p['execution_channel']={'channel':'BYBIT_SPOT','spot':True}
+        p['last_exit_estimate']=liquidation(p,book(),dt.datetime.fromtimestamp(100,dt.timezone.utc),10)
+        self.p=portfolio(p);self.p['active_observation_generation_id']='monitor-1'
+        self.m=dict(batch_endpoint='/api/v3/ticker/24hr',capital_authority='NONE_SHADOW_ONLY',
+            evidence_refresh=dict(generation_id='monitor-1',observed_exit_raw_books={'ENA':book()}))
+    def bind(self):return bind_observed_model_routes(self.p,self.m,'fixed-main',101)
+    def test_current_model_receipt_resolves_without_guessing_channel(self):
+        result,ids=self.bind();self.assertEqual(ids,['p'])
+        self.assertEqual(result['open_positions'][0]['execution_venue'],'BINANCE_SPOT')
+        self.assertEqual(result['open_positions'][0]['historical_entry_execution_venue'],'UNKNOWN')
+    def test_original_portfolio_not_mutated(self):
+        before=copy.deepcopy(self.p);self.bind();self.assertEqual(self.p,before)
+    def test_generation_mismatch_rejected(self):
+        self.m['evidence_refresh']['generation_id']='old';self.assertEqual(self.bind()[1],[])
+    def test_wrong_symbol_rejected(self):
+        self.m['evidence_refresh']['observed_exit_raw_books']['ENA']['symbol']='FAKEUSDT';self.assertEqual(self.bind()[1],[])
+    def test_cost_mismatch_rejected(self):
+        self.p['open_positions'][0]['last_exit_estimate']['net_pnl_usdt']+=1;self.assertEqual(self.bind()[1],[])
+    def test_stale_identity_receipt_rejected(self):
+        self.assertEqual(bind_observed_model_routes(self.p,self.m,'sha',1000)[1],[])
+    def test_unavailable_book_rejected(self):
+        self.m['evidence_refresh']['observed_exit_raw_books']={};self.assertEqual(self.bind()[1],[])
+    def test_existing_bybit_identity_not_overwritten(self):
+        self.p['open_positions'][0].update(execution_venue='BYBIT_SPOT',market_symbol='ENAUSDT',market_type='spot')
+        result,ids=self.bind();self.assertEqual(ids,[]);self.assertEqual(result['open_positions'][0]['execution_venue'],'BYBIT_SPOT')
+    def test_partial_identity_not_overwritten(self):
+        self.p['open_positions'][0]['execution_venue']='BYBIT_SPOT';self.assertEqual(self.bind()[1],[])
+    def test_future_receipt_rejected(self):
+        self.m['evidence_refresh']['observed_exit_raw_books']['ENA']['fetched_at']=utc(110);self.assertEqual(self.bind()[1],[])
+
+
+    def research_bind(self, **changes):
+        scan=dict(generation_id='monitor-1',coins={'ENA':dict(reference_venue='binance',
+            pairs=[dict(venue='binance',pair='ENAUSDT',base='ENA')])})
+        liq=dict(scan_generation_id='monitor-1',capital_authority='NONE__OFFICIAL_FACTS_AND_PORTFOLIO_GATES_SEPARATE',
+            snapshots={'ENA':dict(raw_book_evidence=book())})
+        changes.get('mutate',lambda s,l:None)(scan,liq)
+        monitor=copy.deepcopy(self.m);monitor['evidence_refresh']['generation_id']='other-monitor'
+        return bind_observed_model_routes(self.p,monitor,'sha',101,research_scan=scan,research_liquidity=liq)
+    def test_hourly_matching_receipt_admitted_despite_newer_monitor(self):
+        result,ids=self.research_bind();self.assertEqual(ids,['p'])
+        self.assertEqual(result['open_positions'][0]['execution_identity_proof']['source_kind'],'HOURLY_RESEARCH')
+    def test_hourly_scan_generation_mismatch_rejected(self):
+        self.assertEqual(self.research_bind(mutate=lambda s,l:s.update(generation_id='old'))[1],[])
+    def test_hourly_liquidity_generation_mismatch_rejected(self):
+        self.assertEqual(self.research_bind(mutate=lambda s,l:l.update(scan_generation_id='old'))[1],[])
+    def test_hourly_reference_venue_mismatch_rejected(self):
+        self.assertEqual(self.research_bind(mutate=lambda s,l:s['coins']['ENA'].update(reference_venue='bybit'))[1],[])
+    def test_hourly_symbol_membership_required(self):
+        self.assertEqual(self.research_bind(mutate=lambda s,l:s['coins']['ENA'].update(pairs=[]))[1],[])
+    def test_hourly_unknown_authority_rejected(self):
+        self.assertEqual(self.research_bind(mutate=lambda s,l:l.update(capital_authority='UNKNOWN'))[1],[])
+    def test_monitor_proof_has_priority(self):
+        result,ids=bind_observed_model_routes(self.p,self.m,'sha',101,research_scan={},research_liquidity={})
+        self.assertEqual(ids,['p']);self.assertEqual(result['open_positions'][0]['execution_identity_proof']['source_kind'],'POSITION_MONITOR')
+
+
+class ObservationArchiveTests(unittest.TestCase):
+    def row(self, at=100):
+        return dict(mode='OBSERVATION_ONLY',capital_authority='NONE_SHADOW_ONLY',generated_at=utc(at),
+            source_sha='verified-main',history=[dict(kind='OBSERVATION_REVIEW',formal_mutation=False)])
+    def test_restart_appends_without_losing_previous_observation(self):
+        import gzip
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'runtime.json';out=archive_state(path,self.row())
+            archive_state(path,self.row(160))
+            rows=[json.loads(x) for x in gzip.decompress(out.read_bytes()).splitlines()]
+            self.assertEqual(len(rows),2);self.assertEqual(rows[0]['generated_at'],utc(100))
+            self.assertFalse(path.exists())
+    def test_utc_day_rollover(self):
+        with tempfile.TemporaryDirectory() as root:
+            a=archive_state(Path(root)/'state',self.row(86399));b=archive_state(Path(root)/'state',self.row(86400))
+            self.assertNotEqual(a,b)
+    def test_non_shadow_archive_refused(self):
+        with tempfile.TemporaryDirectory() as root:
+            row=self.row();row['capital_authority']='REAL'
+            with self.assertRaises(ValueError):archive_state(Path(root)/'state',row)
+            self.assertEqual(list(Path(root).iterdir()),[])
+    def test_invalid_number_refused_before_append(self):
+        with tempfile.TemporaryDirectory() as root:
+            row=self.row();row['pnl']=float('nan')
+            with self.assertRaises(ValueError):archive_state(Path(root)/'state',row)
+            self.assertEqual(list(Path(root).iterdir()),[])
 
 
 if __name__=='__main__': unittest.main()

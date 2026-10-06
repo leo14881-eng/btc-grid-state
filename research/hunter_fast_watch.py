@@ -28,6 +28,7 @@ class Config:
     review_seconds: float = 5
     reconcile_seconds: float = 30
     save_seconds: float = 5
+    archive_seconds: float = 60
     rotate_seconds: float = 23 * 3600 + 50 * 60
     timeout_seconds: float = 4
     concurrency: int = 3
@@ -36,6 +37,7 @@ class Config:
     max_backoff_seconds: float = 60
     jitter_seconds: float = 1
     max_symbols: int = 64  # fail closed; never silently truncate open holdings
+    model_identity_seconds: float = 600
 
 
 def utc(ts):
@@ -47,6 +49,73 @@ def finite(value):
     if not math.isfinite(n) or n <= 0:
         raise ValueError('INVALID_PRICE')
     return n
+
+
+def bind_observed_model_routes(portfolio, monitor, source_sha, now, *, research_scan=None, research_liquidity=None):
+    """Read-only legacy admission from actual current model liquidation receipts.
+
+    This assigns a FORWARD_SHADOW_MODEL route on a copy, never historical entry
+    venue and never an availability label. Failed/mismatched proof stays unknown.
+    Identity freshness is a Monitor-window bound, not permission to reuse quotes.
+    """
+    result = copy.deepcopy(portfolio)
+    evidence = monitor.get('evidence_refresh', {})
+    generation = evidence.get('generation_id')
+    active = portfolio.get('active_observation_generation_id')
+    source_kind = 'POSITION_MONITOR'
+    books = evidence.get('observed_exit_raw_books', {})
+    source_valid = (generation == active and monitor.get('batch_endpoint') == '/api/v3/ticker/24hr'
+                    and monitor.get('capital_authority') == 'NONE_SHADOW_ONLY')
+    if not source_valid and research_scan is not None and research_liquidity is not None:
+        generation = research_scan.get('generation_id')
+        source_kind = 'HOURLY_RESEARCH'
+        source_valid = (generation == active and research_liquidity.get('scan_generation_id') == generation
+            and research_liquidity.get('capital_authority') == 'NONE__OFFICIAL_FACTS_AND_PORTFOLIO_GATES_SEPARATE')
+        books = {asset: snapshot.get('raw_book_evidence', {}) for asset, snapshot
+                 in research_liquidity.get('snapshots', {}).items()}
+    admitted = []
+    for p in result.get('open_positions', []):
+        if p.get('execution_venue') or p.get('market_symbol') or p.get('market_type'):
+            continue  # partial or explicit identity must never be overwritten
+        try:
+            if not source_sha or not generation or not source_valid:
+                raise ValueError('MODEL_GENERATION_MISMATCH')
+            book = books[p['asset']]
+            if book.get('exchange') != 'binance' or book.get('market') != 'spot':
+                raise ValueError('MODEL_VENUE_UNSUPPORTED')
+            # Validate receipt's symbol, rather than using asset to invent a route.
+            symbol = book['symbol']
+            if not symbol.endswith('USDT') or symbol[:-4] != p['asset']:
+                raise ValueError('MODEL_SYMBOL_IDENTITY_MISMATCH')
+            if source_kind == 'HOURLY_RESEARCH':
+                coin = research_scan.get('coins', {}).get(p['asset'], {})
+                if coin.get('reference_venue') != 'binance' or not any(
+                    pair.get('venue') == 'binance' and pair.get('pair') == symbol
+                    and pair.get('base') == p['asset'] for pair in coin.get('pairs', [])):
+                    raise ValueError('RESEARCH_MODEL_IDENTITY_UNKNOWN')
+            observed = dt.datetime.fromisoformat(book['fetched_at'])
+            if not 0 <= now-observed.timestamp() <= Config().model_identity_seconds:
+                raise ValueError('MODEL_RECEIPT_STALE')
+            execution = p['last_exit_estimate']
+            if execution.get('fetched_at') != book['fetched_at'] or execution.get('fee_bps') != FEE_BPS:
+                raise ValueError('MODEL_ESTIMATE_PROVENANCE_MISMATCH')
+            replay = liquidation(p, book, observed, FEE_BPS)
+            if replay['status'] != 'SHADOW_RECEIPT_ESTIMATE' or execution.get('status') != replay['status']:
+                raise ValueError('MODEL_FULL_QUANTITY_UNKNOWN')
+            for key in ('net_pnl_usdt','quantity','vwap','capital'):
+                if not math.isclose(float(execution[key]),float(replay[key]),rel_tol=1e-9,abs_tol=1e-7):
+                    raise ValueError('MODEL_ESTIMATE_MISMATCH')
+            p.update(execution_venue='BINANCE_SPOT', market_symbol=symbol, market_type='spot',
+                execution_fee_bps=FEE_BPS, execution_identity_scope='CURRENT_SHADOW_EXECUTION_MODEL',
+                historical_entry_execution_venue='UNKNOWN', execution_identity_proof={
+                    'source_main_sha':source_sha,'generation_id':generation,'source_kind':source_kind,
+                    'receipt_at':book['fetched_at'], 'admitted_at':utc(now),
+                    'raw_book_sha256':hashlib.sha256(json.dumps(book,sort_keys=True).encode()).hexdigest(),
+                    'historical_execution_verified':False,'formal_portfolio_mutated':False})
+            admitted.append(p['shadow_id'])
+        except (KeyError, ValueError, TypeError, OverflowError):
+            continue
+    return result, admitted
 
 
 class Watch:
