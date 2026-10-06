@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'research/hunter_lifecycle_*.py'
+      - 'research/hunter_fast_watch.py'
+      - 'scripts/hunter_market_stream.py'
+      - 'tests/test_hunter_fast_watch.py'
+      - 'deploy/hunter-fast-watch-requirements.txt'
       - 'tests/test_hunter_lifecycle_state.py'
       - 'scripts/hunter_job_runner.py'
       - 'scripts/hunter_aux_persist.py'
@@ -42,6 +46,7 @@ jobs:
           node-version: '22'
       - name: Complete Hunter and routing regressions
         run: |
+          python -m pip install -r deploy/hunter-fast-watch-requirements.txt
           python -m py_compile scripts/hunter_job_runner.py scripts/hunter_runtime_gate.py scripts/hunter_research_rebind.py
           bash -n scripts/hunter_scheduled_job.sh
           bash -n scripts/hunter_monitor_runner.sh
