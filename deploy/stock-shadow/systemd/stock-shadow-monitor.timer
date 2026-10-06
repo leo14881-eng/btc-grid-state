@@ -1,0 +1,12 @@
+[Unit]
+Description=Stock Shadow weekday UTC minutes 02 through 57 every five minutes
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* *:02/5:00 UTC
+Unit=stock-shadow-monitor.service
+Persistent=false
+RandomizedDelaySec=0
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

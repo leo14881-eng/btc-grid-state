@@ -17,6 +17,10 @@ on:
     paths:
       - 'research/stock_shadow/**'
       - 'tests/test_stock_shadow.py'
+      - 'tests/test_stock_server_migration.py'
+      - '.github/stock-runtime.json'
+      - 'research/stock_shadow/server/**'
+      - 'deploy/stock-shadow/**'
       - '.github/workflows/stock-shadow.yml'
   schedule:
     - cron: '23 * * * *'
@@ -36,37 +40,45 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Bind execution version
-        run: |
-          echo "STOCK_SHADOW_SOURCE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "STOCK_SHADOW_RUN_ID=${{ github.run_id }}" >> "$GITHUB_ENV"
+      - name: Admit authoritative stock writer
+        id: admission
+        run: python3 -m research.stock_shadow.server.runtime admit --owner github --job main --run-id "${{ github.run_id }}" --run-attempt "${{ github.run_attempt }}"
       - uses: actions/setup-python@v5
+        if: steps.admission.outputs.should_run == 'true'
         with:
           python-version: '3.12'
       - name: Install test dependency
+        if: steps.admission.outputs.should_run == 'true'
         run: python -m pip install --disable-pip-version-check pytest
       - name: Test isolated Stock Shadow
-        run: python -m pytest -q tests/test_stock_shadow.py
+        if: steps.admission.outputs.should_run == 'true'
+        run: python -m pytest -q tests/test_stock_shadow.py tests/test_stock_server_migration.py
       - name: P0 weekend and final mutation gate acceptance
+        if: steps.admission.outputs.should_run == 'true'
         run: python -m pytest -q tests/test_stock_shadow.py -k p0
       - name: Observe fundamentals (no strategy effect)
+        if: steps.admission.outputs.should_run == 'true'
         timeout-minutes: 8
         env:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           STOCKFIT_API_KEY: ${{ secrets.STOCKFIT_API_KEY }}
         run: python research/stock_shadow/fundamentals_observer.py
       - name: Run Stock Shadow V1
+        if: steps.admission.outputs.should_run == 'true'
         id: stock_scan
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
         run: python research/stock_shadow/stock_shadow_v1.py
       - name: Winner loser review
+        if: steps.admission.outputs.should_run == 'true'
         run: python research/stock_shadow/stock_review.py
       - name: Isolation guard
+        if: steps.admission.outputs.should_run == 'true'
         run: |
           bash research/stock_shadow/isolation_guard.sh
       - name: Persist Stock Shadow state only
+        if: steps.admission.outputs.should_run == 'true'
         run: bash research/stock_shadow/persist_results.sh main
 
 # FINAL_API_ARCH_ACCEPTANCE_R3
@@ -81,7 +93,7 @@ jobs:
 
 
       - name: Persist failure health only
-        if: ${{ failure() && steps.stock_scan.outcome == 'failure' }}
+        if: ${{ failure() && steps.admission.outputs.should_run == 'true' && steps.stock_scan.outcome == 'failure' }}
         run: |
           bash research/stock_shadow/isolation_guard.sh
           bash research/stock_shadow/persist_results.sh health

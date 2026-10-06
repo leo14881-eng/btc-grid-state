@@ -927,8 +927,12 @@ def _p0_git_pair(tmp_path):
     git(tmp_path,'init','-b','main',str(work))
     for key,value in [('user.name','Test'),('user.email','test@example.invalid')]: git(work,'config',key,value)
     result=work/'research/results/stock-shadow';result.mkdir(parents=True)
-    (result/'portfolio-v1.json').write_text('{"positions":{}}\n')
+    (result/'portfolio-v1.json').write_text('{"positions":{},"closed":[],"simulation_only":true}\n')
     (result/'trades-v1.json').write_text('[]\n')
+    (work/'.github').mkdir()
+    (work/'.github/stock-runtime.json').write_text(
+        '{"schema":"stock_shadow_runtime_v1","owner":"github","epoch":1,'
+        '"jobs":["main","monitor","replay"],"shadow_only":true,"automatic_failover":false}\n')
     (work/'unrelated.txt').write_text('initial\n')
     git(work,'add','.');git(work,'commit','-m','base');git(work,'remote','add','origin',str(remote));git(work,'push','origin','main')
     git(tmp_path,'clone','-b','main',str(remote),str(writer))
@@ -936,26 +940,52 @@ def _p0_git_pair(tmp_path):
     return git,remote,work,writer
 
 
+def _p0_persist_environment(work, job='main', run_id='fixture-test.1'):
+    import hashlib, json, os, subprocess
+    source=subprocess.run(['git','rev-parse','HEAD'],cwd=work,check=True,capture_output=True,text=True).stdout.strip()
+    config=json.loads(subprocess.run(['git','show','HEAD:.github/stock-runtime.json'],cwd=work,check=True,capture_output=True,text=True).stdout)
+    owner=config['owner'];epoch=config['epoch']
+    identity=f'{source}:{owner}:{epoch}:{job}:{run_id}:1'
+    env={k:v for k,v in os.environ.items() if not k.startswith('STOCK_SHADOW_')}
+    env.update({'STOCK_SHADOW_SOURCE_COMMIT':source,'STOCK_SHADOW_WRITER':owner,
+                'STOCK_SHADOW_EPOCH':str(epoch),'STOCK_SHADOW_JOB':job,
+                'STOCK_SHADOW_RUN_ID':run_id,'STOCK_SHADOW_ATTEMPT':'1',
+                'STOCK_SHADOW_GENERATION':hashlib.sha256(identity.encode()).hexdigest()})
+    return env
+
+
+def _p0_run_persister(work, mode, env=None):
+    import json, subprocess
+    env=env or _p0_persist_environment(work, 'main' if mode=='health' else mode)
+    job=env['STOCK_SHADOW_JOB']
+    if job in ('main','monitor'):
+        health={'source_commit':env['STOCK_SHADOW_SOURCE_COMMIT'],'run_id':env['STOCK_SHADOW_RUN_ID'],
+                'status':'FAILED' if mode=='health' else 'SUCCESS','simulation_only':True,'real_orders':False}
+        (work/f'research/results/stock-shadow/{job}-run-health-v1.json').write_text(json.dumps(health)+'\n')
+    return subprocess.run(['bash',str(Path(__file__).resolve().parents[1]/'research/stock_shadow/persist_results.sh'),mode],
+                          cwd=work,env=env,capture_output=True,text=True)
+
+
 def test_p0_persistence_preserves_other_system_commits(tmp_path):
     import subprocess
     git,remote,work,writer=_p0_git_pair(tmp_path)
-    (work/'research/results/stock-shadow/portfolio-v1.json').write_text('{"positions":{"NEW":{}}}\n')
+    (work/'research/results/stock-shadow/summary-v1.json').write_text('{"fixture":"NEW"}\n')
     (writer/'unrelated.txt').write_text('other system latest\n')
     git(writer,'add','.');git(writer,'commit','-m','other update');git(writer,'push','origin','main')
-    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'main'],cwd=work,capture_output=True,text=True)
+    result=_p0_run_persister(work,'main')
     assert result.returncode==0,result.stdout+result.stderr
     assert git(work,'show','origin/main:unrelated.txt').stdout=='other system latest\n'
-    assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/portfolio-v1.json').stdout
+    assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/summary-v1.json').stdout
 
 
 def test_p0_persistence_refuses_to_overwrite_a_newer_portfolio(tmp_path):
     import subprocess
     git,remote,work,writer=_p0_git_pair(tmp_path)
     path='research/results/stock-shadow/portfolio-v1.json'
-    (work/path).write_text('{"positions":{"STALE":{}}}\n')
+    (work/'research/results/stock-shadow/summary-v1.json').write_text('{"fixture":"STALE"}\n')
     (writer/path).write_text('{"positions":{"FRESH":{}}}\n')
     git(writer,'add','.');git(writer,'commit','-m','newer portfolio');git(writer,'push','origin','main')
-    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'monitor'],cwd=work,capture_output=True,text=True)
+    result=_p0_run_persister(work,'monitor')
     assert result.returncode==43,result.stdout+result.stderr
     assert 'FRESH' in git(work,'show','origin/main:'+path).stdout
     assert 'STALE' not in git(work,'show','origin/main:'+path).stdout
@@ -964,16 +994,16 @@ def test_p0_persistence_refuses_to_overwrite_a_newer_portfolio(tmp_path):
 def test_p0_push_race_retries_only_own_outputs(tmp_path):
     import subprocess,shlex
     git,remote,work,writer=_p0_git_pair(tmp_path)
-    (work/'research/results/stock-shadow/portfolio-v1.json').write_text('{"positions":{"NEW":{}}}\n')
+    (work/'research/results/stock-shadow/summary-v1.json').write_text('{"fixture":"NEW"}\n')
     (writer/'unrelated.txt').write_text('race winner\n')
     git(writer,'add','.');git(writer,'commit','-m','race update')
     hook=work/'.git/hooks/pre-push'
     hook.write_text('#!/bin/bash\nif [ ! -f .git/race-injected ]; then\n touch .git/race-injected\n git -C '+shlex.quote(str(writer))+' push origin main\nfi\n')
     hook.chmod(0o755)
-    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'main'],cwd=work,capture_output=True,text=True)
+    result=_p0_run_persister(work,'main')
     assert result.returncode==0,result.stdout+result.stderr
     assert 'race winner' in git(work,'show','origin/main:unrelated.txt').stdout
-    assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/portfolio-v1.json').stdout
+    assert 'NEW' in git(work,'show','origin/main:research/results/stock-shadow/summary-v1.json').stdout
 
 
 @pytest.mark.parametrize('field', ['swing_high_price','pullback_low_price'])
@@ -1053,7 +1083,7 @@ def test_monitor_null_extremes_and_summary_binding(monkeypatch):
     assert book[monitor.EVENTS]==[]
 
 
-def test_health_only_persistence_excludes_partial_ledger_and_accepts_newer_book(tmp_path):
+def test_health_only_persistence_rejects_a_newer_stock_snapshot(tmp_path):
     import subprocess
     git,remote,work,writer=_p0_git_pair(tmp_path)
     path='research/results/stock-shadow/portfolio-v1.json'
@@ -1062,10 +1092,10 @@ def test_health_only_persistence_excludes_partial_ledger_and_accepts_newer_book(
     (work/health).write_text('{"status":"FAILED"}\n')
     (writer/path).write_text('{"positions":{"FRESH":{}}}\n')
     git(writer,'add','.');git(writer,'commit','-m','fresh book');git(writer,'push','origin','main')
-    result=subprocess.run(['bash',str(Path('research/stock_shadow/persist_results.sh').resolve()),'health'],cwd=work,capture_output=True,text=True)
-    assert result.returncode==0,result.stdout+result.stderr
+    result=_p0_run_persister(work,'health')
+    assert result.returncode==43,result.stdout+result.stderr
     assert 'FRESH' in git(work,'show','origin/main:'+path).stdout
-    assert 'FAILED' in git(work,'show','origin/main:'+health).stdout
+    assert git(work,'ls-tree','--name-only','origin/main','--',health).stdout==''
 
 
 def test_isolation_guard_really_fails_for_tracked_and_untracked_files(tmp_path):

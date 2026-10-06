@@ -1,0 +1,12 @@
+[Unit]
+Description=Stock Shadow weekday 22:30 UTC chronological replay timer
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 22:30:00 UTC
+Unit=stock-shadow-replay.service
+Persistent=false
+RandomizedDelaySec=0
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

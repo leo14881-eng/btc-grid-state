@@ -1,0 +1,39 @@
+[Unit]
+Description=Stock Shadow weekday chronological replay
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=stock-shadow
+Group=stock-shadow
+WorkingDirectory=/opt/stock-shadow
+EnvironmentFile=/etc/stock-shadow/stock-shadow.env
+ExecStart=/opt/stock-shadow/bin/run-job.sh replay --publish
+TimeoutStartSec=45min
+TimeoutStopSec=30s
+KillMode=control-group
+Restart=no
+UMask=0077
+Nice=15
+CPUWeight=10
+CPUQuota=50%
+IOWeight=10
+MemoryHigh=512M
+MemoryMax=1G
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/stock-shadow/source /var/lib/stock-shadow
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stock-shadow-replay
