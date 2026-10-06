@@ -1,0 +1,29 @@
+name: Stock Scheduler Live Acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: stock-shadow-scheduler-acceptance
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Observe three automatic stock scheduler periods (read only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_STOCK }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STOCK_AUDIT_GITHUB_TOKEN: ${{ github.token }}
+        run: python .github/scripts/verify_stock_scheduler_live.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stock-scheduler-live-evidence
+          path: /tmp/stock-scheduler-live-evidence.json
+          if-no-files-found: error
