@@ -30,7 +30,10 @@ def stamp(now=None):
 def instant(value):
     if not value:
         return None
-    return dt.datetime.fromisoformat(value.replace('Z', '+00:00')).astimezone(UTC)
+    parsed = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError('SOURCE_TIMESTAMP_TIMEZONE_REQUIRED')
+    return parsed.astimezone(UTC)
 
 def get_json(url):
     req = urllib.request.Request(url, headers={'User-Agent': 'sentinel-public-evidence/1.0'})
@@ -236,10 +239,12 @@ def collect(get=get_json):
         return evidence
 
 def fresh(record, now, seconds):
+    if not isinstance(record, dict) or record.get('error'):
+        return False
     try:
         age = (now - instant(record.get('asof'))).total_seconds()
         return -30 <= age <= seconds
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, AttributeError, OverflowError):
         return False
 
 def watchdog(previous, valid, now):
