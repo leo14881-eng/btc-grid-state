@@ -38,6 +38,15 @@ def load_early_into_review():
     by={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
     candidates=[]
     held={p.get("asset") for p in (engine.load(root/"hunter-shadow-portfolio.json").get("open_positions") or [])}
+    # Keep the existing exclusion gate, but make excluded research samples auditable.
+    exclusions=[]
+    for s in early.get("early") or []:
+        a=s.get("base")
+        if a and a not in held and a not in excluded and s.get("execution_supported") is False:
+            exclusions.append({"asset":a,"source_venue":s.get("source_venue"),
+                "source_observed_at_utc":s.get("source_observed_at_utc"),
+                "reason":"VENUE_SPECIFIC_EXECUTION_AND_MONITOR_NOT_INTEGRATED",
+                "signal_evidence":engine.stamp(a,early.get("scan_generation_id"),early.get("as_of_utc"))})
     # Bybit-only EARLY signals remain research observations until their own
     # executable order book and position-monitor market data are integrated.
     signals={x.get("base"):x for x in early.get("early") or []
@@ -56,6 +65,8 @@ def load_early_into_review():
         candidates.append(c)
     review["candidates"]=candidates
     review["v1_source"]="hunter-early-signals.json"
+    review["v1_early_exclusions"]={"scan_generation_id":early.get("scan_generation_id"),
+        "as_of_utc":early.get("as_of_utc"),"rows":exclusions}
     review["v1_early_count"]=len(candidates)
     review["v1_excluded_bstocks"]=sorted(excluded)
     return review_path,review

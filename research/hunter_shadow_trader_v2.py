@@ -856,6 +856,20 @@ def build_summary(state,now,guard_status="NORMAL",scan=None):
    "position_lifecycle":{"degrade_confirm_cycles":DEGRADE_CONFIRM_CYCLES,"ordinary_thesis_invalidation_loss_exit":False,"hard_invalidation_may_exit_at_loss":True,"profit_stagnation_exit":True,"reentry_requires_new_move":True,"max_hot_closed_positions":MAX_CLOSED_HOT}},
   "opportunity_evaluation":cohorts,"capital_authority":"NONE_SHADOW_ONLY"}
 
+def record_early_sample_exclusions(state,review,scan,now):
+ """Diagnostic decisions only; never admit a sample or create a trade event."""
+ if ENTRY_MODE!="DISCOVERY" or "v1_early_exclusions" not in review:return
+ audit=review["v1_early_exclusions"]
+ if not scan.get("generation_id") or audit.get("scan_generation_id")!=scan.get("generation_id"):
+  raise SystemExit("V1_EXCLUSION_AUDIT_GENERATION_MISMATCH")
+ existing={(d.get("asset"),((d.get("evidence") or {}).get("signal_evidence") or {}).get("generation_id"))
+           for d in state.get("decisions",[]) if d.get("action")=="SAMPLE_EXCLUDED"}
+ state["early_sample_exclusions"]=audit
+ for row in audit.get("rows") or []:
+  if (row["asset"],audit["scan_generation_id"]) in existing:continue
+  record(state,{"asset":row["asset"],"tranches":[]},"SAMPLE_EXCLUDED",now,[row["reason"]],row,price(scan,row["asset"]))
+  existing.add((row["asset"],audit["scan_generation_id"]))
+
 def main():
  if SHADOW_FREEZE:
   print(json.dumps({"status":"SHADOW_STRATEGY_FREEZE","strategy":STRATEGY_ID,"writes":0,"capital_pool_usdt":CAPITAL_POOL_USDT}))
@@ -867,6 +881,7 @@ def main():
  if not btc:raise SystemExit("BTC_PRICE_MISSING")
  state=load(STATE,{"schema":"hunter_shadow_v2_portfolio_v2","mode":"SIMULATION_ONLY_NO_REAL_ORDERS","open_positions":[],"closed_positions":[],"events":[],"decisions":[]})
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
+ record_early_sample_exclusions(state,review,scan,now)
  risk_evidence=tail.collect_systemic_evidence(scan,liq,now,C,BINANCE_DATA_API)
  tail.update_risk_controls(state,risk_evidence,now,C)
  excluded=set((((scan.get("venue_status") or {}).get("binance") or {}).get("excluded_bstocks") or []))
