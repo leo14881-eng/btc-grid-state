@@ -353,10 +353,8 @@ def persist(root, mutation, attempt_hook=None, readback_hook=None, required_regi
                 git(root, 'worktree', 'remove', '--force', path)
     raise RuntimeError('CONCURRENCY_EXHAUSTED')
 
-def write_public_evidence(path, mutation, source_sha, evidence_main_sha):
-    """Local observation artifact only; never Sentinel main or a model decision."""
-    import os
-    import tempfile
+def public_evidence(mutation, source_sha, evidence_main_sha):
+    """Public preview schema shared by hourly artifacts and read-only live reads."""
     if (mutation.get('confirmation_status') != 'ANALYSIS_NOT_PORTED'
             or mutation.get('runtime', {}).get('real_trading_enabled') is not False):
         raise ValueError('EVIDENCE_PREVIEW_BOUNDARY_REQUIRED')
@@ -370,6 +368,14 @@ def write_public_evidence(path, mutation, source_sha, evidence_main_sha):
                run_status=mutation['run_status'], run_id=mutation['run_id'],
                real_order_count=0, real_trading_enabled=False,
                capital_authority='NONE_SHADOW_ONLY', formal_writer=False)
+    return row
+
+
+def write_public_evidence(path, mutation, source_sha, evidence_main_sha):
+    """Local observation artifact only; never Sentinel main or a model decision."""
+    import os
+    import tempfile
+    row = public_evidence(mutation, source_sha, evidence_main_sha)
     path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
     payload=(json.dumps(row,ensure_ascii=False,allow_nan=False)+'\n').encode()
     with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name+'.', delete=False) as stream:
