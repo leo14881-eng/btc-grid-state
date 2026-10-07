@@ -156,6 +156,13 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
  doc["main_readback_head_sha"] = git("rev-parse", "origin/main").stdout.strip()
  if job in ("discovery", "research"):
   doc["scan_generation_id"] = json.loads((RESULTS / "hunter-cex-universe-run.json").read_text()).get("generation_id")
+ # Preserve real job result even if subsequent GitHub health publication fails.
+ # This local receipt is diagnostic input for watchdog, not main readback proof.
+ from scripts import hunter_local_job_health
+ try:
+  hunter_local_job_health.write(job, doc)
+ except (OSError, ValueError, KeyError, RuntimeError) as exc:
+  print("HUNTER_LOCAL_JOB_HEALTH_FAILED", job, safe_diagnostic(str(exc)), flush=True)
  raw = json.dumps(doc, indent=2, sort_keys=True) + "\n"
  last_push = None
  for attempt in range(5):
@@ -304,17 +311,33 @@ AUX_RECOVERY_STEPS = {
 }
 
 
-def auxiliary_cas_recovery_units(results, now):
+def auxiliary_cas_recovery_units(results, now, local_results=None):
  """Retry complete replay from a fresh checkout; never retry stale publication.
 
  The existing installed scheduled-job wrapper owns each job's flock and fetches
- main into a disposable checkout. Only exact fresh CAS publication failures are
- eligible. Authentication, market-data and validator failures remain failures.
+ main into a disposable checkout. Only exact fresh CAS/race/transport publication
+ failures are eligible. Local receipts cover failed GitHub health publication;
+ authentication, policy, unknown, market-data and validator failures remain failures.
  """
  units = []
  for job, expected_step in AUX_RECOVERY_STEPS.items():
   try:
-   row = json.loads((results / ('hunter-runtime-'+job+'-health.json')).read_text())
+   candidates = []
+   for root in (results, local_results):
+    if root is None: continue
+    try:
+     candidate = json.loads((root / ('hunter-runtime-'+job+'-health.json')).read_text())
+     if root == local_results and (candidate.get('local_publication_only') is not True or
+          candidate.get('schema') != 'hunter_runtime_job_health_v1'):
+      continue
+     order = dt.datetime.fromisoformat(candidate.get('started_at_utc') or candidate['completed_at_utc'])
+     if order.tzinfo is None: continue
+     candidates.append((order, candidate))
+    except (OSError, ValueError, KeyError, TypeError):
+     continue
+   if not candidates: continue
+   # Newer success suppresses an older local failure; never resurrect old work.
+   row = max(candidates, key=lambda item:item[0])[1]
    if (row.get('status') != 'FAILURE' or row.get('job') != job or
        row.get('source') != 'VULTR_SYSTEMD' or row.get('capital_authority') != 'NONE_SHADOW_ONLY' or
        row.get('real_trading_enabled') is not False or not row.get('source_head_sha')):
@@ -327,7 +350,11 @@ def auxiliary_cas_recovery_units(results, now):
     continue
    if row.get('error_details', {}).get('failed_step') != expected_step:
     continue
-   if 'RuntimeError: AUX_CAS_REJECTED_STALE_WRITER' not in failed[0].get('stderr_tail', ''):
+   eligible_errors = ('AUX_CAS_REJECTED_STALE_WRITER',
+                      'AUX_PUSH_RETRY_EXHAUSTED_RACE',
+                      'AUX_PUSH_RETRY_EXHAUSTED_TRANSPORT_FAILED')
+   if not any(re.search(r'(?m)^RuntimeError: '+code+r'(?:\s|$)',
+                        failed[0].get('stderr_tail', '')) for code in eligible_errors):
     continue
    units.append('hunter-'+job+'.service')
   except (OSError, ValueError, KeyError, TypeError):
@@ -348,7 +375,9 @@ def run_job(job, preview=False, steps=None):
  lock_started = None
  try:
   if job == "watchdog" and not preview:
-   units = auxiliary_cas_recovery_units(RESULTS, dt.datetime.now(dt.timezone.utc))
+   from scripts import hunter_local_job_health
+   units = auxiliary_cas_recovery_units(RESULTS, dt.datetime.now(dt.timezone.utc),
+                                      local_results=hunter_local_job_health.directory())
    if units:
     row = dict(job=job, name="Request fresh-source auxiliary CAS recovery", status="RUNNING",
                exit=None, started_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
