@@ -5,14 +5,14 @@
   "persistence": {
     "provider": "github",
     "writable": true,
-    "verification": "PHASE1_CAS_PENDING_READBACK",
+    "verification": "VERIFIED_PHASE1_REREAD_THEN_PHASE2_CAS",
     "run_id": "sentinel-20261008T042727+0700",
-    "status": "PERSISTED_UNVERIFIED",
-    "last_write_attempt_at": "2026-10-07T21:31:00.056Z",
-    "last_persisted_at": "2026-10-07T21:31:00.056Z",
-    "persist_verified": false,
-    "last_verified_at": "2026-10-07T20:12:17.382Z",
-    "note": "Phase1 CAS requested; exact readback required before verification."
+    "status": "PERSISTED_VERIFIED",
+    "last_write_attempt_at": "2026-10-07T21:31:25.663Z",
+    "last_persisted_at": "2026-10-07T21:31:25.663Z",
+    "persist_verified": true,
+    "last_verified_at": "2026-10-07T21:31:25.663Z",
+    "note": "Phase1 exact readback matched; phase2 verification marker CAS requested, final exact readback required."
   },
   "state_ownership": {
     "purpose": "Sentinel BTC market and signal state only",
@@ -148,8 +148,8 @@
     ]
   },
   "operational_reconciliation": {
-    "status": "PHASE1_WRITE_REQUESTED_PENDING_EXACT_READBACK",
-    "as_of": "2026-10-07T21:31:00.056Z",
+    "status": "PHASE2_WRITTEN_PENDING_FINAL_READBACK",
+    "as_of": "2026-10-07T21:31:25.663Z",
     "source_main_commit": "04eb7e71cff393e71d658c99e00ab5d7b0a74670",
     "prewrite_main_commit": "39206f0bfb35ded986d358228399b0a55eed0915",
     "server_evidence_snapshot_main_sha": "730d4887e109949f1355e7acac642df86110de63",
@@ -159,8 +159,6 @@
     "logic_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
     "swing_journal_sha": "f5a25696fd90ce00f89c5953bf00a79165974a3b",
     "remaining": [
-      "PHASE1_EXACT_READBACK",
-      "PHASE2_VERIFY_MARKER_CAS",
       "FINAL_EXACT_READBACK"
     ]
   },
@@ -172,9 +170,9 @@
   "derivatives_data_asof": "2026-10-07T21:28:18.001000+00:00",
   "macro_data_asof": "2026-10-07",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": "2026-10-07T21:31:00.056Z",
+  "last_persisted_at": "2026-10-07T21:31:25.663Z",
   "persisted": true,
-  "persist_verified": false,
+  "persist_verified": true,
   "market_snapshot": {
     "run_id": "sentinel-20261008T042727+0700",
     "btc_price_usd": 83334.77,
