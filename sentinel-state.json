@@ -5,13 +5,14 @@
   "persistence": {
     "provider": "github",
     "writable": true,
-    "verification": "PHASE1_WRITE_PENDING_READBACK",
-    "last_verified_at": "2026-10-07T01:44:05.102Z",
+    "verification": "VERIFIED_PHASE1_REREAD_THEN_PHASE2_CAS",
+    "last_verified_at": "2026-10-07T10:02:04.209Z",
     "run_id": "sentinel-20261007T164737+0700",
-    "status": "PHASE1_PENDING_VERIFICATION",
-    "last_write_attempt_at": "2026-10-07T10:01:44.741Z",
-    "last_persisted_at": "2026-10-07T10:01:44.741Z",
-    "persist_verified": false
+    "status": "VERIFIED",
+    "last_write_attempt_at": "2026-10-07T10:02:04.209Z",
+    "last_persisted_at": "2026-10-07T10:02:04.209Z",
+    "persist_verified": true,
+    "note": "Phase-1 exact-path main readback matched; this phase-2 CAS records verified closure, pending final exact-path readback."
   },
   "state_ownership": {
     "purpose": "Sentinel BTC market and signal state only",
@@ -170,18 +171,17 @@
     ]
   },
   "operational_reconciliation": {
-    "status": "ANALYSIS_COMPLETE__PHASE1_WRITE_PENDING",
-    "as_of": "2026-10-07T10:01:18.945Z",
+    "status": "PHASE1_READBACK_MATCHED__PHASE2_WRITTEN",
+    "as_of": "2026-10-07T10:02:04.209Z",
     "source_main_commit": "1f714332baca41c4f89784a0824f9732fb0063c6",
-    "prewrite_main_commit": "a9e93fa67bb6ddd42350f53d13ccb9d70e031859",
+    "prewrite_main_commit": "840349b9d4f06d6fc2ce7d6ca1d93d69863645ed",
     "server_evidence_snapshot_main_sha": "a8245c845e42b9c2002a233a3e157875e28a670b",
     "portfolio_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
     "decision_journal_sha": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
     "runtime_sha": "85e24271bdfce0f13c07d95f6c756a918cf37193",
     "logic_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
     "remaining": [
-      "PHASE1_READBACK",
-      "PHASE2_WRITE_AND_READBACK"
+      "FINAL_EXACT_PATH_READBACK"
     ]
   },
   "run_id": "sentinel-20261007T164737+0700",
@@ -192,9 +192,9 @@
   "derivatives_data_asof": "2026-10-07T09:43:56.001000+00:00",
   "macro_data_asof": "2026-10-07",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": "2026-10-07T10:01:44.741Z",
+  "last_persisted_at": "2026-10-07T10:02:04.209Z",
   "persisted": true,
-  "persist_verified": false,
+  "persist_verified": true,
   "market_snapshot": {
     "run_id": "sentinel-20261007T164737+0700",
     "btc_price_usd": 83705.76,
@@ -285,7 +285,7 @@
     "status": "HEALTHY",
     "state": "HEALTHY",
     "prior_status": "SENTINEL_DEGRADED",
-    "reason": "At run start the previous valid scan was 29054 seconds old (>120 minutes). This fresh partial-but-valid scan completed; persistence verification is in progress.",
+    "reason": "At run start the previous valid scan was 29054 seconds old (>120 minutes). This fresh partial-but-valid scan completed; phase-1 readback matched and phase-2 final verification was written.",
     "last_successful_scan_at": "2026-10-07T10:01:18.945Z",
     "consecutive_invalid_scans": 0,
     "degraded_window_detected": {
