@@ -39,14 +39,35 @@ def patch(source):
     return updated
 
 
+def add_sentinel_reader(source):
+    """Add one fixed public evidence artifact to the existing path allowlist."""
+    tree=ast.parse(source)
+    for node in tree.body:
+        if isinstance(node,ast.FunctionDef) and node.name=='runtime_file':
+            old=ast.get_source_segment(source,node)
+            if 'read_sentinel_evidence' in old: raise ValueError('ALREADY_PATCHED')
+            needle='    from pathlib import Path\n'
+            insertion="""    if path in ('sentinel-evidence-current.json', '/var/lib/sentinel-evidence/preview.json'):
+        import json
+        from hunter_ops_health import read_sentinel_evidence
+        return {'path': path, 'content': json.dumps(read_sentinel_evidence())}
+"""
+            if needle not in old: raise ValueError('UNEXPECTED_RUNTIME_READER')
+            lines=source.splitlines(keepends=True)
+            lines[node.lineno-1:node.end_lineno]=[old.replace(needle,needle+insertion,1)+'\n']
+            updated=''.join(lines);ast.parse(updated);return updated
+    raise ValueError('RUNTIME_READER_NOT_FOUND')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--server',required=True,type=Path)
     parser.add_argument('--expected-sha256',required=True)
+    parser.add_argument('--sentinel-reader',action='store_true')
     args=parser.parse_args();original=args.server.read_bytes()
     if hashlib.sha256(original).hexdigest()!=args.expected_sha256:
         raise ValueError('CONNECTOR_CAS_MISMATCH')
-    changed=patch(original.decode()).encode()
+    changed=(add_sentinel_reader(original.decode()) if args.sentinel_reader else patch(original.decode())).encode()
     backup=args.server.with_name('server.py.before-fast-health-'+args.expected_sha256[:12])
     with backup.open('xb') as f: f.write(original)
     backup.chmod(0o600)

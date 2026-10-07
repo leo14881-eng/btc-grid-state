@@ -63,3 +63,32 @@ def enrich_deployment(base, health=None):
                       fast_watch_health_generated_at_utc=health['generated_at'],
                       fast_watch_status=health.get('status', 'UNKNOWN'))
     return result
+
+
+SENTINEL_EVIDENCE_PATH = '/var/lib/sentinel-evidence/preview.json'
+
+
+def read_sentinel_evidence(path=SENTINEL_EVIDENCE_PATH, now=None):
+    """Receipt freshness does not upgrade individual source freshness or analysis."""
+    fd=os.open(path,os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode): raise ValueError('EVIDENCE_NOT_REGULAR_FILE')
+        with os.fdopen(fd,'rb',closefd=False) as stream: raw=stream.read(MAX_BYTES+1)
+        if len(raw)>MAX_BYTES: raise ValueError('EVIDENCE_TOO_LARGE')
+    finally: os.close(fd)
+    row=json.loads(raw)
+    if (row.get('schema')!='sentinel_public_evidence_v1'
+            or row.get('mode')!='EVIDENCE_PREVIEW_ONLY'
+            or row.get('confirmation_status')!='ANALYSIS_NOT_PORTED'
+            or row.get('capital_authority')!='NONE_SHADOW_ONLY'
+            or row.get('real_order_count')!=0 or row.get('real_trading_enabled') is not False
+            or row.get('formal_writer') is not False): raise ValueError('EVIDENCE_BOUNDARY_INVALID')
+    observed=dt.datetime.fromisoformat(row['generated_at'].replace('Z','+00:00'))
+    if observed.tzinfo is None: raise ValueError('EVIDENCE_TIMESTAMP_INVALID')
+    age=((now or dt.datetime.now(dt.timezone.utc))-observed).total_seconds()
+    if not 0<=age<=600: raise ValueError('EVIDENCE_STALE_OR_FUTURE')
+    for key in ('source_sha','evidence_snapshot_main_sha'):
+        if not re.fullmatch('[0-9a-f]{40}',row.get(key,'')):raise ValueError('EVIDENCE_SHA_INVALID')
+    if any(not (key.startswith('btc_') or key in ('etf_latest_complete','macro_treasury_daily'))
+           for key in row['evidence']): raise ValueError('EVIDENCE_SCOPE_INVALID')
+    return row
