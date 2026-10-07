@@ -106,9 +106,9 @@ class RuntimeTest(unittest.TestCase):
         html='<table><tr><td></td><td>IBIT</td><td>FBTC</td><td></td></tr><tr><td>06 Oct 2026</td><td>0</td><td>0</td><td>0</td></tr></table>'
         with self.assertRaisesRegex(ValueError,'NO_COMPLETE'): etf_latest_complete(html,self.now)
     def test_secondary_failure_does_not_turn_unknown_to_pass(self):
-        result=scan(self.old,{'btc_spot':{'asof':stamp(self.now)},'axs_korea':{'asof':None,'error':'timeout'}},self.now)
-        self.assertFalse(result['freshness_gate']['sources']['axs_korea'])
-        self.assertIn('axs_korea: timeout',result['data_gaps'])
+        result=scan(self.old,{'btc_spot':{'asof':stamp(self.now)},'btc_depth':{'asof':None,'error':'timeout'}},self.now)
+        self.assertFalse(result['freshness_gate']['sources']['btc_depth'])
+        self.assertIn('btc_depth: timeout',result['data_gaps'])
     def test_stale_source_blocks(self):
         self.assertFalse(fresh({'asof': None}, self.now, 600))
         self.assertFalse(fresh({'asof': stamp(self.now+dt.timedelta(hours=1))},self.now,600))
