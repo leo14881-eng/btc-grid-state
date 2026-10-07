@@ -1,53 +1,59 @@
 {
   "capital_authority": "NONE_SHADOW_ONLY",
-  "completed_at_utc": "2026-10-07T21:32:11.153027+00:00",
-  "duration_seconds": 47.887,
-  "error": null,
+  "completed_at_utc": "2026-10-07T22:31:53.391774+00:00",
+  "duration_seconds": 50.719,
+  "error": "RuntimeError",
+  "error_details": {
+    "failed_step": "INITIALIZATION_OR_HEALTH_PUBLICATION",
+    "message": "JOB_HEALTH_PUSH_REJECTED_UNKNOWN",
+    "stderr_tail": "To github.com:leo14881-eng/btc-grid-state.git\n ! [remote rejected]   HEAD -> main (cannot lock ref 'refs/heads/main': is at 00acc98b059c0388967940c3722266d1244b3016 but expected c415daba6b757cbb304a364a0b855dafbf930ebd)\nerror: failed to push some refs to 'github.com:leo14881-eng/btc-grid-state.git'\n\n",
+    "type": "RuntimeError"
+  },
   "job": "blind-replay",
-  "main_readback_head_sha": "e1503e560acdc54ba286d9ea1cff0fa21998c85d",
-  "main_readback_verified": true,
+  "main_readback_head_sha": "c415daba6b757cbb304a364a0b855dafbf930ebd",
+  "main_readback_verified": false,
   "real_trading_enabled": false,
   "schema": "hunter_runtime_job_health_v1",
   "source": "VULTR_SYSTEMD",
-  "source_head_sha": "39206f0bfb35ded986d358228399b0a55eed0915",
-  "started_at_utc": "2026-10-07T21:31:23.266333+00:00",
-  "status": "SUCCESS",
+  "source_head_sha": "1d8932f840e1b4b077016b04885909789dc7c0d3",
+  "started_at_utc": "2026-10-07T22:31:02.672821+00:00",
+  "status": "FAILURE",
   "steps": [
     {
-      "completed_at_utc": "2026-10-07T21:31:23.333936+00:00",
+      "completed_at_utc": "2026-10-07T22:31:02.750609+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Normalize Binance archive timestamps",
-      "seconds": 0.053,
-      "started_at_utc": "2026-10-07T21:31:23.280762+00:00",
+      "seconds": 0.061,
+      "started_at_utc": "2026-10-07T22:31:02.689186+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-07T21:32:02.126092+00:00",
+      "completed_at_utc": "2026-10-07T22:31:40.072306+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Run blind replay",
-      "seconds": 38.792,
-      "started_at_utc": "2026-10-07T21:31:23.334015+00:00",
+      "seconds": 37.32,
+      "started_at_utc": "2026-10-07T22:31:02.752469+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-07T21:32:09.674423+00:00",
+      "completed_at_utc": "2026-10-07T22:31:46.972205+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Persist replay outputs from clean latest main",
-      "seconds": 7.548,
-      "started_at_utc": "2026-10-07T21:32:02.126238+00:00",
+      "seconds": 6.899,
+      "started_at_utc": "2026-10-07T22:31:40.073017+00:00",
       "status": "SUCCESS",
-      "stderr_tail": "Note: switching to '39206f0bfb35ded986d358228399b0a55eed0915'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\n"
+      "stderr_tail": "Note: switching to '1d8932f840e1b4b077016b04885909789dc7c0d3'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\n"
     },
     {
-      "completed_at_utc": "2026-10-07T21:32:11.151776+00:00",
+      "completed_at_utc": "2026-10-07T22:31:48.426931+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Authoritative main read-back",
-      "seconds": 1.477,
-      "started_at_utc": "2026-10-07T21:32:09.674760+00:00",
+      "seconds": 1.453,
+      "started_at_utc": "2026-10-07T22:31:46.973615+00:00",
       "status": "SUCCESS"
     }
   ]
