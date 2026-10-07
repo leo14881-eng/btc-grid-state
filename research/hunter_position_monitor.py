@@ -199,6 +199,14 @@ def main():
  evaluated_at=dt.datetime.now(dt.timezone.utc)
  results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence)]
  TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
- eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"timing_seconds":dict(TIMINGS),"evidence_refresh":refresh,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
+ # Observe subscription drift after authoritative lifecycle updates. The resident
+ # stream owns its 30-second subscription self-healing; this never writes its state.
+ from research.hunter_fast_reconciliation import observe
+ import subprocess
+ try:
+  source_sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True,timeout=5).strip()
+ except (OSError,subprocess.SubprocessError):source_sha='UNKNOWN'
+ fast_reconciliation=observe(load(V2),{'evidence_refresh':refresh,'batch_endpoint':'/api/v3/ticker/24hr','capital_authority':'NONE_SHADOW_ONLY'},source_sha,dt.datetime.now(dt.timezone.utc))
+ eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"timing_seconds":dict(TIMINGS),"evidence_refresh":refresh,"fast_watch_reconciliation":fast_reconciliation,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()
