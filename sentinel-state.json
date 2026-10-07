@@ -5,14 +5,14 @@
   "persistence": {
     "provider": "github",
     "writable": true,
-    "verification": "PENDING_POST_WRITE_READBACK",
-    "last_verified_at": "2026-10-06T23:18:00Z",
+    "verification": "VERIFIED_PHASE1_REREAD_THEN_PHASE2_CAS",
+    "last_verified_at": "2026-10-07T01:44:05.102Z",
     "run_id": "sentinel-20261007T083444+0700",
-    "status": "WRITE_IN_PROGRESS",
-    "last_write_attempt_at": "2026-10-07T01:43:22.445Z",
-    "last_persisted_at": "2026-10-07T01:43:22.445Z",
-    "persist_verified": false,
-    "note": "BTC-only Sentinel phase-1 CAS write by authorized CHATGPT_AUTOMATION; final status requires exact-path main reread and phase-2 verification."
+    "status": "VERIFIED",
+    "last_write_attempt_at": "2026-10-07T01:44:05.102Z",
+    "last_persisted_at": "2026-10-07T01:44:05.102Z",
+    "persist_verified": true,
+    "note": "BTC-only Sentinel phase-1 write was reread from main and matched; this phase-2 CAS records the verified closure, subject to final exact-path readback."
   },
   "state_ownership": {
     "purpose": "Sentinel BTC market and signal state only",
@@ -216,18 +216,17 @@
     ]
   },
   "operational_reconciliation": {
-    "status": "CURRENT_RUN_MARKET_SCAN_COMPLETE__PERSISTENCE_PHASE1_IN_PROGRESS",
-    "as_of": "2026-10-07T01:43:22.395Z",
+    "status": "CURRENT_RUN_MARKET_SCAN_AND_PHASE1_READBACK_COMPLETE__PHASE2_WRITTEN",
+    "as_of": "2026-10-07T01:44:05.102Z",
     "source_main_commit": "86fd3bd5767d41c695bfc58ddf9fdd02dff1f749",
     "prewrite_main_commit": "0cf8aa9d9dde3d9238605b1b18a7f2370afdc1cc",
     "portfolio_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
     "decision_journal_sha": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
     "logic_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
     "remaining": [
-      "VERIFY_CURRENT_WALLET_BALANCES_ORDERS_AND_FEES",
-      "COMPLETE_PHASE2_PERSISTENCE_READBACK"
+      "FINAL_EXACT_PATH_READBACK"
     ],
-    "note": "Sentinel analysis uses current BTC-only sources; server evidence remains preview-only and was not treated as a complete scan."
+    "note": "Phase-1 main readback matched run_id, run_status, scan time, persistence time and primary state; phase-2 records verified closure."
   },
   "run_id": "sentinel-20261007T083444+0700",
   "last_run_at": "2026-10-07T08:34:44+07:00",
@@ -237,9 +236,9 @@
   "derivatives_data_asof": "2026-10-07T01:36:39.958Z",
   "macro_data_asof": "2026-10-07T01:26:44Z",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": "2026-10-07T01:43:22.445Z",
-  "persisted": false,
-  "persist_verified": false,
+  "last_persisted_at": "2026-10-07T01:44:05.102Z",
+  "persisted": true,
+  "persist_verified": true,
   "market_snapshot": {
     "run_id": "sentinel-20261007T083444+0700",
     "btc_price_usd": 85247.67,
@@ -309,7 +308,7 @@
     "status": "HEALTHY",
     "state": "HEALTHY",
     "prior_status": "SENTINEL_DEGRADED",
-    "reason": "At this resumed run start the previous valid scan was 7460 seconds old (>120 minutes) and its persisted flag had not been readback-verified. This fresh partial-but-valid BTC-only scan completed successfully; persistence verification is in progress.",
+    "reason": "At this resumed run start the previous valid scan was 7460 seconds old (>120 minutes) and its persisted flag had not been readback-verified. This fresh partial-but-valid BTC-only scan completed successfully and phase-1 persistence readback matched.",
     "last_successful_scan_at": "2026-10-07T01:43:22.395Z",
     "consecutive_invalid_scans": 0,
     "degraded_window_detected": {
@@ -322,7 +321,7 @@
       "event_id": "sentinel-recovered-after-gap-20261007T063024+0700",
       "status": "AUTOMATION_RESPONSE_QUEUED",
       "recovered_at": "2026-10-07T01:43:22.395Z",
-      "note": "Fresh partial-but-valid BTC-only scan completed; final persistence readback in progress."
+      "note": "Fresh partial-but-valid BTC-only scan completed and phase-1 persistence readback matched; phase-2 final verification written."
     }
   },
   "notification": {
