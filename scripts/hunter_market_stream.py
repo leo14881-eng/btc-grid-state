@@ -15,6 +15,9 @@ from pathlib import Path
 import random
 import subprocess
 import time
+import threading
+
+from scripts.hunter_deployment_status import deployment_view
 
 from research.hunter_fast_watch import Config, Watch, DualWatch, utc, bind_observed_model_routes
 
@@ -119,7 +122,23 @@ class BybitREST(PublicREST):
                 raise RuntimeError(str(exc)) from exc
 
 
+_READBACK_LOCK = threading.Lock()
+_READBACK_CACHE = {}
+
+
 def read_main(repo):
+    # Three daemon tasks share one private readback clone, never the portfolio writer.
+    with _READBACK_LOCK:
+        key = str(Path(repo).resolve())
+        cached = _READBACK_CACHE.get(key)
+        if cached and 0 <= time.monotonic()-cached[0] < Config().save_seconds:
+            return copy.deepcopy(cached[1])
+        result = _read_main(repo)
+        _READBACK_CACHE[key] = (time.monotonic(), copy.deepcopy(result))
+        return result
+
+
+def _read_main(repo):
     # Fetch only. No checkout, reset, push, commit or portfolio mutation.
     subprocess.run(['git', '-C', str(repo), 'fetch', 'origin', 'main'], check=True,
                    capture_output=True, timeout=20)
@@ -140,6 +159,40 @@ def read_main(repo):
     except (subprocess.CalledProcessError, ValueError):
         portfolio['model_route_admitted_ids'] = []
     return portfolio, sha
+
+
+def deployment_evidence(repo, sha):
+    """Reuse existing main job receipts; no independent deployment SSOT."""
+    def git(*args):
+        return subprocess.run(['git','-C',str(repo),*args],capture_output=True,text=True,timeout=20)
+    def read(name):
+        result=git('show',sha+':research/results/'+name+'.json')
+        return result.stdout if result.returncode==0 else ''
+    jobs={}
+    for job in ('discovery','research','monitor','watchdog'):
+        raw=read('hunter-runtime-'+job+'-health')
+        jobs[job]=json.loads(raw) if raw else {}
+    return deployment_view({},jobs,read('hunter-scheduler-health'),sha,
+        lambda a,b:git('merge-base','--is-ancestor',a,b).returncode==0)
+
+
+def loaded_code_sha():
+    root=Path(__file__).resolve().parents[1]
+    row=subprocess.run(['git','-c','safe.directory='+str(root),'-C',str(root),
+        'rev-parse','HEAD'],capture_output=True,text=True,timeout=5)
+    return row.stdout.strip() if row.returncode==0 else 'UNKNOWN'
+
+
+def public_health(snapshot, code_sha, versions):
+    """Only market health, A/B diagnostics and source receipts leave private state."""
+    row=copy.deepcopy(snapshot)
+    row['loaded_code_source_sha']=code_sha
+    row['deployment_evidence']=versions
+    for venue in row.get('venues',{}).values():
+        venue.pop('counterfactual',None)
+        venue['history']=[h for h in venue.get('history',[]) if h.get('kind') in
+            ('REST_TAKEOVER','WS_RECOVERED','GAPPED_THROUGH_PROTECTION_WINDOW')][-20:]
+    return row
 
 
 def atomic_state(path, value):
@@ -373,7 +426,8 @@ async def run(repo, state_path, duration=None, venue='BINANCE_SPOT'):
             atomic_state(state_path, row)
 
 
-async def run_dual(repo, state_path, duration=None):
+async def run_dual(repo, state_path, duration=None, health_path=None):
+    code_sha=loaded_code_sha()
     paths = {v: Path(str(state_path)+'.'+v+'.json') for v in ('BINANCE_SPOT','BYBIT_SPOT')}
     async def aggregate():
         divergent = set()
@@ -403,7 +457,12 @@ async def run_dual(repo, state_path, duration=None):
                 snapshot['source_sha'] = sha
                 snapshot['status'] = 'PRIMARY_VENUE_IDENTITY_MISSING' if dual.unroutable else (
                     'FAST_PATH_HEALTHY' if all(x['status'] in ('FAST_PATH_HEALTHY','NOT_REQUIRED') for x in snapshot['venues'].values()) else 'PARTIAL_FAST_PATH_DEGRADED')
+                snapshot['loaded_code_source_sha']=code_sha
                 atomic_state(state_path, snapshot)
+                if health_path is not None:
+                    versions=await asyncio.to_thread(deployment_evidence,repo,sha)
+                    atomic_state(health_path,public_health(snapshot,code_sha,versions))
+                    os.chmod(health_path,0o644)
                 print(json.dumps({'status': snapshot['status'], 'unroutable_count':len(dual.unroutable),
                     'venues': {v: {'status':x['status'],'subscriptions':x['subscription_count']} for v,x in snapshot['venues'].items()}}), flush=True)
             except Exception as exc:
@@ -424,6 +483,7 @@ def main():
     parser.add_argument('--repo', default='.')
     parser.add_argument('--state', default='/var/lib/hunter-fast-watch/state.json')
     parser.add_argument('--watchdog', action='store_true')
+    parser.add_argument('--health', type=Path, help='Read-only operations health export; no credentials/counterfactual portfolio')
     parser.add_argument('--duration', type=float)
     args = parser.parse_args()
     if args.watchdog:
@@ -433,7 +493,7 @@ def main():
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.with_suffix('.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        asyncio.run(run_dual(Path(args.repo), path, args.duration))
+        asyncio.run(run_dual(Path(args.repo), path, args.duration, args.health))
 
 
 if __name__ == '__main__':

@@ -5,18 +5,24 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=GIT_TERMINAL_PROMPT=0
+TimeoutStartSec=180
+DynamicUser=true
 User=hunter-fast-watch
 Group=hunter-fast-watch
 WorkingDirectory=/opt/hunter-fast-watch/code
-ExecStart=/opt/hunter-fast-watch/venv/bin/python -m scripts.hunter_market_stream --repo /var/lib/hunter-fast-watch/readback --state /var/lib/hunter-fast-watch/state.json
+ExecStartPre=/opt/hunter-fast-watch/venv/bin/python -m scripts.hunter_fast_watch_bootstrap --repo /var/lib/hunter-fast-watch/readback
+ExecStart=/opt/hunter-fast-watch/venv/bin/python -m scripts.hunter_market_stream --repo /var/lib/hunter-fast-watch/readback --state /var/lib/hunter-fast-watch/state.json --health /run/hunter-fast-watch/health.json
 Restart=on-failure
 RestartSec=5
 StateDirectory=hunter-fast-watch
+RuntimeDirectory=hunter-fast-watch
+RuntimeDirectoryMode=0755
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/hunter-fast-watch
+ReadWritePaths=/var/lib/hunter-fast-watch /run/hunter-fast-watch
 UMask=0077
 MemoryMax=512M
 StandardOutput=journal
