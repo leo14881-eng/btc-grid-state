@@ -157,6 +157,7 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
  if job in ("discovery", "research"):
   doc["scan_generation_id"] = json.loads((RESULTS / "hunter-cex-universe-run.json").read_text()).get("generation_id")
  raw = json.dumps(doc, indent=2, sort_keys=True) + "\n"
+ last_push = None
  for attempt in range(5):
   git("fetch", "origin", "main")
   # Publish only this health document from a clean current-main auxiliary checkout.
@@ -177,12 +178,20 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
    hgit("config", "user.name", "hunter-vultr-shadow")
    hgit("config", "user.email", "hunter-vultr-shadow@localhost")
    hgit("add", "-f", "--", path); hgit("commit", "-m", "ops: Hunter " + job + " runtime health")
-   if hgit("push", "origin", "HEAD:main", check=False).returncode == 0:
+   pushed = hgit("push", "origin", "HEAD:main", check=False)
+   if pushed.returncode:
+    category = push_failure_category(pushed)
+    last_push = pushed
+    if category not in ("RACE", "TRANSPORT_FAILED"):
+     raise push_failure_exception("JOB_HEALTH_PUSH", pushed, category)
+    print("HUNTER_JOB_HEALTH_PUSH_RETRY", job, attempt + 1, category,
+          safe_diagnostic(pushed.stderr), flush=True)
+   else:
     hgit("fetch", "origin", "main")
     require(hgit("show", "origin/main:" + path).stdout == raw, "JOB_HEALTH_READBACK_MISMATCH")
     print("HUNTER_JOB_HEALTH_READBACK_OK", job, status, flush=True)
     return
- raise RuntimeError("JOB_HEALTH_PUSH_FAILED")
+ raise push_failure_exception("JOB_HEALTH_PUSH_RETRY_EXHAUSTED", last_push)
 
 
 def condition(step, outputs):
@@ -217,6 +226,34 @@ def safe_diagnostic(value, env=None, limit=2048):
                r"\1[REDACTED]", text)
  text = re.sub(r"(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)", "[REDACTED]", text)
  return text[-limit:]
+
+
+def push_failure_category(result):
+ """Classify actual Git diagnostics; unknown/policy errors are not CAS races."""
+ text = (str(result.stderr or "") + "\n" + str(result.stdout or "")).lower()
+ if any(x in text for x in ("authentication failed", "could not read username",
+                            "permission denied", "error: 403", "http 403",
+                            "write access to repository not granted")):
+  return "AUTHENTICATION_FAILED"
+ if any(x in text for x in ("gh001", "gh006", "gh013", "protected branch",
+                            "repository rule violations", "file size limit",
+                            "pre-receive hook declined")):
+  return "POLICY_REJECTED"
+ if any(x in text for x in ("(fetch first)", "(non-fast-forward)", "(stale info)")):
+  return "RACE"
+ if any(x in text for x in ("connection reset", "connection timed out",
+                            "operation timed out", "temporary failure in name resolution",
+                            "could not resolve host", "connection closed",
+                            "error: 502", "error: 503", "error: 504")):
+  return "TRANSPORT_FAILED"
+ return "REJECTED_UNKNOWN"
+
+
+def push_failure_exception(prefix, result, category=None):
+ category = category or push_failure_category(result)
+ exc = RuntimeError(prefix + "_" + category)
+ exc.stderr_tail = safe_diagnostic(str(result.stderr or "") + "\n" + str(result.stdout or ""))
+ return exc
 
 
 def exception_details(exc):

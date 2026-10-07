@@ -123,6 +123,108 @@ class AuxPublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'OUTPUT_MISSING'):
             publisher.persist('discovery', self.base)
 
+    def test_unknown_rejection_is_not_retried_or_called_a_race(self):
+        original_run = subprocess.run
+        pushes = []
+        def intercept(args, **kwargs):
+            if args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                pushes.append(args)
+                return subprocess.CompletedProcess(args, 1, '', 'remote: unexpected push rejection')
+            return original_run(args, **kwargs)
+        with patch.object(subprocess, 'run', side_effect=intercept):
+            with self.assertRaisesRegex(RuntimeError, 'AUX_PUSH_REJECTED_UNKNOWN') as found:
+                publisher.persist('discovery', self.base)
+        self.assertEqual(len(pushes), 1)
+        self.assertIn('unexpected push rejection', found.exception.stderr_tail)
+
+    def test_policy_rejection_stops_without_retry(self):
+        original_run = subprocess.run
+        pushes = []
+        def intercept(args, **kwargs):
+            if args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                pushes.append(args)
+                return subprocess.CompletedProcess(args, 1, '', 'remote: error: GH013 repository rule violations')
+            return original_run(args, **kwargs)
+        with patch.object(subprocess, 'run', side_effect=intercept):
+            with self.assertRaisesRegex(RuntimeError, 'AUX_PUSH_POLICY_REJECTED'):
+                publisher.persist('discovery', self.base)
+        self.assertEqual(len(pushes), 1)
+
+    def test_exhausted_race_preserves_redacted_diagnostic(self):
+        original_run = subprocess.run
+        pushes = []
+        def intercept(args, **kwargs):
+            if args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                pushes.append(args)
+                return subprocess.CompletedProcess(args, 1, '',
+                    '[rejected] HEAD -> main (fetch first) token=github_pat_privatevalue')
+            return original_run(args, **kwargs)
+        with patch.object(subprocess, 'run', side_effect=intercept):
+            with self.assertRaisesRegex(RuntimeError, 'AUX_PUSH_RETRY_EXHAUSTED_RACE') as found:
+                publisher.persist('discovery', self.base)
+        self.assertEqual(len(pushes), 5)
+        self.assertIn('fetch first', found.exception.stderr_tail)
+        self.assertNotIn('github_pat_privatevalue', found.exception.stderr_tail)
+
+    def test_disjoint_push_race_rebases_and_succeeds(self):
+        original_run = subprocess.run
+        raced = False
+        def intercept(args, **kwargs):
+            nonlocal raced
+            if not raced and args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                raced = True
+                self.competing_commit('stock.txt', 'concurrent disjoint change')
+            return original_run(args, **kwargs)
+        with patch.object(subprocess, 'run', side_effect=intercept):
+            commit = publisher.persist('discovery', self.base)
+        self.assertTrue(commit)
+        self.run_git('fetch', 'origin', 'main')
+        self.assertEqual(self.run_git('show', 'origin/main:stock.txt').stdout,
+                         'concurrent disjoint change')
+
+
+    def test_health_policy_failure_is_preserved_without_retry(self):
+        import datetime as dt
+        from scripts import hunter_job_runner as runner
+        original_run = subprocess.run
+        pushes = []
+        def intercept(args, **kwargs):
+            if args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                pushes.append(args)
+                return subprocess.CompletedProcess(args, 1, '',
+                    'remote: error: GH013 repository rule violations')
+            return original_run(args, **kwargs)
+        with patch.dict(os.environ, {'RUNNER_TEMP':self.temp.name}), patch.object(
+                subprocess, 'run', side_effect=intercept):
+            with self.assertRaisesRegex(RuntimeError, 'JOB_HEALTH_PUSH_POLICY_REJECTED') as found:
+                runner.publish_health('missed-replay','FAILURE',
+                    dt.datetime.now(dt.timezone.utc), [], error='test failure')
+        self.assertEqual(len(pushes),1)
+        self.assertIn('GH013',runner.exception_details(found.exception)['stderr_tail'])
+
+    def test_health_disjoint_race_preserves_competing_commit_and_reads_back(self):
+        import datetime as dt
+        import json
+        from scripts import hunter_job_runner as runner
+        original_run = subprocess.run
+        raced = False
+        def intercept(args, **kwargs):
+            nonlocal raced
+            if not raced and args[0] == 'git' and 'push' in args and 'HEAD:main' in args:
+                raced = True
+                self.competing_commit('stock.txt','health concurrent change')
+            return original_run(args, **kwargs)
+        with patch.dict(os.environ, {'RUNNER_TEMP':self.temp.name}), patch.object(
+                subprocess, 'run', side_effect=intercept):
+            runner.publish_health('missed-replay','FAILURE',
+                dt.datetime.now(dt.timezone.utc),[],error='test failure')
+        self.run_git('fetch','origin','main')
+        self.assertEqual(self.run_git('show','origin/main:stock.txt').stdout,'health concurrent change')
+        doc=json.loads(self.run_git('show',
+            'origin/main:research/results/hunter-runtime-missed-replay-health.json').stdout)
+        self.assertEqual(doc['status'],'FAILURE')
+        self.assertFalse(doc['main_readback_verified'])
+
 
 if __name__ == '__main__':
     unittest.main()
