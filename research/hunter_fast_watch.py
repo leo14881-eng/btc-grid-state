@@ -196,9 +196,12 @@ class Watch:
             a=self.ab[key]
             life=p.get('protection_lifecycle',{})
             if str(portfolio.get('active_observation_generation_id','')).startswith('MONITOR_'):
-                if in_live_window(life.get('armed_at_utc'),a['measurement_started_at'],now):
+                if (str(life.get('armed_generation_id','')).startswith('MONITOR_') and
+                    in_live_window(life.get('armed_at_utc'),a['measurement_started_at'],now)):
                     a['monitor_first_arm_seen_at']=life['armed_at_utc']
-                if life.get('state')=='EXIT_TRIGGERED' and in_live_window(life.get('last_observed_at_utc'),a['measurement_started_at'],now):
+                if (life.get('state')=='EXIT_TRIGGERED' and
+                    life.get('last_generation_id')==portfolio.get('active_observation_generation_id') and
+                    in_live_window(life.get('last_observed_at_utc'),a['measurement_started_at'],now)):
                     a['monitor_exit_review_at']=life['last_observed_at_utc']
                     a['monitor_theoretical_net_exit_pnl']=p.get('last_exit_estimate',{}).get('net_pnl_usdt')
                 if in_live_window(p.get('last_marked_at_utc'),a['measurement_started_at'],now):
@@ -213,7 +216,13 @@ class Watch:
                     a=self.ab[p['shadow_id']]
                     fingerprint=hashlib.sha256(json.dumps(p.get('tranches'),sort_keys=True).encode()).hexdigest()
                     at=p.get('closed_at_utc',p.get('exit_at_utc'))
-                    if fingerprint==a['tranche_fingerprint'] and in_live_window(at,a['measurement_started_at'],now):
+                    monitor_sell=any(e.get('type')=='SHADOW_V2_SELL' and
+                        e.get('shadow_id')==p['shadow_id'] and e.get('at')==at and
+                        e.get('reason')=='PROFIT_PROTECTION' and
+                        str(e.get('generation_id','')).startswith('MONITOR_')
+                        for e in portfolio.get('events',[]))
+                    if (monitor_sell and fingerprint==a['tranche_fingerprint'] and
+                        in_live_window(at,a['measurement_started_at'],now)):
                         a['monitor_exit_review_at']=at
                         a['monitor_theoretical_net_exit_pnl']=p.get('net_pnl_usdt')
         self.positions = new

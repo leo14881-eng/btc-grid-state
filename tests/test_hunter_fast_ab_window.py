@@ -25,11 +25,11 @@ class LiveWindowTests(unittest.TestCase):
         self.assertIsNone(self.reconcile()['monitor_first_arm_seen_at'])
 
     def test_new_monitor_arm_counts_inside_window(self):
-        self.p['protection_lifecycle']=dict(state='ARMED',armed_at_utc=utc(105))
+        self.p['protection_lifecycle']=dict(state='ARMED',armed_at_utc=utc(105),armed_generation_id='MONITOR_1')
         self.assertEqual(self.reconcile()['monitor_first_arm_seen_at'],utc(105))
 
     def test_research_arm_not_a_monitor_sample(self):
-        self.p['protection_lifecycle']=dict(state='ARMED',armed_at_utc=utc(105))
+        self.p['protection_lifecycle']=dict(state='ARMED',armed_at_utc=utc(105),armed_generation_id='MONITOR_1')
         self.assertIsNone(self.reconcile(generation='RESEARCH_1')['monitor_first_arm_seen_at'])
 
     def test_new_monitor_peak_uses_actual_last_price(self):
@@ -68,6 +68,8 @@ class LiveWindowTests(unittest.TestCase):
     def test_fresh_close_requires_matching_cashflow(self):
         closed=copy.deepcopy(self.p);closed.update(closed_at_utc=utc(105),net_pnl_usdt=10)
         self.state['closed_positions']=[closed]
+        self.state['events']=[dict(type='SHADOW_V2_SELL',shadow_id='p',at=utc(105),
+            reason='PROFIT_PROTECTION',generation_id='MONITOR_1')]
         self.assertEqual(self.reconcile()['monitor_exit_review_at'],utc(105))
         self.w.ab['p']['monitor_exit_review_at']=None
         closed['tranches'].append(dict(price=1,notional_usdt=1000))
@@ -77,3 +79,33 @@ class LiveWindowTests(unittest.TestCase):
         m=self.w.snapshot(110)['metrics']
         self.assertIsNone(m['arm_detection_improvement_seconds'])
         self.assertIsNone(m['exit_review_improvement_seconds'])
+
+    def test_research_arm_carried_into_monitor_not_a_monitor_detection(self):
+        self.p['protection_lifecycle']=dict(state='ARMED',armed_at_utc=utc(105),armed_generation_id='RESEARCH_1')
+        self.assertIsNone(self.reconcile()['monitor_first_arm_seen_at'])
+
+    def test_unknown_arm_generation_does_not_form_a_pair(self):
+        self.p['protection_lifecycle']=dict(state='ARMED',armed_at_utc=utc(105))
+        self.assertIsNone(self.reconcile()['monitor_first_arm_seen_at'])
+
+    def test_exit_review_requires_same_monitor_generation(self):
+        self.p['protection_lifecycle']=dict(state='EXIT_TRIGGERED',last_observed_at_utc=utc(105),last_generation_id='RESEARCH_1')
+        self.assertIsNone(self.reconcile()['monitor_exit_review_at'])
+        self.p['protection_lifecycle']['last_generation_id']='MONITOR_1'
+        self.assertEqual(self.reconcile()['monitor_exit_review_at'],utc(105))
+
+    def test_close_requires_monitor_profit_protection_sell_provenance(self):
+        closed=copy.deepcopy(self.p);closed.update(closed_at_utc=utc(105),net_pnl_usdt=10)
+        self.state['closed_positions']=[closed]
+        for gen,reason in [('RESEARCH_1','PROFIT_PROTECTION'),(None,'PROFIT_PROTECTION'),('MONITOR_1','SYSTEMIC_RISK')]:
+            self.state['events']=[dict(type='SHADOW_V2_SELL',shadow_id='p',at=utc(105),reason=reason,generation_id=gen)]
+            self.assertIsNone(self.reconcile()['monitor_exit_review_at'])
+        self.state['events']=[]
+        self.assertIsNone(self.reconcile()['monitor_exit_review_at'])
+
+    def test_close_event_must_match_position_and_time(self):
+        closed=copy.deepcopy(self.p);closed.update(closed_at_utc=utc(105),net_pnl_usdt=10)
+        self.state['closed_positions']=[closed]
+        for pid,at in [('other',utc(105)),('p',utc(104))]:
+            self.state['events']=[dict(type='SHADOW_V2_SELL',shadow_id=pid,at=at,reason='PROFIT_PROTECTION',generation_id='MONITOR_1')]
+            self.assertIsNone(self.reconcile()['monitor_exit_review_at'])
