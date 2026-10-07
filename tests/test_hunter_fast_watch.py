@@ -136,6 +136,37 @@ class FastWatchTests(unittest.TestCase):
     def test_stale_trigger(self):
         self.w.event(event(),100);t=self.w.pending.pop('p')
         self.assertEqual(self.w.review('p',t,book(at=110),110)['status'],'STALE_TRIGGER')
+    def test_pending_candidate_coalesces_latest_fresh_tick(self):
+        self.w.event(event(1,1.04,at=100),100)
+        first=copy.deepcopy(self.w.pending['p'])
+        self.w.event(event(2,1.05,at=106),106)
+        trigger=self.w.pending.pop('p')
+        self.assertEqual(trigger['received_at'],106)
+        self.assertNotEqual(trigger['event_id'],first['event_id'])
+        self.assertEqual(self.w.review('p',trigger,book(1.05,106),106)['status'],'OBSERVATION_ONLY')
+        self.assertEqual(first['received_at'],100)  # in-flight objects are immutable
+    def test_unarmed_candidate_withdrawn_when_window_closes(self):
+        self.w.event(event(1,1.04,at=100),100)
+        self.w.event(event(2,.99,at=101),101)
+        self.assertEqual(self.w.pending,{})
+        self.assertNotIn('protection_lifecycle',self.w.counterfactual['p'])
+    def test_armed_pending_latest_gap_is_not_earlier_profit(self):
+        self.review(1.04,100)
+        self.w.event(event(2,1.005,at=106),106)
+        self.w.event(event(3,.99,at=112),112)
+        trigger=self.w.pending.pop('p')
+        self.assertEqual(trigger['price'],.99)
+        result=self.w.review('p',trigger,book(.99,112),112)
+        self.assertFalse(result['exit'])
+        self.assertEqual(result['incident'],'GAPPED_THROUGH_PROTECTION_WINDOW')
+    def test_bybit_pending_latest_tick_keeps_venue_identity(self):
+        w=Watch(venue='BYBIT_SPOT');w.reconcile(portfolio(position('BYBIT_SPOT')),'sha',100)
+        w.connect(100);w.event(bybit_event(1,1.04,100),100)
+        w.event(bybit_event(2,1.05,106),106)
+        trigger=w.pending.pop('p')
+        self.assertEqual(trigger['received_at'],106)
+        self.assertEqual(trigger['execution_venue'],'BYBIT_SPOT')
+        self.assertEqual(w.review('p',trigger,book(1.05,106,'bybit'),106)['status'],'OBSERVATION_ONLY')
     def test_no_double_exit(self):
         self.review(1.04,100);self.review(1.005,106,2)
         self.w.event(event(3,1.005,at=112),112);self.assertEqual(self.w.pending,{})

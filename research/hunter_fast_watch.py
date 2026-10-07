@@ -398,16 +398,25 @@ class Watch:
             n = sum(t['notional_usdt'] for t in p['tranches'])
             entry = sum(t['notional_usdt'] * t['price'] for t in p['tranches']) / n
             armed = p.get('protection_lifecycle', {}).get('state', 'UNARMED') != 'UNARMED'
+            prior = self.pending.get(key)
+            if prior is not None and now < prior['received_at']:
+                continue
             if not armed and (price / entry - 1) * 100 < PROTECT_ARM_PCT:
+                self.pending.pop(key, None)
                 continue
             if now - p.get('_last_review_at', -1e30) < self.config.review_seconds:
                 continue
             event_id = hashlib.sha256(f'{key}:{source}:{sequence}'.encode()).hexdigest()
-            self.pending.setdefault(key, dict(position_id=key, symbol=symbol, price=price,
+            # Coalesce queued work to the newest validated quote. setdefault kept
+            # an expired trigger throughout slow REST probes, discarding a live
+            # review window even while fresh ticks continued arriving. Replace
+            # the object, so a depth review already in flight retains its own
+            # event/time identity and must still pass the freshness gates.
+            self.pending[key] = dict(position_id=key, symbol=symbol, price=price,
                 received_at=now, source=source, event_id=event_id,
                 execution_venue=self.venue,
                 tranche_fingerprint=hashlib.sha256(json.dumps(p['tranches'], sort_keys=True).encode()).hexdigest(),
-                kind='FAST_EXIT_OR_PEAK_REVIEW' if armed else 'FAST_ARM_REVIEW'))
+                kind='FAST_EXIT_OR_PEAK_REVIEW' if armed else 'FAST_ARM_REVIEW')
 
     def review(self, key, trigger, book, now):
         p = self.counterfactual.get(key)
