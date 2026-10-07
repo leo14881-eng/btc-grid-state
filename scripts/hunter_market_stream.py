@@ -267,6 +267,53 @@ def watchdog(path, now):
         return {'status': 'FAST_WATCH_NOT_DEPLOYED_OR_UNREADABLE', 'authoritative_monitor_affected': False}
 
 
+async def active_market_reviews(watch, probe, review, stop):
+    """Bounded independent pumps; a slow ticker never gates depth review.
+
+    Reserve one shared REST admission slot for depth. The adapter's existing
+    semaphore, public-only allowlist, weight budget and circuit breaker still
+    apply to every request. One in-flight request per symbol/position prevents
+    fanout or duplicate review of an episode.
+    """
+    probes, reviews = {}, {}
+    probe_limit = max(1, watch.config.concurrency - 1)
+    try:
+        while not stop.is_set():
+            for kind, tasks in (('PROBE', probes), ('REVIEW', reviews)):
+                for key, task in list(tasks.items()):
+                    if task.done():
+                        del tasks[key]
+                        if not task.cancelled() and task.exception() is not None:
+                            watch.record(kind + '_TASK_FAILED', time.time(), key=key,
+                                         error=str(task.exception()))
+            # Dispatch depth before background probes, and exits before arms.
+            queued = sorted(watch.pending.items(), key=lambda row:
+                row[1].get('kind') == 'FAST_ARM_REVIEW')
+            for key, trigger in queued:
+                if key in reviews:
+                    continue
+                if len(reviews) >= watch.config.concurrency:
+                    break
+                watch.pending.pop(key)
+                now = time.time()
+                if not 0 <= now - trigger['received_at'] <= watch.config.evidence_seconds:
+                    watch.record('REVIEW_REJECTED', now, position_id=key,
+                                 result={'status': 'STALE_TRIGGER'})
+                    continue
+                reviews[key] = asyncio.create_task(review(key, trigger))
+            for symbol in watch.probe_due(time.time()):
+                if len(probes) >= probe_limit:
+                    break
+                if symbol not in probes:
+                    probes[symbol] = asyncio.create_task(probe(symbol))
+            await asyncio.sleep(1)
+    finally:
+        tasks = list(probes.values()) + list(reviews.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def run(repo, state_path, duration=None, venue='BINANCE_SPOT'):
     import aiohttp  # dependency only required by the resident daemon
     watch = Watch(venue=venue)
@@ -315,15 +362,7 @@ async def run(repo, state_path, duration=None, venue='BINANCE_SPOT'):
 
         async def fallback():
             # Independent task: WS connect/recv/backoff never blocks REST.
-            while not stop.is_set():
-                if not watch.symbols:
-                    await asyncio.sleep(1)
-                    continue
-                await asyncio.gather(*(probe(s) for s in watch.probe_due(time.time())))
-                requests = list(watch.pending.items())
-                watch.pending.clear()
-                await asyncio.gather(*(review(k, t) for k, t in requests))
-                await asyncio.sleep(1)
+            await active_market_reviews(watch, probe, review, stop)
 
         async def save():
             next_archive = 0
