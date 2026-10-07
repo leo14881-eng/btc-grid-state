@@ -101,6 +101,71 @@ The epoch values below assume the first migration starts at epoch 1. If the
 authoritative epoch is already higher, stop and plan monotonically increasing
 epochs rather than reusing these values.
 
+### Stock-only Cloudflare cron control (cutover preparation)
+
+The cron-control patch must remain unpublished while the host is unavailable or
+GitHub is still the intended primary. Publish it only at the coordinated cutover
+checkpoint, after host readiness, `paused/2` readback and legacy-run drain. It sets
+the stock Wrangler desired-state cron list to `[]`; it does not deploy anything
+by itself. The stock deployment workflow has **only** `workflow_dispatch` (no
+push/schedule trigger). The Hunter deployment push filters contain only Hunter
+paths. Scheduler CI has read-only permissions. Stock main's existing
+`research/stock_shadow/**` push filter can create a normal job on merge, which is
+why paused authority and legacy workflow disablement must precede this merge.
+
+The existing `Deploy Stock Shadow Scheduler` workflow now has `cron_control`:
+
+- `cron_control=true, read_only=true`: inspect the precise stock schedules,
+  unchanged deployment/settings, and fresh Git authority; never mutate.
+- `cron_control=true, read_only=false`: the only write is one
+  `PUT /accounts/{existing account}/workers/scripts/stock-shadow-scheduler/schedules`
+  with JSON `[]`, followed by an independent GET requiring an actual empty list.
+- Both modes require `expected_worker_exists=true`, the inspected
+  `expected_worker_version` UUID, a fresh `expected_main_sha`, and unchanged
+  stock-control source with `paused/2` throughout. The last accepted Worker
+  version before this cutover was `3e4ba1b5-1de0-4ae1-8ed5-2e260b689803`; inspect
+  again instead of assuming it remains current.
+- Cron-control mode skips account-wide inventory, the GitHub dispatch token,
+  Wrangler deployment, and secret upload. It uses the existing stock Cloudflare
+  token solely for authenticated requests to this Worker's schedules/settings/
+  deployments endpoints. Redirects are rejected and no raw token, account,
+  request header, provider body, or exception is logged.
+- The only accepted preexisting cron is
+  `3,8,13,18,23,28,33,38,43,48,53,58 * * * *`; an already-empty list is idempotent.
+  Unexpected schedules or deployment/binding changes stop the operation.
+- A timed-out/uncertain PUT is never retried automatically. Only fresh GET
+  reconciliation is attempted. Failure or ambiguous readback keeps the cutover
+  unverified; do not advance ownership or enable timers.
+
+Fresh GET verifies **stored configuration**, not delivery propagation. Cloudflare
+documents up to 15 minutes for cron changes. Keep `paused/2`, maintain exclusive
+operator control, and drain the three stock workflows during that window. After
+at least 900 seconds, run the same cron-control **read-only** mode again and
+require empty schedules, the same version/settings and unchanged authority.
+Where available inspect scheduled-event evidence too; no events alone does not
+prove deletion. The 10-minute workflow timeout does not cover this waiting period.
+Reverify the host connection before committing `server/3`.
+
+Cloudflare does not provide a cross-provider atomic CAS for this operation.
+The shared Actions deployment concurrency group serializes this workflow's
+modes; fresh Git/provider checks detect observed races but cannot prevent an
+uncoordinated external operator changing Cloudflare between requests. No other
+operator may deploy/edit this stock Worker or advance authority during the
+operation. Never treat a stale heartbeat as a lease or permission to take over.
+
+Retain the before/after receipt, source/run IDs, original singleton cron and
+version as rollback evidence. Controlled failback must use monotonically newer
+paused/GitHub epochs and the latest verified ledger. Re-enabling the old cron
+requires a separately coordinated restoration of the exact original cron and
+Wrangler desired state, with fresh provider readback and the same propagation
+wait; this disable-only helper never restores it automatically. Do not restore
+an old portfolio or trade file. An empty desired-state list is intentional:
+omitting `triggers.crons` would leave existing remote schedules unchanged.
+
+Provider references: [schedule PUT](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/schedules/methods/update/),
+[schedule GET](https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/schedules/methods/get/),
+[cron removal and propagation](https://developers.cloudflare.com/workers/configuration/cron-triggers/#remove-a-cron-trigger).
+
 ### 1. Merge guarded execution with GitHub still the owner (epoch 1)
 
 1. Review and merge the migration code, guarded stock workflows, exact runtime
