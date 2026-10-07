@@ -428,3 +428,43 @@ not a verified permanent fix. Treat Sentinel scheduler reliability as
 **CONFIRMED_OBSERVATION / ROOT_CAUSE_UNVERIFIED / NOT_FIXED** until a real
 subsequent natural run and its state/readback can be checked. Full migration
 and two natural hourly cycles remain pending.
+
+## 2026-10-07 12:17 UTC continuation: live evidence deployed; task recurrence remains unresolved
+
+Pinned main for this continuation: `07a431828ef8916b961905f94097a805704b7aa1`. Shell Git fetch returned CONNECT tunnel 403; the authorized GitHub connector actually reread main and these exact report files at that commit. Cached origin/main was not presented as current GitHub main. Only these two report paths change; concurrent server/other-window commits are preserved by normal merge.
+
+### PR #67: on-demand public evidence (deployed, not full model migration)
+
+PR #67 feature `9e045bdd20cb6de3a3c99e15a93ed3b027c6185e`, merge `730d4887e109949f1355e7acac642df86110de63`.
+Changed: scripts/sentinel_runtime.py, scripts/sentinel_live_evidence.py, scripts/hunter_ops_connector_patch.py, tests/test_sentinel_live_evidence.py.
+The connector now supports fixed readonly alias `sentinel-evidence-live.json`, using the existing official BTC GET collector. No caller URL/path, formal writer, portfolio/main write, or freshness relaxation. Cache lasts at most 30 seconds and retains original timestamps. Installed collector is source-pinned and SHA256 checked.
+
+Actual 币圈服务器 MCP call: run `sentinel-20261007T120627.640140Z`, generated 12:06:27.640140 UTC, collection 1.3682802759867627 seconds, `collection_trigger=ON_DEMAND_PUBLIC_GET`, collector code SHA=PR #67 merge.
+Nine BTC source freshness checks were true; date-only ETF/Treasury remained separately classified; new-capital gate remained false. Preview `ANALYSIS_FAILED / ANALYSIS_NOT_PORTED` means full model is not ported. `main_readback_verified=false` is correct because this readonly call performs no formal persistence; collector source SHA is not a claim of live main-state readback.
+
+Deployment: /opt/shadow-ops-mcp/releases/sentinel-live-20261007T1205; root-owned fixed collector/manifest; connector server hash `7b2f98deee6d7b8f162e19f414d77f2301ecf30b7db6da89a17d4e3548791640`. Existing authentication/allowlist and nonroot readonly journal access preserved.
+Actual tests: 52 Sentinel+ops passed, 550 Hunter passed, 44 server Sentinel passed. CI 37618291516 SUCCESS.
+Canonical model task was updated to use this proven alias and one immediate run was requested. This is neither successful consumption nor natural hourly acceptance. Latest formal Sentinel and notification cursor at the pinned main still had 11:35 values.
+
+### CONFIRMED operational recurrence: keep-enabled prompt did not fix runtime
+
+Actual registry:
+- Sentinel last run 12:08:00.994768 UTC, disabled 12:09:04.407089.
+- V2 notification last run 12:06:45.327077 UTC, disabled 12:07:49.366646.
+- Both restored without changing strategies/schedules; notification subsequently observed enabled, updated 12:15:52.910617.
+- Sentinel ran again 12:16:00.215369 and was disabled again at 12:16:43.976529.
+Thus repeated restore plus prompt guard is **NOT_FIXED**, not permanent repair. Current tools expose neither disable caller nor latest execution error/history. Personal-context search returned only old assistant reports, including an earlier safety-check rejection; those do not prove the latest cause. No attribution to GitHub permissions, user settings, or recent safety rejection is made without evidence. No alternate interface is used to bypass a rejected operation. No fake successful scan, delivery, or ACK is written.
+
+### Real fast-path archives and current capital evidence
+
+Actual server gzip audit: Binance 210 snapshots 08:45:38.348802–12:15:33.668579 UTC, maximum gap61.007479s; Bybit211 snapshots08:45:37.326213–12:15:38.577267 UTC, maximum gap60.3082s. No gzip/JSON errors or gaps>120s. All OBSERVATION_ONLY/NONE_SHADOW_ONLY. This establishes ~3.5h archived observation, **not 24h acceptance**; Bybit has zero formal open positions, so its transport/reference smoke test is not an actual-position protection sample.
+
+MCP fast health 12:16:10 UTC: FAST_PATH_HEALTHY, Binance expected/actual11; accepted events3,063,114, duplicate drops0, old-order drops109,066, stale incidents651, fallback activations628, fallback requests2,382, both-source failures0. Median trade-event detection126.09ms and REST takeover240.98ms are measured session metrics. review_count0; arm/exit improvement and capture delta remain UNKNOWN, not zero improvement or proven precision.
+
+V2 generation MONITOR_20261007T121025579900Z, asof12:10:46.544408 UTC: realized795.79U, open unrealized−1314.38U, exit cost25.30U, full-depth MTM−541.99U;10open,9thesis-invalidated,10recovery-family. Closed-win-rate100% applies only19closed trades. Ordinary used14K, strategic used0/available3K, hardcap20K; tail4K STRESS_DIAGNOSTIC_NOT_CAPITAL_ALLOCATION. RISK_OFF allocator_available0 is not disappearance of reserve.
+
+### Venue metadata audit: remaining scope
+
+Existing V2 entry writer does not persist execution_venue/market_symbol/market_type; execution_channel is explicitly a Bybit availability label, not execution proof. Current fast watcher uses validated native Binance depth on a readonly copy and retains historical venue UNKNOWN. Both venue adapters fail closed on mixed execution evidence. No actual Bybit formal holding exists now. Future formal venue metadata propagation remains unimplemented/unverified; no asset-string inference, false Bybit assignment, portfolio rewrite, or BUY gate change was introduced to disguise this gap.
+
+Conclusion: **PARTIAL_FIX**. Still open: repeated Task disabling/root cause, full server model/notification/writer handoff, two real hourly Sentinel cycles, actual notification delivery/ACK,24h A/B, real ARM/EXIT sample, future entry venue metadata. All real orders remain0; real_trading_enabled=false;capital_authority=NONE_SHADOW_ONLY.
