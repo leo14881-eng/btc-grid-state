@@ -28,5 +28,20 @@ jobs:
           python -m unittest discover -s tests -p 'test_hunter*.py'
       - name: Validate authoritative snapshot contract
         run: |
-          GENERATION=$(python -c 'import json; print(json.load(open("research/results/hunter-scheduler-health.json"))["current_generation_id"])')
-          python scripts/hunter_monitor_persist.py validate --generation "$GENERATION"
+          # Hourly Research may legitimately supersede the working portfolios.
+          # Validate the exact Monitor publication, never splice those writers.
+          python - <<'PY'
+          import json, re
+          from scripts.hunter_monitor_persist import git, snapshot, validate
+          health = json.load(open('research/results/hunter-runtime-monitor-health.json'))
+          assert health.get('schema') == 'hunter_runtime_job_health_v1'
+          assert health.get('job') == 'monitor' and health.get('source') == 'VULTR_SYSTEMD'
+          assert health.get('status') == 'SUCCESS' and health.get('main_readback_verified') is True
+          assert health.get('real_trading_enabled') is False
+          assert health.get('capital_authority') == 'NONE_SHADOW_ONLY'
+          ref = health.get('main_readback_head_sha', '')
+          assert re.fullmatch(r'[0-9a-f]{40}', ref), 'VERIFIED_MONITOR_REF_REQUIRED'
+          git('fetch', '--no-tags', 'origin', ref)
+          counts = validate(snapshot(ref), health['monitor_generation_id'])
+          print('PINNED_MONITOR_SNAPSHOT_CONTRACT_OK', ref, counts)
+          PY
