@@ -3,8 +3,10 @@
 BookTicker has NO exchange timestamp. Receipt freshness and update-id ordering
 are explicit; aggTrade timestamps are independent evidence, not borrowed for books.
 """
+import base64
 import copy
 import datetime as dt
+import gzip
 import hashlib
 import json
 import math
@@ -442,6 +444,7 @@ class Watch:
         self.metrics['review_count'] += 1
         self.record('OBSERVATION_REVIEW', now, position_id=key, trigger=trigger,
             result=result, lifecycle=copy.deepcopy(p.get('protection_lifecycle')),
+            depth_receipt=depth_receipt(book, self.venue, estimate),
             formal_mutation=False)
         return dict(result, status='OBSERVATION_ONLY', formal_mutation=False)
 
@@ -477,6 +480,23 @@ class Watch:
             subscription_count=len(self.actual), expected_subscription_count=len(self.symbols),
             stale_symbols=stale, rest_fallback_symbols=fallback, symbols=copy.deepcopy(self.symbols),
             metrics=report_metrics, ab=copy.deepcopy(self.ab), history=copy.deepcopy(self.history))
+
+
+def depth_receipt(book, venue, estimate):
+    """Private, lossless evidence for a hypothetical review, never a fill receipt.
+
+    Retain the native venue payload rather than the calculation's normalized copy.
+    Compression bounds runtime/history memory without discarding depth levels.
+    """
+    raw = json.dumps(book, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+    return dict(schema='hunter_fast_depth_receipt_v1', execution_venue=venue,
+        symbol=book['symbol'], fetched_at=book['fetched_at'],
+        source_timestamp=book.get('source_timestamp'),
+        timestamp_quality='EXCHANGE_TIMESTAMP' if book.get('source_timestamp') is not None else 'RECEIPT_BOUND',
+        encoding='GZIP_BASE64_JSON', payload_sha256=hashlib.sha256(raw).hexdigest(),
+        payload=base64.b64encode(gzip.compress(raw, mtime=0)).decode(),
+        execution_estimate=copy.deepcopy(estimate),
+        formal_execution=False, historical_execution_verified=False)
 
 
 def normalize_bybit(payload):
