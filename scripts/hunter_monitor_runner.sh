@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+CAS_RETRY_COUNT=${HUNTER_MONITOR_CAS_RETRY_COUNT:-0}
+[[ "$CAS_RETRY_COUNT" =~ ^[012]$ ]] || { echo INVALID_MONITOR_CAS_RETRY_COUNT; exit 1; }
 # One host lock; every generation gets an isolated checkout. Never reset the
 # running production checkout or share its working tree with another writer.
 exec 9>/run/lock/hunter-position-monitor.lock
@@ -39,5 +41,20 @@ PY
 python3 scripts/hunter_monitor_persist.py validate --generation "$GENERATION"
 git config user.name hunter-vultr-shadow
 git config user.email hunter-vultr-shadow@localhost
-python3 scripts/hunter_monitor_persist.py persist --base "$BASE_SHA" --generation "$GENERATION"
+if python3 scripts/hunter_monitor_persist.py persist --base "$BASE_SHA" --generation "$GENERATION" > "$TASK_DIR/persist.log" 2>&1; then
+  cat "$TASK_DIR/persist.log"
+else
+  PERSIST_STATUS=$?
+  cat "$TASK_DIR/persist.log"
+  # A protected input changed while this observation ran. Never reuse its
+  # decisions/output or weaken CAS: re-enter admission and recompute on main.
+  # Two fresh retries are bounded by this service's existing 240s timeout.
+  if [ "$CAS_RETRY_COUNT" -lt 2 ] && grep -Eq '^RuntimeError: SHADOW_STATE_CAS_REJECTED_STALE_WRITER( |$)' "$TASK_DIR/persist.log"; then
+    export HUNTER_MONITOR_CAS_RETRY_COUNT=$((CAS_RETRY_COUNT + 1))
+    echo "HUNTER_MONITOR_FRESH_CAS_RETRY attempt=$HUNTER_MONITOR_CAS_RETRY_COUNT"
+    rm -rf "$TASK_DIR"
+    exec "$0"
+  fi
+  exit "$PERSIST_STATUS"
+fi
 echo "HUNTER_MONITOR_SUCCESS $(date -u +%FT%TZ)"
