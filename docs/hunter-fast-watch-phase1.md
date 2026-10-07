@@ -117,3 +117,15 @@ missed-profit/capture delta仍须24小时以上配对证据裁定，当前UNKNOW
 
 未验收事项：历史成交身份（UNKNOWN）、服务器部署、两Venue官方真实连接/断流接管、完整24h A/B、
 Fast review到正式Single Writer的future admission、真实ARM/EXIT样本。
+
+## 无交易凭据的常驻部署
+
+unit采用DynamicUser独立身份，StateDirectory保留私有观察档案；bootstrap只从固定公开
+HTTPS仓库初始化readback，不复制服务器Git写入凭据，未知origin拒绝。clone先在私有临时
+目录完成再提交到本地cache，失败不能留下半成品供下一次启动误读。
+两个venue与汇总器共享序列化、5秒缓存的同一main snapshot；缓存锁只管理Git对象读取，
+不是正式portfolio writer。独立副本防止venue间污染。
+/run/hunter-fast-watch/health.json仅导出行情health/A-B/source receipts，不导出counterfactual
+portfolio或任何凭据。loaded_code_source_sha明确区分已加载代码与source_sha行情账本快照。
+deployment_evidence直接复用该快照中的既有job health/scheduler proof；不是新增SSOT。
+该能力的代码测试不等同于服务器运行验收，真实部署与24小时观察仍须另给证据。
