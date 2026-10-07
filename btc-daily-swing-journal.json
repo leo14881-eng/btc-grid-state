@@ -1,0 +1,148 @@
+{
+  "schema": "btc_daily_swing_journal_v1",
+  "title": "BTC 每日短线波段复盘",
+  "version": "1.0.0",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "start_date": "2026-10-08",
+  "status": "ACTIVE_RECORDKEEPING",
+  "purpose": "Record immutable planned BTC spot swing setups, user-confirmed orders/fills, daily outcomes and evidence-based strategy reviews. This journal is not an execution authority or portfolio SSOT.",
+  "authorities": {
+    "market_and_sentinel": "sentinel-state.json",
+    "portfolio_balances_positions": "portfolio-state.json",
+    "confirmed_trade_decisions": "decision-journal.json",
+    "canonical_rules": "automation-logic-final.md",
+    "execution": "USER_ONLY",
+    "no_auto_trading": true,
+    "journal_is_not_order_confirmation": true
+  },
+  "capital_policy": {
+    "main_investment_usdt": 200000,
+    "btc_unified_pool_usdt": 160000,
+    "btc_unified_components": [
+      "CORE_BTC",
+      "SWING_BTC",
+      "STANDBY_USDT"
+    ],
+    "hunter_pool_usdt": 20000,
+    "extreme_crash_reserve_usdt": 20000,
+    "btc_grid_separate_usdt": 14000,
+    "crisis_living_reserve_separate_usd": 50000,
+    "no_fixed_btc_core_swing_split": true,
+    "never_spend_extreme_reserve_on_normal_volatility": true
+  },
+  "strategy_policy": {
+    "style": "SPOT_LONG_ONLY_DISCRETIONARY_LEFT_SIDE_SWING",
+    "objective": "MAXIMIZE_CUMULATIVE_REALIZED_NET_USDT_WITH_RISK_CONTROL_NOT_DAILY_GUARANTEED_PROFIT",
+    "primary_kpi": "REALIZED_NET_USDT_AFTER_ACTUAL_FEES_AND_SLIPPAGE",
+    "btc_quantity_and_buy_hold": "DIAGNOSTIC_ONLY",
+    "no_minimum_net_profit_amount_or_pct": true,
+    "trade_only_when_evidence_supports_positive_expected_net_usdt": true,
+    "preserve_core_btc": true,
+    "no_forced_daily_trade": true,
+    "no_mechanical_averaging_down": true,
+    "user_is_only_order_executor": true,
+    "orders_must_not_be_marked_placed_or_filled_without_user_confirmation": true,
+    "no_strategy_hindsight_rewrite": true
+  },
+  "source_refs": {
+    "portfolio_state_blob_sha_at_initialization": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
+    "decision_journal_blob_sha_at_initialization": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
+    "note": "Historical BTC positions in portfolio SSOT are not included in this new Day 1 trade."
+  },
+  "daily_records": [
+    {
+      "day_id": "BTC-DAILY-SWING-2026-10-08",
+      "day_number": 1,
+      "local_date": "2026-10-08",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "UNKNOWN_FROM_SCREENSHOT",
+      "strategy_version": "DAY1_V1",
+      "plan": {
+        "direction": "SPOT_BUY_THEN_SELL",
+        "buy_limit_usdt_per_btc": 82600,
+        "intended_notional_usdt": 3000,
+        "screenshot_entered_quantity_btc": 0.036319,
+        "take_profit_usdt_per_btc": 84200,
+        "stop_loss_usdt_per_btc": null,
+        "second_buy_order_planned": false,
+        "planned_core_btc_change": false,
+        "funding": "BTC_UNIFIED_POOL_STANDBY_USDT_SUBJECT_TO_VERIFIED_AVAILABILITY",
+        "plan_status": "PROPOSED_AND_SHOWN_IN_ORDER_ENTRY_SCREEN_NOT_CONFIRMED_SUBMITTED",
+        "invalidation_note": "If downside accelerates, reassess before adding; a resting limit buy can fill during a sharp selloff. No guaranteed protection without an exchange-accepted protective order."
+      },
+      "evidence": {
+        "type": "USER_SUPPLIED_ORDER_ENTRY_SCREENSHOT",
+        "screenshot_clock_display": "01:35",
+        "screenshot_clock_timezone": "UNVERIFIED",
+        "screenshot_visible_last_price_usdt": 83328.2,
+        "screenshot_visible_estimated_gross_profit_usdt": 58.1104,
+        "screenshot_visible_estimated_return_pct": 1.93,
+        "exchange_order_id": null,
+        "submitted_confirmation": false,
+        "filled_confirmation": false,
+        "caution": "Order-entry screenshot does not prove submission, execution or contingent take-profit activation."
+      },
+      "actual": {
+        "order_status": "UNKNOWN_NOT_CONFIRMED_SUBMITTED",
+        "buy_filled": false,
+        "buy_filled_quantity_btc": null,
+        "buy_avg_fill_price_usdt": null,
+        "buy_filled_at": null,
+        "sell_filled": false,
+        "sell_filled_quantity_btc": null,
+        "sell_avg_fill_price_usdt": null,
+        "sell_filled_at": null,
+        "buy_fee_usdt": null,
+        "sell_fee_usdt": null,
+        "slippage_usdt": null,
+        "realized_net_profit_usdt": null,
+        "end_of_day_unrealized_pnl_usdt": null,
+        "exchange_order_ids": [],
+        "evidence_of_fills": []
+      },
+      "review": {
+        "status": "PENDING_USER_REPORT",
+        "intraday_low_usdt": null,
+        "intraday_high_usdt": null,
+        "mfe_pct": null,
+        "mae_pct": null,
+        "buy_distance_from_day_low_pct": null,
+        "sell_distance_from_day_high_pct": null,
+        "missed_opportunity": false,
+        "direction_accuracy": "UNKNOWN",
+        "entry_quality": "UNKNOWN",
+        "exit_quality": "UNKNOWN",
+        "sizing_quality": "UNKNOWN",
+        "mistakes": [],
+        "improvement_actions": [],
+        "review_at": null
+      }
+    }
+  ],
+  "aggregates": {
+    "verified_closed_trades": 0,
+    "realized_net_profit_usdt": null,
+    "win_rate_pct": null,
+    "profit_factor": null,
+    "max_drawdown_usdt": null,
+    "capital_utilization_pct": null,
+    "days_reviewed": 0,
+    "pending_actual_confirmation": true,
+    "calculation_policy": "Compute from user-confirmed fills and fees only; null is UNKNOWN, not zero."
+  },
+  "review_schedule": {
+    "daily": "After user provides order/fill screenshots and results",
+    "seven_day": "After seven dated review records with evidence",
+    "thirty_day": "After thirty dated review records with evidence",
+    "no_automatic_push_created": true
+  },
+  "change_policy": {
+    "plans_immutable_after_publication": true,
+    "user_confirmed_fills_only": true,
+    "corrections_append_with_reason_and_timestamp": true,
+    "future_updates_use_latest_main_blob_sha_cas": true,
+    "post_write_main_readback_required": true,
+    "avoid_overwriting_other_writers": true
+  }
+}
