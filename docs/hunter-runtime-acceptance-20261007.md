@@ -409,3 +409,22 @@ No new qualifying notification event exists, so silence is NOT_A_BUG; actual
 delivery receipt remains sample-dependent.
 
 Conclusion remains **PARTIAL_FIX**.
+
+## Recurrent Sentinel automation disable — unresolved
+
+A final actual automation lookup found the canonical Sentinel task disabled again:
+last_run_time=2026-10-07T10:26:47.948699+00:00, updated_at=10:27:52.022629Z.
+The completed 09:47 model scan was still the last verified main state. The task
+was explicitly resumed at **10:30:23.444348 UTC**, preserving its prompt, hourly
+schedule and sole CHATGPT_AUTOMATION writer. No duplicate task or server writer
+was enabled, and no immediate run was requested to disguise natural cadence.
+
+The prompt already prohibited self-disabling before a verified handoff, so
+that instruction alone did not resolve the observed recurrence. The current
+automation tools expose enabled/last-run state, not a disable cause or per-run
+error/caller history. The cause is **UNKNOWN**, not attributed to the user or
+assumed to be a permission/API problem. Restoring enabled=true is recovery,
+not a verified permanent fix. Treat Sentinel scheduler reliability as
+**CONFIRMED_OBSERVATION / ROOT_CAUSE_UNVERIFIED / NOT_FIXED** until a real
+subsequent natural run and its state/readback can be checked. Full migration
+and two natural hourly cycles remain pending.
