@@ -246,7 +246,8 @@ def push_failure_category(result):
                             "repository rule violations", "file size limit",
                             "pre-receive hook declined")):
   return "POLICY_REJECTED"
- if any(x in text for x in ("(fetch first)", "(non-fast-forward)", "(stale info)")):
+ if (any(x in text for x in ("(fetch first)", "(non-fast-forward)", "(stale info)")) or
+     re.search(r"cannot lock ref 'refs/heads/main': is at [0-9a-f]{40} but expected [0-9a-f]{40}(?=[)\s]|$)", text)):
   return "RACE"
  if any(x in text for x in ("connection reset", "connection timed out",
                             "operation timed out", "temporary failure in name resolution",

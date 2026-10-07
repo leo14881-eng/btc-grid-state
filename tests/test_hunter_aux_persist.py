@@ -225,6 +225,50 @@ class AuxPublicationTests(unittest.TestCase):
         self.assertEqual(doc['status'],'FAILURE')
         self.assertFalse(doc['main_readback_verified'])
 
+    def test_exact_main_ref_lock_race_is_recognized(self):
+        from scripts import hunter_job_runner as runner
+        diagnostic="! [remote rejected] HEAD -> main (cannot lock ref 'refs/heads/main': is at "+'a'*40+' but expected '+'b'*40+')'
+        result=subprocess.CompletedProcess([],1,'',diagnostic)
+        self.assertEqual(runner.push_failure_category(result),'RACE')
+        for text in [diagnostic.replace('refs/heads/main','refs/heads/other'),
+                     diagnostic.replace('a'*40,'missing'), 'cannot lock ref permission error']:
+            self.assertEqual(runner.push_failure_category(subprocess.CompletedProcess([],1,'',text)),
+                             'REJECTED_UNKNOWN')
+        for prefix, category in [('GH013 repository rule violations\n','POLICY_REJECTED'),
+                                 ('Permission denied\n','AUTHENTICATION_FAILED')]:
+            self.assertEqual(runner.push_failure_category(subprocess.CompletedProcess([],1,'',prefix+diagnostic)),category)
+
+    def test_main_ref_lock_race_retries_aux_and_health_without_lost_commit(self):
+        import datetime as dt
+        import json
+        from scripts import hunter_job_runner as runner
+        original_run=subprocess.run
+        raced=False;push_count=0
+        def intercept(args,**kwargs):
+            nonlocal raced,push_count
+            if args[0]=='git' and 'push' in args and 'HEAD:main' in args:
+                push_count+=1
+                if not raced:
+                    raced=True
+                    before=self.run_git('ls-remote','origin','refs/heads/main').stdout.split()[0]
+                    self.run_git('-C',str(self.other),'fetch','origin','main')
+                    self.run_git('-C',str(self.other),'reset','--hard','origin/main')
+                    self.competing_commit('stock.txt','preserve ref-lock competitor '+str(push_count))
+                    after=self.run_git('ls-remote','origin','refs/heads/main').stdout.split()[0]
+                    return subprocess.CompletedProcess(args,1,'',
+                        "! [remote rejected] HEAD -> main (cannot lock ref 'refs/heads/main': is at "+after+' but expected '+before+')')
+            return original_run(args,**kwargs)
+        with patch.dict(os.environ,{'RUNNER_TEMP':self.temp.name}),patch.object(subprocess,'run',side_effect=intercept):
+            publisher.persist('discovery',self.base)
+            raced=False
+            runner.publish_health('blind-replay','SUCCESS',dt.datetime.now(dt.timezone.utc),[])
+        self.assertGreaterEqual(push_count,4)
+        self.run_git('fetch','origin','main')
+        self.assertEqual(self.run_git('show','origin/main:stock.txt').stdout,'preserve ref-lock competitor 3')
+        doc=json.loads(self.run_git('show','origin/main:research/results/hunter-runtime-blind-replay-health.json').stdout)
+        self.assertEqual(doc['status'],'SUCCESS')
+        self.assertTrue(doc['main_readback_verified'])
+
 
 if __name__ == '__main__':
     unittest.main()
