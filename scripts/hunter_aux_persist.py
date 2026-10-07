@@ -4,7 +4,8 @@ import pathlib
 import subprocess
 import tempfile
 
-from scripts.hunter_job_runner import output_paths
+from scripts.hunter_job_runner import (output_paths, push_failure_category,
+                                       push_failure_exception, safe_diagnostic)
 from scripts.hunter_monitor_persist import git, require
 
 
@@ -49,6 +50,7 @@ def persist(job, base):
     # never print it or embed it in the remote URL.
     headers = git('config', '--local', '--get-regexp',
                   r'^http\..*\.extraheader$', check=False).stdout.splitlines()
+    last_push = None
     for attempt in range(1, 6):
         cas(base, job)
         with tempfile.TemporaryDirectory(prefix='hunter-aux-') as directory:
@@ -76,11 +78,12 @@ def persist(job, base):
                 aux('commit', '-m', 'state: publish verified Hunter ' + job)
                 pushed = aux('push', 'origin', 'HEAD:main', check=False)
                 if pushed.returncode:
-                    require(not any(s in pushed.stderr for s in
-                                    ('could not read Username', 'Authentication failed',
-                                     'Permission denied', 'error: 403')),
-                            'AUX_PUSH_AUTHENTICATION_FAILED')
-                    print('HUNTER_AUX_PUSH_RACE', job, attempt, flush=True)
+                    category = push_failure_category(pushed)
+                    last_push = pushed
+                    if category not in ('RACE', 'TRANSPORT_FAILED'):
+                        raise push_failure_exception('AUX_PUSH', pushed, category)
+                    print('HUNTER_AUX_PUSH_RETRY', job, attempt, category,
+                          safe_diagnostic(pushed.stderr), flush=True)
                     continue
             commit = aux('rev-parse', 'HEAD').stdout.strip()
             aux('fetch', 'origin', 'main')
@@ -92,7 +95,7 @@ def persist(job, base):
                 require(actual == raw, 'AUX_MAIN_READBACK_MISMATCH ' + path)
             print('HUNTER_AUX_MAIN_READBACK_OK', job, commit, len(expected), flush=True)
             return commit
-    raise RuntimeError('AUX_PUSH_RETRY_EXHAUSTED')
+    raise push_failure_exception('AUX_PUSH_RETRY_EXHAUSTED', last_push)
 
 
 def main():

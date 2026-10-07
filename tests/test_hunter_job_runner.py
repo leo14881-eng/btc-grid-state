@@ -93,3 +93,28 @@ class CriticalTimeoutTests(unittest.TestCase):
   with self.assertRaisesRegex(RuntimeError,'CRITICAL_PHASE_TIMEOUT'):
    runner.run_shell("sleep 5",dict(os.environ),'.',0.05)
   self.assertLess(time.monotonic()-started,2)
+
+
+class PushDiagnosticTests(unittest.TestCase):
+ def test_push_failure_categories(self):
+  import subprocess
+  cases = [('remote: error: GH001 large files detected','POLICY_REJECTED'),
+           ('remote: error: GH013 repository rule violations','POLICY_REJECTED'),
+           ('Authentication failed','AUTHENTICATION_FAILED'),
+           ('Permission denied (publickey)','AUTHENTICATION_FAILED'),
+           ('[rejected] HEAD -> main (non-fast-forward)','RACE'),
+           ('[rejected] HEAD -> main (fetch first)','RACE'),
+           ('connection reset by peer','TRANSPORT_FAILED'),
+           ('opaque failure','REJECTED_UNKNOWN')]
+  for diagnostic, expected in cases:
+   with self.subTest(diagnostic=diagnostic):
+    self.assertEqual(runner.push_failure_category(
+        subprocess.CompletedProcess([],1,'',diagnostic)),expected)
+
+ def test_failure_diagnostic_is_redacted_and_bounded(self):
+  import subprocess
+  result=subprocess.CompletedProcess([],1,'','x'*5000+' Authorization: Bearer SECRET123')
+  exc=runner.push_failure_exception('JOB_HEALTH_PUSH',result)
+  self.assertLessEqual(len(exc.stderr_tail),2048)
+  self.assertNotIn('SECRET123',exc.stderr_tail)
+  self.assertIn('JOB_HEALTH_PUSH_REJECTED_UNKNOWN',str(exc))
