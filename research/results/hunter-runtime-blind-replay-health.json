@@ -1,54 +1,54 @@
 {
   "capital_authority": "NONE_SHADOW_ONLY",
-  "completed_at_utc": "2026-10-06T23:31:46.573650+00:00",
-  "duration_seconds": 40.226,
-  "error": "RuntimeError",
-  "error_details": {
-    "failed_step": "Persist replay outputs from clean latest main",
-    "message": "JOB_STEP_FAILED Persist replay outputs from clean latest main",
-    "type": "RuntimeError"
-  },
+  "completed_at_utc": "2026-10-07T00:08:04.255777+00:00",
+  "duration_seconds": 46.211,
+  "error": null,
   "job": "blind-replay",
-  "main_readback_head_sha": "d2af03785c70e81a8344968bb7c3e2431660a06a",
-  "main_readback_verified": false,
+  "main_readback_head_sha": "7d319bba65c0458e832acfa960d89da7d11facd5",
+  "main_readback_verified": true,
   "real_trading_enabled": false,
   "schema": "hunter_runtime_job_health_v1",
   "source": "VULTR_SYSTEMD",
-  "source_head_sha": "16b4081d8a785f8f8c8d7cf72e2fbc2c5b1444c7",
-  "started_at_utc": "2026-10-06T23:31:06.347269+00:00",
-  "status": "FAILURE",
+  "source_head_sha": "e3b2cfa0580c1990aa1ae84bc7efb79ec2bcdd66",
+  "started_at_utc": "2026-10-07T00:07:18.044751+00:00",
+  "status": "SUCCESS",
   "steps": [
     {
-      "completed_at_utc": "2026-10-06T23:31:06.420161+00:00",
+      "completed_at_utc": "2026-10-07T00:07:18.112517+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Normalize Binance archive timestamps",
-      "seconds": 0.055,
-      "started_at_utc": "2026-10-06T23:31:06.365240+00:00",
+      "seconds": 0.052,
+      "started_at_utc": "2026-10-07T00:07:18.060280+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-06T23:31:44.907836+00:00",
+      "completed_at_utc": "2026-10-07T00:07:56.674848+00:00",
       "exit": 0,
       "job": "blind-replay",
       "name": "Run blind replay",
-      "seconds": 38.488,
-      "started_at_utc": "2026-10-06T23:31:06.420247+00:00",
+      "seconds": 38.562,
+      "started_at_utc": "2026-10-07T00:07:18.112620+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-06T23:31:46.573326+00:00",
-      "error_details": {
-        "message": "JOB_STEP_FAILED Persist replay outputs from clean latest main",
-        "type": "RuntimeError"
-      },
-      "exit": 1,
+      "completed_at_utc": "2026-10-07T00:08:02.960908+00:00",
+      "exit": 0,
       "job": "blind-replay",
       "name": "Persist replay outputs from clean latest main",
-      "seconds": 1.665,
-      "started_at_utc": "2026-10-06T23:31:44.907928+00:00",
-      "status": "FAILURE",
-      "stderr_tail": "chedules-validation.yml deploy/systemd/hunter-market-stream.service research/hunter_fast_watch.py scripts/hunter_job_runner.py scripts/hunter_market_stream.py scripts/hunter_scheduled_job.sh tests/test_hunter_fast_watch.py\nError in sys.excepthook:\nTraceback (most recent call last):\n  File \"/usr/lib/python3/dist-packages/apport_python_hook.py\", line 228, in partial_apport_excepthook\n    return apport_excepthook(binary, exc_type, exc_obj, exc_tb)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3/dist-packages/apport_python_hook.py\", line 114, in apport_excepthook\n    report[\"ExecutableTimestamp\"] = str(int(os.stat(binary).st_mtime))\n                                            ^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: '/opt/shadow-runner/job-generation.oluQpz/repo/-m'\n\nOriginal exception was:\nTraceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 106, in <module>\n    main()\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 102, in main\n    persist(args.job, git('rev-parse', 'HEAD').stdout.strip())\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 53, in persist\n    cas(base, job)\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_aux_persist.py\", line 37, in cas\n    require(not conflicts, 'AUX_CAS_REJECTED_STALE_WRITER ' + ' '.join(conflicts))\n  File \"/opt/shadow-runner/job-generation.oluQpz/repo/scripts/hunter_monitor_persist.py\", line 31, in require\n    raise RuntimeError(message)\nRuntimeError: AUX_CAS_REJECTED_STALE_WRITER .github/workflows/hunter-server-schedules-validation.yml deploy/systemd/hunter-market-stream.service research/hunter_fast_watch.py scripts/hunter_job_runner.py scripts/hunter_market_stream.py scripts/hunter_scheduled_job.sh tests/test_hunter_fast_watch.py\n"
+      "seconds": 6.286,
+      "started_at_utc": "2026-10-07T00:07:56.674933+00:00",
+      "status": "SUCCESS",
+      "stderr_tail": "Note: switching to 'e3b2cfa0580c1990aa1ae84bc7efb79ec2bcdd66'.\n\nYou are in 'detached HEAD' state. You can look around, make experimental\nchanges and commit them, and you can discard any commits you make in this\nstate without impacting any branches by switching back to a branch.\n\nIf you want to create a new branch to retain commits you create, you may\ndo so (now or later) by using -c with the switch command. Example:\n\n  git switch -c <new-branch-name>\n\nOr undo this operation with:\n\n  git switch -\n\nTurn off this advice by setting config variable advice.detachedHead to false\n\n"
+    },
+    {
+      "completed_at_utc": "2026-10-07T00:08:04.254807+00:00",
+      "exit": 0,
+      "job": "blind-replay",
+      "name": "Authoritative main read-back",
+      "seconds": 1.294,
+      "started_at_utc": "2026-10-07T00:08:02.961016+00:00",
+      "status": "SUCCESS"
     }
   ]
 }
