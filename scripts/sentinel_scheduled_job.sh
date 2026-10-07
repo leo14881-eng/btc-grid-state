@@ -13,4 +13,5 @@ git remote set-url origin "$REMOTE"
 git fetch origin main
 git checkout --detach origin/main
 export PYTHONDONTWRITEBYTECODE=1
-python3 -m scripts.sentinel_runtime --preview
+install -d -m 0755 /var/lib/sentinel-evidence
+python3 -m scripts.sentinel_runtime --preview --evidence-output /var/lib/sentinel-evidence/preview.json

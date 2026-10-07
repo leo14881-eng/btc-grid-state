@@ -215,6 +215,7 @@ def collect(get=get_json):
     specs = {
       'btc_spot': ('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', lambda d: {'asof': millis(d['closeTime']), 'price': float(d['lastPrice']), 'volume_24h': float(d['volume']), 'price_change_pct_24h': float(d['priceChangePercent'])}),
       'btc_structure': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
+      'btc_structure_15m': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '15m', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
       'btc_structure_1h': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '1h', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
       'btc_structure_daily': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '1d', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
       'btc_oi_history': ('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=1h&limit=25', oi_history),
@@ -253,7 +254,7 @@ def watchdog(previous, valid, now):
 def scan(previous, evidence, now=None):
     now = now or dt.datetime.now(UTC)
     evidence = {key: value for key, value in evidence.items() if not key.startswith('axs_')}
-    limits = {'btc_structure': 14460, 'btc_structure_1h': 3660, 'btc_structure_daily': 86460, 'btc_oi_history': 3660}
+    limits = {'btc_structure_15m': 960, 'btc_structure': 14460, 'btc_structure_1h': 3660, 'btc_structure_daily': 86460, 'btc_oi_history': 3660}
     gates = {key: fresh(record, now, limits.get(key, 600)) for key, record in evidence.items()}
     valid = all(gates.get(key, False) for key in ('btc_spot', 'btc_structure', 'btc_oi', 'btc_funding'))
     gaps = [key + ': ' + record.get('error', 'SOURCE_TIMESTAMP_UNVERIFIED_OR_STALE') for key, record in evidence.items() if not gates[key]]
@@ -352,11 +353,44 @@ def persist(root, mutation, attempt_hook=None, readback_hook=None, required_regi
                 git(root, 'worktree', 'remove', '--force', path)
     raise RuntimeError('CONCURRENCY_EXHAUSTED')
 
+def write_public_evidence(path, mutation, source_sha, evidence_main_sha):
+    """Local observation artifact only; never Sentinel main or a model decision."""
+    import os
+    import tempfile
+    if (mutation.get('confirmation_status') != 'ANALYSIS_NOT_PORTED'
+            or mutation.get('runtime', {}).get('real_trading_enabled') is not False):
+        raise ValueError('EVIDENCE_PREVIEW_BOUNDARY_REQUIRED')
+    row = dict(schema='sentinel_public_evidence_v1', mode='EVIDENCE_PREVIEW_ONLY',
+               generated_at=mutation['last_run_at'], source_sha=source_sha,
+               evidence_snapshot_main_sha=evidence_main_sha,
+               confirmation_status='ANALYSIS_NOT_PORTED',
+               evidence={k:v for k,v in mutation['evidence'].items()
+                         if k.startswith('btc_') or k in ('etf_latest_complete', 'macro_treasury_daily')},
+               data_gaps=mutation['data_gaps'], freshness_gate=mutation['freshness_gate'],
+               run_status=mutation['run_status'], run_id=mutation['run_id'],
+               real_order_count=0, real_trading_enabled=False,
+               capital_authority='NONE_SHADOW_ONLY', formal_writer=False)
+    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
+    payload=(json.dumps(row,ensure_ascii=False,allow_nan=False)+'\n').encode()
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name+'.', delete=False) as stream:
+        temporary=Path(stream.name)
+        stream.write(payload);stream.flush();os.fsync(stream.fileno())
+    try:
+        temporary.chmod(0o644);temporary.replace(path)
+        if path.read_bytes()!=payload: raise RuntimeError('LOCAL_EVIDENCE_READBACK_MISMATCH')
+    finally:
+        temporary.unlink(missing_ok=True)
+    return row
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', default='.')
     parser.add_argument('--preview', action='store_true')
+    parser.add_argument('--evidence-output', type=Path)
     args = parser.parse_args()
+    if args.evidence_output and not args.preview:
+        parser.error('Evidence artifact requires preview mode')
     root = Path(args.root)
     git(root, 'fetch', 'origin', 'main')
     previous = json.loads(git(root, 'show', 'origin/main:sentinel-state.json'))
@@ -365,6 +399,9 @@ def main():
     mutation = scan(previous, collect())
     print('SENTINEL_SCAN', json.dumps({key: mutation[key] for key in ('run_id', 'run_status', 'data_gaps', 'market_data_asof', 'derivatives_data_asof')}))
     if args.preview:
+        if args.evidence_output:
+            write_public_evidence(args.evidence_output, mutation, git(root, 'rev-parse', 'HEAD'), git(root, 'rev-parse', 'origin/main'))
+            print('SENTINEL_EVIDENCE_LOCAL_READBACK_OK', mutation['run_id'])
         print(json.dumps(mutation, indent=2))
         return
     registry = json.loads(git(root, 'show', 'origin/main:sentinel-runtime.json'))
