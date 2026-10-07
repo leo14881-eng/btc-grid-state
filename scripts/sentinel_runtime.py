@@ -218,14 +218,8 @@ def collect(get=get_json):
       'btc_structure_1h': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '1h', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
       'btc_structure_daily': ('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=30', lambda d: {'asof': millis(d[-1][0]), 'candles': d, 'interval': '1d', 'asof_definition': 'last_candle_open; close_time_future_is_not_freshness_proof'}),
       'btc_oi_history': ('https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=1h&limit=25', oi_history),
-      'axs_oi_history': ('https://fapi.binance.com/futures/data/openInterestHist?symbol=AXSUSDT&period=1h&limit=25', oi_history),
       'btc_oi': ('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT', lambda d: {'asof': millis(d['time']), 'open_interest': float(d['openInterest'])}),
       'btc_funding': ('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', lambda d: {'asof': millis(d['time']), 'funding_rate': float(d['lastFundingRate']), 'mark_price': float(d['markPrice'])}),
-      'axs_spot': ('https://api.binance.com/api/v3/ticker/24hr?symbol=AXSUSDT', lambda d: {'asof': millis(d['closeTime']), 'price': float(d['lastPrice']), 'volume_24h': float(d['volume']), 'quote_volume_24h': float(d['quoteVolume'])}),
-      'axs_oi': ('https://fapi.binance.com/fapi/v1/openInterest?symbol=AXSUSDT', lambda d: {'asof': millis(d['time']), 'open_interest': float(d['openInterest'])}),
-      'axs_funding': ('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=AXSUSDT', lambda d: {'asof': millis(d['time']), 'funding_rate': float(d['lastFundingRate'])}),
-      'axs_korea': ('https://api.upbit.com/v1/ticker?markets=KRW-AXS', lambda d: {'asof': millis(d[0]['trade_timestamp']), 'price_krw': float(d[0]['trade_price']), 'volume_24h': d[0]['acc_trade_volume_24h'], 'turnover_krw_24h': d[0]['acc_trade_price_24h']}),
-      'axs_korea_hours': ('https://api.upbit.com/v1/candles/minutes/60?market=KRW-AXS&count=25', lambda d: {'asof': millis(d[0]['timestamp']), 'candles': d}),
     }
     with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {key: pool.submit(spot_source if url.startswith('https://api.binance.com/') else source, url, parser, get) for key, (url, parser) in specs.items()}
@@ -258,7 +252,8 @@ def watchdog(previous, valid, now):
 
 def scan(previous, evidence, now=None):
     now = now or dt.datetime.now(UTC)
-    limits = {'btc_structure': 14460, 'btc_structure_1h': 3660, 'btc_structure_daily': 86460, 'btc_oi_history': 3660, 'axs_oi_history': 3660}
+    evidence = {key: value for key, value in evidence.items() if not key.startswith('axs_')}
+    limits = {'btc_structure': 14460, 'btc_structure_1h': 3660, 'btc_structure_daily': 86460, 'btc_oi_history': 3660}
     gates = {key: fresh(record, now, limits.get(key, 600)) for key, record in evidence.items()}
     valid = all(gates.get(key, False) for key in ('btc_spot', 'btc_structure', 'btc_oi', 'btc_funding'))
     gaps = [key + ': ' + record.get('error', 'SOURCE_TIMESTAMP_UNVERIFIED_OR_STALE') for key, record in evidence.items() if not gates[key]]
@@ -270,18 +265,6 @@ def scan(previous, evidence, now=None):
     gaps += [macro_gap, 'LIQUIDATIONS_AND_HOLDER_SUPPLY_UNVERIFIED', 'FULL_LEADING_WARNING_ENGINE_REMAINS_CHATGPT; server evidence scan does not replace strategy']
     # Collection is not a complete Leading Warning analysis. Never advance success.
     wd = watchdog(previous, False, now)
-    axs = {'status': 'PARTIAL_DATA', 'capital_action': 'NO_AUTOMATIC_TRADE', 'left_side_research': 'UNKNOWN_REQUIRES_LOW_STRUCTURE_KOREAN_FLOW_AND_BTC_RISK', 'second_wave': 'UNCONFIRMED', 'strong_breakout': 'UNCONFIRMED'}
-    if all(gates.get(key, False) for key in ('axs_spot', 'axs_korea', 'axs_korea_hours', 'axs_oi', 'axs_funding')):
-        candles = evidence['axs_korea_hours']['candles']
-        # Only completed hours are compared; no made-up volume significance threshold.
-        if len(candles) >= 22:
-            mean = sum(float(c['candle_acc_trade_volume']) for c in candles[2:22]) / 20
-            axs['completed_hour_volume_ratio_to_prior20'] = float(candles[1]['candle_acc_trade_volume']) / mean if mean else None
-        axs['price_usdt'] = evidence['axs_spot']['price']
-        axs['second_wave_price_zone_reached'] = axs['price_usdt'] >= 1.40
-        axs['strong_breakout_price_zone_reached'] = axs['price_usdt'] >= 1.454
-        axs['status'] = 'OBSERVED_NOT_STRATEGY_CONFIRMED'
-        axs['note'] = 'Price zone is evidence only; Korean flow and OI/price confirmation require full analysis. Lower-cost left-side research is separate.'
     at = stamp(now)
     previous_notification = previous.get('notification_decision', {})
     pending_type = wd['transition']
@@ -297,7 +280,7 @@ def scan(previous, evidence, now=None):
       'derivatives_data_asof': evidence.get('btc_oi', {}).get('asof'), 'etf_data_asof': evidence.get('etf_latest_complete', {}).get('asof_date'), 'macro_data_asof': evidence.get('macro_treasury_daily', {}).get('asof_date'),
       'early_action': 'NO_NEW_CAPITAL_ACTION', 'confirmation_status': 'ANALYSIS_NOT_PORTED',
       'data_gaps': gaps, 'evidence': evidence, 'freshness_gate': {'sources': gates, 'valid_evidence_scan': valid, 'valid_partial_scan': False, 'new_capital_action_allowed': False},
-      'watchdog': wd, 'axs_monitor': axs, 'runtime': {'source': 'VULTR_SYSTEMD', 'scope': 'EVIDENCE_SCAN_ACCEPTANCE_ONLY', 'execution_authority': 'USER_ONLY', 'real_trading_enabled': False},
+      'watchdog': wd, 'runtime': {'source': 'VULTR_SYSTEMD', 'scope': 'EVIDENCE_SCAN_ACCEPTANCE_ONLY', 'execution_authority': 'USER_ONLY', 'real_trading_enabled': False},
       'notification_decision': notification}
     return result
 
