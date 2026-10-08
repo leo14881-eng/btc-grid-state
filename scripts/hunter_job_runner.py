@@ -307,6 +307,7 @@ def run_shell(code, env, cwd, timeout=None):
 
 AUX_CAS_RECOVERY_MAX_AGE_SECONDS = 3600
 AUX_RECOVERY_STEPS = {
+ "discovery": "Atomically persist discovery outputs only",
  "blind-replay": "Persist replay outputs from clean latest main",
  "missed-replay": "Persist replay only",
 }
