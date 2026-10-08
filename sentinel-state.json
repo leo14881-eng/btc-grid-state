@@ -1,18 +1,21 @@
 {
   "version": "3.56",
-  "updated_at": "2026-10-08T15:23:53.836Z",
-  "last_scan_at": "2026-10-08T15:23:40.911Z",
+  "updated_at": "2026-10-08T16:50:35.991Z",
+  "last_scan_at": "2026-10-08T16:50:35.991Z",
   "persistence": {
     "provider": "github",
     "writable": true,
     "verification": "EXACT_MAIN_READBACK_VERIFIED",
     "run_id": "sentinel-20261008T152340911Z",
-    "status": "PERSISTED_VERIFIED",
+    "status": "PENDING",
     "last_write_attempt_at": "2026-10-08T15:23:53.836Z",
     "last_persisted_at": "2026-10-08T15:23:53.836Z",
     "persist_verified": true,
     "last_verified_at": "2026-10-08T15:23:53.836Z",
-    "note": "Phase1 Sentinel-owned CAS write was read back exactly; verification marker written and requires final exact readback."
+    "note": "Phase1 Sentinel-owned CAS write was read back exactly; verification marker written and requires final exact readback.",
+    "last_attempt_at": "2026-10-08T16:50:35.991Z",
+    "last_success_at": "2026-10-08T15:23:53.836Z",
+    "error": null
   },
   "state_ownership": {
     "purpose": "Sentinel BTC market and signal state only",
@@ -36,14 +39,16 @@
     "content_sha": "99688407085a0a443942d0d51ac1962b0fb02869"
   },
   "market_state_freshness": {
-    "status": "VALID_PARTIAL_SCAN",
-    "asof": "2026-10-08T15:22:17.003000+00:00",
-    "checked_at": "2026-10-08T15:23:40.911Z",
-    "server_generated_at": "2026-10-08T15:22:18.746590+00:00"
+    "status": "VALID_PARTIAL",
+    "as_of": "2026-10-08T16:48:35.006055+00:00",
+    "market": "FRESH",
+    "etf": "VALID_LATEST_COMPLETE_SESSION_DATE_ONLY",
+    "derivatives": "FRESH",
+    "macro": "VALID_MIXED_DAILY_TREASURY_AND_DELAYED_CURRENT_SESSION_DXY"
   },
-  "last_price": 81672.73,
-  "last_price_quality": "FRESH_BINANCE_SPOT_EVENT_TIME",
-  "last_regime": "NEW_INTRAHOUR_BREAK_BELOW_PRIOR_81773_LOW__81K_TEST_RISK_ACTIVE",
+  "last_price": 81207.89,
+  "last_price_quality": "BINANCE_SPOT_EXCHANGE_EVENT_TIME",
+  "last_regime": "RISK_OFF_DOWNSIDE_CONFIRMED",
   "etf_flow_acceleration": {
     "status": "LATEST_COMPLETE_HEAVY_OUTFLOW",
     "latest_complete_session": "2026-10-07",
@@ -56,27 +61,27 @@
     "us2y_pct": 4.77,
     "us10y_pct_daily": 5.28,
     "us30y_pct": 5.67,
-    "dxy": 102.413,
+    "dxy": 102.27,
     "dxy_source": "CURRENT_SESSION_SECONDARY_CORRECT_DXY_INDEX",
-    "dxy_asof": "2026-10-08T10:10:19Z_PUBLICATION_CONTEXT_NOT_EXCHANGE_TICK",
+    "dxy_asof": "2026-10-08T15:26:00Z_DELAYED_QUOTE_CONTEXT",
     "dxy_freshness": "CURRENT_SESSION_SECONDARY",
     "treasury_asof": "2026-10-07",
     "direction": "TIGHT_RISK_OFF",
-    "assessment": "TIGHT__HEAVY_ETF_OUTFLOW_ELEVATED_LONG_YIELDS_STRONG_DOLLAR",
-    "note": "Treasury is official date-only evidence; DXY is a correct-index secondary current-session report."
+    "assessment": "TIGHT__HEAVY_ETF_OUTFLOW__ELEVATED_LONG_YIELDS__STRONG_DOLLAR",
+    "note": "Treasury is official date-only evidence; DXY is a correct-index delayed current-session quote."
   },
   "derivatives_state": {
-    "status": "OI_UP_SLIGHTLY_24H__CURRENT_OI_DROPPED_INTRAHOUR__FUNDING_NEAR_NEUTRAL_POSITIVE",
-    "as_of": "2026-10-08T15:22:18.000000+00:00",
-    "binance_open_interest_btc": 95599.481,
-    "binance_open_interest_asof": "2026-10-08T15:22:13.302000+00:00",
-    "binance_oi_history_btc": 96279.259,
-    "binance_oi_history_value_usdt": 7958944294.5749235,
-    "binance_oi_change_24h_pct": 0.49690507232285075,
-    "binance_funding_rate": 0.00004167,
-    "funding_asof": "2026-10-08T15:22:18.000000+00:00",
-    "liquidation_context": "CURRENT_COMPREHENSIVE_EXCHANGE_PRIMARY_AGGREGATE_UNKNOWN",
-    "interpretation": "Returned 24h OI remains about 0.50% higher, but live OI fell below the hourly-history endpoint during the drop; funding is near neutral-positive. Some leverage is exiting, but current aggregate liquidations are unverified."
+    "status": "OI_DOWN_24H__FUNDING_SLIGHTLY_POSITIVE__NO_STABILIZATION_CONFIRMATION",
+    "as_of": "2026-10-08T16:48:34.000000+00:00",
+    "binance_open_interest_btc": 94978.335,
+    "binance_open_interest_asof": "2026-10-08T16:48:32.819000+00:00",
+    "binance_oi_history_btc": 94026.82,
+    "binance_oi_history_value_usdt": 7617316395.261387,
+    "binance_oi_change_24h_pct": -1.7030165064124803,
+    "binance_funding_rate": 0.00002837,
+    "funding_asof": "2026-10-08T16:48:34.000000+00:00",
+    "liquidation_context": "CURRENT_COMPREHENSIVE_AGGREGATE_UNKNOWN",
+    "interpretation": "OI fell over the returned 24h window and funding is only slightly positive. Deleveraging is occurring, but current aggregate liquidations and stabilization are unverified."
   },
   "pre_triggers": {
     "upside_squeeze": {
@@ -134,102 +139,105 @@
   "leading_warning": {
     "primary_state": "EARLY_DOWNSIDE_BUILDING",
     "first_detected_at": "2026-10-08T05:44:27.412Z",
-    "main_path": "NEXT_1_3H__NEW_LOW_81600_MAKES_81K_TEST_IMMINENT__FAILURE_OPENS_80K__RECOVERY_REQUIRES_COMPLETED_H1_RECLAIM_AND_HOLD_ABOVE_82600",
+    "main_path": "NEXT_1_3H__RETEST_80800_THEN_80000_IF_RECLAIM_FAILS__NO_STABILIZATION_UNTIL_COMPLETED_H1_RECLAIMS_81773_THEN_82600",
     "leading_evidence": [
-      "Binance spot 81672.73 USDT at 2026-10-08T15:22:17.003000+00:00; current-session low 81600, below the prior 81,773 low, while 24h change is -1.511%.",
-      "The completed 1h candle reclaimed 82,600 at 82704, but the rebound failed immediately; live price is more than 1,000 USDT below the prior scan and current 15m has not closed.",
-      "Farside finalized 2026-10-07 US spot BTC ETF flow at -484.9M USD; US Treasury 2026-10-07 10Y yield is 5.28%; current-session DXY is about 102.41.",
-      "Binance 24h OI change is +0.497%, live OI is 95599.481 BTC and funding is 0.00004167; Bybit depth is bid-heavy but is only a narrow venue snapshot."
+      "Binance BTC spot 81207.89 USDT at 2026-10-08T16:48:34.002000+00:00; the current-session low is 80800.95 and 24h change is -2.638%.",
+      "The completed 1h and 4h candles both closed at 81037.99 after lows near 80914.23; the 4h volume was 6450.12 BTC, confirming the prior 81,773 breakdown rather than an incomplete-candle dip.",
+      "Farside finalized the 2026-10-07 US spot BTC ETF session at -484.9M USD; US Treasury 2026-10-07 10Y yield was 5.28% and delayed current-session DXY was about 102.27.",
+      "Binance 24h OI fell 1.703%, while funding remained slightly positive at 0.00002837; leverage is flushing but stabilization is not confirmed."
     ],
     "reversal_triggers": [
-      "Immediate downside validation is a completed 15m close below 81,773, followed by a test of 81,000; loss of 81,000 opens 80,000.",
-      "Risk stops escalating only after a completed 1h reclaim above 82,600 that subsequently holds, not a one-candle reclaim followed by collapse.",
-      "Broader repair still requires reclaiming 84,200 and sustaining 85,000-85,500 with stronger spot volume, improved ETF flow and easing macro pressure."
+      "Immediate downside continuation is a completed 15m or 1h close below 80,800, opening the 80,000 area.",
+      "Risk begins to de-escalate only after a completed 1h reclaim above 81,773 that holds; stronger repair requires reclaiming 82,600.",
+      "Broader repair still requires 84,200-84,500 to be reclaimed and 85,000-85,500 sustained with better spot demand, ETF flow and macro conditions."
     ],
-    "early_action": "STOP_ADDING__IF_DAY1_ORDER_FILLED_HOLD_NO_DUPLICATE_AND_VERIFY_84200_TP__IF_UNSUBMITTED_OR_CANCELABLE_DO_NOT_OPEN__NO_SECOND_ADD__NO_CORE_SELL__NO_EXTREME_RESERVE_USE",
-    "confirmation_status": "COMPLETED_M15_82163.11__H1_82704__H4_82506.01__LIVE_SPOT_81672.73__SESSION_LOW_81600__NEW_LOW_BELOW_81773_CURRENT_M15_INCOMPLETE",
+    "early_action": "NO_NEW_BUY__NO_AVERAGING_DOWN__MANAGE_EXISTING_USER_CONFIRMED_SWING_ONLY__VERIFY_OPEN_EXIT_ORDERS__NO_CORE_SELL__NO_EXTREME_RESERVE_USE",
+    "confirmation_status": "COMPLETED_H1_AND_H4_CLOSE_81037.99_BELOW_81773__LIVE_LOW_80800.95__CURRENT_H1_INCOMPLETE",
     "data_gaps": [
-      "Day1 82,600 order submission/fill status, standby USDT, holdings and actual fee tier remain UNKNOWN; do not duplicate or add.",
-      "The current 15m candle containing the 81,600 low is incomplete and is not treated as a completed close.",
-      "Current comprehensive exchange-primary aggregate liquidations remain UNKNOWN.",
+      "Current comprehensive aggregate liquidations remain UNKNOWN.",
       "Fresh comprehensive exchange-solvency, stablecoin reserve/depeg and holder-supply primary feeds are unavailable.",
-      "2026-10-08 US spot BTC ETF session is not complete; 2026-10-07 is latest complete."
+      "2026-10-08 US spot BTC ETF session is incomplete; 2026-10-07 is latest complete.",
+      "BTC swing fees and exact sell-lot attribution remain UNKNOWN; this limits realized-profit and sizing calculations, not market analysis."
     ]
   },
   "operational_reconciliation": {
-    "status": "COMPLETE",
-    "as_of": "2026-10-08T15:23:53.836Z",
-    "source_main_commit": "1411819eb956e65ff2277dbbb1ba06008bdeac5c",
-    "prewrite_main_commit": "1411819eb956e65ff2277dbbb1ba06008bdeac5c",
+    "status": "PENDING_PERSIST",
+    "as_of": "2026-10-08T16:50:35.991Z",
+    "source_main_commit": "3325407da4cc0b7a006d4b840d6ebaf214f62894",
+    "prewrite_main_commit": "629964b6ad5a9eacf8f99b2877d7077b3834b7a7",
     "server_evidence_snapshot_main_sha": "730d4887e109949f1355e7acac642df86110de63",
     "portfolio_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
     "decision_journal_sha": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
     "runtime_sha": "85e24271bdfce0f13c07d95f6c756a918cf37193",
     "logic_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
-    "remaining": [],
-    "phase1_commit_sha": "00f9b178cc50d0d2cc72a82601c76c35a8337c1b",
-    "phase1_content_sha": "d935aa3ea65be15d46e1ec7db42d484183d4fc78",
-    "phase1_readback_verified_at": "2026-10-08T15:23:53.836Z"
+    "btc_daily_swing_journal_sha": "42547512c01a458f700de9bf5c837219f1c3d18c",
+    "remaining": [
+      "PERSIST_SENTINEL_STATE",
+      "MAIN_READBACK_VERIFY"
+    ]
   },
-  "run_id": "sentinel-20261008T152340911Z",
-  "last_run_at": "2026-10-08T15:23:40.911Z",
-  "last_successful_scan_at": "2026-10-08T15:23:40.911Z",
-  "market_data_asof": "2026-10-08T15:22:17.003000+00:00",
+  "run_id": "sentinel-20261008T165035991Z",
+  "last_run_at": "2026-10-08T16:50:35.991Z",
+  "last_successful_scan_at": "2026-10-08T16:50:35.991Z",
+  "market_data_asof": "2026-10-08T16:48:34.002000+00:00",
   "etf_data_asof": "2026-10-07",
-  "derivatives_data_asof": "2026-10-08T15:22:18.000000+00:00",
-  "macro_data_asof": "2026-10-08",
+  "derivatives_data_asof": "2026-10-08T16:48:34.000000+00:00",
+  "macro_data_asof": "2026-10-08T15:26:00Z_DELAYED_DXY__TREASURY_2026-10-07",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": "2026-10-08T15:23:53.836Z",
-  "persisted": true,
-  "persist_verified": true,
+  "last_persisted_at": null,
+  "persisted": false,
+  "persist_verified": false,
   "market_snapshot": {
-    "run_id": "sentinel-20261008T152340911Z",
-    "btc_price_usd": 81672.73,
-    "btc_change_pct_24h": -1.511,
-    "btc_volume_24h": 16419.82495,
+    "run_id": "sentinel-20261008T165035991Z",
+    "btc_price_usd": 81207.89,
+    "btc_change_pct_24h": -2.638,
+    "btc_volume_24h": 19391.96266,
     "current_daily_range_usd": {
-      "low": 81600,
+      "low": 80800.95,
       "high": 83521.15,
       "status": "IN_PROGRESS_DAILY_CANDLE_NOT_COMPLETED"
     },
     "previous_completed_daily": {
       "date": "2026-10-07",
+      "open_at": "2026-10-07T00:00:00.000Z",
+      "close_at": "2026-10-07T23:59:59.999Z",
       "open": 85549.94,
       "high": 85598.22,
       "low": 82787.25,
       "close": 83321.81,
-      "volume_btc": 20838.08376
+      "volume_btc": 20838.08376,
+      "status": "COMPLETED"
     },
-    "structure": "FAILED_COMPLETED_H1_RECLAIM__NEW_INTRAHOUR_LOW_81600__H4_STILL_BELOW_82600",
+    "structure": "COMPLETED_H1_H4_BREAK_BELOW_81773__LIVE_BREACH_BELOW_81000",
     "timeframes": {
       "m15": {
-        "open_at": "2026-10-08T15:00:00.000Z",
-        "close_at": "2026-10-08T15:14:59.999Z",
-        "open": 82704,
-        "high": 82704,
-        "low": 82163.1,
-        "close": 82163.11,
-        "volume_btc": 195.82649,
+        "open_at": "2026-10-08T16:30:00.000Z",
+        "close_at": "2026-10-08T16:44:59.999Z",
+        "open": 81307.83,
+        "high": 81450,
+        "low": 81100,
+        "close": 81288,
+        "volume_btc": 218.21044,
         "status": "COMPLETED"
       },
       "h1": {
-        "open_at": "2026-10-08T14:00:00.000Z",
-        "close_at": "2026-10-08T14:59:59.999Z",
-        "open": 82182.01,
-        "high": 82776.01,
-        "low": 82132,
-        "close": 82704,
-        "volume_btc": 941.25068,
+        "open_at": "2026-10-08T15:00:00.000Z",
+        "close_at": "2026-10-08T15:59:59.999Z",
+        "open": 82704,
+        "high": 82704,
+        "low": 80914.23,
+        "close": 81037.99,
+        "volume_btc": 3003.64392,
         "status": "COMPLETED"
       },
       "h4": {
-        "open_at": "2026-10-08T08:00:00.000Z",
-        "close_at": "2026-10-08T11:59:59.999Z",
-        "open": 82998.75,
-        "high": 83170,
-        "low": 82318,
-        "close": 82506.01,
-        "volume_btc": 2496.58108,
+        "open_at": "2026-10-08T12:00:00.000Z",
+        "close_at": "2026-10-08T15:59:59.999Z",
+        "open": 82506,
+        "high": 82776.01,
+        "low": 80914.23,
+        "close": 81037.99,
+        "volume_btc": 6450.12118,
         "status": "COMPLETED"
       },
       "daily": {
@@ -245,28 +253,27 @@
     },
     "support_resistance": {
       "support_usd": [
-        81600,
-        81000,
-        80000
+        80800.95,
+        80000,
+        79500
       ],
       "resistance_usd": [
+        81037.99,
         81773.43,
-        82163.11,
         82600,
-        82776.01,
-        83170,
-        84200
+        84200,
+        84500
       ]
     },
     "spot_orderbook": {
       "bybit": {
-        "asof": "2026-10-08T15:22:18.353000+00:00",
+        "asof": "2026-10-08T16:48:34.553000+00:00",
         "timestamp_quality": "EXCHANGE_RESPONSE_TIMESTAMP",
-        "bid": 81689,
-        "ask": 81689.1,
-        "spread_bps": 0.01224154277786567,
-        "bid_depth_usdt_25_levels": 285863.5926097,
-        "ask_depth_usdt_25_levels": 74829.6631385,
+        "bid": 81201.7,
+        "ask": 81201.8,
+        "spread_bps": 0.012315005527075557,
+        "bid_depth_usdt_25_levels": 104769.86823759999,
+        "ask_depth_usdt_25_levels": 162763.2137402,
         "scope": "BYBIT_SPOT_EVIDENCE_ONLY"
       }
     }
@@ -276,44 +283,40 @@
     "state": "HEALTHY",
     "prior_status": "HEALTHY",
     "reason": "Valid partial scan completed within the two-hour window.",
-    "last_successful_scan_at": "2026-10-08T15:23:40.911Z",
+    "last_successful_scan_at": "2026-10-08T16:50:35.991Z",
     "consecutive_invalid_scans": 0,
     "recovery_event": null
   },
   "notification": {
     "decision": "NOTIFY_NEW_MAJOR_RISK",
     "reasons": [
-      "New intrahour session low 81600 broke the prior 81,773 low after a failed 1h reclaim above 82,600.",
-      "81,000 is now the immediate support; no new capital action is allowed."
+      "A completed 1h and 4h close at 81,037.99 confirmed the prior 81,773 support break.",
+      "The session low reached 80,800.95, briefly breaching 81,000; 80,000 is now the next primary support area."
     ],
     "delivery_status": "RESPONSE_QUEUED",
     "pending_events": [
       {
-        "event_id": "BTC_NEW_LOW_81600_2026-10-08T15:22:17.003000+00:00",
+        "event_id": "BTC_H1_H4_BREAK_81773_LOW_80800_2026-10-08T16:48:34.002000+00:00",
         "type": "MAJOR_RISK",
         "state": "EARLY_DOWNSIDE_BUILDING",
-        "first_detected_at": "2026-10-08T15:23:40.911Z"
+        "first_detected_at": "2026-10-08T16:50:35.991Z"
       }
     ]
   },
   "portfolio_metrics": {
     "main_investment_nav_usdt": null,
-    "realized_net_profit_usdt": "UNKNOWN",
-    "gap_to_600k_usdt": "UNKNOWN",
-    "completion_pct": "UNKNOWN",
-    "reason": "Current verified balances and fills unavailable; do not fabricate.",
     "cumulative_realized_net_usdt": null,
-    "target_600k_gap_usdt": null,
-    "target_completion_pct": null,
-    "verification": "UNKNOWN_NO_NEW_VERIFIABLE_ACCOUNT_DATA"
+    "gap_to_600k_usdt": null,
+    "progress_pct": null,
+    "status": "UNKNOWN_NOT_VERIFIABLE"
   },
   "analysis_validity": {
     "btc_market_analysis": "VALID_PARTIAL",
-    "capital_execution_readiness": "BLOCK_NEW_OR_DUPLICATE_ACTION__DAY1_ORDER_STATUS_UNKNOWN__NEW_LOWER_LOW"
+    "capital_execution_readiness": "BLOCK_NEW_CAPITAL__EXISTING_SWING_MANAGEMENT_ONLY__FEES_AND_LOT_ATTRIBUTION_UNKNOWN"
   },
   "source_audit": {
-    "run_id": "sentinel-20261008T152340911Z",
-    "scan_completed_at": "2026-10-08T15:23:40.911Z",
+    "run_id": "sentinel-20261008T165035991Z",
+    "scan_completed_at": "2026-10-08T16:50:35.991Z",
     "server_evidence_error": null,
     "sources": [
       {
@@ -322,24 +325,11 @@
         "source_venue": "BINANCE",
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
-        "unit": null,
-        "attempted_at": "2026-10-08T15:22:17.779557+00:00",
-        "fetched_at": "2026-10-08T15:22:18.022283+00:00",
-        "data_asof": "2026-10-08T15:22:17.003000+00:00",
+        "unit": "USDT_PER_BTC",
+        "attempted_at": "2026-10-08T16:48:33.979067+00:00",
+        "fetched_at": "2026-10-08T16:48:34.248485+00:00",
+        "data_asof": "2026-10-08T16:48:34.002000+00:00",
         "freshness": "FRESH",
-        "error": null
-      },
-      {
-        "source_name": "btc_structure",
-        "source_url": "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=30",
-        "source_venue": "BINANCE",
-        "symbol": "BTCUSDT",
-        "market_type": "SPOT",
-        "unit": null,
-        "attempted_at": "2026-10-08T15:22:17.782368+00:00",
-        "fetched_at": "2026-10-08T15:22:18.032627+00:00",
-        "data_asof": "2026-10-08T12:00:00.000000+00:00",
-        "freshness": "FRESH__LAST_CANDLE_OPEN_NOT_CLOSE_PROOF",
         "error": null
       },
       {
@@ -349,10 +339,10 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-08T15:22:17.782802+00:00",
-        "fetched_at": "2026-10-08T15:22:18.026912+00:00",
-        "data_asof": "2026-10-08T15:15:00.000000+00:00",
-        "freshness": "FRESH__CURRENT_CANDLE_INCOMPLETE",
+        "attempted_at": "2026-10-08T16:48:33.990971+00:00",
+        "fetched_at": "2026-10-08T16:48:34.253304+00:00",
+        "data_asof": "2026-10-08T16:44:59.999Z",
+        "freshness": "FRESH_COMPLETED_CANDLE_CLOSE",
         "error": null
       },
       {
@@ -362,10 +352,23 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-08T15:22:17.783250+00:00",
-        "fetched_at": "2026-10-08T15:22:18.035787+00:00",
-        "data_asof": "2026-10-08T15:00:00.000000+00:00",
-        "freshness": "FRESH__CURRENT_CANDLE_INCOMPLETE",
+        "attempted_at": "2026-10-08T16:48:33.995328+00:00",
+        "fetched_at": "2026-10-08T16:48:34.253814+00:00",
+        "data_asof": "2026-10-08T15:59:59.999Z",
+        "freshness": "FRESH_COMPLETED_CANDLE_CLOSE",
+        "error": null
+      },
+      {
+        "source_name": "btc_structure_4h",
+        "source_url": "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=4h&limit=30",
+        "source_venue": "BINANCE",
+        "symbol": "BTCUSDT",
+        "market_type": "SPOT",
+        "unit": null,
+        "attempted_at": "2026-10-08T16:48:33.990094+00:00",
+        "fetched_at": "2026-10-08T16:48:34.249556+00:00",
+        "data_asof": "2026-10-08T15:59:59.999Z",
+        "freshness": "FRESH_COMPLETED_CANDLE_CLOSE",
         "error": null
       },
       {
@@ -375,10 +378,10 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-08T15:22:17.783724+00:00",
-        "fetched_at": "2026-10-08T15:22:18.030155+00:00",
-        "data_asof": "2026-10-08T00:00:00.000000+00:00",
-        "freshness": "FRESH__CURRENT_DAILY_INCOMPLETE",
+        "attempted_at": "2026-10-08T16:48:33.997490+00:00",
+        "fetched_at": "2026-10-08T16:48:34.252881+00:00",
+        "data_asof": "2026-10-07T23:59:59.999Z",
+        "freshness": "VALID_LATEST_COMPLETED_DAILY",
         "error": null
       },
       {
@@ -388,9 +391,9 @@
         "symbol": "BTCUSDT",
         "market_type": "USD_M_FUTURES",
         "unit": "BASE_ASSET",
-        "attempted_at": "2026-10-08T15:22:17.784363+00:00",
-        "fetched_at": "2026-10-08T15:22:18.048696+00:00",
-        "data_asof": "2026-10-08T15:00:00.000000+00:00",
+        "attempted_at": "2026-10-08T16:48:34.001153+00:00",
+        "fetched_at": "2026-10-08T16:48:34.252079+00:00",
+        "data_asof": "2026-10-08T16:00:00.000000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -401,9 +404,9 @@
         "symbol": "BTCUSDT",
         "market_type": "USD_M_FUTURES",
         "unit": "BASE_ASSET",
-        "attempted_at": "2026-10-08T15:22:18.022367+00:00",
-        "fetched_at": "2026-10-08T15:22:18.285405+00:00",
-        "data_asof": "2026-10-08T15:22:13.302000+00:00",
+        "attempted_at": "2026-10-08T16:48:34.248600+00:00",
+        "fetched_at": "2026-10-08T16:48:34.500289+00:00",
+        "data_asof": "2026-10-08T16:48:32.819000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -414,9 +417,9 @@
         "symbol": "BTCUSDT",
         "market_type": "USD_M_FUTURES",
         "unit": "RATE",
-        "attempted_at": "2026-10-08T15:22:18.026971+00:00",
-        "fetched_at": "2026-10-08T15:22:18.743855+00:00",
-        "data_asof": "2026-10-08T15:22:18.000000+00:00",
+        "attempted_at": "2026-10-08T16:48:34.249638+00:00",
+        "fetched_at": "2026-10-08T16:48:34.502440+00:00",
+        "data_asof": "2026-10-08T16:48:34.000000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -426,11 +429,11 @@
         "source_venue": "BYBIT",
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
-        "unit": null,
-        "attempted_at": "2026-10-08T15:22:18.308370+00:00",
-        "fetched_at": "2026-10-08T15:22:18.480405+00:00",
-        "data_asof": "2026-10-08T15:22:18.353000+00:00",
-        "freshness": "FRESH_EXCHANGE_RESPONSE_TIMESTAMP",
+        "unit": "USDT_AND_BTC",
+        "attempted_at": "2026-10-08T16:48:34.501662+00:00",
+        "fetched_at": "2026-10-08T16:48:34.685072+00:00",
+        "data_asof": "2026-10-08T16:48:34.553000+00:00",
+        "freshness": "FRESH_EXCHANGE_RESPONSE_TIMESTAMP__BYBIT_ONLY",
         "error": null
       },
       {
@@ -438,10 +441,10 @@
         "source_url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_yield_curve&field_tdr_date_value=2026",
         "source_venue": "US_TREASURY",
         "symbol": null,
-        "market_type": null,
+        "market_type": "YIELD_CURVE",
         "unit": "PERCENT",
-        "attempted_at": "2026-10-08T15:22:18.035921+00:00",
-        "fetched_at": "2026-10-08T15:22:18.352023+00:00",
+        "attempted_at": "2026-10-08T16:48:34.253349+00:00",
+        "fetched_at": "2026-10-08T16:48:34.946377+00:00",
         "data_asof": "2026-10-07",
         "freshness": "VALID_DAILY_OBSERVATION_DATE",
         "error": null
@@ -451,24 +454,24 @@
         "source_url": "https://farside.co.uk/btc/",
         "source_venue": "FARSIDE_INVESTORS",
         "symbol": null,
-        "market_type": null,
+        "market_type": "US_SPOT_BTC_ETF",
         "unit": "USD_MILLIONS",
-        "attempted_at": "2026-10-08T15:22:18.032686+00:00",
-        "fetched_at": "2026-10-08T15:22:18.264660+00:00",
+        "attempted_at": "2026-10-08T16:48:34.252924+00:00",
+        "fetched_at": "2026-10-08T16:48:34.565675+00:00",
         "data_asof": "2026-10-07",
         "freshness": "VALID_LATEST_COMPLETE_SESSION",
         "error": null
       },
       {
         "source_name": "dxy",
-        "source_url": "https://www.reuters.com/world/africa/dollar-edges-back-18-month-high-after-fomc-minutes-2026-10-08/",
-        "source_venue": "REUTERS_REPORTING_OF_DXY",
+        "source_url": "https://www.marketwatch.com/investing/index/dxy",
+        "source_venue": "MARKETWATCH_DXY_DELAYED_QUOTE",
         "symbol": "DXY",
         "market_type": "MACRO_INDEX",
         "unit": "INDEX_POINTS",
-        "attempted_at": "2026-10-08T15:23:40.911Z",
-        "fetched_at": "2026-10-08T15:23:40.911Z",
-        "data_asof": "2026-10-08T10:10:19Z_PUBLICATION_CONTEXT_NOT_EXCHANGE_TICK",
+        "attempted_at": "2026-10-08T16:50:35.991Z",
+        "fetched_at": "2026-10-08T16:50:35.991Z",
+        "data_asof": "2026-10-08T15:26:00Z_DELAYED_QUOTE_CONTEXT",
         "freshness": "CURRENT_SESSION_SECONDARY_CORRECT_DXY_INDEX",
         "error": null
       },
@@ -479,11 +482,11 @@
         "symbol": "CRYPTO",
         "market_type": "AGGREGATE_DERIVATIVES",
         "unit": "USD",
-        "attempted_at": "2026-10-08T15:23:40.911Z",
-        "fetched_at": "2026-10-08T15:23:40.911Z",
+        "attempted_at": "2026-10-08T16:50:35.991Z",
+        "fetched_at": null,
         "data_asof": null,
-        "freshness": "UNKNOWN_CURRENT_PRIMARY_AGGREGATE",
-        "error": "Public result did not expose a reliable current total; no current total recorded."
+        "freshness": "UNKNOWN_CURRENT_AGGREGATE",
+        "error": "No reliable current aggregate total returned; no number recorded."
       },
       {
         "source_name": "stablecoin_and_systemic_risk",
@@ -492,49 +495,48 @@
         "symbol": null,
         "market_type": null,
         "unit": null,
-        "attempted_at": "2026-10-08T15:23:40.911Z",
+        "attempted_at": "2026-10-08T16:50:35.991Z",
         "fetched_at": null,
         "data_asof": null,
         "freshness": "UNKNOWN_PARTIAL",
-        "error": "No fresh comprehensive primary reserve/depeg/exchange-solvency bundle."
+        "error": "No fresh comprehensive exchange-solvency, stablecoin reserve/depeg and holder-supply primary bundle."
       }
     ]
   },
   "primary_state": "EARLY_DOWNSIDE_BUILDING",
   "first_detected_at": "2026-10-08T05:44:27.412Z",
-  "main_path": "NEXT_1_3H__NEW_LOW_81600_MAKES_81K_TEST_IMMINENT__FAILURE_OPENS_80K__RECOVERY_REQUIRES_COMPLETED_H1_RECLAIM_AND_HOLD_ABOVE_82600",
+  "main_path": "NEXT_1_3H__RETEST_80800_THEN_80000_IF_RECLAIM_FAILS__NO_STABILIZATION_UNTIL_COMPLETED_H1_RECLAIMS_81773_THEN_82600",
   "leading_evidence": [
-    "Binance spot 81672.73 USDT at 2026-10-08T15:22:17.003000+00:00; current-session low 81600, below the prior 81,773 low, while 24h change is -1.511%.",
-    "The completed 1h candle reclaimed 82,600 at 82704, but the rebound failed immediately; live price is more than 1,000 USDT below the prior scan and current 15m has not closed.",
-    "Farside finalized 2026-10-07 US spot BTC ETF flow at -484.9M USD; US Treasury 2026-10-07 10Y yield is 5.28%; current-session DXY is about 102.41.",
-    "Binance 24h OI change is +0.497%, live OI is 95599.481 BTC and funding is 0.00004167; Bybit depth is bid-heavy but is only a narrow venue snapshot."
+    "Binance BTC spot 81207.89 USDT at 2026-10-08T16:48:34.002000+00:00; the current-session low is 80800.95 and 24h change is -2.638%.",
+    "The completed 1h and 4h candles both closed at 81037.99 after lows near 80914.23; the 4h volume was 6450.12 BTC, confirming the prior 81,773 breakdown rather than an incomplete-candle dip.",
+    "Farside finalized the 2026-10-07 US spot BTC ETF session at -484.9M USD; US Treasury 2026-10-07 10Y yield was 5.28% and delayed current-session DXY was about 102.27.",
+    "Binance 24h OI fell 1.703%, while funding remained slightly positive at 0.00002837; leverage is flushing but stabilization is not confirmed."
   ],
   "reversal_triggers": [
-    "Immediate downside validation is a completed 15m close below 81,773, followed by a test of 81,000; loss of 81,000 opens 80,000.",
-    "Risk stops escalating only after a completed 1h reclaim above 82,600 that subsequently holds, not a one-candle reclaim followed by collapse.",
-    "Broader repair still requires reclaiming 84,200 and sustaining 85,000-85,500 with stronger spot volume, improved ETF flow and easing macro pressure."
+    "Immediate downside continuation is a completed 15m or 1h close below 80,800, opening the 80,000 area.",
+    "Risk begins to de-escalate only after a completed 1h reclaim above 81,773 that holds; stronger repair requires reclaiming 82,600.",
+    "Broader repair still requires 84,200-84,500 to be reclaimed and 85,000-85,500 sustained with better spot demand, ETF flow and macro conditions."
   ],
-  "early_action": "STOP_ADDING__IF_DAY1_ORDER_FILLED_HOLD_NO_DUPLICATE_AND_VERIFY_84200_TP__IF_UNSUBMITTED_OR_CANCELABLE_DO_NOT_OPEN__NO_SECOND_ADD__NO_CORE_SELL__NO_EXTREME_RESERVE_USE",
-  "confirmation_status": "COMPLETED_M15_82163.11__H1_82704__H4_82506.01__LIVE_SPOT_81672.73__SESSION_LOW_81600__NEW_LOW_BELOW_81773_CURRENT_M15_INCOMPLETE",
+  "early_action": "NO_NEW_BUY__NO_AVERAGING_DOWN__MANAGE_EXISTING_USER_CONFIRMED_SWING_ONLY__VERIFY_OPEN_EXIT_ORDERS__NO_CORE_SELL__NO_EXTREME_RESERVE_USE",
+  "confirmation_status": "COMPLETED_H1_AND_H4_CLOSE_81037.99_BELOW_81773__LIVE_LOW_80800.95__CURRENT_H1_INCOMPLETE",
   "data_gaps": [
-    "Day1 82,600 order submission/fill status, standby USDT, holdings and actual fee tier remain UNKNOWN; do not duplicate or add.",
-    "The current 15m candle containing the 81,600 low is incomplete and is not treated as a completed close.",
-    "Current comprehensive exchange-primary aggregate liquidations remain UNKNOWN.",
+    "Current comprehensive aggregate liquidations remain UNKNOWN.",
     "Fresh comprehensive exchange-solvency, stablecoin reserve/depeg and holder-supply primary feeds are unavailable.",
-    "2026-10-08 US spot BTC ETF session is not complete; 2026-10-07 is latest complete."
+    "2026-10-08 US spot BTC ETF session is incomplete; 2026-10-07 is latest complete.",
+    "BTC swing fees and exact sell-lot attribution remain UNKNOWN; this limits realized-profit and sizing calculations, not market analysis."
   ],
   "server_evidence_consumed": {
     "consumed": true,
-    "attempted_at": "2026-10-08T15:22:18.746590+00:00",
-    "generated_at": "2026-10-08T15:22:18.746590+00:00",
+    "attempted_at": "2026-10-08T16:48:35.006055+00:00",
+    "generated_at": "2026-10-08T16:48:35.006055+00:00",
     "collection_trigger": "ON_DEMAND_PUBLIC_GET",
-    "server_run_id": "sentinel-20261008T152218.746590Z",
+    "server_run_id": "sentinel-20261008T164835.006055Z",
     "source_sha": "730d4887e109949f1355e7acac642df86110de63",
     "collector_code_sha": "730d4887e109949f1355e7acac642df86110de63",
     "evidence_snapshot_main_sha": "730d4887e109949f1355e7acac642df86110de63",
     "evidence_snapshot_scope": "COLLECTOR_CODE_BASELINE_NOT_MAIN_STATE_READBACK",
     "main_readback_verified": false,
-    "content_summary_sha256": "53dc83698fe7bf61e4095a036d86ee84fa7675686f158ef2592fae6a45222d03",
+    "content_summary_sha256": "6d77b3a8b05e86922d1ae729fa527ef28c35fd545c1481b916393c1cfe48e05d",
     "error": null
   }
 }
