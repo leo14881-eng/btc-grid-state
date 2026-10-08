@@ -776,6 +776,14 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
  state['active_observation_generation_id']=scan.get('generation_id')
  still=[]
  for pos in state["open_positions"]:
+  identity=(pos.get('execution_venue'),pos.get('market_symbol'),pos.get('market_type'))
+  if ((any(identity) and identity!=('BINANCE_SPOT',pos['asset']+'USDT','spot'))
+      or (pos.get('execution_fee_bps') is not None and pos['execution_fee_bps']!=FEE_BPS)):
+   # This authoritative manager consumes Binance marks/signals/books only.
+   # A reference-market profit is not evidence of a primary-venue exit or ADD.
+   # Retain prior fresh health/marks until matched management evidence exists.
+   record(state,pos,'HOLD',now,['PRIMARY_VENUE_MANAGEMENT_EVIDENCE_UNAVAILABLE'],{},pos.get('last_price'))
+   still.append(pos);continue
   p=price(scan,pos["asset"])
   if not p:record(state,pos,"HOLD",now,["CURRENT_PRICE_MISSING"],{},pos.get("last_price"));still.append(pos);continue
   c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)

@@ -111,6 +111,26 @@ class ExecutionIdentityTests(unittest.TestCase):
         self.assertEqual(state['events'][0]['market_symbol'], 'XUSDT')
         self.assertEqual(state['events'][0]['notional_usdt'], 1000)
 
+    def test_unmatched_primary_venue_cannot_fall_back_to_reference_profit_sell(self):
+        state, market, review, liq, supply = monitor_tests.PositionMonitorTests().fixture(price=120)
+        position = state['open_positions'][0]
+        position.update(execution_venue='BYBIT_SPOT', market_symbol='XUSDT', market_type='spot')
+        review['candidates'][0]['signal'].update(btc_relative_1h_pct=-3, btc_relative_4h_pct=-4,
+                                               relative_acceleration_pct=-1)
+        liq['snapshots']['X']['raw_book_evidence'] = receipt(120)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'v2.json'
+            engine.atomic_json_write(path, state)
+            with patch.object(engine, 'backfill_opportunity_history', side_effect=lambda p,n:p):
+                monitor.run_lane(path, 'SHADOW_V2', market, review, liq, supply, NOW, False)
+            saved = monitor.load(path)
+        self.assertEqual(len(saved['open_positions']), 1)
+        self.assertEqual(saved['closed_positions'], [])
+        self.assertEqual(saved['events'], [])
+        self.assertNotIn('last_health_generation_id', saved['open_positions'][0])
+        self.assertTrue(any('PRIMARY_VENUE_MANAGEMENT_EVIDENCE_UNAVAILABLE' in d['reasons']
+                            for d in saved['decisions']))
+
     def test_missing_entry_book_does_not_change_existing_buy_gate(self):
         state = dict(open_positions=[], closed_positions=[], events=[], decisions=[])
         position = dict(shadow_id='new', asset='X', tranches=[])
