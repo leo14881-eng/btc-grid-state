@@ -6,10 +6,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import shutil
 
 
 DRIVER = r'''
-import json,os,pathlib,sys
+import json,os,pathlib,sys,subprocess
 root=pathlib.Path(os.environ['FIXTURE_ROOT']);args=sys.argv[1:]
 name=pathlib.Path(sys.argv[0]).name
 with (root/'calls.jsonl').open('a') as f:f.write(json.dumps([name,args])+'\n')
@@ -17,7 +18,11 @@ countpath=root/'clones'
 count=int(countpath.read_text()) if countpath.exists() else 0
 if name=='git':
  if 'clone' in args:
-  pathlib.Path(args[-1]).mkdir(parents=True);countpath.write_text(str(count+1))
+  if os.environ.get('REAL_CLONE'):
+   process=subprocess.run([os.environ['REAL_GIT'],'clone','--quiet',str(root/'source'),args[-1]])
+   if process.returncode:sys.exit(process.returncode)
+  else:pathlib.Path(args[-1]).mkdir(parents=True)
+  countpath.write_text(str(count+1))
  elif 'rev-parse' in args:print('base-'+str(count))
  elif 'remote' in args:print('/fixture/remote')
 elif args[:3]==['-m','research.hunter_scheduler_health','gate']:
@@ -40,6 +45,15 @@ class RetryTests(unittest.TestCase):
     def run_fixture(self, **settings):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);bindir=root/'bin';bindir.mkdir()
+            (root/'source').mkdir()
+            if settings.get('REAL_CLONE'):
+                real_git=shutil.which('git')
+                for args in [('init','-q'),('config','user.name','fixture'),('config','user.email','fixture@localhost')]:
+                    subprocess.run([real_git,'-C',str(root/'source'),*args],check=True)
+                (root/'source'/'marker').write_text('fixture')
+                subprocess.run([real_git,'-C',str(root/'source'),'add','marker'],check=True)
+                subprocess.run([real_git,'-C',str(root/'source'),'commit','-qm','fixture'],check=True)
+                settings['REAL_GIT']=real_git
             source=Path('scripts/hunter_monitor_runner.sh').read_text()
             source=source.replace('/run/lock/hunter-position-monitor.lock',str(root/'lock'))
             source=source.replace('/opt/shadow-runner/btc-grid-state',str(root/'source'))
@@ -90,3 +104,10 @@ class RetryTests(unittest.TestCase):
         self.assertEqual(sum(a[:3]==['-m','research.hunter_scheduler_health','gate'] for _,a in calls),2)
         self.assertEqual(sum(a[:2]==['-m','research.hunter_position_monitor'] for _,a in calls),1)
         self.assertEqual(sum('--base' in a for _,a in calls),1)
+
+    def test_real_clone_after_retry_has_existing_current_directory(self):
+        result,calls=self.run_fixture(REAL_CLONE='1')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertNotIn('getcwd',result.stderr)
+        self.assertEqual(sum('clone' in a for n,a in calls if n=='git'),2)
+        self.assertEqual(sum(a[:2]==['-m','research.hunter_position_monitor'] for _,a in calls),2)

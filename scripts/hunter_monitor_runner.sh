@@ -52,6 +52,9 @@ else
   if [ "$CAS_RETRY_COUNT" -lt 2 ] && grep -Eq '^RuntimeError: SHADOW_STATE_CAS_REJECTED_STALE_WRITER( |$)' "$TASK_DIR/persist.log"; then
     export HUNTER_MONITOR_CAS_RETRY_COUNT=$((CAS_RETRY_COUNT + 1))
     echo "HUNTER_MONITOR_FRESH_CAS_RETRY attempt=$HUNTER_MONITOR_CAS_RETRY_COUNT"
+    # Re-entry inherits cwd. Leave the disposable checkout before removing it;
+    # otherwise the next real git clone starts in an unlinked work directory.
+    cd "$SOURCE"
     rm -rf "$TASK_DIR"
     exec "$0"
   fi
