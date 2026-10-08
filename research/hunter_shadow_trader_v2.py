@@ -332,8 +332,9 @@ def weighted_entry(pos):
 def total_notional(pos):return sum(t["notional_usdt"] for t in pos["tranches"])
 def raw_return(pos,p):return (p/weighted_entry(pos)-1)*100
 def net_pnl(pos,p):
- qty=sum(t["notional_usdt"]/(t["price"]*(1+(t.get("buy_slippage_bps",0)+FEE_BPS)/10000)) for t in pos["tranches"])
- return qty*p*(1-FEE_BPS/10000)-total_notional(pos)
+ fee=pos.get('execution_fee_bps',FEE_BPS)
+ qty=sum(t["notional_usdt"]/(t["price"]*(1+(t.get("buy_slippage_bps",0)+fee)/10000)) for t in pos["tranches"])
+ return qty*p*(1-fee/10000)-total_notional(pos)
 def scenario_returns(pos,p):
  out={}
  for n in range(1,len(pos.get("tranches",[]))+1):
@@ -379,6 +380,9 @@ def peak_from_bars(bars,end=None):
 
 def backfill_opportunity_history(pos,now):
  """Bounded historical reconstruction of initial-BUY opportunity peaks; observation only."""
+ if pos.get('execution_venue')=='BYBIT_SPOT':
+  pos['historical_opportunity_execution_status']='UNKNOWN_VENUE_MATCHED_HISTORY_NOT_INTEGRATED'
+  return pos
  try:opened=parse(pos.get("opened_at_utc"))
  except Exception:return pos
  closed=parse(pos["closed_at_utc"]) if pos.get("closed_at_utc") else None
@@ -444,7 +448,7 @@ def refresh_closed_observations(state,now,market_price=None):
  for pos in closed:
   if pos.get("observation_complete"):
    refresh_post_exit_status(pos,now);continue
-  p=market_price(pos.get("asset")) if market_price else None
+  p=market_price(pos.get("asset")) if market_price and pos.get('execution_venue')!='BYBIT_SPOT' else None
   if p:update_post_exit(pos,p,now)
   else:refresh_post_exit_status(pos,now)
  cursor=int(state.get("observation_backfill_cursor") or 0)%len(closed)
@@ -565,7 +569,7 @@ def profit_protection(pos,p):
  giveback=max(0.,mfe-raw)
  # Once a real profit window existed, do not deliberately let a shadow winner become a loser.
  # Exit review is triggered either near breakeven after costs or after excessive giveback.
- protect_floor=MIN_PROTECTED_NET_PCT+(2*FEE_BPS)/100.
+ protect_floor=MIN_PROTECTED_NET_PCT+(2*pos.get('execution_fee_bps',FEE_BPS))/100.
  return {"armed":armed,"raw_pct":raw,"mfe_pct":mfe,"giveback_pct":giveback,"protect_floor_pct":protect_floor,
   "exit":bool(armed and (raw<=protect_floor or giveback>=GIVEBACK_MAX_PCT))}
 
@@ -774,10 +778,20 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
  btc=btc or price(scan,"BTC");cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
  state['active_observation_generation_id']=scan.get('generation_id')
- still=[]
+ still=[];base_scan=scan;base_liq=liq
  for pos in state["open_positions"]:
+  scan=base_scan;liq=base_liq;venue_packet=None
   identity=(pos.get('execution_venue'),pos.get('market_symbol'),pos.get('market_type'))
-  if ((any(identity) and identity!=('BINANCE_SPOT',pos['asset']+'USDT','spot'))
+  if pos.get('execution_venue')=='BYBIT_SPOT' and ENTRY_MODE=='EXECUTABLE':
+   try:
+    from research.hunter_bybit_management import management_context
+    venue_packet=management_context(pos,scan,now)
+    scan=dict(scan,coins=dict(scan.get('coins') or {},**{pos['asset']:venue_packet['market']}))
+    liq=dict(liq,snapshots=dict(liq.get('snapshots') or {},**{pos['asset']:venue_packet['liquidity']}))
+   except (KeyError,TypeError,ValueError) as exc:
+    record(state,pos,'HOLD',now,['PRIMARY_VENUE_MANAGEMENT_EVIDENCE_UNAVAILABLE',str(exc)],{},pos.get('last_price'))
+    still.append(pos);continue
+  elif ((any(identity) and identity!=('BINANCE_SPOT',pos['asset']+'USDT','spot'))
       or (pos.get('execution_fee_bps') is not None and pos['execution_fee_bps']!=FEE_BPS)):
    # This authoritative manager consumes Binance marks/signals/books only.
    # A reference-market profit is not evidence of a primary-venue exit or ADD.
@@ -786,7 +800,10 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    still.append(pos);continue
   p=price(scan,pos["asset"])
   if not p:record(state,pos,"HOLD",now,["CURRENT_PRICE_MISSING"],{},pos.get("last_price"));still.append(pos);continue
-  c=cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
+  if venue_packet:
+   pos['last_primary_venue_market_source_timestamp']=venue_packet['market_source_timestamp']
+   pos['last_primary_venue_management_evidence']={'execution_venue':'BYBIT_SPOT','market_symbol':pos['market_symbol'],'generation_id':scan.get('generation_id'),'observed_at_utc':venue_packet['observed_at_utc'],'market_source_timestamp':venue_packet['market_source_timestamp'],'fee_bps':venue_packet['fee_bps'],'signal':venue_packet['candidate']['signal'],'signal_evidence':venue_packet['candidate']['signal_evidence'],'raw_book_evidence':venue_packet['liquidity']['raw_book_evidence'],'historical_execution_verified':False}
+  c=venue_packet['candidate'] if venue_packet else cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
   systemic_level=((state.get("systemic_risk") or {}).get("level") or "HIGH")
@@ -796,6 +813,8 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   book_fresh=fresh(e.get("book_observed_at_utc"),now)
   if not (signal_fresh and book_fresh):act="HOLD";reasons.append("MANAGEMENT_EVIDENCE_STALE_OR_MISSING")
   if health!="STRONG":act="HOLD"
+  if venue_packet and act=='ADD':
+   act='HOLD';reasons.append('BYBIT_ADD_REQUIRES_HOURLY_CAPITAL_REVALIDATION')
   if tail.risk_blocks_new(state):
    if act=="ADD":reasons.append("SYSTEMIC_RISK_ADD_FREEZE")
    act="HOLD"
@@ -809,7 +828,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
   pnl=net_pnl(pos,p);legacy_protection=profit_protection(pos,p)
-  execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,FEE_BPS)
+  execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,pos.get('execution_fee_bps',FEE_BPS))
   pos['last_exit_estimate']=execution
   admit_execution_identity(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),execution,scan,now)
   protection=lifecycle.protect(pos,p,pnl,execution,now,scan.get('generation_id'),scan.get('as_of_utc'),PROTECT_ARM_PCT,GIVEBACK_MAX_PCT,MIN_PROTECTED_NET_PCT)
@@ -818,7 +837,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   if legacy_protection["exit"] and pnl<=0 and health!="HARD_INVALIDATION":
    # Audit the blocked profit window without changing the net-positive-only exit policy.
    protection_review={**legacy_protection,"arm_provenance":"HISTORICAL_MFE_RECALCULATION_ONLY","historical_execution_window":"UNVERIFIABLE_HISTORICAL_EXECUTION_WINDOW","observed_at_utc":now.isoformat(),"generation_id":scan.get("generation_id"),
-    "reference_price":p,"net_pnl_usdt":pnl,"fee_bps_per_side":FEE_BPS,
+    "reference_price":p,"net_pnl_usdt":pnl,"fee_bps_per_side":pos.get('execution_fee_bps',FEE_BPS),
     "tranche_cost_inputs":[{"price":t["price"],"notional_usdt":t["notional_usdt"],"buy_slippage_bps":t.get("buy_slippage_bps",0)} for t in pos["tranches"]],
     "sell_cost_model":"REFERENCE_PRICE_WITH_SELL_FEE_ONLY","sell_spread_and_slippage_modelled":False}
    pos["profit_protection_review"]=protection_review
@@ -835,6 +854,11 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
   if exit_reason and scan.get('as_of_utc') and not lifecycle.fresh(scan['as_of_utc'],now):
    record(state,pos,'HOLD',now,['EXIT_MARKET_EVIDENCE_STALE'],e,p);exit_reason=None
+  if exit_reason and venue_packet:
+   if execution.get('status')!='SHADOW_RECEIPT_ESTIMATE' or (exit_reason!='HARD_INVALIDATION' and execution.get('net_pnl_usdt',0)<=0):
+    record(state,pos,'HOLD',now,['PRIMARY_VENUE_NET_EXECUTION_NOT_AVAILABLE'],e,p);exit_reason=None
+   else:
+    pnl=execution['net_pnl_usdt'];pos['exit_execution_estimate']=execution
   if exit_reason:
    notion=total_notional(pos);br=((btc/pos["btc_entry_price"]-1)*100) if btc and pos.get("btc_entry_price") else 0
    pos.update({"closed_at_utc":now.isoformat(),"exit_reference_price":p,"exit_reason":exit_reason,"weighted_entry_price":weighted_entry(pos),"total_notional_usdt":notion,"net_pnl_usdt":round(pnl,2),"net_return_pct":round(pnl/notion*100,4),"btc_return_pct":round(br,4),"btc_relative_return_pct":round(pnl/notion*100-br,4)})
