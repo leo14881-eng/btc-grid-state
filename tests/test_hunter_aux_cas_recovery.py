@@ -34,6 +34,20 @@ class RecoveryTests(unittest.TestCase):
         row['steps'][0]['name']=row['error_details']['failed_step']=runner.AUX_RECOVERY_STEPS['missed-replay']
         self.assertEqual(self.eligible(row,'missed-replay'),['hunter-missed-replay.service'])
 
+    def test_discovery_cas_failure_is_recoverable(self):
+        row=copy.deepcopy(self.row);row['job']='discovery'
+        row['steps'][0]['name']=row['error_details']['failed_step']=runner.AUX_RECOVERY_STEPS['discovery']
+        self.assertEqual(self.eligible(row,'discovery'),['hunter-discovery.service'])
+
+    def test_discovery_auth_or_collection_failure_does_not_request_recovery(self):
+        row=copy.deepcopy(self.row);row['job']='discovery'
+        row['steps'][0]['name']=row['error_details']['failed_step']=runner.AUX_RECOVERY_STEPS['discovery']
+        row['steps'][0]['stderr_tail']='RuntimeError: AUX_PUSH_AUTHENTICATION_FAILED'
+        self.assertEqual(self.eligible(row,'discovery'),[])
+        row['steps'][0]['stderr_tail']='RuntimeError: AUX_CAS_REJECTED_STALE_WRITER'
+        row['steps'][0]['name']=row['error_details']['failed_step']='Collect universe'
+        self.assertEqual(self.eligible(row,'discovery'),[])
+
     def test_success_not_retried(self):
         self.row['status']='SUCCESS';self.assertEqual(self.eligible(),[])
 
