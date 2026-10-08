@@ -7,19 +7,19 @@
   "acknowledged_event_ids": [],
   "pending_batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
   "delivery_status": "RESPONSE_QUEUED",
-  "source_main_sha": "7dd11f5b0a988cf0a4c663aa948ec55193d6cd73",
+  "source_main_sha": "8782a130b98555b5be46d3e3cdc9fa4c95d3e84d",
   "last_attempt_at": "2026-10-08T11:24:46.986Z",
   "last_successful_check_at": "2026-10-08T05:12:49.890Z",
   "unverified_batch_attempts": 1,
   "notification_failure": {
-    "at": "2026-10-08T11:24:46.986Z",
+    "at": "2026-10-08T12:11:40.800Z",
     "phase": "DELIVERY_ACK_UNVERIFIABLE",
-    "tool": "conversation_message_observation",
-    "source_main_sha": "7dd11f5b0a988cf0a4c663aa948ec55193d6cd73",
+    "tool": "mcp__codex_apps__github_fetch_file",
+    "source_main_sha": "8782a130b98555b5be46d3e3cdc9fa4c95d3e84d",
     "errors": [
       {
         "error_code": "MESSAGE_ID_UNAVAILABLE",
-        "raw_error": "Matching prior assistant batch_id was observable, but no verifiable message_id was available; acknowledgement not advanced."
+        "raw_error": "Matching prior assistant batch_id was observable, but no verifiable message_id was available; acknowledgement not advanced and resend limit already reached."
       },
       {
         "path": "hunter-runtime-monitor-health.json",
@@ -32,18 +32,19 @@
         "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
       }
     ],
-    "effect": "ACK_NOT_ADVANCED_PENDING_RETAINED_UNIQUE_RESEND_QUEUED"
+    "effect": "ACK_AND_LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_PENDING_RETAINED_NO_FURTHER_RESEND"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
   "source_file_hashes": {
-    "portfolio": "b9c2c8c11a8fad40aad0d26a7942c16f0294d22f",
-    "summary": "8cd83c8d8a74ab32ebe43819a2e2f18e1ba4a458",
+    "portfolio": "706e62076c2879c86ff47f5e5e803549d818c339",
+    "summary": "463bc34f9c42b6700d4a74ced5b0210e521d4abc",
     "monitor": null,
     "scheduler": null
   },
   "pending_event_ids": [
     "42b45d3614e8a4d3aa74b2170e6688a1a71835e209c738d696ad1aa04e7b716a"
-  ]
+  ],
+  "last_check_attempt_at": "2026-10-08T12:11:40.800Z"
 }
