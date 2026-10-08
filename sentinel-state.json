@@ -1,18 +1,18 @@
 {
   "version": "3.52",
-  "updated_at": "2026-10-08T01:29:39.467Z",
+  "updated_at": "2026-10-08T01:30:02.089Z",
   "last_scan_at": "2026-10-08T01:29:39.467Z",
   "persistence": {
     "provider": "github",
     "writable": true,
-    "verification": "PENDING_PHASE1_CAS_AND_EXACT_READBACK",
+    "verification": "VERIFIED_PHASE1_REREAD_THEN_PHASE2_CAS",
     "run_id": "sentinel-20261008T082654+0700",
-    "status": "PENDING_CAS",
-    "last_write_attempt_at": "2026-10-08T01:29:46.541Z",
-    "last_persisted_at": null,
-    "persist_verified": false,
-    "last_verified_at": null,
-    "note": "Candidate built from fixed-main SSOT and fresh on-demand server evidence; phase1 CAS then exact readback required."
+    "status": "PERSISTED_VERIFIED",
+    "last_write_attempt_at": "2026-10-08T01:30:02.089Z",
+    "last_persisted_at": "2026-10-08T01:30:02.089Z",
+    "persist_verified": true,
+    "last_verified_at": "2026-10-08T01:30:02.089Z",
+    "note": "Phase1 exact readback matched; phase2 verification marker CAS written; final exact main readback required."
   },
   "state_ownership": {
     "purpose": "Sentinel BTC market and signal state only",
@@ -152,7 +152,7 @@
     ]
   },
   "operational_reconciliation": {
-    "status": "PHASE1_CAS_READY",
+    "status": "PHASE2_WRITTEN_PENDING_FINAL_READBACK",
     "as_of": "2026-10-08T01:29:39.467Z",
     "source_main_commit": "ac8941f4d6e7fa073bc100b91ec059b82019807d",
     "prewrite_main_commit": "1179b6ede13d62d45b07a9252e7a44048c75af7e",
@@ -163,11 +163,10 @@
     "logic_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
     "swing_journal_sha": "f5a25696fd90ce00f89c5953bf00a79165974a3b",
     "remaining": [
-      "PHASE1_CAS",
-      "PHASE1_EXACT_READBACK",
-      "PHASE2_CAS",
       "FINAL_EXACT_READBACK"
-    ]
+    ],
+    "phase1_blob_sha": "b5070b4774aeac75734de9bbcbd37da10fc5226d",
+    "phase2_prewrite_main_commit": "574065d844da60e6095bdb0f3d01530edaab5f03"
   },
   "run_id": "sentinel-20261008T082654+0700",
   "last_run_at": "2026-10-08T08:26:54+07:00",
@@ -177,9 +176,9 @@
   "derivatives_data_asof": "2026-10-08T01:28:01.000000+00:00",
   "macro_data_asof": "2026-10-07",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": null,
-  "persisted": false,
-  "persist_verified": false,
+  "last_persisted_at": "2026-10-08T01:30:02.089Z",
+  "persisted": true,
+  "persist_verified": true,
   "market_snapshot": {
     "run_id": "sentinel-20261008T082654+0700",
     "btc_price_usd": 83256.01,
