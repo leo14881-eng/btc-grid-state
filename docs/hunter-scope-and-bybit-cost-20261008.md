@@ -1,0 +1,7 @@
+# October 8 scope update and Bybit cost foundation
+
+User explicitly cancelled Sentinel full migration at 08:02 +07. Preserve existing ChatGPT analysis and server evidence collection; no model/API, notification handoff or Sentinel writer migration is required by this continuation. Earlier acceptance reports are historical snapshots, and their Sentinel migration blockers are no longer an active task.
+
+Bybit held-position management remains pending. This change unifies Fast Watch and authoritative lifecycle full-quantity liquidation arithmetic, requires venue/symbol/spot identity, known matching position fee and a fresh Bybit source timestamp, and provides the same-depth midpoint for cost decomposition. MTM consumes each position's explicit fee and rejects mismatched Bybit exit receipt venues. It does not unlock Bybit BUY, ADD, management transitions or portfolio mutations. Existing fail-closed authoritative HOLD remains until complete venue-matched management evidence is integrated.
+
+Validation: 182 related baseline tests passed before changes; 9 new Bybit cost tests and 609 full Hunter tests pass (30.647 seconds). Code reviewed against fresh main c03515a6c9e34d128adc42b7b6aa22f390a27c60; both modified source files exactly matched reviewed baseline before publication. Server resident deployment and true Bybit held-position samples remain unverified for this patch. SHADOW ONLY; real trading disabled; no real order API calls; 20K/17K/3K unchanged.
