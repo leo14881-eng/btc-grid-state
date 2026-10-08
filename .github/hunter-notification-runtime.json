@@ -6,47 +6,37 @@
   "bootstrap_since_utc": "2026-10-06T18:26:30+00:00",
   "acknowledged_event_ids": [],
   "pending_batch_id": "0b17115ca1db9fe887e20f82e88c9a650286b8a9a3eda570b2ed4a2d21ab2ae4",
-  "delivery_status": "RESPONSE_QUEUED",
-  "source_main_sha": "cdbb48611113a3ec3bea0110428d8156dd28ba52",
+  "delivery_status": "RESPONSE_EMITTED_ACK_UNVERIFIED",
+  "source_main_sha": "01cfc8b63c8a0bf8f6737de5c0b7a3ba1d262429",
   "last_attempt_at": "2026-10-08T16:42:14.802Z",
-  "last_successful_check_at": "2026-10-08T05:12:49.890Z",
+  "last_successful_check_at": "2026-10-08T17:47:28.873Z",
   "unverified_batch_attempts": 1,
   "notification_failure": {
-    "at": "2026-10-08T16:42:14.802Z",
+    "at": "2026-10-08T17:47:28.873Z",
     "phase": "DELIVERY_ACK_UNVERIFIABLE",
-    "tool": "mcp__codex_apps__github_fetch_file",
-    "source_main_sha": "cdbb48611113a3ec3bea0110428d8156dd28ba52",
+    "tool": "conversation_context",
+    "source_main_sha": "01cfc8b63c8a0bf8f6737de5c0b7a3ba1d262429",
     "errors": [
       {
         "error_code": "MESSAGE_ID_UNAVAILABLE",
-        "raw_error": "Matching prior assistant batch_id was observable, but no verifiable message_id was available; acknowledgement not advanced and this is the single permitted resend."
-      },
-      {
-        "path": "hunter-runtime-monitor-health.json",
-        "error_code": "NOT_FOUND",
-        "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
-      },
-      {
-        "path": "hunter-scheduler-health.json",
-        "error_code": "NOT_FOUND",
-        "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
+        "raw_error": "The prior assistant response containing the same pending batch_id is observable, but no verifiable message_id is available; acknowledgement is not advanced and the batch is not re-emitted."
       }
     ],
-    "effect": "ACK_AND_LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_SINGLE_RESEND_QUEUED"
+    "effect": "PENDING_RETAINED_NO_RESEND_LAST_SUCCESSFUL_CHECK_ADVANCED"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
   "source_file_hashes": {
-    "portfolio": "8e464dea5829c05f691e4a256ed46afbf5b3c151",
-    "summary": "20073a8bb367e19a107225606dff5e02bb5902a5",
-    "monitor": null,
-    "scheduler": null
+    "portfolio": "0e485ec9a517095e91c68725e8a7a05bf36438c5",
+    "summary": "e81ab2ca227b821909843ee68b113d9badd57544",
+    "monitor": "a5228851e3370fcd245cb2ef711269842fa0bd5d",
+    "scheduler": "cff0d75bcc53e0407ecee21fce655d906766424e"
   },
   "pending_event_ids": [
     "0fccfce5f752b98dca2405ba2f10508c179b9a5aeeca6b98d3aec681c686b727"
   ],
-  "last_check_attempt_at": "2026-10-08T16:42:14.802Z",
+  "last_check_attempt_at": "2026-10-08T17:47:28.873Z",
   "unresolved_batches": [
     {
       "batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
