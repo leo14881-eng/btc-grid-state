@@ -66,6 +66,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  configure_lane(v1_mode)
  if risk_evidence is not None:eng.tail.update_risk_controls(state,risk_evidence,now,eng.C)
  scan={"coins":market,"as_of_utc":(regime_scan or {}).get('as_of_utc') or now.isoformat(),"generation_id":(regime_scan or {}).get("generation_id") or "MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")};btc=(market.get("BTC") or {}).get("reference_price")
+ if not v1_mode:scan['venue_management']=(regime_scan or {}).get('venue_management') or {}
  state['last_cycle_generation_id']=scan['generation_id']
  capital_proposals=[] if not v1_mode else None
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
@@ -91,7 +92,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
 def management_selection(states,cursor,budget):
  # V2 health/recovery needs consecutive fresh five-minute observations. Only
  # the independent V1 management batch rotates; discovery admission is unchanged.
- priority=sorted({p['asset'] for st in states[1:] for p in st.get('open_positions',[])})
+ priority=sorted({p['asset'] for st in states[1:] for p in st.get('open_positions',[]) if p.get('execution_venue')!='BYBIT_SPOT'})
  ordinary=sorted({p['asset'] for st in states[:1] for p in st.get('open_positions',[])}-set(priority))
  count=min(max(0,budget-len(priority)),len(ordinary))
  selected=priority+[ordinary[(cursor+i)%len(ordinary)] for i in range(count)] if ordinary else priority
@@ -153,12 +154,19 @@ def main():
   eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False})
   print(json.dumps({"assets":[],"status":"NO_OPEN_POSITIONS"}))
   return
- market=timed('market',batch_market,wanted);missing=sorted(set(wanted)-set(market))
+ market=timed('market',batch_market,wanted)
+ # A Bybit-only holding must not require a Binance same-name market to exist.
+ binance_states=[states[0],dict(states[1],open_positions=[p for p in states[1].get('open_positions',[]) if p.get('execution_venue')!='BYBIT_SPOT'],closed_positions=[p for p in states[1].get('closed_positions',[]) if p.get('execution_venue')!='BYBIT_SPOT'])]
+ missing=sorted(set(assets(binance_states))-set(market))
  if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
  review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now)
  persisted_universe=load(UNIVERSE)
  regime_scan={"schema":"hunter_monitor_market_snapshot_v1","generation_id":refresh["generation_id"],"as_of_utc":now.isoformat(),"coins":market,"binance_complete":True}
+ from research.hunter_bybit_management import collect as collect_bybit_management
+ packets,bybit_failures=timed('bybit_management_evidence',collect_bybit_management,states[1].get('open_positions',[]),review,refresh['generation_id'])
+ regime_scan['venue_management']={'BYBIT_SPOT':packets}
+ refresh['bybit_management']={'expected_symbols':sorted(p.get('market_symbol') or p['asset'] for p in states[1].get('open_positions',[]) if p.get('execution_venue')=='BYBIT_SPOT'),'observed_symbols':sorted(packets),'failures':bybit_failures,'capital_authority':'NONE_SHADOW_ONLY'}
  # One systemic observation is shared by both lanes so V1/V2 cannot disagree
  # merely because they were evaluated a few milliseconds apart.
  risk_evidence=timed('systemic_evidence',eng.tail.collect_systemic_evidence,regime_scan,liq,now,eng.C,eng.BINANCE_DATA_API)
@@ -177,7 +185,7 @@ def main():
  eng.atomic_json_write(LEADING,leading_doc)
  # Exit responsiveness is independent of the rotating fundamental review batch.
  # Fetch all V2 books and any V1 armed/armable position before exit evaluation.
- exit_assets={p['asset'] for p in states[1].get('open_positions',[])}
+ exit_assets={p['asset'] for p in states[1].get('open_positions',[]) if p.get('execution_venue')!='BYBIT_SPOT'}
  exit_assets.update(p['asset'] for p in states[0].get('open_positions',[]) if (p.get('protection_lifecycle',{}).get('state','UNARMED')!='UNARMED' or ((market.get(p['asset']) or {}).get('reference_price') and eng.raw_return(p,market[p['asset']]['reference_price'])>=eng.PROTECT_ARM_PCT)))
  exit_failures={}
  def exit_book(asset):
