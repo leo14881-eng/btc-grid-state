@@ -103,6 +103,13 @@ def test_preview_fetches_latest_clean_detached_and_cannot_push(fixture_repo):
     assert checkout.is_relative_to(f["state"] / "runtime/preview-checkouts")
     assert (checkout / "preview-output.json").is_file()
     assert git(checkout, "remote", "get-url", "--push", "origin") == "disabled://stock-shadow-preview"
+    assert git(checkout, "config", "gc.auto") == "0"
+    assert git(checkout, "config", "maintenance.auto") == "false"
+    # No policy is persisted on the source mirror or the user's global config.
+    for key in ('gc.auto', 'maintenance.auto'):
+        unchanged = subprocess.run(['git', '--git-dir=' + str(f['install'] / 'source'),
+                                    'config', '--local', '--get', key], capture_output=True)
+        assert unchanged.returncode == 1
     # Even an explicit local push URL is rejected by the installed preview hook.
     rejected = subprocess.run(["git", "-C", str(checkout), "push", str(f["origin"]), "HEAD:refs/heads/preview-test"],
                               capture_output=True, text=True)

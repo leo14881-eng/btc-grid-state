@@ -17,7 +17,9 @@ def require(condition, message):
 
 
 def git(*args, input=None, env=None, check=True):
-    return subprocess.run(['git', *args], input=input, text=True,
+    # Scoped to stock commands, including fetches during CAS/readback. Keep
+    # background repack out of the service CPU budget and inherited writer lock.
+    return subprocess.run(['git', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', *args], input=input, text=True,
                           capture_output=True, check=check, env=env)
 
 

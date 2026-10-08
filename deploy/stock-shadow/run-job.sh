@@ -97,7 +97,10 @@ if [[ "$remote" =~ ^https?://[^/]*@ ]]; then
   echo "Use the approved credential helper/SSH route, not credentials in a URL" >&2
   exit 2
 fi
-git --git-dir="$source_mirror" fetch --quiet --no-tags origin refs/heads/main:refs/heads/main
+# Auto maintenance forks repack into this service's 50% CPU budget and can keep
+# the writer lock alive after a failed preflight. Explicit maintenance remains
+# available outside this latency-sensitive job; no global Git setting changes.
+git -c gc.auto=0 -c maintenance.auto=false --git-dir="$source_mirror" fetch --quiet --no-tags origin refs/heads/main:refs/heads/main
 if [[ "$mode" == --preview ]]; then
   run_dir=$(mktemp -d "$preview_root/$launch_id.XXXXXX")
 else
@@ -105,7 +108,10 @@ else
 fi
 checkout=$run_dir/repo
 # An independent clone: no shared object store and no changes to another checkout.
-git clone --quiet --no-hardlinks --no-checkout "$source_mirror" "$checkout"
+git -c gc.auto=0 -c maintenance.auto=false clone --quiet --no-hardlinks --no-checkout "$source_mirror" "$checkout"
+# Only this disposable checkout inherits the no-auto-maintenance policy.
+git -C "$checkout" config gc.auto 0
+git -C "$checkout" config maintenance.auto false
 git -C "$checkout" remote set-url origin "$remote"
 git -C "$checkout" checkout --quiet --detach refs/remotes/origin/main
 source_commit=$(git -C "$checkout" rev-parse HEAD)

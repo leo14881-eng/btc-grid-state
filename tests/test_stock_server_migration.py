@@ -658,6 +658,95 @@ def stub_engine(monkeypatch, fail=False):
     return commands
 
 
+@pytest.mark.parametrize('job', ['main', 'monitor'])
+@pytest.mark.parametrize('preview', [False, True])
+@pytest.mark.parametrize('failure', ['timeout', 'assertion'])
+def test_preflight_failure_reports_health_without_running_engine_or_changing_book(
+        repo, monkeypatch, tmp_path, job, preview, failure):
+    git, remote, work, writer = repo
+    configure_server(git, work, writer)
+    monkeypatch.chdir(work)
+    for key in PROVIDER_KEYS:
+        monkeypatch.setenv(key, 'offline-dummy-' + key)
+    before = git(remote, 'rev-parse', 'main').stdout.strip()
+    old_book = git(remote, 'show', 'main:' + RESULTS + 'portfolio-v1.json').stdout
+    old_trades = git(remote, 'show', 'main:' + RESULTS + 'trades-v1.json').stdout
+    old_engine_tree = git(remote, 'ls-tree', 'main', '--', RESULTS + job + '-run-health-v1.json').stdout
+    original = subprocess.run
+    calls = []
+
+    def fail_tests(command, **kwargs):
+        if command[0] != sys.executable:
+            return original(command, **kwargs)
+        calls.append(command)
+        assert command[1:3] == ['-m', 'pytest'], 'engine must not execute'
+        assert kwargs['timeout'] == 180
+        assert all(key not in kwargs['env'] for key in PROVIDER_KEYS)
+        if failure == 'timeout':
+            raise subprocess.TimeoutExpired(command, 180)
+        raise subprocess.CalledProcessError(1, command)
+
+    monkeypatch.setattr(runner.subprocess, 'run', fail_tests)
+    with pytest.raises((subprocess.TimeoutExpired, subprocess.CalledProcessError)):
+        runner.run(job, preview, tmp_path / 'runtime')
+    assert len(calls) == 1
+    record = json.loads(next((tmp_path / 'runtime').glob('run-*.json')).read_text())
+    assert record['status'] == 'FAILED' and record['verified'] is False
+    assert git(remote, 'show', 'main:' + RESULTS + 'portfolio-v1.json').stdout == old_book
+    assert git(remote, 'show', 'main:' + RESULTS + 'trades-v1.json').stdout == old_trades
+    assert git(remote, 'ls-tree', 'main', '--', RESULTS + job + '-run-health-v1.json').stdout == old_engine_tree
+    if preview:
+        assert git(remote, 'rev-parse', 'main').stdout.strip() == before
+        assert 'failure_health_publication' not in record
+    else:
+        receipt = record['failure_health_publication']
+        assert receipt['verified'] is True and receipt['mode'] == 'preflight'
+        health = json.loads(git(remote, 'show', 'main:' + RESULTS + job + '-preflight-health-v1.json').stdout)
+        assert health['status'] == 'FAILED' and health['stage'] == 'PREFLIGHT'
+        assert health['engine_started'] is False
+        assert health['source_commit'] == before and health['run_id'] == record['run_id']
+        assert health['epoch'] == 3 and health['owner'] == 'server'
+        assert health['real_orders'] is False and health['simulation_only'] is True
+        changed = git(remote, 'diff', '--name-only', before, 'main').stdout.splitlines()
+        assert set(changed) == {RESULTS + job + '-preflight-health-v1.json',
+                                RESULTS + 'runtime-' + job + '-v1.json'}
+
+
+@pytest.mark.parametrize('race', ['epoch', 'ledger', 'successful_health'])
+def test_preflight_failure_health_cannot_overwrite_new_authority_or_state(
+        repo, monkeypatch, tmp_path, race):
+    git, remote, work, writer = repo
+    configure_server(git, work, writer)
+    monkeypatch.chdir(work)
+    monkeypatch.setenv('APCA_API_KEY_ID', 'offline-key')
+    monkeypatch.setenv('APCA_API_SECRET_KEY', 'offline-secret')
+    original = subprocess.run
+    published = []
+
+    def fail_after_race(command, **kwargs):
+        if command[0] != sys.executable:
+            return original(command, **kwargs)
+        assert command[1:3] == ['-m', 'pytest']
+        if race == 'epoch':
+            value = json.loads((writer / CONFIG).read_text())
+            value['epoch'] += 1
+            publish_other(git, writer, CONFIG, value)
+        elif race == 'ledger':
+            publish_other(git, writer, RESULTS + 'portfolio-v1.json', {'newer': 'book'})
+        else:
+            publish_other(git, writer, RESULTS + 'main-run-health-v1.json', {'status': 'SUCCESS', 'run_id': 'newer'})
+        published.append(git(remote, 'rev-parse', 'main').stdout)
+        raise subprocess.TimeoutExpired(command, 180)
+
+    monkeypatch.setattr(runner.subprocess, 'run', fail_after_race)
+    with pytest.raises(subprocess.TimeoutExpired):
+        runner.run('main', False, tmp_path / 'runtime')
+    assert git(remote, 'rev-parse', 'main').stdout == published[0]
+    record = json.loads(next((tmp_path / 'runtime').glob('run-*.json')).read_text())
+    assert 'failure_health_publication' not in record
+    assert 'failure_health_error' in record
+
+
 @pytest.mark.parametrize('job', ['main', 'monitor', 'replay'])
 @pytest.mark.parametrize('preview', [False, True])
 def test_server_tests_strip_provider_keys_but_engines_keep_them(repo, monkeypatch, tmp_path, job, preview):
