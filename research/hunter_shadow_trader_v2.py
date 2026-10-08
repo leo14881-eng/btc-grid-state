@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Hunter shadow v2 capital-decision engine. Forward simulation only; never places exchange orders."""
-import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request
+import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request,subprocess
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
  from research import hunter_lifecycle_state as lifecycle
+ from research.hunter_execution_identity import identity_fields
  from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 except ModuleNotFoundError as exc:
  if exc.name != 'research':raise
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  import hunter_tail_risk as tail
  import hunter_lifecycle_state as lifecycle
+ from hunter_execution_identity import identity_fields
  from hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"; REVIEW=ROOT/"hunter-tactical-capital-review.json"
@@ -706,6 +708,9 @@ def trade_event(state,pos,action,now,p,reason=None,pnl=None):
   "tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0}
  if reason is not None:event["reason"]=reason
  if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
+ if EVENT_PREFIX=='SHADOW_V2' and pos.get('execution_venue'):
+  for key in ('execution_venue','market_symbol','market_type','execution_identity_scope'):
+   event[key]=pos.get(key)
  state["events"].append(event)
  if action=="BUY":
   entered=set(state.get("ever_entered_assets") or [])
@@ -798,6 +803,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   pnl=net_pnl(pos,p);legacy_protection=profit_protection(pos,p)
   execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,FEE_BPS)
   pos['last_exit_estimate']=execution
+  admit_execution_identity(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),execution,scan,now)
   protection=lifecycle.protect(pos,p,pnl,execution,now,scan.get('generation_id'),scan.get('as_of_utc'),PROTECT_ARM_PCT,GIVEBACK_MAX_PCT,MIN_PROTECTED_NET_PCT)
   lifecycle.recovery(pos,e,now,pnl,pos.get('last_health_generation_id'),health)
   exit_reason=None;exit_reasons=None
@@ -834,6 +840,19 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   still.append(pos)
  state["open_positions"]=still;compact_closed_history(state);return state
 
+def _execution_source_sha():
+ try:return subprocess.check_output(['git','rev-parse','HEAD'],text=True,timeout=5).strip()
+ except (OSError,subprocess.SubprocessError):return None
+
+def admit_execution_identity(pos,book,execution,scan,now,entry=False):
+ # Metadata only, inside the existing authoritative lifecycle/Single Writer.
+ # Never rewrite historical events or infer execution from availability labels.
+ if ENTRY_MODE!='EXECUTABLE' or any(pos.get(k) for k in ('execution_venue','market_symbol','market_type')):return
+ source_sha=_execution_source_sha()
+ if not source_sha or len(source_sha)!=40 or any(c not in '0123456789abcdef' for c in source_sha):return
+ pos.update(identity_fields(pos,book,execution,now,scan.get('generation_id'),source_sha,FEE_BPS,
+  source_kind='SHADOW_ENTRY' if entry else ('POSITION_MONITOR' if str(scan.get('generation_id','')).startswith('MONITOR_') else 'HOURLY_RESEARCH'),formal=True,entry=entry))
+
 def execute_capital_proposals(state,proposals,scan,now):
  executed_buys=0
  ranked=sorted(proposals,key=lambda x:opportunity_priority(x.get("evidence"),x.get("kind")),reverse=True)
@@ -850,7 +869,10 @@ def execute_capital_proposals(state,proposals,scan,now):
   if kind=="ADD":
    add(pos,p,e,now);record(state,pos,"ADD",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"ADD",now,p,"PORTFOLIO_ALLOCATOR_ADD")
   else:
-   add(pos,p,e,now);record(state,pos,"BUY",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);executed_buys+=1
+   add(pos,p,e,now)
+   book=q.get('entry_book') or {}
+   admit_execution_identity(pos,book,lifecycle.liquidation(pos,book,now,FEE_BPS),scan,now,entry=True)
+   record(state,pos,"BUY",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"BUY",now,p,("DISCOVERY_ENTRY" if ENTRY_MODE=="DISCOVERY" else "EXECUTABLE_ENTRY"));state["open_positions"].append(pos);executed_buys+=1
   pos['tranches'][-1]['strategic_notional_usdt']=reserve_amount
   pos['tranches'][-1]['ordinary_notional_usdt']=amount-reserve_amount
   if reserve_amount:pos['tranches'][-1]['strategic_qualification']='EXISTING_ABOVE_85PCT_EDGE_GATE'
@@ -977,7 +999,7 @@ def main():
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
   entry_reasons=(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons)
-  capital_proposals.append({"kind":"BUY","asset":a,"pos":pos,"price":p,"evidence":e,"reasons":list(entry_reasons),"amount":TRANCHES[0],"candidate":c})
+  capital_proposals.append({"kind":"BUY","asset":a,"pos":pos,"price":p,"evidence":e,"reasons":list(entry_reasons),"amount":TRANCHES[0],"candidate":c,"entry_book":liq_for(liq,a).get('raw_book_evidence',{})})
   open_assets.add(a)
  buy_count=execute_capital_proposals(state,capital_proposals,scan,now)
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)

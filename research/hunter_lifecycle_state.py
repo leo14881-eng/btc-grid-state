@@ -12,6 +12,9 @@ def liquidation(pos, book, now, fee_bps=10):
  """Full held model quantity against observed bids; receipt-only SHADOW estimate."""
  try:
   if not fresh(book.get('fetched_at'),now):raise ValueError('BOOK_STALE_OR_MISSING')
+  identity=(pos.get('execution_venue'),pos.get('market_symbol'),pos.get('market_type'))
+  if any(identity) and identity!=('BINANCE_SPOT',pos['asset']+'USDT','spot'):raise ValueError('POSITION_EXECUTION_IDENTITY_MISMATCH')
+  if pos.get('execution_fee_bps') is not None and pos['execution_fee_bps']!=fee_bps:raise ValueError('POSITION_EXECUTION_FEE_MISMATCH')
   if book.get('exchange')!='binance' or book.get('market')!='spot' or book.get('symbol')!=pos['asset']+'USDT':raise ValueError('BOOK_IDENTITY_MISMATCH')
   if book.get('price_unit')!='USDT' or book.get('quantity_unit')!='BASE':raise ValueError('BOOK_UNITS_UNKNOWN')
   n=sum(float(t['notional_usdt']) for t in pos['tranches'])
