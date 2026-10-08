@@ -1,0 +1,110 @@
+{
+  "schema": "hunter-v2-lifecycle-offline-replay-v1",
+  "frozen_commit": "b661483e05ad7c3491a89715b47c88f44bc0fd36",
+  "parameter_hash": "d4065f213c91129a44dcb53633b260addac49d6951b7f08fec7ae946d704faad",
+  "input_hash": "e81bd143c48e0a437f337764ad985b06ce0300adcb1eb6a90865047193d41691",
+  "authority": "NONE_SHADOW_ONLY",
+  "real_trading_enabled": false,
+  "canonical_write_allowed": false,
+  "candidate_enabled": false,
+  "candidate_engine_source_hash": "b94c69810d82b67881b8fe37154ff8002d97c2e404feb1f8e2d2d7687895bab9",
+  "candidate_engine_exercised": true,
+  "coverage": {
+    "current_positions": 29,
+    "recoverable_position_ids": 33,
+    "historical_executable_complete": 0
+  },
+  "latest_counts": {
+    "open": 10,
+    "closed": 19
+  },
+  "history_commits_read": 809,
+  "history_read_failures": [],
+  "scenario_results_scope": "ASSUMPTION_ONLY; exits COUNTERFACTUAL_REFERENCE_CLOSE_NOT_EXECUTED; post_exit values [point_in_time,window_max], null=UNVERIFIABLE; no full-lifecycle comparison",
+  "portfolio_replay_status": "UNVERIFIABLE_MISSING_CONTEMPORANEOUS_REVIEW_AND_EXECUTION_EVIDENCE",
+  "metrics": {
+    "net_usdt_pnl_after_costs": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "portfolio_max_drawdown": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "profit_capture_ratio": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "sell_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "capital_released": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "premature_exit_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "missed_profit_exit_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "capital_utilization": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "new_buy_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "new_buy_quality": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "reserve_usage": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "gap_through_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "data_degraded_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    },
+    "execution_evidence_missing_count": {
+      "status": "UNVERIFIABLE",
+      "value": null,
+      "denominator": 0
+    }
+  },
+  "limitations": [
+    "Recorded marks may have source timestamp/freshness unknown.",
+    "Historical full quantity orderbooks unavailable; no executable comparison proved.",
+    "Missing observations can hide excursions; no OHLC intrabar ordering assumption.",
+    "Current/open and recoverable erased positions included; unknown erased positions not invented.",
+    "Holdout chronological split frozen before evaluation; sparse short history not independent validation.",
+    "Close-only paths are partial scenarios, not full lifecycle profitability; old denotes frozen current legacy protection subset, not a reconstruction of every historical policy version or all other exits.",
+    "Full-portfolio candidates, identity/supply and competition not reconstructed; no invented new BUY.",
+    "No runner admitted without historical fresh signal evidence."
+  ],
+  "decision": "NOT_ENOUGH_EVIDENCE_TO_REPLACE_CURRENT_V2",
+  "candidate_pr_head": "95a6ff51935c810a1c8f011729110b9760bf922d",
+  "isolated_unit_tests_passed": 78
+}
