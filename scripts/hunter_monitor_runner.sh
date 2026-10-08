@@ -30,14 +30,7 @@ fi
 tail -n 4 "$TASK_DIR/regression.log"
 python3 -m research.hunter_position_monitor
 # Preserve the generation admitted at the gate, even across a time boundary.
-python3 -m research.hunter_scheduler_health success --started-at "$STARTED_AT" --trigger-source VULTR_SYSTEMD --state-revision "$BASE_SHA"
-python3 - "$GENERATION" <<'PY'
-import json, pathlib, sys
-p=pathlib.Path('research/results/hunter-scheduler-health.json')
-h=json.loads(p.read_text())
-h['current_generation_id']=h['last_successful_monitor_generation_id']=sys.argv[1]
-p.write_text(json.dumps(h,indent=2,sort_keys=True)+'\n')
-PY
+python3 -m research.hunter_scheduler_health success --started-at "$STARTED_AT" --generation "$GENERATION" --trigger-source VULTR_SYSTEMD --state-revision "$BASE_SHA"
 python3 scripts/hunter_monitor_persist.py validate --generation "$GENERATION"
 git config user.name hunter-vultr-shadow
 git config user.email hunter-vultr-shadow@localhost

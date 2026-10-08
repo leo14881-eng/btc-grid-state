@@ -37,13 +37,24 @@ def should_process(now, health):
     previous=health.get("last_successful_monitor_generation_id")
     return current, not (isinstance(previous,str) and current<=previous)
 
-def build_success_health(now, started_at, previous, trigger_source, state_revision=None):
-    current=generation_id(now)
+def build_success_health(now, started_at, previous, trigger_source, state_revision=None, admitted_generation=None):
     prev_at=parse_time(previous.get("monitor_completed_at_utc"))
     completed=now.astimezone(dt.timezone.utc)
     started=parse_time(started_at) or completed
+    current=admitted_generation or generation_id(started)
+    bucket=parse_time(current)
+    if bucket is None or generation_id(bucket)!=current or bucket>completed:
+        raise ValueError('INVALID_ADMITTED_GENERATION')
+    previous_generation=previous.get('last_successful_monitor_generation_id')
+    previous_bucket=parse_time(previous_generation)
+    if previous_generation and (previous_bucket is None or generation_id(previous_bucket)!=previous_generation):
+        raise ValueError('INVALID_PREVIOUS_SUCCESS_GENERATION')
+    if previous_bucket is not None and bucket<=previous_bucket:
+        raise ValueError('DUPLICATE_OR_OLD_SUCCESS_GENERATION')
     interval=(completed-prev_at).total_seconds() if prev_at else None
-    missed=max(0,int(interval//INTERVAL_SECONDS)-1) if interval is not None else 0
+    missed=(max(0,int((bucket-previous_bucket).total_seconds()//INTERVAL_SECONDS)-1)
+            if previous_bucket is not None else
+            max(0,int(interval//INTERVAL_SECONDS)-1) if interval is not None else 0)
     age=interval
     return {
       "schema":"hunter_scheduler_health_v1",
@@ -55,8 +66,11 @@ def build_success_health(now, started_at, previous, trigger_source, state_revisi
       "monitor_completed_at_utc":completed.isoformat(),
       "duration_seconds":max(0.0,round((completed-started).total_seconds(),3)),
       "previous_success_at_utc":previous.get("monitor_completed_at_utc"),
+      "previous_success_generation_id":previous_generation,
       "interval_since_previous_success_seconds":None if interval is None else round(interval,3),
       "missed_bucket_count":missed,
+      "missed_bucket_provenance":('GENERATION_BUCKET_DISTANCE' if previous_bucket is not None else
+                                  'LEGACY_COMPLETION_INTERVAL_INFERRED' if interval is not None else 'FIRST_SUCCESS_NO_PREVIOUS_BUCKET'),
       "consecutive_missed_bucket_count":missed,
       "duplicate_trigger_count":int(previous.get("duplicate_trigger_count") or 0),
       "last_duplicate_trigger_at_utc":previous.get("last_duplicate_trigger_at_utc"),
@@ -74,9 +88,9 @@ def atomic_write(path, doc):
 def main():
     p=argparse.ArgumentParser(); sub=p.add_subparsers(dest="cmd",required=True)
     g=sub.add_parser("gate"); g.add_argument("--now"); g.add_argument("--health",default=str(HEALTH))
-    s=sub.add_parser("success"); s.add_argument("--now"); s.add_argument("--started-at",required=True); s.add_argument("--trigger-source",required=True); s.add_argument("--state-revision"); s.add_argument("--health",default=str(HEALTH))
+    s=sub.add_parser("success"); s.add_argument("--now"); s.add_argument("--started-at",required=True); s.add_argument("--generation"); s.add_argument("--trigger-source",required=True); s.add_argument("--state-revision"); s.add_argument("--health",default=str(HEALTH))
     a=p.parse_args(); now=parse_time(a.now) if a.now else utc_now(); h=load_health(pathlib.Path(a.health))
     if a.cmd=="gate":
         gid,process=should_process(now,h); print(json.dumps({"generation_id":gid,"process":process,"status":"PROCESS" if process else "ALREADY_PROCESSED"})); return
-    doc=build_success_health(now,a.started_at,h,a.trigger_source,a.state_revision); atomic_write(a.health,doc); print(json.dumps(doc))
+    doc=build_success_health(now,a.started_at,h,a.trigger_source,a.state_revision,a.generation); atomic_write(a.health,doc); print(json.dumps(doc))
 if __name__=="__main__": main()

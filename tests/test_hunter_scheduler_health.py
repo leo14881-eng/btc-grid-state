@@ -54,4 +54,29 @@ class SchedulerHealthTests(unittest.TestCase):
  def test_atomic_roundtrip(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/"h.json"; s.atomic_write(p,{"x":1}); self.assertEqual(json.loads(p.read_text()),{"x":1})
+ def test_missed_bucket_uses_generation_not_faster_completion(self):
+  previous={'last_successful_monitor_generation_id':'2026-10-08T00:25:00Z',
+            'monitor_completed_at_utc':'2026-10-08T00:25:57.190236+00:00'}
+  now=dt.datetime(2026,10,8,0,35,49,160381,tzinfo=UTC)
+  doc=s.build_success_health(now,'2026-10-08T00:35:02.611075+00:00',previous,'VULTR_SYSTEMD')
+  self.assertEqual(doc['missed_bucket_count'],1)
+  self.assertEqual(doc['missed_bucket_provenance'],'GENERATION_BUCKET_DISTANCE')
+ def test_long_execution_keeps_started_bucket(self):
+  previous={'last_successful_monitor_generation_id':'2026-10-08T00:25:00Z',
+            'monitor_completed_at_utc':'2026-10-08T00:25:40+00:00'}
+  doc=s.build_success_health(dt.datetime(2026,10,8,0,35,10,tzinfo=UTC),
+                            '2026-10-08T00:34:40+00:00',previous,'VULTR_SYSTEMD')
+  self.assertEqual(doc['last_successful_monitor_generation_id'],'2026-10-08T00:30:00Z')
+  self.assertEqual(doc['missed_bucket_count'],0)
+ def test_explicit_admission_overrides_start_clock_boundary(self):
+  doc=s.build_success_health(dt.datetime(2026,10,8,0,30,45,tzinfo=UTC),
+                            '2026-10-08T00:29:59+00:00',{},'VULTR_SYSTEMD',
+                            admitted_generation='2026-10-08T00:30:00Z')
+  self.assertEqual(doc['current_generation_id'],'2026-10-08T00:30:00Z')
+ def test_same_or_old_success_does_not_rewrite_health(self):
+  previous={'last_successful_monitor_generation_id':'2026-10-08T00:35:00Z'}
+  for minute in [30,35]:
+   with self.subTest(minute=minute),self.assertRaises(ValueError):
+    s.build_success_health(dt.datetime(2026,10,8,0,35,30,tzinfo=UTC),
+                           dt.datetime(2026,10,8,0,minute,10,tzinfo=UTC),previous,'test')
 if __name__=="__main__": unittest.main()
