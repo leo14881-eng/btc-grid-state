@@ -533,21 +533,9 @@ def venue_liquidation(pos, book, now):
         exchange_age = now.timestamp() - float(book['source_timestamp']) / 1000
         if not 0 <= age <= Config().evidence_seconds or not 0 <= exchange_age <= Config().evidence_seconds:
             raise ValueError('BOOK_STALE_OR_MISSING')
-        bids = [(finite(p), finite(q)) for p, q in book['bids']]
-        asks = [(finite(p), finite(q)) for p, q in book['asks']]
-        if not bids or not asks or bids[0][0] >= asks[0][0] or any(bids[i][0] <= bids[i+1][0] for i in range(len(bids)-1)) or any(asks[i][0] >= asks[i+1][0] for i in range(len(asks)-1)):
-            raise ValueError('BOOK_INVALID')
-        capital = sum(t['notional_usdt'] for t in pos['tranches'])
-        quantity = sum(t['notional_usdt'] / (t['price'] * (1 + (t.get('buy_slippage_bps', 0) + fee) / 10000)) for t in pos['tranches'])
-        remaining, proceeds = quantity, 0
-        for price, size in bids:
-            take = min(size, remaining); proceeds += take * price; remaining -= take
-        if remaining > 1e-10:
-            raise ValueError('FULL_QUANTITY_DEPTH_UNKNOWN')
-        return dict(status='SHADOW_RECEIPT_ESTIMATE', venue='BYBIT_SPOT',
-            net_pnl_usdt=proceeds * (1-fee/10000) - capital, vwap=proceeds/quantity,
-            quantity=quantity, capital=capital, fee_bps=fee, fetched_at=book['fetched_at'],
-            source_timestamp=book['source_timestamp'], historical_execution_verified=False)
+        # Use the same full-quantity cashflow model as the authoritative lifecycle.
+        # Fast Watch retains its tighter event/depth freshness above.
+        return liquidation(pos, book, now, fee)
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         return dict(status='UNKNOWN', reason=str(exc), net_pnl_usdt=None, historical_execution_verified=False)
 

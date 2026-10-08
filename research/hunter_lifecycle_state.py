@@ -13,9 +13,16 @@ def liquidation(pos, book, now, fee_bps=10):
  try:
   if not fresh(book.get('fetched_at'),now):raise ValueError('BOOK_STALE_OR_MISSING')
   identity=(pos.get('execution_venue'),pos.get('market_symbol'),pos.get('market_type'))
-  if any(identity) and identity!=('BINANCE_SPOT',pos['asset']+'USDT','spot'):raise ValueError('POSITION_EXECUTION_IDENTITY_MISMATCH')
+  venue=pos.get('execution_venue') or 'BINANCE_SPOT'
+  if venue not in ('BINANCE_SPOT','BYBIT_SPOT'):raise ValueError('POSITION_EXECUTION_IDENTITY_MISMATCH')
+  if any(identity) and identity!=(venue,pos['asset']+'USDT','spot'):raise ValueError('POSITION_EXECUTION_IDENTITY_MISMATCH')
+  if venue=='BYBIT_SPOT':
+   if pos.get('execution_fee_bps') is None:raise ValueError('BYBIT_FEE_MODEL_UNKNOWN')
+   source_at=float(book.get('source_timestamp'))/1000
+   if not math.isfinite(source_at) or not 0<=now.timestamp()-source_at<=600:raise ValueError('BOOK_STALE_OR_MISSING')
+  if not math.isfinite(float(fee_bps)) or not 0<=float(fee_bps)<=100:raise ValueError('EXECUTION_FEE_INVALID')
   if pos.get('execution_fee_bps') is not None and pos['execution_fee_bps']!=fee_bps:raise ValueError('POSITION_EXECUTION_FEE_MISMATCH')
-  if book.get('exchange')!='binance' or book.get('market')!='spot' or book.get('symbol')!=pos['asset']+'USDT':raise ValueError('BOOK_IDENTITY_MISMATCH')
+  if book.get('exchange')!=('binance' if venue=='BINANCE_SPOT' else 'bybit') or book.get('market')!='spot' or book.get('symbol')!=pos['asset']+'USDT':raise ValueError('BOOK_IDENTITY_MISMATCH')
   if book.get('price_unit')!='USDT' or book.get('quantity_unit')!='BASE':raise ValueError('BOOK_UNITS_UNKNOWN')
   n=sum(float(t['notional_usdt']) for t in pos['tranches'])
   q=sum(float(t['notional_usdt'])/(float(t['price'])*(1+(float(t.get('buy_slippage_bps',0))+fee_bps)/10000)) for t in pos['tranches'])
@@ -28,7 +35,7 @@ def liquidation(pos, book, now, fee_bps=10):
    if remain<=1e-10:break
   if remain>1e-10:raise ValueError('FULL_QUANTITY_DEPTH_UNKNOWN')
   net=proceeds*(1-fee_bps/10000)-n
-  return {'status':'SHADOW_RECEIPT_ESTIMATE','net_pnl_usdt':net,'vwap':proceeds/q,'quantity':q,'capital':n,'fee_bps':fee_bps,'book_mid':(bids[0][0]+asks[0][0])/2,'fetched_at':book['fetched_at'],'source_timestamp':book.get('source_timestamp'),'historical_execution_verified':False}
+  return {'status':'SHADOW_RECEIPT_ESTIMATE','venue':venue,'net_pnl_usdt':net,'vwap':proceeds/q,'quantity':q,'capital':n,'fee_bps':fee_bps,'book_mid':(bids[0][0]+asks[0][0])/2,'fetched_at':book['fetched_at'],'source_timestamp':book.get('source_timestamp'),'historical_execution_verified':False}
  except (KeyError,TypeError,ValueError,ZeroDivisionError,OverflowError) as ex:
   return {'status':'UNKNOWN','reason':str(ex),'net_pnl_usdt':None,'historical_execution_verified':False}
 
@@ -98,8 +105,12 @@ def mtm(state, now, net_function, fee_bps):
  for p in rows:
   asset=p.get('asset')
   try:
+   position_fee=p.get('execution_fee_bps',fee_bps)
+   if p.get('execution_venue')=='BYBIT_SPOT' and p.get('execution_fee_bps') is None:raise ValueError('BYBIT_FEE_MODEL_UNKNOWN')
+   position_fee=float(position_fee)
+   if not math.isfinite(position_fee) or not 0<=position_fee<=100:raise ValueError('EXECUTION_FEE_INVALID')
    capital=sum(float(t['notional_usdt']) for t in p['tranches'])
-   q=sum(float(t['notional_usdt'])/(float(t['price'])*(1+(float(t.get('buy_slippage_bps',0))+fee_bps)/10000)) for t in p['tranches'])
+   q=sum(float(t['notional_usdt'])/(float(t['price'])*(1+(float(t.get('buy_slippage_bps',0))+position_fee)/10000)) for t in p['tranches'])
    if not math.isfinite(capital*q) or capital<=0 or q<=0:raise ValueError('POSITION_QUANTITY_UNKNOWN')
   except (KeyError,TypeError,ValueError,ZeroDivisionError,OverflowError):
    unknown.append(asset);exit_unknown.append(asset);cost_unknown.append(asset);continue
@@ -113,9 +124,10 @@ def mtm(state, now, net_function, fee_bps):
   try:
    net=float(ex['net_pnl_usdt']);vwap=float(ex['vwap'])
    if (ex.get('status')!='SHADOW_RECEIPT_ESTIMATE' or not fresh(ex.get('fetched_at'),now) or
-       ex.get('fee_bps')!=fee_bps or not math.isfinite(net) or not math.isfinite(vwap) or vwap<=0):
+       ex.get('fee_bps')!=position_fee or not math.isfinite(net) or not math.isfinite(vwap) or vwap<=0):
     raise ValueError('EXIT_ESTIMATE_UNKNOWN')
-   for observed,expected in [(ex['quantity'],q),(ex['capital'],capital),(net,q*vwap*(1-fee_bps/10000)-capital)]:
+   if p.get('execution_venue')=='BYBIT_SPOT' and ex.get('venue')!='BYBIT_SPOT':raise ValueError('EXIT_VENUE_MISMATCH')
+   for observed,expected in [(ex['quantity'],q),(ex['capital'],capital),(net,q*vwap*(1-position_fee/10000)-capital)]:
     if not math.isclose(float(observed),expected,rel_tol=1e-9,abs_tol=1e-7):raise ValueError('EXIT_CASHFLOW_MISMATCH')
    exits.append(net)
   except (KeyError,TypeError,ValueError,OverflowError):
@@ -124,7 +136,7 @@ def mtm(state, now, net_function, fee_bps):
    # A separate ticker price cannot split depth slippage from price movement.
    mid=float(ex['book_mid'])
    if not math.isfinite(mid) or mid<vwap:raise ValueError('EXIT_COST_REFERENCE_UNKNOWN')
-   costs.append(q*mid-q*vwap*(1-fee_bps/10000))
+   costs.append(q*mid-q*vwap*(1-position_fee/10000))
   except (KeyError,TypeError,ValueError):cost_unknown.append(asset)
  return {'realized_net_pnl_usdt':round(realized,2),
   'open_unrealized_pnl_usdt':round(sum(marks),2) if not unknown else 'UNKNOWN',
