@@ -387,6 +387,29 @@ Failback is an operator decision using the latest ledger:
 
 ## Retention and operational gaps
 
+- Stock job fetches use command-scoped `gc.auto=0` and `maintenance.auto=false`;
+  disposable checkouts carry the same local settings. This prevents background
+  repacks sharing the job's CPU quota or retaining its writer lock. Global Git
+  settings and Hunter repositories are unchanged. Explicit maintenance remains
+  available: schedule it separately on the stock source mirror after checking
+  active stock jobs/locks and resource headroom. Objects can accumulate in the
+  mirror, so monitor its disk/object count; this change does not install a new
+  maintenance timer or delete objects. Disposable checkouts are still cleaned.
+- Preflight regression failures publish runner-authored failure health only when
+  the canonical checkout remains unchanged. Publication uses the existing owner,
+  epoch, full input CAS, metadata-only manifest and authoritative readback; no
+  partial ledger is published. Test mutations, fencing or CAS conflicts leave
+  only the local failure receipt. The full regression and 180-second budget are
+  retained; failure health never turns a failed run into success.
+  Separate `main-preflight-health-v1.json` / `monitor-preflight-health-v1.json`
+  preserve the last engine health records. `runtime-<job>-v1.json` carries
+  `RUN_FAILED` with mode `preflight` for the failed generation; consumers must
+  inspect that current manifest rather than treating an old engine SUCCESS as
+  fresh. A later successful job replaces the manifest with RUN_COMPLETED;
+  the older preflight file stays bound to its original source/run/generation.
+  Failures before authoritative admission/fence/credential checks complete
+  remain local launcher receipts; they do not acquire publication authority.
+
 - Retain receipts, logs, cutover evidence, and preview outputs through the
   original freeze and migration/failback acceptance. Plan capacity and approved
   archival/retention separately; no automatic destructive cleanup is installed.

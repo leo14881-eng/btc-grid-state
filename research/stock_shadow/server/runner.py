@@ -89,9 +89,10 @@ def run(job, preview, runtime_dir):
     save()
     deadline = time.monotonic() + (360 if job == 'monitor' else 1200)
     engine_started = False
+    canonical_before_tests = None
     try:
         canonical_before_tests = canonical_inventory()
-        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_stock_shadow.py',
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', '--durations=10', 'tests/test_stock_shadow.py',
                         'tests/test_stock_server_migration.py'], env=test_environment(env), check=True, timeout=180)
         require(not changed_paths() and canonical_inventory() == canonical_before_tests,
                 'STOCK_TESTS_MUTATED_CHECKOUT')
@@ -113,6 +114,31 @@ def run(job, preview, runtime_dir):
         # Preserve successful old book on any stage failure. Only a matching
         # engine-generated FAILED health document can take this narrow path.
         health = Path(ROOT + job + '-run-health-v1.json')
+        if not engine_started and not preview and job in ('main', 'monitor'):
+            try:
+                # A test-created/modified artifact is never trusted as health.
+                # Publish only a runner-authored failure, with the old canonical
+                # book intact. The existing publisher rechecks epoch and all CAS
+                # inputs, writes only health+manifest, and verifies remote bytes.
+                clean = (canonical_before_tests is not None and not changed_paths()
+                         and canonical_inventory() == canonical_before_tests)
+                if not clean:
+                    record['failure_health_skipped'] = 'PREFLIGHT_FAILURE_CHECKOUT_NOT_CLEAN'
+                else:
+                    h = {'schema': 'stock_server_preflight_health_v1',
+                         'status': 'FAILED', 'stage': 'PREFLIGHT', 'job': job,
+                         'source_commit': source, 'run_id': run_id,
+                         'generation': a['generation'], 'owner': a['owner'], 'epoch': a['epoch'],
+                         'updated_at': datetime.now(timezone.utc).isoformat(),
+                         'simulation_only': True, 'real_orders': False,
+                         'engine_started': False, 'error_type': type(exc).__name__}
+                    preflight_health = Path(ROOT + job + '-preflight-health-v1.json')
+                    preflight_health.write_text(json.dumps(h, indent=2, sort_keys=True) + '\n')
+                    record['failure_health_publication'] = persist('preflight', a)
+            except Exception as error:
+                record['failure_health_error'] = type(error).__name__ + ': ' + str(error)[:200]
+                if isinstance(error, PublicationUnverified):
+                    record['failure_health_candidate_commit'] = error.commit
         if engine_started and not preview and job in ('main', 'monitor') and health.exists():
             h = json.loads(health.read_text())
             if h.get('status') == 'FAILED' and h.get('run_id') == a['run_id']:

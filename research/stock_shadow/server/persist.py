@@ -75,14 +75,19 @@ def changed_paths():
 
 
 def snapshot(mode, a):
-    require(mode in OUTPUTS or mode == 'health', 'INVALID_PERSISTENCE_MODE')
-    require(mode == a['job'] or mode == 'health' and a['job'] in ('main', 'monitor'),
+    require(mode in OUTPUTS or mode in ('health', 'preflight'), 'INVALID_PERSISTENCE_MODE')
+    require(mode == a['job'] or mode in ('health', 'preflight') and a['job'] in ('main', 'monitor'),
             'MODE_JOB_MISMATCH')
-    names = OUTPUTS[a['job']] if mode != 'health' else {a['job'] + '-run-health-v1.json'}
+    preflight = a['job'] + '-preflight-health-v1.json'
+    names = (OUTPUTS[a['job']] if mode not in ('health', 'preflight') else
+             {preflight if mode == 'preflight' else a['job'] + '-run-health-v1.json'})
     paths = changed_paths()
     # A failed process can leave partial stock outputs. They may be inspected but
     # are never published by health mode. Out-of-scope mutations still reject.
-    require(all(path in {ROOT + name for name in OUTPUTS[a['job']]} for path in paths),
+    allowed = {ROOT + name for name in OUTPUTS[a['job']]}
+    if mode == 'preflight':
+        allowed = {ROOT + preflight}  # No test/engine artifacts can ride along.
+    require(all(path in allowed for path in paths),
             'UNEXPECTED_MUTATION')
     chosen = [path for path in paths if path[len(ROOT):] in names]
     result = {}
@@ -126,11 +131,17 @@ def reporting_audit(state):
 
 
 def validate_outputs(outputs, mode, a):
-    if mode == 'health':
-        health_path = ROOT + a['job'] + '-run-health-v1.json'
+    if mode in ('health', 'preflight'):
+        health_path = ROOT + a['job'] + ('-preflight-health-v1.json' if mode == 'preflight' else '-run-health-v1.json')
         require(health_path in outputs, 'MISSING_FAILURE_HEALTH')
         h = json.loads(outputs[health_path])
         require(h.get('status') == 'FAILED', 'NOT_FAILURE_HEALTH')
+        if mode == 'preflight':
+            require(h.get('schema') == 'stock_server_preflight_health_v1'
+                    and h.get('stage') == 'PREFLIGHT' and h.get('engine_started') is False
+                    and h.get('job') == a['job'] and h.get('owner') == a['owner']
+                    and h.get('epoch') == a['epoch'] and h.get('generation') == a['generation'],
+                    'INVALID_PREFLIGHT_HEALTH')
     elif a['job'] in ('main', 'monitor'):
         h = read_json(ROOT + a['job'] + '-run-health-v1.json')
         require(h.get('status') == 'SUCCESS', 'RUN_NOT_SUCCESSFUL')
@@ -141,7 +152,7 @@ def validate_outputs(outputs, mode, a):
                 'HEALTH_RUN_BINDING_MISMATCH')
         require(h.get('simulation_only') is True and h.get('real_orders') is False,
                 'HEALTH_SHADOW_INVARIANT')
-    if mode == 'health':
+    if mode in ('health', 'preflight'):
         return None
     if a['job'] == 'replay':
         replay = read_json(ROOT + 'replay-v1.json')
@@ -253,7 +264,7 @@ def persist(mode, a=None):
     audit = validate_outputs(outputs, mode, a)
     manifest = {
         'schema': 'stock_shadow_generation_v1', **a,
-        'status': 'RUN_FAILED' if mode == 'health' else 'RUN_COMPLETED',
+        'status': 'RUN_FAILED' if mode in ('health', 'preflight') else 'RUN_COMPLETED',
         'mode': mode, 'created_at': datetime.now(timezone.utc).isoformat(),
         'shadow_only': True, 'real_orders': False,
         'files': {path: hashlib.sha256(raw).hexdigest() for path, raw in sorted(outputs.items())},
@@ -288,7 +299,7 @@ def persist(mode, a=None):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('mode', choices=['main', 'monitor', 'replay', 'health'])
+    p.add_argument('mode', choices=['main', 'monitor', 'replay', 'health', 'preflight'])
     args = p.parse_args()
     try:
         print(json.dumps(persist(args.mode), sort_keys=True))
