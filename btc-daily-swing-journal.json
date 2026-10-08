@@ -68,26 +68,27 @@
         "second_buy_order_planned": false,
         "planned_core_btc_change": false,
         "funding": "BTC_UNIFIED_POOL_STANDBY_USDT_SUBJECT_TO_VERIFIED_AVAILABILITY",
-        "plan_status": "PROPOSED_AND_SHOWN_IN_ORDER_ENTRY_SCREEN_NOT_CONFIRMED_SUBMITTED",
+        "plan_status": "HISTORICAL_PLAN_PRESERVED__ORIGINAL_ORDER_FILLED__ADDITIONAL_INDEPENDENT_BUY_CONFIRMED",
         "invalidation_note": "If downside accelerates, reassess before adding; a resting limit buy can fill during a sharp selloff. No guaranteed protection without an exchange-accepted protective order."
       },
       "evidence": {
-        "type": "USER_SUPPLIED_ORDER_ENTRY_SCREENSHOT",
+        "type": "USER_SUPPLIED_ORDER_ENTRY_AND_FILLED_ORDER_HISTORY_SCREENSHOTS",
         "screenshot_clock_display": "01:35",
         "screenshot_clock_timezone": "UNVERIFIED",
         "screenshot_visible_last_price_usdt": 83328.2,
         "screenshot_visible_estimated_gross_profit_usdt": 58.1104,
         "screenshot_visible_estimated_return_pct": 1.93,
-        "exchange_order_id": null,
-        "submitted_confirmation": false,
-        "filled_confirmation": false,
-        "caution": "Order-entry screenshot does not prove submission, execution or contingent take-profit activation."
+        "exchange_order_id": "11156224",
+        "submitted_confirmation": true,
+        "filled_confirmation": true,
+        "caution": "Order-entry screenshot does not prove submission, execution or contingent take-profit activation.",
+        "latest_evidence_note": "Order history screenshot proves two distinct fully filled BTC limit buys. 84,200 TP shown for order 11156224 as trigger price, but no evidence of a live exit order or sell fill."
       },
       "actual": {
-        "order_status": "UNKNOWN_NOT_CONFIRMED_SUBMITTED",
-        "buy_filled": false,
-        "buy_filled_quantity_btc": null,
-        "buy_avg_fill_price_usdt": null,
+        "order_status": "TWO_BUY_ORDERS_FULLY_FILLED__SELL_NOT_VERIFIED",
+        "buy_filled": true,
+        "buy_filled_quantity_btc": 0.072342,
+        "buy_avg_fill_price_usdt": 82941.596555,
         "buy_filled_at": null,
         "sell_filled": false,
         "sell_filled_quantity_btc": null,
@@ -98,11 +99,51 @@
         "slippage_usdt": null,
         "realized_net_profit_usdt": null,
         "end_of_day_unrealized_pnl_usdt": null,
-        "exchange_order_ids": [],
-        "evidence_of_fills": []
+        "exchange_order_ids": [
+          "11156224",
+          "90484992"
+        ],
+        "evidence_of_fills": [
+          "USER_SCREENSHOT_ORDER_HISTORY_2026_10_08__TWO_BTC_BUYS_FULLY_FILLED"
+        ],
+        "confirmed_buy_fills": [
+          {
+            "order_id": "11156224",
+            "displayed_at": "2026-10-08 01:35:55",
+            "timestamp_timezone": "UNVERIFIED_SCREENSHOT_DISPLAY",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "fill_price_usdt": 82600,
+            "quantity_btc": 0.036319,
+            "filled_quantity_btc": 0.036319,
+            "status": "FULLY_FILLED",
+            "source": "USER_SCREENSHOT_ORDER_HISTORY_2026_10_08",
+            "linked_take_profit_trigger_usdt": 84200,
+            "linked_take_profit_execution_status": "UNKNOWN",
+            "gross_cost_usdt": 2999.9494
+          },
+          {
+            "order_id": "90484992",
+            "displayed_at": "2026-10-08 07:08:06",
+            "timestamp_timezone": "UNVERIFIED_SCREENSHOT_DISPLAY",
+            "side": "BUY",
+            "order_type": "LIMIT",
+            "fill_price_usdt": 83286,
+            "quantity_btc": 0.036023,
+            "filled_quantity_btc": 0.036023,
+            "status": "FULLY_FILLED",
+            "source": "USER_SCREENSHOT_ORDER_HISTORY_2026_10_08",
+            "linked_take_profit_trigger_usdt": null,
+            "linked_take_profit_execution_status": "UNKNOWN",
+            "gross_cost_usdt": 3000.211578
+          }
+        ],
+        "gross_cost_usdt": 6000.160978,
+        "take_profit_84200_status": "TRIGGER_SHOWN_IN_HISTORICAL_BUY_ORDER__ACTIVE_TP_UNVERIFIED",
+        "fees_status": "UNKNOWN"
       },
       "review": {
-        "status": "PENDING_USER_REPORT",
+        "status": "PENDING_EXIT_FEE_AND_TP_CONFIRMATION",
         "intraday_low_usdt": null,
         "intraday_high_usdt": null,
         "mfe_pct": null,
@@ -113,9 +154,13 @@
         "direction_accuracy": "UNKNOWN",
         "entry_quality": "UNKNOWN",
         "exit_quality": "UNKNOWN",
-        "sizing_quality": "UNKNOWN",
-        "mistakes": [],
-        "improvement_actions": [],
+        "sizing_quality": "ADDITIONAL_3000_USDT_ORDER_OUTSIDE_ORIGINAL_SINGLE_ORDER_PLAN__RATIONALE_UNKNOWN",
+        "mistakes": [
+          "Original Day 1 plan specified one 3,000 USDT buy; a second distinct 3,000 USDT buy is now confirmed by screenshot. Its decision basis is unverified and should not be attributed to the original plan."
+        ],
+        "improvement_actions": [
+          "Require explicit new evidence and budget check before an additional short-term buy; verify any take-profit as an active order, not just a trigger field in historical buy."
+        ],
         "review_at": null
       }
     }
