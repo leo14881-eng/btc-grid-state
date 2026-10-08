@@ -3,7 +3,7 @@
 Spot uses the public V5 endpoint. Alpha uses the official authenticated Alpha token-list endpoint when credentials exist.
 Failure is UNKNOWN, never NOT_LISTED.
 """
-import datetime as dt, hashlib, hmac, json, os, pathlib, re, time, urllib.error, urllib.parse, urllib.request
+import datetime as dt, hashlib, hmac, json, math, os, pathlib, re, time, urllib.error, urllib.parse, urllib.request
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 SPOT_CACHE=ROOT/"hunter-bybit-spot-cache.json"
@@ -57,8 +57,8 @@ def validate_spot_rows(rows):
         raise RuntimeError("BYBIT_FULL_LIST_INCOMPLETE_OR_SYMBOL_SCOPED")
     return rows
 
-def spot_proxy_universe(now=None):
-    """One full-list request per successful 24h cache period; never per-symbol calls."""
+def spot_proxy_universe(now=None, force_refresh=False):
+    """Cache the full list; permit one explicit refresh on a ticker contradiction."""
     now=now or dt.datetime.now(dt.timezone.utc)
     endpoint=SPOT_PROXY+"/bybit/spot"
     try: cache=json.loads(SPOT_CACHE.read_text())
@@ -71,6 +71,8 @@ def spot_proxy_universe(now=None):
         if fresh:validate_spot_rows(cache["instruments"])
     except Exception: fresh=False
     network_requests=0
+    if force_refresh:
+        fresh=False
     if not fresh:
         network_requests=1
         data=request(endpoint)
@@ -79,6 +81,13 @@ def spot_proxy_universe(now=None):
         result=data.get("result") or {}
         if result.get("category")!="spot" or result.get("nextPageCursor"):
             raise RuntimeError("BYBIT_FULL_LIST_WRONG_CATEGORY_OR_PARTIAL")
+        if force_refresh:
+            try:
+                source_time=float(data['time'])/1000
+                if not math.isfinite(source_time) or abs(now.timestamp()-source_time)>120:
+                    raise ValueError('stale')
+            except (KeyError,TypeError,ValueError,OverflowError):
+                raise RuntimeError("BYBIT_FULL_LIST_REFRESH_TIME_INVALID") from None
         rows=validate_spot_rows(result.get("list"))
         cache={"schema":CACHE_SCHEMA,"captured_at_utc":now.isoformat(),
                "expires_at_utc":(now+dt.timedelta(seconds=CACHE_TTL_SECONDS)).isoformat(),

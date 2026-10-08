@@ -90,4 +90,47 @@ class FullSpotCacheTests(unittest.TestCase):
         req.assert_called_once_with(mod.SPOT_PROXY+'/bybit/spot')
         self.assertFalse(self.path.exists())
 
+    def test_forced_refresh_replaces_unexpired_complete_list(self):
+        self.populate()
+        at=self.now+dt.timedelta(hours=1)
+        response=dict(retCode=0,time=int(at.timestamp()*1000),
+                      result=dict(category='spot',list=[row('BTC'),row('ETH'),row('NEW')]))
+        with patch.object(mod,'request',return_value=response) as request:
+            xs,meta=mod.spot_proxy_universe(at,force_refresh=True)
+        request.assert_called_once_with(mod.SPOT_PROXY+'/bybit/spot')
+        self.assertEqual(xs,['BTC','ETH','NEW'])
+        self.assertFalse(meta['cache_hit'])
+        self.assertEqual(meta['network_requests'],1)
+        self.assertEqual(meta['captured_at_utc'],at.isoformat())
+        self.assertEqual(json.loads(self.path.read_text())['instruments'],response['result']['list'])
+
+    def test_forced_refresh_rejects_missing_stale_future_and_nonfinite_time(self):
+        self.populate();before=self.path.read_bytes()
+        for stamp in [None,int(self.now.timestamp()*1000)-121000,
+                      int(self.now.timestamp()*1000)+121000,'nan','inf']:
+            response=dict(retCode=0,result=dict(category='spot',list=self.rows))
+            if stamp is not None:response['time']=stamp
+            with self.subTest(stamp=stamp),patch.object(mod,'request',return_value=response):
+                with self.assertRaisesRegex(RuntimeError,'REFRESH_TIME_INVALID'):
+                    mod.spot_proxy_universe(self.now,force_refresh=True)
+            self.assertEqual(before,self.path.read_bytes())
+
+    def test_forced_refresh_rejects_partial_list_without_overwriting_cache(self):
+        self.populate();before=self.path.read_bytes()
+        for result in [dict(category='spot',list=[row('BTC')]),
+                       dict(category='spot',list=self.rows,nextPageCursor='more'),
+                       dict(category='linear',list=self.rows)]:
+            response=dict(retCode=0,time=int(self.now.timestamp()*1000),result=result)
+            with self.subTest(result=result),patch.object(mod,'request',return_value=response):
+                with self.assertRaises(RuntimeError):mod.spot_proxy_universe(self.now,force_refresh=True)
+            self.assertEqual(before,self.path.read_bytes())
+
+    def test_forced_transport_failure_does_not_fall_back_to_old_cache(self):
+        self.populate();before=self.path.read_bytes()
+        with patch.object(mod,'request',side_effect=RuntimeError('HTTP_403')) as request:
+            with self.assertRaisesRegex(RuntimeError,'HTTP_403'):
+                mod.spot_proxy_universe(self.now,force_refresh=True)
+        request.assert_called_once_with(mod.SPOT_PROXY+'/bybit/spot')
+        self.assertEqual(before,self.path.read_bytes())
+
 if __name__=='__main__':unittest.main()
