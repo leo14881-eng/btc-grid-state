@@ -12,17 +12,27 @@
   "last_successful_check_at": "2026-10-08T20:35:55.907Z",
   "unverified_batch_attempts": 1,
   "notification_failure": {
-    "at": "2026-10-08T20:35:55.907Z",
-    "phase": "DELIVERY_ACK_UNVERIFIABLE",
-    "tool": "conversation_context",
-    "source_main_sha": "bb98cd92e2a383b9d748ca6ab0af9ffb347996dd",
+    "at": "2026-10-08T21:39:28.431Z",
+    "phase": "DATA_READ_REQUIRED_HEALTH_FILES_MISSING",
+    "tool": "mcp__codex_apps__github_fetch_file",
+    "source_main_sha": "e3898cb9c063218f05c66beae4a6544adc6e8b16",
     "errors": [
       {
+        "path": "hunter-runtime-monitor-health.json",
+        "error_code": "NOT_FOUND",
+        "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
+      },
+      {
+        "path": "hunter-scheduler-health.json",
+        "error_code": "NOT_FOUND",
+        "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
+      },
+      {
         "error_code": "MESSAGE_ID_UNAVAILABLE",
-        "raw_error": "The prior assistant response containing the same pending batch_id is observable, but no verifiable message_id is available; acknowledgement is not advanced and the batch is not re-emitted."
+        "raw_error": "The pending batch was already emitted in chat, but no verifiable message_id is available; acknowledgement is not advanced and the batch is not re-emitted."
       }
     ],
-    "effect": "PENDING_RETAINED_NO_RESEND_LAST_SUCCESSFUL_CHECK_ADVANCED"
+    "effect": "LAST_SUCCESSFUL_CHECK_AND_ACK_NOT_ADVANCED_PENDING_RETAINED_NO_RESEND"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
@@ -36,7 +46,7 @@
   "pending_event_ids": [
     "0fccfce5f752b98dca2405ba2f10508c179b9a5aeeca6b98d3aec681c686b727"
   ],
-  "last_check_attempt_at": "2026-10-08T20:35:55.907Z",
+  "last_check_attempt_at": "2026-10-08T21:39:28.431Z",
   "unresolved_batches": [
     {
       "batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
