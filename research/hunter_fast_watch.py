@@ -14,6 +14,7 @@ import statistics
 from dataclasses import dataclass
 
 from research.hunter_lifecycle_state import liquidation, protect
+from research.hunter_execution_identity import identity_fields
 from research.hunter_shadow_trader_v2 import PROTECT_ARM_PCT, GIVEBACK_MAX_PCT, MIN_PROTECTED_NET_PCT, FEE_BPS
 
 
@@ -105,25 +106,12 @@ def bind_observed_model_routes(portfolio, monitor, source_sha, now, *, research_
                     pair.get('venue') == 'binance' and pair.get('pair') == symbol
                     and pair.get('base') == p['asset'] for pair in coin.get('pairs', [])):
                     raise ValueError('RESEARCH_MODEL_IDENTITY_UNKNOWN')
-            observed = dt.datetime.fromisoformat(book['fetched_at'])
-            if not 0 <= now-observed.timestamp() <= Config().model_identity_seconds:
-                raise ValueError('MODEL_RECEIPT_STALE')
-            execution = p['last_exit_estimate']
-            if execution.get('fetched_at') != book['fetched_at'] or execution.get('fee_bps') != FEE_BPS:
-                raise ValueError('MODEL_ESTIMATE_PROVENANCE_MISMATCH')
-            replay = liquidation(p, book, observed, FEE_BPS)
-            if replay['status'] != 'SHADOW_RECEIPT_ESTIMATE' or execution.get('status') != replay['status']:
-                raise ValueError('MODEL_FULL_QUANTITY_UNKNOWN')
-            for key in ('net_pnl_usdt','quantity','vwap','capital'):
-                if not math.isclose(float(execution[key]),float(replay[key]),rel_tol=1e-9,abs_tol=1e-7):
-                    raise ValueError('MODEL_ESTIMATE_MISMATCH')
-            p.update(execution_venue='BINANCE_SPOT', market_symbol=symbol, market_type='spot',
-                execution_fee_bps=FEE_BPS, execution_identity_scope='CURRENT_SHADOW_EXECUTION_MODEL',
-                historical_entry_execution_venue='UNKNOWN', execution_identity_proof={
-                    'source_main_sha':source_sha,'generation_id':generation,'source_kind':source_kind,
-                    'receipt_at':book['fetched_at'], 'admitted_at':utc(now),
-                    'raw_book_sha256':hashlib.sha256(json.dumps(book,sort_keys=True).encode()).hexdigest(),
-                    'historical_execution_verified':False,'formal_portfolio_mutated':False})
+            fields = identity_fields(p, book, p['last_exit_estimate'],
+                dt.datetime.fromtimestamp(now, dt.timezone.utc), generation, source_sha, FEE_BPS,
+                source_kind=source_kind, max_age=Config().model_identity_seconds)
+            if not fields:
+                continue
+            p.update(fields)
             admitted.append(p['shadow_id'])
         except (KeyError, ValueError, TypeError, OverflowError):
             continue
