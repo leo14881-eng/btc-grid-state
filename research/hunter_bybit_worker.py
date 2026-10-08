@@ -9,6 +9,8 @@ import hashlib
 import json
 import math
 import pathlib
+import re
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -21,6 +23,62 @@ except ModuleNotFoundError:
 
 DEFAULT = pathlib.Path("research/results/hunter-bybit-worker-snapshot.json")
 SOURCE = "OFFICIAL_BYBIT_V5_VIA_WORKER"
+INTERVALS = {"60", "15"}
+SAFE_WORKER_ERROR = re.compile(r"BYBIT_HTTP_[1-5][0-9]{2}|BYBIT_RET_-?[0-9]{1,10}|BYBIT_STALE_TIME|INCOMPLETE_KLINE")
+LOCAL_ERRORS = {
+    "BYBIT_WORKER_BATCH_SCOPE_MISMATCH", "BYBIT_WORKER_BATCH_INTERVAL_MISMATCH",
+    "BYBIT_WORKER_BATCH_SUCCESS_FAILURE_CONFLICT", "BYBIT_WORKER_FAILURE_SHAPE_INVALID",
+    "BYBIT_WORKER_UPSTREAM_ERROR", "BYBIT_WORKER_WRONG_CATEGORY",
+    "BYBIT_WORKER_KLINE_WRONG_SYMBOL", "BYBIT_WORKER_KLINE_INSUFFICIENT",
+    "BYBIT_WORKER_KLINE_STALE_OR_GAPPED", "BYBIT_WORKER_KLINE_INVALID",
+    "BYBIT_WORKER_KLINE_INVALID_OHLC", "WORKER_MISSING_KLINE_REASON",
+    "WORKER_TIMEOUT", "WORKER_ABORTED", "WORKER_KLINE_FAILURE",
+}
+
+
+def exception_detail(exc):
+    if isinstance(exc, urllib.error.HTTPError):
+        return failure_detail("BYBIT_HTTP_" + str(exc.code))
+    if isinstance(exc, TimeoutError) or (isinstance(exc, urllib.error.URLError)
+                                       and isinstance(exc.reason, TimeoutError)):
+        return dict(code="WORKER_TIMEOUT", detail_redacted=True, detail_truncated=False)
+    raw = str(exc)
+    if raw in LOCAL_ERRORS:
+        return dict(code=raw, detail_redacted=False, detail_truncated=False)
+    return failure_detail(raw or "UNKNOWN")
+
+
+def contextual(detail, batch_id, symbol, interval, end, stage):
+    return dict(detail, batch_id=batch_id, symbol=symbol, interval=interval,
+                generation_end_ms=end, stage=stage)
+
+
+def failure_detail(raw):
+    """Keep bounded public error codes, never arbitrary upstream text or URLs."""
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("BYBIT_WORKER_FAILURE_SHAPE_INVALID")
+    text = raw.strip()
+    code = text.removeprefix("Error: ")
+    known = len(text) <= 160 and SAFE_WORKER_ERROR.fullmatch(code) is not None
+    return {"code": code if known else ("WORKER_ABORTED" if text.startswith("AbortError:") else "WORKER_KLINE_FAILURE"),
+            "detail_redacted": not known, "detail_truncated": len(text) > 160}
+
+
+def batch_parts(data, batch, end):
+    klines, failures = data.get("klines", {}), data.get("failures", {})
+    if (data.get("end") != end or not isinstance(klines, dict) or not isinstance(failures, dict)
+            or (set(klines) | set(failures)) - set(batch)):
+        raise ValueError("BYBIT_WORKER_BATCH_SCOPE_MISMATCH")
+    for entries in (klines, failures):
+        if any(not isinstance(values, dict) or not values or set(values) - INTERVALS
+               for values in entries.values()):
+            raise ValueError("BYBIT_WORKER_BATCH_INTERVAL_MISMATCH")
+    details = {}
+    for symbol, errors in failures.items():
+        if set(errors) & set(klines.get(symbol, {})):
+            raise ValueError("BYBIT_WORKER_BATCH_SUCCESS_FAILURE_CONFLICT")
+        details[symbol] = {interval: failure_detail(raw) for interval, raw in errors.items()}
+    return klines, details
 
 def digest(payload):
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
@@ -119,21 +177,49 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
     required=[r for r in rows if r["base"] not in set(binance_bases) and r["base"]!="BTC"]
     symbols=sorted({r["pair"] for r in required}|{"BTCUSDT"})
     batches=[symbols[i:i+20] for i in range(0,len(symbols),20)]
-    bundles={}; batch_failures={}
+    bundles={}; failure_details={}
     with ThreadPoolExecutor(max_workers=2) as executor:
-        jobs={executor.submit(fetcher,"/bybit/early-klines",{"symbols":batch,"end":end}):batch for batch in batches}
+        jobs={executor.submit(fetcher,"/bybit/early-klines",{"symbols":batch,"end":end}):(index,batch)
+              for index,batch in enumerate(batches)}
         for job in as_completed(jobs):
-            batch=jobs[job]
+            batch_id,batch=jobs[job]
+            stage="batch_request"
             try:
-                data=result(job.result())
-                if data.get("end")!=end or set(data.get("klines") or {})-set(batch):
-                    raise ValueError("BYBIT_WORKER_BATCH_SCOPE_MISMATCH")
-                bundles.update(data.get("klines") or {})
+                response=job.result()
+                stage="batch_validation"
+                if isinstance(response,dict) and type(response.get("retCode")) is int and response["retCode"] != 0:
+                    raise ValueError("BYBIT_RET_"+str(response["retCode"]))
+                data=result(response)
+                klines, details = batch_parts(data, batch, end)
             except Exception as exc:
-                batch_failures.update({s:type(exc).__name__+":"+str(exc)[:120] for s in batch})
+                detail=exception_detail(exc)
+                for symbol in batch:
+                    failure_details[symbol]={i:contextual(detail,batch_id,symbol,i,end,stage) for i in INTERVALS}
+                continue
+            # Validate every interval before feature extraction (which short-circuits).
+            # No missing or contradictory response can become a usable candle.
+            for symbol in batch:
+                for interval,limit in (("60",5),("15",25)):
+                    detail=details.get(symbol,{}).get(interval)
+                    stage="worker_response"
+                    if detail is None:
+                        stage="candle_validation"
+                        try:
+                            if interval not in klines.get(symbol,{}):
+                                raise ValueError("WORKER_MISSING_KLINE_REASON")
+                            body=klines[symbol][interval]
+                            if isinstance(body,dict) and type(body.get("retCode")) is int and body["retCode"] != 0:
+                                raise ValueError("BYBIT_RET_"+str(body["retCode"]))
+                            bundles.setdefault(symbol,{})[interval]=candles(body,symbol,interval,limit,end)
+                        except Exception as exc:
+                            detail=exception_detail(exc)
+                    if detail is not None:
+                        failure_details.setdefault(symbol,{})[interval]=contextual(detail,batch_id,symbol,interval,end,stage)
     def get(symbol,interval,limit):
-        if symbol in batch_failures:raise ValueError(batch_failures[symbol])
-        return candles(bundles.get(symbol,{}).get(interval),symbol,interval,limit,end)
+        detail = failure_details.get(symbol, {}).get(interval)
+        if detail:
+            raise ValueError("BYBIT_WORKER_KLINE_FAILURE:"+symbol+":"+interval+":"+detail["code"])
+        return bundles[symbol][interval]
     try:
         signals, failures=capture(required,get)
     except RuntimeError as exc:
@@ -148,6 +234,8 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
         status['listing_refresh']=refresh_evidence
     payload=dict(schema="hunter_bybit_worker_v1",source=SOURCE,captured_at_utc=now.isoformat(),
                  rows=rows,venue_status=status,early_signals=signals,signal_failures=failures)
+    if failure_details:
+        payload["signal_failure_details"] = failure_details
     payload["snapshot_sha256"]=digest(payload)
     validate(payload,now)
     DEFAULT.parent.mkdir(parents=True,exist_ok=True)
@@ -177,4 +265,35 @@ def validate(snapshot,now):
     for base,signal in snapshot.get("early_signals",{}).items():
         if base not in bases or signal.get("base")!=base or signal.get("pair")!=base+"USDT" or signal.get("source_venue")!="bybit" or signal.get("execution_supported") is not False or signal.get("stage") not in ("EARLY","WATCH"):
             raise ValueError("BYBIT_WORKER_SNAPSHOT_SIGNAL_INVALID")
+    if "signal_failure_details" in snapshot:
+        details = snapshot["signal_failure_details"]
+        expected = status.get("signal_expected_bases")
+        if (not isinstance(details, dict) or not isinstance(expected, list)
+                or any(not isinstance(base, str) or base not in bases or base == "BTC" for base in expected)):
+            raise ValueError("BYBIT_WORKER_SNAPSHOT_FAILURE_SCOPE_INVALID")
+        requested = {base+"USDT" for base in expected} | {"BTCUSDT"}
+        failures = snapshot.get("signal_failures", {})
+        signals = snapshot.get("early_signals", {})
+        if (set(details) - requested or not isinstance(failures, dict)
+                or any(symbol not in failures for symbol in details)
+                or (details and status.get("signal_complete") is not False)
+                or ("BTCUSDT" in details and signals)
+                or any(symbol[:-4] in signals for symbol in details)):
+            raise ValueError("BYBIT_WORKER_SNAPSHOT_FAILURE_SIGNAL_CONFLICT")
+        ordered=sorted(requested)
+        generation_end=int(dt.datetime.fromisoformat(snapshot["captured_at_utc"]).timestamp()*1000)
+        for symbol,values in details.items():
+            if not isinstance(values, dict) or not values or set(values) - INTERVALS:
+                raise ValueError("BYBIT_WORKER_SNAPSHOT_FAILURE_INTERVAL_INVALID")
+            for interval,detail in values.items():
+                if (not isinstance(detail, dict) or set(detail) != {"code", "detail_redacted", "detail_truncated",
+                        "batch_id", "symbol", "interval", "generation_end_ms", "stage"}
+                        or not isinstance(detail["code"], str)
+                        or not (SAFE_WORKER_ERROR.fullmatch(detail["code"]) or detail["code"] in LOCAL_ERRORS)
+                        or type(detail["batch_id"]) is not int or detail["batch_id"] != ordered.index(symbol)//20
+                        or detail["symbol"] != symbol or detail["interval"] != interval
+                        or type(detail["generation_end_ms"]) is not int or detail["generation_end_ms"] != generation_end
+                        or detail["stage"] not in ("batch_request","batch_validation","worker_response","candle_validation")
+                        or type(detail["detail_redacted"]) is not bool or type(detail["detail_truncated"]) is not bool):
+                    raise ValueError("BYBIT_WORKER_SNAPSHOT_FAILURE_DETAIL_INVALID")
     return snapshot["rows"],status
