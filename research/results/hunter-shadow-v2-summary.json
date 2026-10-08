@@ -1,12 +1,12 @@
 {
   "realized_net_pnl_usdt": 816.1,
-  "open_unrealized_pnl_usdt": -1498.49,
-  "estimated_exit_cost_usdt": 27.35,
-  "mark_to_market_net_pnl_usdt": -741.36,
-  "reference_mark_to_market_net_pnl_usdt": -682.39,
+  "open_unrealized_pnl_usdt": -1725.42,
+  "estimated_exit_cost_usdt": 24.58,
+  "mark_to_market_net_pnl_usdt": -942.91,
+  "reference_mark_to_market_net_pnl_usdt": -909.32,
   "closed_win_rate": 1.0,
   "open_loss_exposure_usdt": 14000.0,
-  "thesis_invalidated_open_count": 6,
+  "thesis_invalidated_open_count": 7,
   "loss_recovery_open_count": 10,
   "mark_data_unknown_assets": [],
   "exit_data_unknown_assets": [],
@@ -14,9 +14,9 @@
   "mark_to_market_basis": "FULL_QUANTITY_LIQUIDATION_ESTIMATES",
   "estimated_exit_cost_basis": "SAME_DEPTH_RECEIPT_MID",
   "metric_scope": "SHADOW_MODEL_NOT_ACTUAL_FILLS",
-  "generation_id": "20261008T151725823219Z",
+  "generation_id": "MONITOR_20261008T152527143617Z",
   "schema": "hunter_shadow_v2_summary_v3",
-  "as_of_utc": "2026-10-08T15:22:02.343863+00:00",
+  "as_of_utc": "2026-10-08T15:25:47.759026+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
   "policy_version": "shadow-consistent-v2-leading-risk-phase1",
@@ -90,16 +90,16 @@
       "realized_net_pnl_usdt": 816.1,
       "equity_usdt": 20816.1,
       "used_capital_usdt": 14000.0,
-      "market_regime": "NEUTRAL",
+      "market_regime": "RISK_OFF",
       "market_regime_evidence": {
-        "btc_change_24h_pct": -1.286,
-        "negative_breadth": 0.5662,
-        "max_utilization": 0.75
+        "btc_change_24h_pct": -1.612,
+        "negative_breadth": 0.7432,
+        "max_utilization": 0.6
       },
       "hard_cash_floor_pct": 0.05,
-      "max_deployable_usdt": 15612.07,
-      "allocator_available_usdt": 1612.07,
-      "strategic_allocator_available_usdt": 1612.07,
+      "max_deployable_usdt": 12489.66,
+      "allocator_available_usdt": 0.0,
+      "strategic_allocator_available_usdt": 0,
       "total_cash_usdt": 6816.1,
       "tail_risk_budget": {
         "budget_usdt": 4000.0,
@@ -123,12 +123,12 @@
         "level": "NORMAL",
         "raw_level": "NORMAL",
         "reasons": [
-          "SYSTEMIC_EVIDENCE_NORMAL"
+          "MARKET_BREADTH_ELEVATED"
         ],
         "entered_at_utc": "2026-10-08T01:40:35.720282+00:00",
-        "updated_at_utc": "2026-10-08T15:22:02.343863+00:00",
-        "last_observation_id": "127e635a89dad8302a399e2a23dc3305b81d7bbf545d3e080a656867d763bc8d",
-        "last_observed_at_utc": "2026-10-08T15:22:02.343863+00:00",
+        "updated_at_utc": "2026-10-08T15:25:47.759026+00:00",
+        "last_observation_id": "4223fd0906f2b6bce414fbd8e0119edb526f2e9d150722d7e5d9b34fcc157e37",
+        "last_observed_at_utc": "2026-10-08T15:25:27.143617+00:00",
         "recovery_observations": 0,
         "recovery_required": 4,
         "recovery_mode": false,
@@ -137,42 +137,42 @@
         "risk_release_fraction": 1.0,
         "evidence": {
           "schema": "hunter_systemic_risk_evidence_v1",
-          "observed_at_utc": "2026-10-08T15:22:02.343863+00:00",
-          "observation_id": "127e635a89dad8302a399e2a23dc3305b81d7bbf545d3e080a656867d763bc8d",
-          "scan_generation_id": "20261008T151725823219Z",
-          "scan_as_of_utc": "2026-10-08T15:17:25.823219+00:00",
+          "observed_at_utc": "2026-10-08T15:25:27.143617+00:00",
+          "observation_id": "4223fd0906f2b6bce414fbd8e0119edb526f2e9d150722d7e5d9b34fcc157e37",
+          "scan_generation_id": "MONITOR_20261008T152527143617Z",
+          "scan_as_of_utc": "2026-10-08T15:25:27.143617+00:00",
           "scan_fresh": true,
           "btc_short": {
-            "return_5m_pct": -0.2082,
-            "return_15m_pct": -0.6182,
-            "return_1h_pct": -0.6808,
-            "last_completed_close_utc": "2026-10-08T15:19:59.999000+00:00"
+            "return_5m_pct": -0.5337,
+            "return_15m_pct": -1.0166,
+            "return_1h_pct": -1.1694,
+            "last_completed_close_utc": "2026-10-08T15:24:59.999000+00:00"
           },
           "btc_fetch_error": null,
           "breadth": {
-            "sample_count": 408,
-            "negative_fraction": 0.5662,
-            "loss_5pct_fraction": 0.076,
-            "loss_10pct_fraction": 0.0098
+            "sample_count": 692,
+            "negative_fraction": 0.7457,
+            "loss_5pct_fraction": 0.2197,
+            "loss_10pct_fraction": 0.091
           },
           "liquidity": {
             "fresh_sample_count": 212,
-            "catastrophic_fraction": 0.0142,
+            "catastrophic_fraction": 0.0236,
             "hard_spread_bps": 200.0,
             "hard_min_depth_usdt": 5000.0
           },
           "stablecoins": {
             "prices": {
               "USDCUSDT": 1.00051,
-              "FDUSDUSDT": 0.9976,
+              "FDUSDUSDT": 0.9977,
               "TUSDUSDT": 0.9996
             },
             "deviation_pct": {
               "USDCUSDT": 0.051,
-              "FDUSDUSDT": 0.24,
+              "FDUSDUSDT": 0.23,
               "TUSDUSDT": 0.04
             },
-            "max_deviation_pct": 0.24,
+            "max_deviation_pct": 0.23,
             "fetch_error": null
           },
           "missing_or_stale": [],
@@ -187,12 +187,12 @@
         "level": "NORMAL",
         "raw_level": "NORMAL",
         "reasons": [
-          "SYSTEMIC_EVIDENCE_NORMAL"
+          "MARKET_BREADTH_ELEVATED"
         ],
         "entered_at_utc": "2026-10-08T01:40:35.720282+00:00",
-        "updated_at_utc": "2026-10-08T15:22:02.343863+00:00",
-        "last_observation_id": "127e635a89dad8302a399e2a23dc3305b81d7bbf545d3e080a656867d763bc8d",
-        "last_observed_at_utc": "2026-10-08T15:22:02.343863+00:00",
+        "updated_at_utc": "2026-10-08T15:25:47.759026+00:00",
+        "last_observation_id": "4223fd0906f2b6bce414fbd8e0119edb526f2e9d150722d7e5d9b34fcc157e37",
+        "last_observed_at_utc": "2026-10-08T15:25:27.143617+00:00",
         "recovery_observations": 0,
         "recovery_required": 4,
         "recovery_mode": false,
@@ -201,42 +201,42 @@
         "risk_release_fraction": 1.0,
         "evidence": {
           "schema": "hunter_systemic_risk_evidence_v1",
-          "observed_at_utc": "2026-10-08T15:22:02.343863+00:00",
-          "observation_id": "127e635a89dad8302a399e2a23dc3305b81d7bbf545d3e080a656867d763bc8d",
-          "scan_generation_id": "20261008T151725823219Z",
-          "scan_as_of_utc": "2026-10-08T15:17:25.823219+00:00",
+          "observed_at_utc": "2026-10-08T15:25:27.143617+00:00",
+          "observation_id": "4223fd0906f2b6bce414fbd8e0119edb526f2e9d150722d7e5d9b34fcc157e37",
+          "scan_generation_id": "MONITOR_20261008T152527143617Z",
+          "scan_as_of_utc": "2026-10-08T15:25:27.143617+00:00",
           "scan_fresh": true,
           "btc_short": {
-            "return_5m_pct": -0.2082,
-            "return_15m_pct": -0.6182,
-            "return_1h_pct": -0.6808,
-            "last_completed_close_utc": "2026-10-08T15:19:59.999000+00:00"
+            "return_5m_pct": -0.5337,
+            "return_15m_pct": -1.0166,
+            "return_1h_pct": -1.1694,
+            "last_completed_close_utc": "2026-10-08T15:24:59.999000+00:00"
           },
           "btc_fetch_error": null,
           "breadth": {
-            "sample_count": 408,
-            "negative_fraction": 0.5662,
-            "loss_5pct_fraction": 0.076,
-            "loss_10pct_fraction": 0.0098
+            "sample_count": 692,
+            "negative_fraction": 0.7457,
+            "loss_5pct_fraction": 0.2197,
+            "loss_10pct_fraction": 0.091
           },
           "liquidity": {
             "fresh_sample_count": 212,
-            "catastrophic_fraction": 0.0142,
+            "catastrophic_fraction": 0.0236,
             "hard_spread_bps": 200.0,
             "hard_min_depth_usdt": 5000.0
           },
           "stablecoins": {
             "prices": {
               "USDCUSDT": 1.00051,
-              "FDUSDUSDT": 0.9976,
+              "FDUSDUSDT": 0.9977,
               "TUSDUSDT": 0.9996
             },
             "deviation_pct": {
               "USDCUSDT": 0.051,
-              "FDUSDUSDT": 0.24,
+              "FDUSDUSDT": 0.23,
               "TUSDUSDT": 0.04
             },
-            "max_deviation_pct": 0.24,
+            "max_deviation_pct": 0.23,
             "fetch_error": null
           },
           "missing_or_stale": [],
