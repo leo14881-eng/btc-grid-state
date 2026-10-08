@@ -164,7 +164,8 @@ class CexUniverseTests(unittest.TestCase):
     def test_cross_venue_union_and_existing_baseline(self):
         b={"venue":"binance","pair":"ABCUSDT","base":"ABC","price":1.03,"volume_24h_usdt":50000,"change_24h_pct":5}
         y={"venue":"bybit","pair":"ABCUSDT","base":"ABC","price":1.02,"volume_24h_usdt":10000,"change_24h_pct":4}
-        r=scan.build({"binance":[b],"bybit":[y]},{"coins":{"ABC":{"venue_prices":{"binance":1,"bybit":1}}}},"2026-09-26T00:00:00Z")
+        # Equivalent UTC fixture, also parseable by local Python 3.10.
+        r=scan.build({"binance":[b],"bybit":[y]},{"coins":{"ABC":{"venue_prices":{"binance":1,"bybit":1}}}},"2026-09-26T00:00:00+00:00")
         self.assertEqual(r["unique_base_tickers"],1)
         self.assertEqual(r["coins"]["ABC"]["stage"],"PRE_MOVE_WATCH")
         self.assertTrue(r["coins"]["ABC"]["contract_identity_unverified"])
@@ -174,7 +175,8 @@ class CexUniverseTests(unittest.TestCase):
         rows=[{"venue":"binance","pair":base+"USDT","base":base,
                "price":1.0,"volume_24h_usdt":100000,"change_24h_pct":pct}
               for base,pct in changes.items()]
-        report=scan.build({"binance":rows},{},"2026-09-26T00:00:00Z")
+        # This test covers queue membership, not ISO parser version support.
+        report=scan.build({"binance":rows},{},"2026-09-26T00:00:00+00:00")
         self.assertEqual(report["research_coverage_count"],4)
         self.assertEqual({r["base"] for r in report["research_leads"]},set(changes))
         self.assertTrue(all(r["prior_rally_auto_reject"] is False for r in report["research_leads"]))

@@ -60,36 +60,60 @@ def candles(body, symbol, interval, limit, end):
             raise ValueError("BYBIT_WORKER_KLINE_INVALID_OHLC")
     return rows
 
-def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None):
+def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
+            listing_refresher=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     end = int(now.timestamp() * 1000)
     listing_fetcher = listing_fetcher or availability.spot_proxy_universe
+    listing_refresher = listing_refresher or (lambda: availability.spot_proxy_universe(now, force_refresh=True))
     bases, cache = listing_fetcher()
     try:
         from research.hunter_cex_scan import valid
     except ModuleNotFoundError:
         from hunter_cex_scan import valid
     bases = [base for base in bases if valid(base)]
-    ticker_body = fetcher("/bybit/tickers")
-    ticks = result(ticker_body)
-    if abs(int(ticker_body.get("time",0))-end)>120000:
-        raise ValueError("BYBIT_WORKER_TICKERS_STALE_OR_FUTURE")
-    quotes = {}
-    for q in ticks.get("list") or []:
-        symbol = q.get("symbol") if isinstance(q,dict) else None
-        if not symbol or symbol in quotes:
-            raise ValueError("BYBIT_WORKER_TICKERS_INVALID_OR_DUPLICATE")
-        quotes[symbol] = q
-    rows=[]; missing=[]
-    for base in sorted(bases):
-        pair=base+"USDT"; q=quotes.get(pair,{})
-        try:
-            price,vol,change = [float(q[k]) for k in ("lastPrice","turnover24h","price24hPcnt")]
-            if not all(math.isfinite(v) for v in (price,vol,change)) or price<=0 or vol<0:
-                raise ValueError("invalid quote")
-        except (KeyError,TypeError,ValueError,OverflowError):
-            missing.append(pair); continue
-        rows.append(dict(venue="bybit",pair=pair,base=base,price=price,volume_24h_usdt=vol,change_24h_pct=change*100))
+    refresh_evidence=None
+    for ticker_attempt in range(2):
+        ticker_body = fetcher("/bybit/tickers")
+        ticks = result(ticker_body)
+        if abs(int(ticker_body.get("time",0))-end)>120000:
+            raise ValueError("BYBIT_WORKER_TICKERS_STALE_OR_FUTURE")
+        quotes = {}
+        for q in ticks.get("list") or []:
+            symbol = q.get("symbol") if isinstance(q,dict) else None
+            if not symbol or symbol in quotes:
+                raise ValueError("BYBIT_WORKER_TICKERS_INVALID_OR_DUPLICATE")
+            quotes[symbol] = q
+        rows=[]; missing=[]
+        for base in sorted(bases):
+            pair=base+"USDT"; q=quotes.get(pair,{})
+            try:
+                price,vol,change = [float(q[k]) for k in ("lastPrice","turnover24h","price24hPcnt")]
+                if not all(math.isfinite(v) for v in (price,vol,change)) or price<=0 or vol<0:
+                    raise ValueError("invalid quote")
+            except (KeyError,TypeError,ValueError,OverflowError):
+                missing.append(pair); continue
+            rows.append(dict(venue="bybit",pair=pair,base=base,price=price,volume_24h_usdt=vol,change_24h_pct=change*100))
+        if not missing:
+            break
+        if ticker_attempt or cache.get('cache_hit') is not True:
+            break
+        # A 24h cached Trading list can outlive a delisting. Never subtract the
+        # missing symbols from that list: refresh the entire official universe,
+        # then re-fetch and validate ALL tickers, including newly listed assets.
+        original=set(bases)
+        refreshed, refreshed_cache=listing_refresher()
+        age=(now-dt.datetime.fromisoformat(refreshed_cache['captured_at_utc'])).total_seconds()
+        if (refreshed_cache.get('cache_hit') is not False
+                or refreshed_cache.get('network_requests')!=1
+                or refreshed_cache.get('complete') is not True or not 0<=age<=120):
+            raise ValueError('BYBIT_WORKER_LISTING_REFRESH_NOT_FRESH_FULL_LIST')
+        bases=[base for base in refreshed if valid(base)]
+        refresh_evidence=dict(reason='CACHED_LIST_TICKER_CONTRADICTION',
+            original_missing_or_invalid=missing,
+            removed_bases=sorted(original-set(bases)),added_bases=sorted(set(bases)-original),
+            captured_at_utc=refreshed_cache['captured_at_utc'])
+        cache=refreshed_cache
     if missing:
         raise ValueError("BYBIT_WORKER_TICKERS_INCOMPLETE:"+",".join(missing[:10]))
     required=[r for r in rows if r["base"] not in set(binance_bases) and r["base"]!="BTC"]
@@ -119,7 +143,9 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None):
                 source=SOURCE,captured_at_utc=now.isoformat(),signal_pairs=len(signals),
                 signal_failures=len(failures),signal_complete=not failures and len(signals)==len(required),
                 signal_expected_bases=sorted(r["base"] for r in required),
-                listing_cache=cache, ticker_requests=1,kline_batch_requests=len(batches))
+                listing_cache=cache, ticker_requests=ticker_attempt+1,kline_batch_requests=len(batches))
+    if refresh_evidence is not None:
+        status['listing_refresh']=refresh_evidence
     payload=dict(schema="hunter_bybit_worker_v1",source=SOURCE,captured_at_utc=now.isoformat(),
                  rows=rows,venue_status=status,early_signals=signals,signal_failures=failures)
     payload["snapshot_sha256"]=digest(payload)

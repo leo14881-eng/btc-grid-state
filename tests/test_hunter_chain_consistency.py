@@ -2,6 +2,9 @@ import copy,datetime as dt,json,pathlib,tempfile,unittest,urllib.parse
 from unittest.mock import patch
 from research import hunter_policy as policy,hunter_shadow_trader_v2 as eng,hunter_tactical_capital_review as review,hunter_position_monitor as monitor,hunter_early_signals as early
 NOW=dt.datetime(2026,10,5,tzinfo=dt.timezone.utc)
+# Synthetic test-only provenance for in-memory positions; never a real commit.
+# Patch only the external Git lookup, leaving identity admission and lifecycle live.
+TEST_ONLY_SOURCE_SHA='0'*40
 class ChainConsistencyTests(unittest.TestCase):
  def test_monitor_encodes_unicode_pair_and_retains_actual_book(self):
   states=[{'open_positions':[{'asset':'牛来'}]}]
@@ -67,7 +70,9 @@ class ChainConsistencyTests(unittest.TestCase):
    c={'asset':'X','signal':{'score':12,'independent_signal_count':3,'btc_relative_1h_pct':2,'btc_relative_4h_pct':3,'relative_acceleration_pct':1},'signal_evidence':policy.stamp('X','old',(NOW-dt.timedelta(hours=2)).isoformat()),'execution_scenario':{'estimated_rr':2,'buy_slippage_bps':10},'blockers':[]}
    state={'open_positions':[pos]};scan={'coins':{'X':{'reference_price':price}}}
    liq={'snapshots':{'X':{'as_of_utc':NOW.isoformat(),'spread_bps':10,'bid_depth_2pct_usdt':50000,'ask_depth_2pct_usdt':50000}}}
-   eng.manage_existing_positions(state,scan,{'candidates':[c]},liq,{},NOW)
+   with patch.object(eng,'_execution_source_sha',return_value=TEST_ONLY_SOURCE_SHA) as source_sha:
+    eng.manage_existing_positions(state,scan,{'candidates':[c]},liq,{},NOW)
+    source_sha.assert_called_once_with()
    self.assertEqual(len(state['open_positions']),1);self.assertEqual(len(pos['tranches']),1);self.assertEqual(state['events'],[])
  def test_price_protection_still_operates_without_signal(self):
   p={'asset':'X','opened_at_utc':NOW.isoformat(),'tranches':[{'price':100,'notional_usdt':1000}],'mfe_pct':4}
@@ -75,8 +80,12 @@ class ChainConsistencyTests(unittest.TestCase):
   def book(price,now):return {'exchange':'binance','market':'spot','symbol':'XUSDT','price_unit':'USDT','quantity_unit':'BASE','bids':[[price,100]],'asks':[[price+.01,100]],'fetched_at':now.isoformat()}
   before=NOW-dt.timedelta(minutes=5)
   life.protect(p,104,eng.net_pnl(p,104),life.liquidation(p,book(104,before),before),before,'armed',before.isoformat())
-  state={'open_positions':[p]};eng.manage_existing_positions(state,{'as_of_utc':NOW.isoformat(),'generation_id':'current','coins':{'X':{'reference_price':101}}},{}, {'snapshots':{'X':{'raw_book_evidence':book(101,NOW)}}},{},NOW)
+  state={'open_positions':[p]}
+  with patch.object(eng,'_execution_source_sha',return_value=TEST_ONLY_SOURCE_SHA) as source_sha:
+   eng.manage_existing_positions(state,{'as_of_utc':NOW.isoformat(),'generation_id':'current','coins':{'X':{'reference_price':101}}},{}, {'snapshots':{'X':{'raw_book_evidence':book(101,NOW)}}},{},NOW)
+   source_sha.assert_called_once_with()
   self.assertEqual(state['closed_positions'][0]['exit_reason'],'PROFIT_PROTECTION')
+  self.assertEqual(state['closed_positions'][0]['execution_identity_proof']['source_main_sha'],TEST_ONLY_SOURCE_SHA)
  def test_monitor_refreshes_watch_holdings_without_new_entry(self):
   states=[{'open_positions':[{'asset':'X'}]}];market={'X':{'reference_price':100}}
   values={'XUSDT':{'return_pct':2},'BTCUSDT':{'return_pct':0}}
