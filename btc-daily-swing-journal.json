@@ -82,10 +82,10 @@
         "submitted_confirmation": true,
         "filled_confirmation": true,
         "caution": "Order-entry screenshot does not prove submission, execution or contingent take-profit activation.",
-        "latest_evidence_note": "Order history screenshot proves two distinct fully filled BTC limit buys. 84,200 TP shown for order 11156224 as trigger price, but no evidence of a live exit order or sell fill."
+        "latest_evidence_note": "Open orders screenshot shows unfilled 0.037 BTC limit SELL at 84,500 and 0.036282 BTC conditional market SELL triggered at >=84,200. Their combined quantity 0.073282 BTC exceeds today's confirmed buys 0.072342 BTC by 0.000940 BTC; attribution to original BTC holdings UNKNOWN. No stop-loss shown."
       },
       "actual": {
-        "order_status": "TWO_BUY_ORDERS_FULLY_FILLED__SELL_NOT_VERIFIED",
+        "order_status": "TWO_BUYS_FILLED__TWO_SELL_ORDERS_OPEN_UNFILLED",
         "buy_filled": true,
         "buy_filled_quantity_btc": 0.072342,
         "buy_avg_fill_price_usdt": 82941.596555,
@@ -139,11 +139,40 @@
           }
         ],
         "gross_cost_usdt": 6000.160978,
-        "take_profit_84200_status": "TRIGGER_SHOWN_IN_HISTORICAL_BUY_ORDER__ACTIVE_TP_UNVERIFIED",
-        "fees_status": "UNKNOWN"
+        "take_profit_84200_status": "ACTIVE_OPEN_TRIGGER_ORDER_SHOWN__NO_FILL",
+        "fees_status": "UNKNOWN",
+        "open_sell_orders_observed": [
+          {
+            "side": "SELL",
+            "order_type": "LIMIT",
+            "limit_price_usdt": 84500,
+            "quantity_btc": 0.037,
+            "filled_btc": 0,
+            "status": "OPEN_UNFILLED_SCREENSHOT",
+            "order_id": "UNKNOWN",
+            "screenshot_clock": "22:35",
+            "clock_timezone": "UNVERIFIED",
+            "evidence": "USER_SCREENSHOT_OPEN_ORDERS_2026_10_08"
+          },
+          {
+            "side": "SELL",
+            "order_type": "TAKE_PROFIT_STOP_MARKET",
+            "trigger_condition": ">=84200",
+            "trigger_price_usdt": 84200,
+            "execution_type": "MARKET",
+            "quantity_btc": 0.036282,
+            "status": "OPEN_WAITING_TRIGGER_SCREENSHOT",
+            "order_id": "UNKNOWN",
+            "screenshot_clock": "22:35",
+            "clock_timezone": "UNVERIFIED",
+            "evidence": "USER_SCREENSHOT_OPEN_ORDERS_2026_10_08"
+          }
+        ],
+        "open_sell_order_quantity_btc": 0.073282,
+        "open_sell_orders_excess_over_day1_buy_quantity_btc": 0.00094
       },
       "review": {
-        "status": "PENDING_EXIT_FEE_AND_TP_CONFIRMATION",
+        "status": "OPEN_SELL_ORDERS_VERIFIED__EXIT_FEES_PENDING",
         "intraday_low_usdt": null,
         "intraday_high_usdt": null,
         "mfe_pct": null,
@@ -159,9 +188,18 @@
           "Original Day 1 plan specified one 3,000 USDT buy; a second distinct 3,000 USDT buy is now confirmed by screenshot. Its decision basis is unverified and should not be attributed to the original plan."
         ],
         "improvement_actions": [
-          "Require explicit new evidence and budget check before an additional short-term buy; verify any take-profit as an active order, not just a trigger field in historical buy."
+          "Require explicit new evidence and budget check before an additional short-term buy; verify any take-profit as an active order, not just a trigger field in historical buy.",
+          "Reconcile total sell reservations against actual available BTC and older holdings; do not assume the two exits match today's buys exactly.",
+          "Conditional take-profit at 84,200 is market-on-trigger and does not guarantee that fill price; neither sell order is a downside stop-loss."
         ],
-        "review_at": null
+        "review_at": null,
+        "observed_market_snapshot_from_user_screenshot": {
+          "btc_price_usdt": 81105.6,
+          "screenshot_clock": "22:35",
+          "timezone": "UNVERIFIED",
+          "market_source": "EXCHANGE_UI_USER_SCREENSHOT",
+          "price_is_not_live_now": true
+        }
       }
     }
   ],
