@@ -6,17 +6,21 @@
   "bootstrap_since_utc": "2026-10-06T18:26:30+00:00",
   "acknowledged_event_ids": [],
   "pending_batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
-  "delivery_status": "PREPARED_NOT_DELIVERED",
-  "source_main_sha": "9f75cee2d92cf915209719c679969175fc8e145d",
-  "last_attempt_at": "2026-10-08T10:34:25.499Z",
+  "delivery_status": "RESPONSE_QUEUED",
+  "source_main_sha": "7dd11f5b0a988cf0a4c663aa948ec55193d6cd73",
+  "last_attempt_at": "2026-10-08T11:24:46.986Z",
   "last_successful_check_at": "2026-10-08T05:12:49.890Z",
-  "unverified_batch_attempts": 0,
+  "unverified_batch_attempts": 1,
   "notification_failure": {
-    "at": "2026-10-08T10:34:25.499Z",
-    "phase": "FIXED_MAIN_INPUT_VALIDATION",
-    "tool": "mcp__codex_apps__github_fetch_file",
-    "source_main_sha": "9f75cee2d92cf915209719c679969175fc8e145d",
+    "at": "2026-10-08T11:24:46.986Z",
+    "phase": "DELIVERY_ACK_UNVERIFIABLE",
+    "tool": "conversation_message_observation",
+    "source_main_sha": "7dd11f5b0a988cf0a4c663aa948ec55193d6cd73",
     "errors": [
+      {
+        "error_code": "MESSAGE_ID_UNAVAILABLE",
+        "raw_error": "Matching prior assistant batch_id was observable, but no verifiable message_id was available; acknowledgement not advanced."
+      },
       {
         "path": "hunter-runtime-monitor-health.json",
         "error_code": "NOT_FOUND",
@@ -28,14 +32,14 @@
         "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
       }
     ],
-    "effect": "LAST_SUCCESSFUL_CHECK_AND_ACK_NOT_ADVANCED"
+    "effect": "ACK_NOT_ADVANCED_PENDING_RETAINED_UNIQUE_RESEND_QUEUED"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
   "source_file_hashes": {
-    "portfolio": "cc3e8f60502a1e5e300e615424e4b15ed405d7f0",
-    "summary": "4d2f42bb30a11d2a6dc31ee2de62406327713706",
+    "portfolio": "b9c2c8c11a8fad40aad0d26a7942c16f0294d22f",
+    "summary": "8cd83c8d8a74ab32ebe43819a2e2f18e1ba4a458",
     "monitor": null,
     "scheduler": null
   },
