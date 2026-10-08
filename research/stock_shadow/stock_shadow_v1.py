@@ -588,6 +588,11 @@ def main():
                 "net_pnl_usdt":closed["realized_net_pnl_usdt"],"net_return_pct":closed["realized_net_return_pct"],
                 "gross_price_return_pct":closed["gross_price_return_pct"],"estimated_total_fees_usdt":closed["estimated_total_fees_usdt"],
                 "position_state":ps,"USER_ALERT_REQUIRED":True})
+        if s in state["positions"] and len(p["tranches"]) > n:
+            # Report the post-ADD book only after this position's V3 decisions.
+            # Keep r, extrema and lifecycle signals on their frozen decision basis.
+            p.update({"net_pnl_usdt":round(net_pnl(p,price),6),
+                      "net_return_pct":round(net_pct(p,price),6)})
     wins=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)>0]; losses=[x for x in state["closed"] if x.get("realized_net_pnl_usdt",0)<=0]
     realized=sum(x.get("realized_net_pnl_usdt",0) for x in state["closed"])
     state["updated_at"]=now(); state["simulation_only"]=True

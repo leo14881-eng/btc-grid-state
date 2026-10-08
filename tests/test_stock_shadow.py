@@ -900,6 +900,77 @@ def test_p0_full_scan_buy_add_structural_sell_and_close_crossing(monkeypatch,ini
         assert ss.continuity_fingerprint(book[ss.STATE],book[ss.EVENTS])==before
     assert book[ss.SUMMARY]['candidates_ready']==2
 
+@pytest.mark.parametrize('price,tranche_prices,pending,actions_enabled,quoted,expected', [
+    (90.0, [100.0], False, True, True, ['ADD']),
+    (100.5, [100.0], False, True, True, ['ADD']),  # ADD fees cross zero.
+    (110.0, [90.0, 100.0], False, True, True, ['ADD']),
+    (110.0, [100.0], True, True, True, ['ADD', 'SELL']),
+    (110.0, [100.0] * 5, False, True, True, []),
+    (110.0, [100.0], False, False, True, []),
+    (110.0, [100.0], False, True, False, []),
+])
+def test_post_add_reporting_preserves_decisions_and_history(
+        monkeypatch, price, tranche_prices, pending, actions_enabled, quoted, expected):
+    from research.stock_shadow.server.persist import reporting_audit
+
+    book = _p0_book(ss, monkeypatch)
+    old_closed = book[ss.STATE]['positions'].pop('EXIT')
+    old_closed.update(realized_net_pnl_usdt=12.0, closed_at='2026-10-02T16:00:00+00:00')
+    book[ss.STATE]['closed'] = [old_closed]
+    p = book[ss.STATE]['positions']['ADD']
+    p['tranches'] = [{**copy.deepcopy(p['tranches'][0]), 'price': value}
+                     for value in tranche_prices]
+    p.update(mae_net_pct=-1.0, last_price=100.0, net_pnl_usdt=-4.0, net_return_pct=-0.4)
+    if pending:
+        p['rebound_exit_pending_v3'] = {'armed_at': '2026-10-02T15:00:00+00:00',
+                                      'lowest_net_return_pct': -2.0}
+    book[ss.EVENTS] = [{'type': 'BUY', 'symbol': 'ADD', **copy.deepcopy(p['tranches'][0])}]
+    before = copy.deepcopy(book)
+    before_pnl, before_return = ss.net_pnl(p, price), ss.net_pct(p, price)
+    stamp = '2026-10-05T17:00:01+00:00' if actions_enabled else '2026-10-05T20:00:01+00:00'
+    _p0_clock(ss, monkeypatch, stamp, stamp)
+    monkeypatch.setattr(ss, '_alpaca_exchange_session', lambda ts=None:
+                        {'date': '2026-10-05', 'open': clock_time(9, 30), 'close': clock_time(16)})
+    market = {'ADD': {**_m(price=price), 'base': 'ADD'}} if quoted else {}
+    monkeypatch.setattr(ss, 'stock_universe', lambda: (market, [], {'discovered': 1, 'source_errors': []}))
+    monkeypatch.setattr(ss, 'entry_decision', lambda *args:
+                        {'ready': True, 'score': 80, 'entry_structure': 'MOMENTUM_TREND',
+                         'reasons': [], 'rejects': [], 'metrics': {}})
+    monkeypatch.setattr(ss, 'position_state_v2', lambda *args:
+                        {'state': 'STRONG', 'market_relative20': 1})
+    monkeypatch.setattr(ss, 'recovery_add_signal', lambda *args: {'eligible': True})
+
+    ss.main()
+
+    state, events = book[ss.STATE], book[ss.EVENTS]
+    assert events[:1] == before[ss.EVENTS]
+    assert state['closed'][:1] == before[ss.STATE]['closed']
+    assert [event['type'] for event in events[1:]] == expected
+    saved = state['closed'][-1] if 'SELL' in expected else state['positions']['ADD']
+    assert saved['tranches'][:len(tranche_prices)] == before[ss.STATE]['positions']['ADD']['tranches']
+    assert len(saved['tranches']) == len(tranche_prices) + ('ADD' in expected)
+    if not quoted:
+        assert saved == before[ss.STATE]['positions']['ADD']
+        return
+    # Extrema and all V3 lifecycle/exit inputs retain the pre-ADD observation.
+    assert saved['mfe_net_pct'] == max(10.0, before_return)
+    assert saved['mae_net_pct'] == min(-1.0, before_return)
+    assert saved['position_state_v3']['net_return_pct'] == round(before_return, 6)
+    if 'SELL' in expected:
+        assert events[-1]['reason'] == 'REBOUND_PROFIT_EXIT_AFTER_DETERIORATION_V3'
+        assert events[-1]['net_pnl_usdt'] == round(before_pnl - 4.0, 6)
+        assert saved['net_pnl_usdt'] == round(before_pnl, 6)  # Closed history is not rewritten.
+    else:
+        assert saved['net_pnl_usdt'] == round(ss.net_pnl(saved, price), 6)
+        assert saved['net_return_pct'] == round(ss.net_pct(saved, price), 6)
+        assert reporting_audit(state)['status'] == 'MATCH'
+        if 'ADD' in expected:
+            assert saved['net_pnl_usdt'] == round(before_pnl - 4.0, 6)
+            assert saved['avg_price'] == ss.avg(saved)
+    assert book[ss.SUMMARY]['realized_net_pnl_usdt'] == round(
+        sum(item['realized_net_pnl_usdt'] for item in state['closed']), 6)
+
+
 @pytest.mark.parametrize('initial,event_stamp,expect_sell', [
     ('2026-10-04T09:00:00+00:00','2026-10-04T09:26:25+00:00',False),
     ('2026-10-05T19:59:59+00:00','2026-10-05T20:00:00+00:00',False),
