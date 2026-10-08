@@ -5,22 +5,18 @@
   "real_trading_enabled": false,
   "bootstrap_since_utc": "2026-10-06T18:26:30+00:00",
   "acknowledged_event_ids": [],
-  "pending_batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
+  "pending_batch_id": "0b17115ca1db9fe887e20f82e88c9a650286b8a9a3eda570b2ed4a2d21ab2ae4",
   "delivery_status": "RESPONSE_QUEUED",
-  "source_main_sha": "4763fb2f426b33372d08da78d1ded2673e9ac72a",
-  "last_attempt_at": "2026-10-08T11:24:46.986Z",
+  "source_main_sha": "b5bed88eac5c6d4624c56b9169c446220bfde1c0",
+  "last_attempt_at": "2026-10-08T15:41:39.399Z",
   "last_successful_check_at": "2026-10-08T05:12:49.890Z",
-  "unverified_batch_attempts": 1,
+  "unverified_batch_attempts": 0,
   "notification_failure": {
-    "at": "2026-10-08T14:21:10.520Z",
-    "phase": "DELIVERY_ACK_UNVERIFIABLE",
+    "at": "2026-10-08T15:41:39.399Z",
+    "phase": "SOURCE_HEALTH_FILES_MISSING",
     "tool": "mcp__codex_apps__github_fetch_file",
-    "source_main_sha": "4763fb2f426b33372d08da78d1ded2673e9ac72a",
+    "source_main_sha": "b5bed88eac5c6d4624c56b9169c446220bfde1c0",
     "errors": [
-      {
-        "error_code": "MESSAGE_ID_UNAVAILABLE",
-        "raw_error": "Matching prior assistant batch_id was observable, but no verifiable message_id was available; acknowledgement not advanced and resend limit already reached."
-      },
       {
         "path": "hunter-runtime-monitor-health.json",
         "error_code": "NOT_FOUND",
@@ -32,19 +28,53 @@
         "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
       }
     ],
-    "effect": "ACK_AND_LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_PENDING_RETAINED_NO_FURTHER_RESEND"
+    "effect": "LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_NEW_TRADE_BATCH_PREPARED"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
   "source_file_hashes": {
-    "portfolio": "b9f757d578674ec9e6307b160b9fb6e7ed506ca1",
-    "summary": "00001cf52ba3586dd4ed255268bcc8853d2f3ecd",
+    "portfolio": "c6c7b7fd29a3ab949b3f4b9dce05fd42e890ca6c",
+    "summary": "7ff1cfbfef0d99fb4b25e3f84efc3a371992a2a7",
     "monitor": null,
     "scheduler": null
   },
   "pending_event_ids": [
-    "42b45d3614e8a4d3aa74b2170e6688a1a71835e209c738d696ad1aa04e7b716a"
+    "0fccfce5f752b98dca2405ba2f10508c179b9a5aeeca6b98d3aec681c686b727"
   ],
-  "last_check_attempt_at": "2026-10-08T14:21:10.520Z"
+  "last_check_attempt_at": "2026-10-08T15:41:39.399Z",
+  "unresolved_batches": [
+    {
+      "batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
+      "event_ids": [
+        "42b45d3614e8a4d3aa74b2170e6688a1a71835e209c738d696ad1aa04e7b716a"
+      ],
+      "delivery_status": "DELIVERY_ACK_UNVERIFIABLE",
+      "unverified_batch_attempts": 1,
+      "last_attempt_at": "2026-10-08T11:24:46.986Z",
+      "notification_failure": {
+        "at": "2026-10-08T14:21:10.520Z",
+        "phase": "DELIVERY_ACK_UNVERIFIABLE",
+        "tool": "mcp__codex_apps__github_fetch_file",
+        "source_main_sha": "4763fb2f426b33372d08da78d1ded2673e9ac72a",
+        "errors": [
+          {
+            "error_code": "MESSAGE_ID_UNAVAILABLE",
+            "raw_error": "Matching prior assistant batch_id was observable, but no verifiable message_id was available; acknowledgement not advanced and resend limit already reached."
+          },
+          {
+            "path": "hunter-runtime-monitor-health.json",
+            "error_code": "NOT_FOUND",
+            "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
+          },
+          {
+            "path": "hunter-scheduler-health.json",
+            "error_code": "NOT_FOUND",
+            "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
+          }
+        ],
+        "effect": "ACK_AND_LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_PENDING_RETAINED_NO_FURTHER_RESEND"
+      }
+    }
+  ]
 }
