@@ -1,0 +1,846 @@
+{
+  "schema": "hunter_scope_change_acceptance_v1",
+  "snapshot_sha": "d232f7457390aad800c482d5f9abd6bcd492187a",
+  "scope": {
+    "sentinel_full_migration": "CANCELED_BY_USER_2026_10_08",
+    "sentinel_existing_tasks": "RETAINED",
+    "strategy_changes": false,
+    "fast_path_mode": "OBSERVATION_ONLY"
+  },
+  "conclusion": "PARTIAL_FIX",
+  "new_prs": [
+    {
+      "number": 81,
+      "merge": "8a6c35dd78713ad687067c318e84a30c0846e563"
+    },
+    {
+      "number": 82,
+      "merge": "c4f27e4707d4c516ce11af08ab4441b1f42d72da"
+    },
+    {
+      "number": 83,
+      "merge": "09e7e3a4985a9371bbf652709bbee3d152b94058"
+    }
+  ],
+  "tests": {
+    "local_hunter": {
+      "run": 630,
+      "passed": 630,
+      "skipped": 0,
+      "seconds": 33.141
+    },
+    "server_research_hunter": {
+      "run": 630,
+      "passed": 629,
+      "skipped": 1,
+      "seconds": 40.452
+    },
+    "server_fast_watch_release": {
+      "fast_watch": 134,
+      "shared_cost": 9,
+      "status": "PASS"
+    }
+  },
+  "failed_natural_hour": {
+    "at_utc": "2026-10-08T01:17:00Z",
+    "status": "FAILURE",
+    "publication_error": "AUX_CAS_REJECTED_STALE_WRITER",
+    "failure_readback_completed_utc": "2026-10-08T01:17:28Z",
+    "must_not_erase": true
+  },
+  "recovered_chain": {
+    "classification": "USER_AUTHORIZED_RECOVERY",
+    "discovery": {
+      "job": "discovery",
+      "status": "SUCCESS",
+      "started_at_utc": "2026-10-08T01:32:04.672716+00:00",
+      "completed_at_utc": "2026-10-08T01:32:27.563502+00:00",
+      "source_head_sha": "4fce69157442c4370a5a6896c2b8b1c8baa656d8",
+      "main_readback_head_sha": "8b188acc05c0ed25a8f7c732fc4b478b9082e297",
+      "main_readback_verified": true,
+      "scan_generation_id": "20261008T013206955874Z",
+      "capital_authority": "NONE_SHADOW_ONLY",
+      "real_trading_enabled": false,
+      "steps": [
+        {
+          "name": "Validate discovery only",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:04.689021+00:00",
+          "completed_at_utc": "2026-10-08T01:32:06.844148+00:00"
+        },
+        {
+          "name": "Scan Binance and verified Bybit USDT spot universe",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:06.844228+00:00",
+          "completed_at_utc": "2026-10-08T01:32:19.052079+00:00"
+        },
+        {
+          "name": "Validate publishable discovery generation",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:19.052171+00:00",
+          "completed_at_utc": "2026-10-08T01:32:19.114040+00:00"
+        },
+        {
+          "name": "Atomically persist discovery outputs only",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:19.114105+00:00",
+          "completed_at_utc": "2026-10-08T01:32:26.084975+00:00"
+        },
+        {
+          "name": "Authoritative main read-back",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:26.085056+00:00",
+          "completed_at_utc": "2026-10-08T01:32:27.562484+00:00"
+        }
+      ]
+    },
+    "research": {
+      "job": "research",
+      "status": "SUCCESS",
+      "started_at_utc": "2026-10-08T01:32:37.894047+00:00",
+      "completed_at_utc": "2026-10-08T01:36:56.085875+00:00",
+      "source_head_sha": "297b75c0350997cc7bc1eb830d10224cc6b8ab10",
+      "main_readback_head_sha": "297b75c0350997cc7bc1eb830d10224cc6b8ab10",
+      "main_readback_verified": true,
+      "scan_generation_id": "20261008T013206955874Z",
+      "capital_authority": "NONE_SHADOW_ONLY",
+      "real_trading_enabled": false,
+      "steps": [
+        {
+          "name": "Refresh admitted generation baseline",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:37.910549+00:00",
+          "completed_at_utc": "2026-10-08T01:32:39.437347+00:00"
+        },
+        {
+          "name": "Test complete Hunter system before state mutation",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:32:39.437604+00:00",
+          "completed_at_utc": "2026-10-08T01:33:20.977521+00:00"
+        },
+        {
+          "name": "Capture discovery generation",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:33:20.977625+00:00",
+          "completed_at_utc": "2026-10-08T01:33:21.039997+00:00"
+        },
+        {
+          "name": "Run Hunter closed-loop engine — signals",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:33:21.040340+00:00",
+          "completed_at_utc": "2026-10-08T01:33:46.188364+00:00"
+        },
+        {
+          "name": "Forward-upside research",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:33:46.188865+00:00",
+          "completed_at_utc": "2026-10-08T01:34:14.542347+00:00"
+        },
+        {
+          "name": "Identity audit",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:14.542447+00:00",
+          "completed_at_utc": "2026-10-08T01:34:15.632796+00:00"
+        },
+        {
+          "name": "Forward outcome audit",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:15.632887+00:00",
+          "completed_at_utc": "2026-10-08T01:34:16.072883+00:00"
+        },
+        {
+          "name": "Candidate dossiers",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:16.072971+00:00",
+          "completed_at_utc": "2026-10-08T01:34:16.306082+00:00"
+        },
+        {
+          "name": "Liquidity only for shortlisted candidates",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:16.306155+00:00",
+          "completed_at_utc": "2026-10-08T01:34:51.266699+00:00"
+        },
+        {
+          "name": "Rebuild dossiers with execution evidence",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:51.266769+00:00",
+          "completed_at_utc": "2026-10-08T01:34:51.482402+00:00"
+        },
+        {
+          "name": "Primary-source lead discovery",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:51.482481+00:00",
+          "completed_at_utc": "2026-10-08T01:34:51.621164+00:00"
+        },
+        {
+          "name": "Official-source evidence enrichment",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:51.621242+00:00",
+          "completed_at_utc": "2026-10-08T01:34:52.026017+00:00"
+        },
+        {
+          "name": "Research completion state",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:52.026097+00:00",
+          "completed_at_utc": "2026-10-08T01:34:52.102362+00:00"
+        },
+        {
+          "name": "Rebuild dossiers with completion state",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:52.102441+00:00",
+          "completed_at_utc": "2026-10-08T01:34:52.326637+00:00"
+        },
+        {
+          "name": "Tactical supply and unlock risk",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:52.326713+00:00",
+          "completed_at_utc": "2026-10-08T01:34:52.417354+00:00"
+        },
+        {
+          "name": "Single authoritative BUY WAIT REJECT decision",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:52.417446+00:00",
+          "completed_at_utc": "2026-10-08T01:34:52.916716+00:00"
+        },
+        {
+          "name": "Health and candidate gate report",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:52.916813+00:00",
+          "completed_at_utc": "2026-10-08T01:34:53.104213+00:00"
+        },
+        {
+          "name": "Run historical tail-risk replay",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:34:53.104310+00:00",
+          "completed_at_utc": "2026-10-08T01:35:05.006581+00:00"
+        },
+        {
+          "name": "Verify tail-risk replay assumptions and shadow boundary",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:35:05.006668+00:00",
+          "completed_at_utc": "2026-10-08T01:35:05.052099+00:00"
+        },
+        {
+          "name": "Run historical leading-risk replay",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:35:05.052187+00:00",
+          "completed_at_utc": "2026-10-08T01:35:42.188338+00:00"
+        },
+        {
+          "name": "Verify leading-risk replay shadow boundary",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:35:42.188418+00:00",
+          "completed_at_utc": "2026-10-08T01:35:42.241339+00:00"
+        },
+        {
+          "name": "Refresh official Bybit execution channels",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:35:42.241470+00:00",
+          "completed_at_utc": "2026-10-08T01:35:42.368185+00:00"
+        },
+        {
+          "name": "Bind latest authoritative monitor state before shadow execution",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:35:42.368263+00:00",
+          "completed_at_utc": "2026-10-08T01:36:08.526703+00:00"
+        },
+        {
+          "name": "Validate shadow engines",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:08.526772+00:00",
+          "completed_at_utc": "2026-10-08T01:36:08.794096+00:00"
+        },
+        {
+          "name": "Shadow optimizer frozen pending user acceptance",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:08.794167+00:00",
+          "completed_at_utc": "2026-10-08T01:36:08.798621+00:00"
+        },
+        {
+          "name": "Run V1 broad-net shadow orders",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:08.798695+00:00",
+          "completed_at_utc": "2026-10-08T01:36:34.252390+00:00"
+        },
+        {
+          "name": "Verify V1 EARLY coverage and state integrity",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:34.252466+00:00",
+          "completed_at_utc": "2026-10-08T01:36:34.568129+00:00"
+        },
+        {
+          "name": "Run V2 executable shadow orders",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:34.568195+00:00",
+          "completed_at_utc": "2026-10-08T01:36:38.947440+00:00"
+        },
+        {
+          "name": "Verify V2 shadow state integrity",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:38.947517+00:00",
+          "completed_at_utc": "2026-10-08T01:36:39.063186+00:00"
+        },
+        {
+          "name": "Reject mixed-generation research",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:39.063282+00:00",
+          "completed_at_utc": "2026-10-08T01:36:39.279030+00:00"
+        },
+        {
+          "name": "Closed-loop acceptance guard",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:39.279121+00:00",
+          "completed_at_utc": "2026-10-08T01:36:39.745370+00:00"
+        },
+        {
+          "name": "Persist Hunter state only after closed-loop acceptance",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:39.745448+00:00",
+          "completed_at_utc": "2026-10-08T01:36:54.621381+00:00"
+        },
+        {
+          "name": "Authoritative main read-back",
+          "status": "SUCCESS",
+          "started_at_utc": "2026-10-08T01:36:54.621453+00:00",
+          "completed_at_utc": "2026-10-08T01:36:56.084827+00:00"
+        }
+      ]
+    }
+  },
+  "watchdog": {
+    "job": "watchdog",
+    "status": "SUCCESS",
+    "started_at_utc": "2026-10-08T01:37:04.869062+00:00",
+    "completed_at_utc": "2026-10-08T01:37:07.492026+00:00",
+    "source_head_sha": "092dc9bd5b3ce0d259edaab692c825a604b6ca95",
+    "main_readback_head_sha": "092dc9bd5b3ce0d259edaab692c825a604b6ca95",
+    "main_readback_verified": true,
+    "capital_authority": "NONE_SHADOW_ONLY",
+    "real_trading_enabled": false,
+    "steps": [
+      {
+        "name": "Observe discovery and downstream generation",
+        "status": "SUCCESS",
+        "started_at_utc": "2026-10-08T01:37:04.886985+00:00",
+        "completed_at_utc": "2026-10-08T01:37:06.246694+00:00"
+      },
+      {
+        "name": "Self-heal stale discovery or downstream by touching dedicated trigger",
+        "status": "SKIPPED",
+        "started_at_utc": "2026-10-08T01:37:06.246772+00:00",
+        "completed_at_utc": "2026-10-08T01:37:06.247094+00:00"
+      },
+      {
+        "name": "Self-heal stale position monitor by touching dedicated trigger",
+        "status": "SKIPPED",
+        "started_at_utc": "2026-10-08T01:37:06.247130+00:00",
+        "completed_at_utc": "2026-10-08T01:37:06.247206+00:00"
+      },
+      {
+        "name": "Authoritative main read-back",
+        "status": "SUCCESS",
+        "started_at_utc": "2026-10-08T01:37:06.247231+00:00",
+        "completed_at_utc": "2026-10-08T01:37:07.490904+00:00"
+      }
+    ]
+  },
+  "scheduler": {
+    "consecutive_missed_bucket_count": 0,
+    "current_generation_id": "2026-10-08T01:40:00Z",
+    "duplicate_trigger_count": 0,
+    "duration_seconds": 46.367,
+    "expected_interval_seconds": 300,
+    "health": "HEALTHY",
+    "interval_since_previous_success_seconds": 304.774,
+    "last_duplicate_trigger_at_utc": null,
+    "last_failure": null,
+    "last_successful_monitor_generation_id": "2026-10-08T01:40:00Z",
+    "missed_bucket_count": 0,
+    "missed_bucket_provenance": "GENERATION_BUCKET_DISTANCE",
+    "monitor_completed_at_utc": "2026-10-08T01:40:56.117669+00:00",
+    "monitor_started_at_utc": "2026-10-08T01:40:09.751055+00:00",
+    "previous_success_at_utc": "2026-10-08T01:35:51.344064+00:00",
+    "previous_success_generation_id": "2026-10-08T01:35:00Z",
+    "real_order_count": 0,
+    "schema": "hunter_scheduler_health_v1",
+    "shadow_only": true,
+    "state_revision": "86e2a33be462bfd0074e04762f88108ff6b9c821",
+    "trigger_source": "VULTR_SYSTEMD"
+  },
+  "monitor": {
+    "capital_authority": "NONE_SHADOW_ONLY",
+    "completed_at_utc": "2026-10-08T01:41:05.589315+00:00",
+    "job": "monitor",
+    "main_readback_head_sha": "eb97330075456c8e22ca799c0ce7608cdf9f2205",
+    "main_readback_verified": true,
+    "monitor_generation_id": "2026-10-08T01:40:00Z",
+    "real_trading_enabled": false,
+    "scheduler_health_sha256": "75cf904d504834fb34b1cdd90f98a2d647d757fdd5711e1dabd874a012d384db",
+    "schema": "hunter_runtime_job_health_v1",
+    "source": "VULTR_SYSTEMD",
+    "status": "SUCCESS"
+  },
+  "portfolio_invariants": {
+    "snapshot_sha": "d232f7457390aad800c482d5f9abd6bcd492187a",
+    "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
+    "last_cycle_generation_id": "MONITOR_20261008T014015369280Z",
+    "positions": [
+      {
+        "asset": "NEXO",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "NEXOUSDT",
+        "market_type": "spot",
+        "health_state": "THESIS_INVALIDATED",
+        "health_reasons": [
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
+        ],
+        "recovery_state": "PERSISTENT_INVALIDATION",
+        "degraded_cycles": 23,
+        "persistent_invalidation_count": 21,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 25
+      },
+      {
+        "asset": "HUMA",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "HUMAUSDT",
+        "market_type": "spot",
+        "health_state": "WEAKENING",
+        "health_reasons": [
+          "SCORE_WEAK"
+        ],
+        "recovery_state": "LOSS_RECOVERY",
+        "degraded_cycles": 0,
+        "persistent_invalidation_count": 0,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 32
+      },
+      {
+        "asset": "HAEDAL",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "HAEDALUSDT",
+        "market_type": "spot",
+        "health_state": "WEAKENING",
+        "health_reasons": [
+          "SCORE_WEAK"
+        ],
+        "recovery_state": "LOSS_RECOVERY",
+        "degraded_cycles": 0,
+        "persistent_invalidation_count": 0,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 26
+      },
+      {
+        "asset": "IO",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "IOUSDT",
+        "market_type": "spot",
+        "health_state": "STRONG",
+        "health_reasons": [],
+        "recovery_state": "NONE",
+        "degraded_cycles": 0,
+        "persistent_invalidation_count": 0,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 17
+      },
+      {
+        "asset": "STX",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "STXUSDT",
+        "market_type": "spot",
+        "health_state": "THESIS_INVALIDATED",
+        "health_reasons": [
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
+        ],
+        "recovery_state": "PERSISTENT_INVALIDATION",
+        "degraded_cycles": 9,
+        "persistent_invalidation_count": 7,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 31
+      },
+      {
+        "asset": "SYRUP",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "SYRUPUSDT",
+        "market_type": "spot",
+        "health_state": "WEAKENING",
+        "health_reasons": [
+          "SCORE_WEAK"
+        ],
+        "recovery_state": "LOSS_RECOVERY",
+        "degraded_cycles": 0,
+        "persistent_invalidation_count": 0,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 22
+      },
+      {
+        "asset": "GIGGLE",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "GIGGLEUSDT",
+        "market_type": "spot",
+        "health_state": "THESIS_INVALIDATED",
+        "health_reasons": [
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
+        ],
+        "recovery_state": "PERSISTENT_INVALIDATION",
+        "degraded_cycles": 5,
+        "persistent_invalidation_count": 3,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 32
+      },
+      {
+        "asset": "ENA",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "ENAUSDT",
+        "market_type": "spot",
+        "health_state": "THESIS_INVALIDATED",
+        "health_reasons": [
+          "SCORE_WEAK",
+          "SIGNALS_WEAK",
+          "BTC_RELATIVE_NEGATIVE"
+        ],
+        "recovery_state": "PERSISTENT_INVALIDATION",
+        "degraded_cycles": 6,
+        "persistent_invalidation_count": 4,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "UNVERIFIABLE_HISTORICAL_EXECUTION_WINDOW",
+        "history_transition_count": 23
+      },
+      {
+        "asset": "PENDLE",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "PENDLEUSDT",
+        "market_type": "spot",
+        "health_state": "WEAKENING",
+        "health_reasons": [
+          "SCORE_WEAK"
+        ],
+        "recovery_state": "LOSS_RECOVERY",
+        "degraded_cycles": 0,
+        "persistent_invalidation_count": 0,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "UNVERIFIABLE_HISTORICAL_EXECUTION_WINDOW",
+        "history_transition_count": 31
+      },
+      {
+        "asset": "ENJ",
+        "execution_venue": "BINANCE_SPOT",
+        "market_symbol": "ENJUSDT",
+        "market_type": "spot",
+        "health_state": "THESIS_INVALIDATED",
+        "health_reasons": [
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
+        ],
+        "recovery_state": "PERSISTENT_INVALIDATION",
+        "degraded_cycles": 7,
+        "persistent_invalidation_count": 5,
+        "recovery_observations": 0,
+        "health_generation_id": "MONITOR_20261008T014015369280Z",
+        "recovery_generation_id": "MONITOR_20261008T014015369280Z",
+        "health_snapshot_generation_id": "MONITOR_20261008T014015369280Z",
+        "protection_state": "UNARMED",
+        "armed_at_utc": null,
+        "historical_arm_status": "NOT_OBSERVED",
+        "history_transition_count": 32
+      }
+    ],
+    "invariant_issues": [],
+    "trade_event_count": 64,
+    "notification_cutoff": "2026-10-06T18:26:30Z",
+    "eligible_new_notification_events": 0,
+    "contains_target_commits": {
+      "788b9e0515f9644c84d33539a1ed8ceb425c29d7": true,
+      "8b46b3a38706cef25251d7812668997055e4f2a9": true,
+      "237ef93a3176c58ccc72266275bea266b08d8491": true,
+      "9452b07987247de4b32411f8b24916da1e93efb6": true,
+      "86f1adf31ed000449fd1d3eaf02b1f90bc1b0137": true,
+      "8a6c35dd78713ad687067c318e84a30c0846e563": true,
+      "c4f27e4707d4c516ce11af08ab4441b1f42d72da": true,
+      "09e7e3a4985a9371bbf652709bbee3d152b94058": true
+    }
+  },
+  "v2_summary": {
+    "generation_id": "MONITOR_20261008T014015369280Z",
+    "as_of_utc": "2026-10-08T01:40:35.720282+00:00",
+    "realized_net_pnl_usdt": 795.79,
+    "open_unrealized_pnl_usdt": -1299.63,
+    "estimated_exit_cost_usdt": 23,
+    "mark_to_market_net_pnl_usdt": -535.19,
+    "reference_mark_to_market_net_pnl_usdt": -503.84,
+    "closed_win_rate": 1,
+    "open_positions": 10,
+    "closed_positions": 19,
+    "open_loss_exposure_usdt": 14000,
+    "thesis_invalidated_open_count": 5,
+    "loss_recovery_open_count": 9,
+    "mark_to_market_basis": "FULL_QUANTITY_LIQUIDATION_ESTIMATES",
+    "estimated_exit_cost_basis": "SAME_DEPTH_RECEIPT_MID",
+    "metric_scope": "SHADOW_MODEL_NOT_ACTUAL_FILLS"
+  },
+  "v1_summary": {
+    "generation_id": "MONITOR_20261008T014015369280Z",
+    "as_of_utc": "2026-10-08T01:40:35.720282+00:00",
+    "realized_net_pnl_usdt": 7327.97,
+    "open_unrealized_pnl_usdt": -11750.31,
+    "estimated_exit_cost_usdt": 305.94,
+    "mark_to_market_net_pnl_usdt": -4682.66,
+    "open_positions": 157,
+    "closed_win_rate": 0.9057591623036649
+  },
+  "capital": {
+    "capital_pool": 20000,
+    "ordinary_opportunity_cap": 17000,
+    "ordinary_used": 14000,
+    "ordinary_available": 3000,
+    "strategic_reserve": 3000,
+    "strategic_reserve_used": 0,
+    "strategic_reserve_available": 3000,
+    "market_regime": "RISK_OFF",
+    "max_deployable_usdt": 12477.47,
+    "allocator_available_usdt": 0,
+    "tail_budget_role": "STRESS_DIAGNOSTIC_NOT_CAPITAL_ALLOCATION"
+  },
+  "tail_risk_diagnostic": {
+    "budget_usdt": 4000,
+    "budget_status": "CALIBRATION_CEILING_NOT_FINAL",
+    "stress_loss_pct": 90,
+    "execution_buffer_pct": 10,
+    "stress_loss_fraction_with_buffer": 1,
+    "tail_cap_usdt": 4000,
+    "quarantined_cash_usdt": 0,
+    "systemic_recovery_release_fraction": 1,
+    "effective_tail_cap_usdt": 4000,
+    "candidate_budget_caps_usdt": {
+      "1000": 1000,
+      "2000": 2000,
+      "3000": 3000,
+      "4000": 4000
+    },
+    "realized_profit_expands_tail_budget": false
+  },
+  "deployment_view": {
+    "base_checkout_sha": "19b7c6bbe63a5f5741f051cf62a5d469290d2703",
+    "cached_origin_main_sha": "b661483e05ad7c3491a89715b47c88f44bc0fd36",
+    "cached_origin_is_live_lookup": false,
+    "last_discovery_source_sha": "4fce69157442c4370a5a6896c2b8b1c8baa656d8",
+    "last_research_source_sha": "297b75c0350997cc7bc1eb830d10224cc6b8ab10",
+    "last_monitor_source_sha": "86e2a33be462bfd0074e04762f88108ff6b9c821",
+    "last_watchdog_source_sha": "092dc9bd5b3ce0d259edaab692c825a604b6ca95",
+    "authoritative_main_readback_sha": "eb97330075456c8e22ca799c0ce7608cdf9f2205",
+    "evidence_snapshot_sha": "d232f7457390aad800c482d5f9abd6bcd492187a",
+    "job_source_provenance": {
+      "discovery": "PUBLISHED_JOB_HEAD; START_HEAD_NOT_SEPARATELY_RECORDED",
+      "research": "PUBLISHED_JOB_HEAD; START_HEAD_NOT_SEPARATELY_RECORDED",
+      "monitor": "MATCHED_SCHEDULER_STATE_REVISION",
+      "watchdog": "PUBLISHED_JOB_HEAD; START_HEAD_NOT_SEPARATELY_RECORDED"
+    },
+    "readback_provenance": "LATEST_VERIFIED_JOB_READBACK:monitor",
+    "fast_watch_loaded_code_sha": "86e2a33be462bfd0074e04762f88108ff6b9c821"
+  },
+  "wrapper_installation": {
+    "at_utc": "2026-10-08T01:31:55.348238Z",
+    "source_sha": "09e7e3a4985a9371bbf652709bbee3d152b94058",
+    "sha256": "b557817efd5dbe68426eccdf42a88aa6716e5714ff8f7c22f367ba6c0cd2eefe",
+    "readback_verified": true
+  },
+  "fast_watch": {
+    "generated_at": "2026-10-08T01:42:54.096176+00:00",
+    "loaded_code_source_sha": "86e2a33be462bfd0074e04762f88108ff6b9c821",
+    "loaded_at_utc": "2026-10-08T01:39:15Z",
+    "status": "PARTIAL_FAST_PATH_DEGRADED",
+    "counter_scope": "RESTORED_CUMULATIVE_CROSS_VERSION_NOT_NEW_CODE_24H",
+    "uptime_scope": "CURRENT_PROCESS_WINDOW_NOT_24H",
+    "formal_writer": false,
+    "real_order_count": 0,
+    "real_trading_enabled": false,
+    "capital_authority": "NONE_SHADOW_ONLY",
+    "venues": {
+      "BINANCE_SPOT": {
+        "status": "FAST_PATH_DEGRADED_REST_FALLBACK_HEALTHY",
+        "expected": 11,
+        "actual": 11,
+        "stale_symbols": [
+          "HAEDALUSDT",
+          "HUMAUSDT",
+          "NEXOUSDT"
+        ],
+        "rest_fallback_symbols": [
+          "HAEDALUSDT",
+          "HUMAUSDT",
+          "NEXOUSDT"
+        ],
+        "metrics": {
+          "connection_count": 5,
+          "reconnect_count": 0,
+          "ws_recovery_count": 4223,
+          "event_count": 11683373,
+          "duplicate_drop_count": 0,
+          "out_of_order_drop_count": 377991,
+          "invalid_drop_count": 109,
+          "stale_incident_count": 4427,
+          "rest_fallback_count": 4238,
+          "rest_fallback_requests": 15044,
+          "both_sources_failed_count": 1,
+          "false_fast_trigger_count": 0,
+          "review_count": 0,
+          "current_subscription_count": 11,
+          "ws_uptime_pct": 99.03531260451805,
+          "median_price_detection_latency_ms": 124.22728538513184,
+          "arm_detection_improvement_seconds": null,
+          "exit_review_improvement_seconds": null,
+          "missed_profit_windows_5m": null,
+          "missed_profit_windows_ws": null,
+          "profit_protection_capture_delta_usdt": null,
+          "rest_takeover_latency_ms": 237.05291748046875,
+          "measurement_status": "UNKNOWN_UNTIL_PAIRED_LIVE_OBSERVATIONS"
+        }
+      },
+      "BYBIT_SPOT": {
+        "status": "NOT_REQUIRED",
+        "expected": 0,
+        "actual": 0,
+        "stale_symbols": [],
+        "rest_fallback_symbols": [],
+        "metrics": {
+          "connection_count": 0,
+          "reconnect_count": 0,
+          "ws_recovery_count": 0,
+          "event_count": 0,
+          "duplicate_drop_count": 0,
+          "out_of_order_drop_count": 0,
+          "invalid_drop_count": 0,
+          "stale_incident_count": 0,
+          "rest_fallback_count": 0,
+          "rest_fallback_requests": 0,
+          "both_sources_failed_count": 0,
+          "false_fast_trigger_count": 0,
+          "review_count": 0,
+          "current_subscription_count": 0,
+          "ws_uptime_pct": 0,
+          "median_price_detection_latency_ms": null,
+          "arm_detection_improvement_seconds": null,
+          "exit_review_improvement_seconds": null,
+          "missed_profit_windows_5m": null,
+          "missed_profit_windows_ws": null,
+          "profit_protection_capture_delta_usdt": null,
+          "rest_takeover_latency_ms": null,
+          "measurement_status": "UNKNOWN_UNTIL_PAIRED_LIVE_OBSERVATIONS"
+        }
+      }
+    }
+  },
+  "remaining": [
+    "POST_FIX_NATURAL_COMPLETE_HOURLY_CHAIN_PENDING",
+    "OBSERVATION_PERIOD_REQUIRED",
+    "LIVE_BYBIT_POSITION_SAMPLE_PENDING",
+    "RUNTIME_ARM_EXIT_SAMPLE_PENDING",
+    "NEW_TRADE_NOTIFICATION_DELIVERY_ACK_PENDING",
+    "PR35_HOLDOUT_AND_COMPLETE_EXECUTION_REPLAY_UNVERIFIED"
+  ],
+  "implementation_boundaries": [
+    "HOURLY_BYBIT_NEW_BUY_ADD_NOT_IMPLEMENTED_AND_NOT_ENABLED",
+    "SAME_VENUE_BYBIT_HISTORICAL_POST_EXIT_BACKFILL_NOT_IMPLEMENTED"
+  ],
+  "safety": {
+    "real_order_count": 0,
+    "real_trading_enabled": false,
+    "capital_authority": "NONE_SHADOW_ONLY",
+    "v2_hard_cap_usdt": 20000
+  },
+  "publication_base_sha": "7d318cf7bcf35038ff4af1c24482b645df7d27c5",
+  "post_fast_release_monitor_supplement": {
+    "snapshot_sha": "7d318cf7bcf35038ff4af1c24482b645df7d27c5",
+    "scheduler": {
+      "consecutive_missed_bucket_count": 0,
+      "current_generation_id": "2026-10-08T01:45:00Z",
+      "duplicate_trigger_count": 0,
+      "duration_seconds": 55.24,
+      "expected_interval_seconds": 300,
+      "health": "HEALTHY",
+      "interval_since_previous_success_seconds": 304.785,
+      "last_duplicate_trigger_at_utc": null,
+      "last_failure": null,
+      "last_successful_monitor_generation_id": "2026-10-08T01:45:00Z",
+      "missed_bucket_count": 0,
+      "missed_bucket_provenance": "GENERATION_BUCKET_DISTANCE",
+      "monitor_completed_at_utc": "2026-10-08T01:46:00.902989+00:00",
+      "monitor_started_at_utc": "2026-10-08T01:45:05.663350+00:00",
+      "previous_success_at_utc": "2026-10-08T01:40:56.117669+00:00",
+      "previous_success_generation_id": "2026-10-08T01:40:00Z",
+      "real_order_count": 0,
+      "schema": "hunter_scheduler_health_v1",
+      "shadow_only": true,
+      "state_revision": "c174502a6c0dba46c3e6944ce3e0c0ae1f7c038c",
+      "trigger_source": "VULTR_SYSTEMD"
+    },
+    "monitor": {
+      "capital_authority": "NONE_SHADOW_ONLY",
+      "completed_at_utc": "2026-10-08T01:46:10.033289+00:00",
+      "job": "monitor",
+      "main_readback_head_sha": "1cff378552e79f37366c9335713a10f3f35c2c40",
+      "main_readback_verified": true,
+      "monitor_generation_id": "2026-10-08T01:45:00Z",
+      "real_trading_enabled": false,
+      "scheduler_health_sha256": "22afe507f216a88b227ce564a6a22c8562faf7d569672753a42aade0ed4732a3",
+      "schema": "hunter_runtime_job_health_v1",
+      "source": "VULTR_SYSTEMD",
+      "status": "SUCCESS"
+    }
+  }
+}
