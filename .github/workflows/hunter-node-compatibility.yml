@@ -1,0 +1,57 @@
+name: Hunter Node Runtime Compatibility
+on:
+  push:
+    branches: ['codex/hunter-node18-test-crypto-20261009']
+  pull_request:
+    paths:
+      - 'tests/helpers/cloudflare-webcrypto.mjs'
+      - 'tests/test_hunter_cloudflare_crypto.mjs'
+      - 'tests/test_hunter_bybit_proxy.mjs'
+      - 'tests/test_hunter_http_diagnostics.mjs'
+      - 'workers/hunter-bybit-proxy.js'
+      - '.github/workflows/hunter-cex-universe.yml'
+      - '.github/workflows/hunter-node-compatibility.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18.19.1', '22']
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Reproduce missing global and verify test-only adapter
+        run: node tests/test_hunter_cloudflare_crypto.mjs
+      - name: Execute exact Discovery preflight without scan or persistence
+        run: |
+          python - <<'PY'
+          import subprocess
+          from scripts.hunter_job_runner import workflow_steps
+          steps = [s for s in workflow_steps('discovery') if s.get('name') == 'Validate discovery only']
+          assert len(steps) == 1
+          expected = [
+              "python -m unittest discover -s tests -p 'test_hunter_cex_scan.py' -v",
+              "python -m unittest discover -s tests -p 'test_hunter_bybit*.py' -v",
+              "node tests/test_hunter_bybit_proxy.mjs",
+          ]
+          assert steps[0]['run'].strip().splitlines() == expected, 'Review changed preflight commands before executing'
+          subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', steps[0]['run']], check=True)
+          print('DISCOVERY_PREFLIGHT_ALL_COMMANDS_OK', flush=True)
+          PY
+      - name: Verify diagnostics and downstream compatibility offline
+        run: |
+          node tests/generate_hunter_http_contract.mjs --check
+          node --test tests/test_hunter_http_diagnostics.mjs tests/test_hunter_bybit_proxy.mjs
+          python -I -B -X utf8 scripts/run_hunter_http_compat_tests.py

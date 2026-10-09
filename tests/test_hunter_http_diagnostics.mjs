@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import './helpers/cloudflare-webcrypto.mjs';
 const source = fs.readFileSync(new URL('../workers/hunter-bybit-proxy.js', import.meta.url), 'utf8');
 const {default: worker} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 const blocked = async () => { throw new Error('REAL_NETWORK_DISABLED'); };
