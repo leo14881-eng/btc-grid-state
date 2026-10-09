@@ -17,11 +17,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from research import hunter_bybit_availability as availability
     from research.hunter_bybit_signal_capture import capture
-    from research.hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
 except ModuleNotFoundError:
     import hunter_bybit_availability as availability
     from hunter_bybit_signal_capture import capture
-    from hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
 
 DEFAULT = pathlib.Path("research/results/hunter-bybit-worker-snapshot.json")
 SOURCE = "OFFICIAL_BYBIT_V5_VIA_WORKER"
@@ -39,11 +37,6 @@ LOCAL_ERRORS = {
 
 
 def exception_detail(exc):
-    if isinstance(exc, ObservedHTTPError):
-        # Persist only legacy codes/flags; richer classification belongs in logs.
-        detail = (dict(code=exc.diagnostic_code, detail_redacted=True, detail_truncated=False)
-                  if exc.diagnostic_code in LOCAL_ERRORS else failure_detail(exc.diagnostic_code))
-        return dict(detail, http_evidence=exc.http_evidence)
     if isinstance(exc, urllib.error.HTTPError):
         return failure_detail("BYBIT_HTTP_" + str(exc.code))
     if isinstance(exc, TimeoutError) or (isinstance(exc, urllib.error.URLError)
@@ -85,20 +78,6 @@ def batch_parts(data, batch, end):
         if set(errors) & set(klines.get(symbol, {})):
             raise ValueError("BYBIT_WORKER_BATCH_SUCCESS_FAILURE_CONFLICT")
         details[symbol] = {interval: failure_detail(raw) for interval, raw in errors.items()}
-    diagnostics = data.get("failure_diagnostics", {})
-    if not isinstance(diagnostics, dict) or set(diagnostics) - set(failures):
-        raise ValueError("BYBIT_WORKER_BATCH_SCOPE_MISMATCH")
-    for symbol, values in diagnostics.items():
-        if not isinstance(values, dict) or not values or set(values) - set(failures[symbol]):
-            raise ValueError("BYBIT_WORKER_BATCH_INTERVAL_MISMATCH")
-        for interval, evidence in values.items():
-            evidence = validate_evidence(evidence)
-            if evidence["layer"] != "bybit_upstream":
-                raise ValueError("BYBIT_WORKER_HTTP_EVIDENCE_INVALID")
-            code = details[symbol][interval]["code"]
-            if code.startswith("BYBIT_HTTP_") and evidence["http_status"] != int(code.removeprefix("BYBIT_HTTP_")):
-                raise ValueError("BYBIT_WORKER_HTTP_EVIDENCE_INVALID")
-            details[symbol][interval]["http_evidence"] = evidence
     return klines, details
 
 def digest(payload):
@@ -108,7 +87,8 @@ def request(path, body=None):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(availability.SPOT_PROXY + path, data=data, headers={
         "User-Agent": "Mozilla/5.0", "Accept": "application/json", "Content-Type": "application/json"})
-    return request_json(req, timeout=60)
+    with urllib.request.urlopen(req, timeout=60) as response:
+        return json.load(response)
 
 def result(body):
     if not isinstance(body, dict) or body.get("retCode") != 0:
@@ -235,16 +215,6 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
                             detail=exception_detail(exc)
                     if detail is not None:
                         failure_details.setdefault(symbol,{})[interval]=contextual(detail,batch_id,symbol,interval,end,stage)
-    # Diagnostic evidence is deliberately excluded from the authoritative schema.
-    # Existing stdout reaches the systemd journal / Actions log, not a new writer.
-    for symbol, intervals in sorted(failure_details.items()):
-        for interval, detail in sorted(intervals.items()):
-            evidence = detail.pop("http_evidence", None)
-            if evidence is not None:
-                print("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
-                    schema="hunter_http_log_v1", source=SOURCE,
-                    captured_at_utc=now.isoformat(), **detail,
-                    http_evidence=validate_evidence(evidence)), sort_keys=True, separators=(",", ":")), flush=True)
     def get(symbol,interval,limit):
         detail = failure_details.get(symbol, {}).get(interval)
         if detail:
