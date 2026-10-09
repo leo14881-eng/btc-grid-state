@@ -7,46 +7,36 @@
   "acknowledged_event_ids": [],
   "pending_batch_id": "0b17115ca1db9fe887e20f82e88c9a650286b8a9a3eda570b2ed4a2d21ab2ae4",
   "delivery_status": "RESPONSE_EMITTED_ACK_UNVERIFIED",
-  "source_main_sha": "bb98cd92e2a383b9d748ca6ab0af9ffb347996dd",
+  "source_main_sha": "32121992ac3db405d525f04597e311807b836ac3",
   "last_attempt_at": "2026-10-08T16:42:14.802Z",
-  "last_successful_check_at": "2026-10-08T20:35:55.907Z",
+  "last_successful_check_at": "2026-10-09T03:33:10.972Z",
   "unverified_batch_attempts": 1,
   "notification_failure": {
-    "at": "2026-10-09T01:51:29.162Z",
-    "phase": "DATA_READ_REQUIRED_HEALTH_FILES_MISSING",
-    "tool": "mcp__codex_apps__github_fetch_file",
-    "source_main_sha": "6f8142249f3ab62886f9aca2886cabceeb2c4839",
+    "at": "2026-10-09T03:33:10.972Z",
+    "phase": "DELIVERY_ACK_UNVERIFIABLE",
+    "tool": "CHATGPT_CONVERSATION_CONTEXT",
+    "source_main_sha": "32121992ac3db405d525f04597e311807b836ac3",
     "errors": [
       {
-        "path": "hunter-runtime-monitor-health.json",
-        "error_code": "NOT_FOUND",
-        "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
-      },
-      {
-        "path": "hunter-scheduler-health.json",
-        "error_code": "NOT_FOUND",
-        "raw_error": "GitHub API error 404: {\"message\":\"Not Found\",\"documentation_url\":\"https://docs.github.com/rest/repos/contents#get-repository-content\",\"status\":\"404\"}"
-      },
-      {
         "error_code": "MESSAGE_ID_UNAVAILABLE",
-        "raw_error": "The pending batch was already emitted in chat; acknowledgement is not advanced and the batch is not re-emitted."
+        "raw_error": "The pending batch was already emitted in chat; no verifiable assistant message_id is available, so acknowledgement is not advanced and the batch is not re-emitted."
       }
     ],
-    "effect": "LAST_SUCCESSFUL_CHECK_AND_ACK_NOT_ADVANCED_PENDING_RETAINED_NO_RESEND"
+    "effect": "DATA_CHECK_SUCCEEDED_ACK_NOT_ADVANCED_PENDING_RETAINED_NO_RESEND"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
   "source_file_hashes": {
-    "portfolio": "cf4a2c31a8aea959d1a11094281e5410505a8dc4",
-    "summary": "5cc58b72bc9f5f33a1987eb179e5f01e1bb63680",
-    "monitor": "4116839ca45d78c9ed25d015b2f918ce79fb5bdd",
-    "scheduler": "4b2ec71e10827778330a33a981a96635859cb323"
+    "portfolio": "aea607632d496af91f47b649d5ae26c38d65595f",
+    "summary": "20006e07543dd52cdd06d90008da7e11d158aaff",
+    "monitor": "5ce41866bf83da14b13cb19ee4e3fb48cb4f3a00",
+    "scheduler": "d8cd3dbc82f690c9faab445ef6889cc18f4bb5fa"
   },
   "pending_event_ids": [
     "0fccfce5f752b98dca2405ba2f10508c179b9a5aeeca6b98d3aec681c686b727"
   ],
-  "last_check_attempt_at": "2026-10-09T01:51:29.162Z",
+  "last_check_attempt_at": "2026-10-09T03:33:10.972Z",
   "unresolved_batches": [
     {
       "batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
@@ -78,6 +68,28 @@
           }
         ],
         "effect": "ACK_AND_LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_PENDING_RETAINED_NO_FURTHER_RESEND"
+      }
+    },
+    {
+      "batch_id": "0b17115ca1db9fe887e20f82e88c9a650286b8a9a3eda570b2ed4a2d21ab2ae4",
+      "event_ids": [
+        "0fccfce5f752b98dca2405ba2f10508c179b9a5aeeca6b98d3aec681c686b727"
+      ],
+      "delivery_status": "DELIVERY_ACK_UNVERIFIABLE",
+      "unverified_batch_attempts": 1,
+      "last_attempt_at": "2026-10-08T16:42:14.802Z",
+      "notification_failure": {
+        "at": "2026-10-09T03:33:10.972Z",
+        "phase": "DELIVERY_ACK_UNVERIFIABLE",
+        "tool": "CHATGPT_CONVERSATION_CONTEXT",
+        "source_main_sha": "32121992ac3db405d525f04597e311807b836ac3",
+        "errors": [
+          {
+            "error_code": "MESSAGE_ID_UNAVAILABLE",
+            "raw_error": "Matching prior assistant batch_id is observable, but no verifiable assistant message_id is available; acknowledgement is not advanced and this batch is never re-emitted automatically."
+          }
+        ],
+        "effect": "ACK_NOT_ADVANCED_PENDING_RETAINED_BATCH_RECORDED_AS_ALREADY_EMITTED_NO_RESEND"
       }
     }
   ]
