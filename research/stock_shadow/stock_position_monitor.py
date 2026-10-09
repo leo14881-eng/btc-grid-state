@@ -13,12 +13,12 @@ except ImportError:
         from research.stock_shadow.market_session import session_allows_trade
 
 try:
-    from .state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+    from .state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health, quote_validity, mark_quote
 except ImportError:
     try:
-        from state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+        from state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health, quote_validity, mark_quote
     except ImportError:
-        from research.stock_shadow.state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+        from research.stock_shadow.state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health, quote_validity, mark_quote
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; HEALTH=ROOT/"position-monitor-v1.json"; CALENDAR_CACHE=ROOT/"calendar-session-cache-v1.json"
@@ -160,7 +160,9 @@ def alpaca_snapshot_quotes(symbols):
                 with urllib.request.urlopen(req,timeout=35) as r: body=json.load(r)
                 requests+=1
                 for raw,rows in (body.get("bars") or {}).items():
-                    if rows: latest[raw.replace(".","-")]=float(rows[-1]["c"])
+                    if rows:
+                        row=max(rows,key=lambda x:str(x.get("t") or ""))
+                        latest[raw.replace(".","-")]={"price":row.get("c"),"price_asof":row.get("t"),"source":"ALPACA_SIP_5M_DELAYED"}
                 token=body.get("next_page_token")
                 if not token: break
             prices.update(latest)
@@ -185,12 +187,18 @@ def main(force=False):
         print(json.dumps(load(HEALTH,{}))); return
     prices,errors,requests,logical_batches=alpaca_snapshot_quotes(symbols)
     trade_actions_enabled=is_open
-    sells=0; updated=0
+    sells=0; updated=0; invalid_quotes={}
+    checked_at=datetime.fromisoformat(now())
     for s in list(symbols):
-        price=prices.get(s)
-        if price is None: continue
+        observation=prices.get(s)
         p=positions.get(s)
         if not p: continue
+        validity=quote_validity(s,observation,checked_at,"5Min")
+        mark_quote(p,validity,checked_at,observation)
+        if validity != "VALID":
+            invalid_quotes[s]=validity
+            continue
+        price=observation["price"]
         if p.get("mfe_net_pct") is None or p.get("mae_net_pct") is None:
             p["extrema_history_status"]="INITIALIZED_FROM_CURRENT_OBSERVATION"
         r=net_pct(p,price); mfe=max(number(p.get("mfe_net_pct"),f"{s}.mfe_net_pct",default=r),r); mae=min(number(p.get("mae_net_pct"),f"{s}.mae_net_pct",default=r),r)
@@ -240,8 +248,8 @@ def main(force=False):
     summary.update(portfolio_statistics(state,events))
     summary["scan_state_stale"]=summary.get("run_id") != state.get("run_id")
     save(ROOT/"summary-v1.json",summary)
-    status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "UNKNOWN"))
-    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
+    status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "DATA_UNAVAILABLE"))
+    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"invalid_quotes":invalid_quotes,"valid_quotes":updated,"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__":
     run_with_health(main,ROOT/"monitor-run-health-v1.json",SOURCE_COMMIT,RUN_ID,save,

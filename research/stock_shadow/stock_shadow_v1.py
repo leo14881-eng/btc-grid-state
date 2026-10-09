@@ -13,12 +13,12 @@ except ImportError:
 from pathlib import Path
 
 try:
-    from .state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+    from .state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health, quote_validity, mark_quote
 except ImportError:
     try:
-        from state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+        from state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health, quote_validity, mark_quote
     except ImportError:
-        from research.stock_shadow.state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health
+        from research.stock_shadow.state_safety import number, optional_number, validate_inputs, portfolio_statistics, run_with_health, quote_validity, mark_quote
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; EVENTS=ROOT/"trades-v1.json"; SUMMARY=ROOT/"summary-v1.json"
@@ -206,7 +206,7 @@ def _snapshot_from_bars(symbol, bars, source):
     return {"base":symbol,"price":price,"ret5":ret5,"ret20":ret20,"sma20":sma20,
             "avg_dollar_volume20":avg_dollar_volume,"daily_volatility20":vol20,
             "volume_ratio20":volume_ratio,"high20":high20,"low20":low20,"range_position20":range_pos20,
-            "status":"OBSERVED","source":source,"observed_at":now()}
+            "status":"OBSERVED","source":source,"observed_at":now(),"price_asof":rows[-1].get("t")}
 
 def _stock_snapshot(symbol):
     # Compatibility/fallback helper for benchmarks only. Full universe uses Alpaca batch bars.
@@ -450,7 +450,9 @@ def stock_universe():
     failed_symbols_from_batches={s for item in failed_batches for s in item["symbols"]}
     for s in symbols:
         rows=cached.get(s,[])
-        try: out[s]=_snapshot_from_bars(s,rows,"ALPACA_SIP_DAILY_CACHE")
+        try:
+            out[s]=_snapshot_from_bars(s,rows,"ALPACA_SIP_DAILY_CACHE")
+            out[s]["refresh_received"]=bool(s not in failed_symbols_from_batches and any(x.get("t")==out[s]["price_asof"] for x in fetched.get(s,[])))
         except Exception as e:
             rows=cached.get(s,[]); classification=None
             universe_exclusion=None
@@ -479,7 +481,9 @@ def stock_universe():
             failed.append({"symbol":s,"error":{"type":"BatchRefreshError","message":"incremental_refresh_failed","source":"ALPACA_BATCH"}})
     bench={}
     for idx in ("SPY","QQQ"):
-        try: bench[idx]=_snapshot_from_bars(idx,cached.get(idx,[]),"ALPACA_SIP_DAILY_CACHE")
+        try:
+            bench[idx]=_snapshot_from_bars(idx,cached.get(idx,[]),"ALPACA_SIP_DAILY_CACHE")
+            bench[idx]["refresh_received"]=bool(idx not in failed_symbols_from_batches and any(x.get("t")==bench[idx]["price_asof"] for x in fetched.get(idx,[])))
         except Exception: pass
     return out, failed, {"discovered":len(symbols),"source_errors":discovery_errors,
                          "cache_mode":"BOOTSTRAP_45D" if bootstrap else "INCREMENTAL_7D",
@@ -510,11 +514,32 @@ def main():
     if state.get("reset_reason") or state.get("reset_at"):
         raise RuntimeError("state_continuity:manual_reset_marker_present")
     market, failed_symbols, discovery=stock_universe()
+    source_observations=len(market)
     bench=discovery.get("benchmarks") or {}
     session=_alpaca_exchange_session()
     actions_enabled=trade_action_window(session=session)
-    candidates=[]; rejection_counts={}
+    candidates=[]; rejection_counts={}; invalid_quotes={}
+    checked_at=datetime.fromisoformat(now())
+    invalid_benchmarks={}
+    for symbol in ("SPY","QQQ"):
+        observation=bench.get(symbol)
+        validity=quote_validity(symbol,observation,checked_at,"1Day")
+        if validity == "VALID":
+            try:
+                number(observation.get("ret20"),f"{symbol}.ret20")
+            except ValueError:
+                validity="INVALID_BENCHMARK_RET20"
+        if validity != "VALID":
+            invalid_benchmarks[symbol]=validity
+    actions_enabled=actions_enabled and not invalid_benchmarks
+    for s,m in list(market.items()):
+        validity=quote_validity(s,m,checked_at,"1Day")
+        if validity != "VALID":
+            invalid_quotes[s]=validity
+            del market[s]
     for s,m in market.items():
+        if invalid_benchmarks:
+            continue
         d=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
         m["selection"]=d
         if d["ready"]: candidates.append((s,m,d))
@@ -526,7 +551,13 @@ def main():
     insufficient_history_count=sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")=="SOURCE_HISTORY_1_21_BARS_AFTER_120D_RECOVERY")
     universe_exclusion_count=sum(1 for x in failed_symbols if (x.get("error") or {}).get("universe_exclusion"))
     # Transport health and history eligibility are separate dimensions.
-    data_status=("OK" if market and http_error_count==0 else ("DEGRADED" if market else "UNKNOWN:ALL_STOCK_SOURCES_FAILED"))
+    transport_errors=bool(discovery.get("source_errors")) or any(
+        (item.get("error") or {}).get("type") in ("HTTPError","BatchRefreshError")
+        for item in failed_symbols)
+    transport_status="DEGRADED" if transport_errors else "OK"
+    data_status=("DEGRADED" if transport_errors or invalid_benchmarks else "OK") if market else (
+        "UNKNOWN:ALL_STOCK_SOURCES_FAILED" if transport_errors and not source_observations
+        else "NO_CURRENT_VALID_QUOTES")
     history_coverage_status=("COMPLETE" if insufficient_history_count==0 else "PARTIAL_HISTORY")
     # Selective V1: scan the whole market, but BUY only candidates that pass every gate.
     newly_opened=set()
@@ -538,12 +569,20 @@ def main():
             events.append({"type":"BUY","symbol":s,**tr}); newly_opened.add(s)
     for s,p in list(state["positions"].items()):
         m=market.get(s)
-        if not m: continue
+        validity=invalid_quotes.get(s) or quote_validity(s,m,checked_at,"1Day")
+        mark_quote(p,validity,checked_at,m)
+        if not m:
+            invalid_quotes[s]=validity
+            continue
         price=m["price"]; r=net_pct(p,price)
         if p.get("mfe_net_pct") is None or p.get("mae_net_pct") is None:
             p["extrema_history_status"]="INITIALIZED_FROM_CURRENT_OBSERVATION"
         p["mfe_net_pct"]=max(number(p.get("mfe_net_pct"),f"{s}.mfe_net_pct",default=r),r); p["mae_net_pct"]=min(number(p.get("mae_net_pct"),f"{s}.mae_net_pct",default=r),r)
         p.update({"last_price":price,"last_at":now(),"avg_price":avg(p),"net_pnl_usdt":round(net_pnl(p,price),6),"net_return_pct":round(r,6)})
+        p["lifecycle_data_status"]="BENCHMARK_UNAVAILABLE" if invalid_benchmarks else "VALID"
+        if invalid_benchmarks:
+            p["quote_actions_allowed"]=False
+            continue
         # V3 lifecycle: worsening never ADDs; ADD waits for pullback + observable recovery.
         n=len(p["tranches"]); decision=entry_decision(m,bench.get("SPY"),bench.get("QQQ"))
         ps=position_state_v2(m,bench.get("SPY"),bench.get("QQQ"))
@@ -609,14 +648,13 @@ def main():
             raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
     save(STATE,state); save(EVENTS,events)
-    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,**portfolio_statistics(state,events),"scan_state_stale":False,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":("OK" if market and http_error_count==0 else "DEGRADED"),"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
+    save(SUMMARY,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"simulation_only":True,**portfolio_statistics(state,events),"scan_state_stale":False,"universe_discovered":discovery["discovered"],"universe_seen":len(market),"market_data_status":data_status,"history_coverage_status":history_coverage_status,"transport_status":transport_status,"invalid_benchmarks":invalid_benchmarks,"coverage_pct":round(len(market)/discovery["discovered"]*100,4) if discovery["discovered"] else 0.0,"insufficient_history_count":insufficient_history_count,"http_error_count":http_error_count,"trade_actions_enabled":actions_enabled,"universe_source_errors":discovery["source_errors"],"market_cache_mode":discovery.get("cache_mode"),
     "market_cache_covered_before":discovery.get("cache_covered_before"),"api_usage":json.loads(json.dumps(API_USAGE)),
     "history_gap_classification_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")==k) for k in sorted({(x.get("error") or {}).get("history_gap_classification") for x in failed_symbols if (x.get("error") or {}).get("history_gap_classification")})},
     "universe_exclusion_count":universe_exclusion_count,
     "universe_exclusion_counts":{k:sum(1 for x in failed_symbols if (x.get("error") or {}).get("universe_exclusion")==k) for k in sorted({(x.get("error") or {}).get("universe_exclusion") for x in failed_symbols if (x.get("error") or {}).get("universe_exclusion")})},
-    "failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
+    "invalid_quotes":invalid_quotes,"failed_symbols":failed_symbols,"candidates_ready":len(candidates),"rejection_counts":rejection_counts,"selection_version":"HYBRID_ENTRY_V1_POSITION_STATE_V3","open_positions":len(state["positions"]),"closed_positions":len(state["closed"]),"wins":len(wins),"losses":len(losses),"realized_net_pnl_usdt":round(realized,6),"events":len(events),"fee_rate_per_side":FEE_RATE,"policy":{"max_open":None,"standard_tranche_usdt":NOTIONAL,"max_tranches":MAX_TRANCHES,"profit_arm_net_pct":ARM_NET_PCT,"profit_floor_min_net_pct":PROFIT_FLOOR_NET_PCT,"profit_giveback_bands":PROFIT_GIVEBACK_BANDS,"paid_api_required":False,"real_orders":False}})
     print(json.dumps(load(SUMMARY,{}),ensure_ascii=False))
 
 if __name__=="__main__":
     run_with_health(main,ROOT/"main-run-health-v1.json",SOURCE_COMMIT,RUN_ID,save)
-

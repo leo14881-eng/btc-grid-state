@@ -2,6 +2,9 @@
 import json
 import math
 from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 def number(value, field, default=None, positive=False):
@@ -68,7 +71,16 @@ def validate_inputs(state, events):
 def portfolio_statistics(state, events):
     validate_inputs(state, events)
     closed = state["closed"]
-    return {"open_positions": len(state["positions"]), "closed_positions": len(closed),
+    valid = {s: p for s, p in state["positions"].items() if p.get("quote_status") == "VALID"}
+    unavailable = sorted(set(state["positions"]) - set(valid))
+    known_pnl = round(sum(number(p.get("net_pnl_usdt"), f"{s}.net_pnl_usdt") for s, p in valid.items()), 6)
+    return {"valuation_coverage_status": "PARTIAL" if unavailable else "COMPLETE",
+            "valuation_checked_at": state.get("updated_at"),
+            "valuation_basis": "VALIDATED_SOURCE_BARS_NOT_REALTIME_QUOTES",
+            "unvalued_symbols": unavailable, "valued_positions": len(valid),
+            "unrealized_net_pnl_valued_subset_usdt": known_pnl,
+            "unrealized_net_pnl_usdt": None if unavailable else known_pnl,
+            "open_positions": len(state["positions"]), "closed_positions": len(closed),
             "events": len(events), "wins": sum(x["realized_net_pnl_usdt"] > 0 for x in closed),
             "losses": sum(x["realized_net_pnl_usdt"] <= 0 for x in closed),
             "realized_net_pnl_usdt": round(sum(x["realized_net_pnl_usdt"] for x in closed), 6),
@@ -91,3 +103,65 @@ def run_with_health(fn, path, source_commit, run_id, save, **kwargs):
     report.update(status="SUCCESS", updated_at=datetime.now(timezone.utc).isoformat())
     save(path, report)
     return result
+
+
+# Data validity gates, not V3 trading thresholds. SIP requests end 20 minutes
+# behind wall clock; allow one 5m bar plus 10m transport/scheduling tolerance.
+DELAYED_BAR_MAX_AGE_SECONDS = 35 * 60
+NY = ZoneInfo("America/New_York")
+
+
+def parse_asof(value):
+    try:
+        stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return stamp.astimezone(timezone.utc) if stamp.tzinfo else None
+    except (ValueError, TypeError):
+        return None
+
+
+@lru_cache(maxsize=1)
+def security_events():
+    return json.loads(Path(__file__).with_name("security-events.json").read_text())
+
+
+def security_block(symbol, checked_at):
+    # Verified security events are effective-dated and never rename a ledger.
+    for record in security_events():
+        if record["symbol"] == symbol and checked_at >= parse_asof(record["effective_at"]):
+            return record
+    return None
+
+
+def quote_validity(symbol, observation, checked_at, kind):
+    event = security_block(symbol, checked_at)
+    if event:
+        return event["status"]
+    if not isinstance(observation, dict):
+        return "MISSING_QUOTE"
+    price = observation.get("price")
+    if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
+        return "INVALID_PRICE"
+    stamp = parse_asof(observation.get("price_asof"))
+    if stamp is None:
+        return "MISSING_OR_INVALID_TIMESTAMP"
+    age = (checked_at - stamp).total_seconds()
+    if age < 0:
+        return "FUTURE_TIMESTAMP"
+    if stamp.astimezone(NY).date() != checked_at.astimezone(NY).date():
+        return "STALE_SESSION"
+    if kind == "5Min" and age > DELAYED_BAR_MAX_AGE_SECONDS:
+        return "STALE_BAR"
+    if kind == "1Day" and observation.get("refresh_received") is not True:
+        return "DAILY_REFRESH_UNCONFIRMED"
+    return "VALID"
+
+
+def mark_quote(p, status, checked_at, observation=None):
+    # Last-known price, extrema, lifecycle state, tranches and ledger stay intact.
+    p["quote_status"] = status
+    p["quote_checked_at"] = checked_at.isoformat()
+    p["valuation_status"] = "VALID_DELAYED" if status == "VALID" else "UNAVAILABLE_LAST_KNOWN_ONLY"
+    p["quote_actions_allowed"] = status == "VALID"
+    if status == "VALID":
+        p["price_asof"] = observation["price_asof"]
+        p["quote_source"] = observation.get("source")

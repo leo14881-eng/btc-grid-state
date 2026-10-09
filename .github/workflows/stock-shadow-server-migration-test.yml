@@ -26,7 +26,7 @@ jobs:
       - run: python -m pip install --disable-pip-version-check pytest
       - name: Complete stock strategy, migration and acceptance regressions
         run: |
-          python -m pytest -q tests/test_stock_shadow.py tests/test_stock_server_migration.py tests/test_stock_scheduler_live_acceptance.py
+          python -m pytest -v tests/test_stock_shadow.py tests/test_stock_quote_safety.py tests/test_stock_server_migration.py tests/test_stock_scheduler_live_acceptance.py tests/test_stock_cron_control.py
           node --test research/stock_shadow/scheduler/worker.test.mjs
           python -m py_compile research/stock_shadow/server/*.py
           bash -n research/stock_shadow/persist_results.sh
