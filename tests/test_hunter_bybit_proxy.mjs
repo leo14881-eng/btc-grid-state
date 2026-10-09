@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import './helpers/cloudflare-webcrypto.mjs';
 const source=fs.readFileSync(new URL('../workers/hunter-bybit-proxy.js',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 let calls=[]; let active=0; let peak=0;
