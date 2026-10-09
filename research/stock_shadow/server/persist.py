@@ -109,7 +109,10 @@ def reporting_audit(state):
     stored = recomputed = 0.0
     mismatches = []
     unpriced = []
+    unavailable = []
     for symbol, position in state['positions'].items():
+        if position.get('quote_status') != 'VALID':
+            unavailable.append(symbol)
         price = position.get('last_price')
         reported = position.get('net_pnl_usdt')
         if not isinstance(price, (int, float)) or isinstance(price, bool) or price <= 0:
@@ -125,6 +128,9 @@ def reporting_audit(state):
             mismatches.append(symbol)
     return {'status': 'MATCH' if not mismatches and not unpriced else 'REPORTING_MISMATCH',
             'mismatched_symbols': mismatches, 'unpriced_symbols': unpriced,
+            'valuation_coverage_status': 'PARTIAL' if unavailable or unpriced else 'COMPLETE',
+            'unvalued_symbols': sorted(set(unavailable + unpriced)),
+            'pnl_basis': 'LAST_KNOWN_PRICES_ARITHMETIC_ONLY',
             'stored_open_net_pnl': round(stored, 6),
             'recomputed_open_net_pnl': round(recomputed, 6),
             'strategy_effect': False, 'ledger_rewritten': False}

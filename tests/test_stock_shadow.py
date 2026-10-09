@@ -37,7 +37,7 @@ def test_full_market_discovery_has_no_fixed_61_symbol_constant():
 
 def _m(price=50,dv=50_000_000,r5=4,r20=12,sma20=48,vol=2.5,volume_ratio=1.0,range_pos=0.6):
     return {"price":price,"avg_dollar_volume20":dv,"ret5":r5,"ret20":r20,"sma20":sma20,"daily_volatility20":vol,
-            "volume_ratio20":volume_ratio,"range_position20":range_pos}
+            "volume_ratio20":volume_ratio,"range_position20":range_pos,"price_asof":"2026-10-05T04:00:00Z","refresh_received":True}
 
 def test_low_price_is_not_rejected_by_price_alone():
     d=ss.entry_decision(_m(price=1.5,dv=100_000_000,r5=2,r20=7,sma20=1.45,vol=2.0,volume_ratio=1.8,range_pos=0.62))
@@ -876,6 +876,9 @@ def _p0_clock(engine,monkeypatch,initial,event_stamp):
     monkeypatch.setattr(engine,'datetime',Clock)
     monkeypatch.setattr(engine,'now',lambda:event_stamp)
 
+def _fresh_benchmarks():
+    return {symbol: {**_m(r20=0), 'base': symbol} for symbol in ('SPY', 'QQQ')}
+
 @pytest.mark.parametrize('initial,event_stamp,expect_trade', [
     ('2026-10-04T09:00:00+00:00','2026-10-04T09:26:25+00:00',False),
     ('2026-10-05T19:59:59+00:00','2026-10-05T20:00:00+00:00',False),
@@ -888,7 +891,7 @@ def test_p0_full_scan_buy_add_structural_sell_and_close_crossing(monkeypatch,ini
     day=initial[:10]
     monkeypatch.setattr(ss,'_alpaca_exchange_session',lambda ts=None:{'date':day,'open':clock_time(9,30),'close':clock_time(16)})
     market={symbol:{**_m(price=100),'base':symbol} for symbol in ['NEW','ADD','EXIT']}
-    monkeypatch.setattr(ss,'stock_universe',lambda:(market,[],{'discovered':3,'source_errors':[]}))
+    monkeypatch.setattr(ss,'stock_universe',lambda:(market,[],{'discovered':3,'source_errors':[], 'benchmarks':_fresh_benchmarks()}))
     monkeypatch.setattr(ss,'entry_decision',lambda m,*a:{'ready':m['base']!='EXIT','score':80,'entry_structure':'MOMENTUM_TREND','reasons':[],'rejects':[],'metrics':{}})
     monkeypatch.setattr(ss,'position_state_v2',lambda m,*a:{'state':'BROKEN' if m['base']=='EXIT' else 'STRONG','market_relative20':1})
     monkeypatch.setattr(ss,'recovery_add_signal',lambda p,m,ps:{'eligible':m['base']=='ADD'})
@@ -898,7 +901,7 @@ def test_p0_full_scan_buy_add_structural_sell_and_close_crossing(monkeypatch,ini
         assert all(e['at']==event_stamp for e in book[ss.EVENTS])
     else:
         assert ss.continuity_fingerprint(book[ss.STATE],book[ss.EVENTS])==before
-    assert book[ss.SUMMARY]['candidates_ready']==2
+    assert book[ss.SUMMARY]['candidates_ready']==(0 if initial.startswith('2026-10-04') else 2)
 
 @pytest.mark.parametrize('price,tranche_prices,pending,actions_enabled,quoted,expected', [
     (90.0, [100.0], False, True, True, ['ADD']),
@@ -932,7 +935,7 @@ def test_post_add_reporting_preserves_decisions_and_history(
     monkeypatch.setattr(ss, '_alpaca_exchange_session', lambda ts=None:
                         {'date': '2026-10-05', 'open': clock_time(9, 30), 'close': clock_time(16)})
     market = {'ADD': {**_m(price=price), 'base': 'ADD'}} if quoted else {}
-    monkeypatch.setattr(ss, 'stock_universe', lambda: (market, [], {'discovered': 1, 'source_errors': []}))
+    monkeypatch.setattr(ss, 'stock_universe', lambda: (market, [], {'discovered': 1, 'source_errors': [], 'benchmarks': _fresh_benchmarks()}))
     monkeypatch.setattr(ss, 'entry_decision', lambda *args:
                         {'ready': True, 'score': 80, 'entry_structure': 'MOMENTUM_TREND',
                          'reasons': [], 'rejects': [], 'metrics': {}})
@@ -950,7 +953,8 @@ def test_post_add_reporting_preserves_decisions_and_history(
     assert saved['tranches'][:len(tranche_prices)] == before[ss.STATE]['positions']['ADD']['tranches']
     assert len(saved['tranches']) == len(tranche_prices) + ('ADD' in expected)
     if not quoted:
-        assert saved == before[ss.STATE]['positions']['ADD']
+        assert {k:v for k,v in saved.items() if k not in {'quote_status','quote_checked_at','valuation_status','quote_actions_allowed'}} == before[ss.STATE]['positions']['ADD']
+        assert saved['quote_status']=='MISSING_QUOTE'
         return
     # Extrema and all V3 lifecycle/exit inputs retain the pre-ADD observation.
     assert saved['mfe_net_pct'] == max(10.0, before_return)
@@ -981,7 +985,7 @@ def test_p0_forced_monitor_cannot_bypass_weekend_or_final_close_gate(monkeypatch
     before=monitor.continuity_fingerprint(book[monitor.STATE],book[monitor.EVENTS])
     _p0_clock(monitor,monkeypatch,initial,event_stamp)
     monkeypatch.setattr(monitor,'_alpaca_exchange_session',lambda ts=None:{'date':initial[:10],'open':clock_time(9,30),'close':clock_time(16)})
-    monkeypatch.setattr(monitor,'alpaca_snapshot_quotes',lambda symbols:({s:94.0 for s in symbols},[],1,1))
+    monkeypatch.setattr(monitor,'alpaca_snapshot_quotes',lambda symbols:({s:{"price":94.0,"price_asof":(real_datetime.fromisoformat(event_stamp)-__import__("datetime").timedelta(minutes=25)).isoformat()} for s in symbols},[],1,1))
     monitor.main(force=True)
     if expect_sell:
         assert len(book[monitor.EVENTS])==2
@@ -1122,7 +1126,7 @@ def test_full_scan_null_derived_state_and_pending_rebound(monkeypatch):
     for p in book[ss.STATE]['positions'].values():
         p.update(mfe_net_pct=None,mae_net_pct=None,swing_high_price=100.0,pullback_low_price=None,
                  rebound_exit_pending_v3=None)
-    monkeypatch.setattr(ss,'stock_universe',lambda:({s:{**_m(price=80,r5=-10,r20=-20,sma20=100),'base':s} for s in ['ADD','EXIT']},[],{'discovered':2,'source_errors':[]}))
+    monkeypatch.setattr(ss,'stock_universe',lambda:({s:{**_m(price=80,r5=-10,r20=-20,sma20=100),'base':s} for s in ['ADD','EXIT']},[],{'discovered':2,'source_errors':[], 'benchmarks':_fresh_benchmarks()}))
     ss.main()
     assert book[ss.EVENTS]==[]
     for p in book[ss.STATE]['positions'].values():
@@ -1147,7 +1151,7 @@ def test_monitor_null_extremes_and_summary_binding(monkeypatch):
     for p in book[monitor.STATE]['positions'].values(): p.update(mfe_net_pct=None,mae_net_pct=None)
     _p0_clock(monitor,monkeypatch,'2026-10-05T17:00:00+00:00','2026-10-05T17:00:01+00:00')
     monkeypatch.setattr(monitor,'_alpaca_exchange_session',lambda ts=None:None)
-    monkeypatch.setattr(monitor,'alpaca_snapshot_quotes',lambda symbols:({s:89.0 for s in symbols},[],1,1))
+    monkeypatch.setattr(monitor,'alpaca_snapshot_quotes',lambda symbols:({s:{"price":89.0,"price_asof":"2026-10-05T16:35:00Z"} for s in symbols},[],1,1))
     summary=monitor.ROOT/'summary-v1.json';book[summary]={'run_id':'old','updated_at':'old scan'}
     monitor.main(force=True)
     assert book[summary]['open_positions']==2
