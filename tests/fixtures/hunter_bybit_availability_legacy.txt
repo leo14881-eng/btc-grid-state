@@ -4,10 +4,6 @@ Spot uses the public V5 endpoint. Alpha uses the official authenticated Alpha to
 Failure is UNKNOWN, never NOT_LISTED.
 """
 import datetime as dt, hashlib, hmac, json, math, os, pathlib, re, time, urllib.error, urllib.parse, urllib.request
-try:
-    from research.hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
-except ModuleNotFoundError:
-    from hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 SPOT_CACHE=ROOT/"hunter-bybit-spot-cache.json"
@@ -24,24 +20,6 @@ def request(url, data=None, headers=None):
     # reject urllib/bot-like clients even though the endpoint itself is public.
     base={"User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153.0 Safari/537.36","Accept":"application/json,text/plain,*/*"}
     req=urllib.request.Request(url,data=data,headers={**base,**(headers or {})})
-    if data is None and url == SPOT_PROXY + "/bybit/spot":
-        try:
-            return request_json(req, timeout=15)
-        except ObservedHTTPError as exc:
-            evidence = validate_evidence(exc.http_evidence)
-            print("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
-                schema="hunter_http_log_v1", route="/bybit/spot",
-                observed_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
-                http_evidence=evidence), sort_keys=True, separators=(",", ":")), flush=True)
-            if evidence["failure_kind"] == "http":
-                # Preserve old public error classification without URL/raw body.
-                reported = evidence.get("worker_error_code", "")
-                raise RuntimeError(("HTTP_" + str(exc.code) + " " + reported).strip()) from None
-            if evidence["failure_kind"] == "invalid_json":
-                raise ValueError("BYBIT_WORKER_NON_JSON") from None
-            if evidence["failure_kind"] == "timeout":
-                raise TimeoutError("WORKER_TIMEOUT") from None
-            raise urllib.error.URLError("WORKER_TRANSPORT_ERROR") from None
     try:
         with urllib.request.urlopen(req,timeout=15) as r:return json.load(r)
     except urllib.error.HTTPError as e:

@@ -1,6 +1,8 @@
 name: Bybit Bulk Cache Check
 on:
   push:
+    # This isolated branch has a guarded offline suite; do not make market probes.
+    branches-ignore: ['codex/bybit-http-diagnostics-20261009']
     paths:
       - ".github/workflows/bybit-bulk-cache-check.yml"
       - "research/hunter_bybit_availability.py"

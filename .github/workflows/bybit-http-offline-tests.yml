@@ -1,0 +1,48 @@
+name: Bybit HTTP Offline Compatibility
+on:
+  push:
+    branches: ['codex/bybit-http-diagnostics-20261009']
+  pull_request:
+    paths:
+      - 'research/hunter_bybit_worker.py'
+      - 'research/hunter_bybit_availability.py'
+      - 'research/hunter_http_evidence.py'
+      - 'workers/hunter-bybit-proxy.js'
+      - 'tests/test_hunter_http*.py'
+      - 'tests/test_hunter_http*.mjs'
+      - 'tests/test_hunter_bybit_worker.py'
+      - 'tests/test_hunter_bybit_availability.py'
+      - 'tests/test_hunter_bybit_proxy.mjs'
+      - 'tests/fixtures/hunter_bybit_worker_pr88.txt'
+      - 'tests/fixtures/hunter_bybit_availability_legacy.txt'
+      - 'tests/fixtures/.gitattributes'
+      - 'tests/fixtures/hunter_http_worker_responses.json'
+      - 'tests/generate_hunter_http_contract.mjs'
+      - 'scripts/run_hunter_http_compat_tests.py'
+      - '.github/workflows/bybit-http-offline-tests.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify offline Worker fixtures and route regressions
+        run: |
+          node tests/generate_hunter_http_contract.mjs --check
+          node --test tests/test_hunter_http_diagnostics.mjs tests/test_hunter_bybit_proxy.mjs
+      - name: Run 108 guarded compatibility and downstream tests
+        run: python -I -B -X utf8 scripts/run_hunter_http_compat_tests.py
