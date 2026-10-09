@@ -1,19 +1,19 @@
 {
-  "version": "3.70",
-  "updated_at": "2026-10-09T18:55:08.000Z",
-  "last_scan_at": "2026-10-09T18:55:01.418998Z",
+  "version": "3.71",
+  "updated_at": "2026-10-09T20:43:35.825Z",
+  "last_scan_at": "2026-10-09T20:42:26.573427Z",
   "persistence": {
     "provider": "github",
     "writable": true,
-    "verification": "EXACT_MAIN_READBACK_VERIFIED_PHASE1_AND_PHASE2",
-    "run_id": "sentinel-20261009T185427000Z",
-    "status": "SUCCESS",
-    "last_write_attempt_at": "2026-10-09T18:55:05.000Z",
-    "last_persisted_at": "2026-10-09T18:55:08.000Z",
-    "persist_verified": true,
-    "last_verified_at": "2026-10-09T18:55:08.000Z",
-    "note": "Phase1 content was read back exactly from main; verification marker committed from phase1 blob 183f8331c151ab531daa655c71a60075334a48db.",
-    "last_attempt_at": "2026-10-09T18:54:27.000Z",
+    "verification": "PHASE1_CAS_PENDING_EXACT_MAIN_READBACK",
+    "run_id": "sentinel-20261009T204150000Z",
+    "status": "PENDING_READBACK",
+    "last_write_attempt_at": "2026-10-09T20:43:35.825Z",
+    "last_persisted_at": null,
+    "persist_verified": false,
+    "last_verified_at": null,
+    "note": "Phase1 prepared from current main blob; exact main readback required before phase2 verification marker.",
+    "last_attempt_at": "2026-10-09T20:41:50.000Z",
     "last_success_at": "2026-10-09T18:55:08.000Z",
     "error": null
   },
@@ -24,34 +24,34 @@
     "observed_portfolio_state_updated_at": "2026-10-03",
     "observed_portfolio_content_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
     "observed_portfolio_state_blob_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
-    "observed_portfolio_state_main_commit": "51b186761b01ea0d5cf62d7ba47c95a4c1e86545",
+    "observed_portfolio_state_main_commit": "01149a1a96c8f61aacce88f1e266650f333895bf",
     "writer": "CHATGPT_AUTOMATION"
   },
   "architecture_source": {
     "file": "decision-journal.json",
     "status": "READ_FIXED_MAIN_COMMIT",
-    "main_commit": "51b186761b01ea0d5cf62d7ba47c95a4c1e86545",
+    "main_commit": "01149a1a96c8f61aacce88f1e266650f333895bf",
     "content_sha": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
     "portfolio_blob_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30"
   },
   "logic_source": {
     "file": "automation-logic-final.md",
     "status": "READ_FIXED_MAIN_COMMIT",
-    "main_commit": "51b186761b01ea0d5cf62d7ba47c95a4c1e86545",
+    "main_commit": "01149a1a96c8f61aacce88f1e266650f333895bf",
     "content_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
     "blob_sha": "99688407085a0a443942d0d51ac1962b0fb02869"
   },
   "market_state_freshness": {
     "status": "VALID_PARTIAL",
-    "as_of": "2026-10-09T18:55:01.418998Z",
+    "as_of": "2026-10-09T20:42:26.573427Z",
     "market": "FRESH",
     "etf": "VALID_LATEST_COMPLETE_SESSION_DATE_ONLY",
     "derivatives": "FRESH",
     "macro": "TREASURY_VALID_DAILY__DXY_UNKNOWN"
   },
-  "last_price": 82535.36,
+  "last_price": 82388.75,
   "last_price_quality": "FRESH_BINANCE_SPOT",
-  "last_regime": "RECOVERY_PULLBACK_M15_SPOT_BELOW_82600_WHILE_H1_H4_STILL_HOLD",
+  "last_regime": "DOWNSIDE_RISK_REACTIVATING_H1_H4_CLOSE_BELOW_82600",
   "etf_flow_acceleration": {
     "status": "LATEST_COMPLETE_OUTFLOW__LESS_NEGATIVE_THAN_PRIOR_COMPLETE_SESSION",
     "latest_complete_session": "2026-10-08",
@@ -60,67 +60,67 @@
     "prior_complete_direct_farside_net_flow_usd_m": -484.9
   },
   "macro_state": {
-    "as_of": "2026-10-08",
-    "treasury_observation_date": "2026-10-08",
-    "us2y_pct": 4.75,
-    "us10y_pct_daily": 5.22,
+    "as_of": "2026-10-09",
+    "treasury_observation_date": "2026-10-09",
+    "us2y_pct": 4.8,
+    "us10y_pct_daily": 5.24,
     "us30y_pct": 5.6,
     "dxy": null,
     "dxy_source": "https://www.ice.com/products/194/US-Dollar-Index-Futures/data",
     "dxy_asof": null,
     "dxy_freshness": "UNKNOWN_CURRENT",
-    "treasury_asof": "2026-10-08",
+    "treasury_asof": "2026-10-09",
     "direction": "TIGHT_RISK_OFF_WITH_DXY_GAP",
     "assessment": "TIGHT__ETF_OUTFLOW__ELEVATED_LONG_YIELDS__DXY_CURRENT_UNKNOWN",
     "note": "No timestamped current official DXY value was available; no stale or proxy value was reused."
   },
   "derivatives_state": {
-    "status": "OI_DOWN_24H__FUNDING_POSITIVE__DELEVERAGING_WITH_SUPPORT_TEST",
-    "as_of": "2026-10-09T18:55:00.005000+00:00",
-    "binance_open_interest_btc": 91956.925,
-    "binance_open_interest_asof": "2026-10-09T18:54:54.091000+00:00",
-    "binance_oi_history_btc": 91893.494,
-    "binance_oi_history_value_usdt": 7597808056.698064,
-    "binance_oi_change_24h_pct": -1.7892602490242715,
-    "binance_funding_rate": 0.00004115,
-    "funding_asof": "2026-10-09T18:55:00.005000+00:00",
+    "status": "OI_DOWN_24H__FUNDING_POSITIVE__H1_H4_SUPPORT_BREAK",
+    "as_of": "2026-10-09T20:42:26.004000+00:00",
+    "binance_open_interest_btc": 92428.269,
+    "binance_open_interest_asof": "2026-10-09T20:42:22.410000+00:00",
+    "binance_oi_history_btc": 92300.213,
+    "binance_oi_history_value_usdt": 7595632268.229766,
+    "binance_oi_change_24h_pct": -0.6620658923462863,
+    "binance_funding_rate": 0.00005816,
+    "funding_asof": "2026-10-09T20:42:26.004000+00:00",
     "liquidation_context": "CURRENT_COMPREHENSIVE_AGGREGATE_UNKNOWN",
-    "interpretation": "24h OI fell -1.789% while funding stayed mildly positive. M15 and spot slipped below 82,600, but completed H1/H4 still hold above it."
+    "interpretation": "24h OI fell -0.662% while funding stayed positive. Completed 1h and 4h candles both closed below 82,600, confirming the support failure on a higher timeframe."
   },
   "pre_triggers": {
     "upside_squeeze": {
-      "status": "RECOVERY_PULLBACK_NOT_BREAKOUT_CONFIRMED",
-      "reason": "M15 and spot are below 82,600; completed H1/H4 still hold, but price remains beneath 82,750 and 83,016-83,418 resistance."
+      "status": "RECOVERY_REJECTED_H1_H4_BELOW_82600",
+      "reason": "Completed 1h and 4h candles both closed 82337.03 below 82,600; no upside breakout is confirmed."
     },
     "downside_liquidation": {
-      "status": "EARLY_REACTIVATION_UNCONFIRMED",
-      "confidence": "MEDIUM",
-      "reason": "M15 and spot breached 82,600, but no completed 1h close below 82,600 exists yet and OI remains lower."
+      "status": "REACTIVATED_H1_H4_CONFIRMED",
+      "confidence": "HIGH",
+      "reason": "The 82,600 support failure is now confirmed by completed 1h and 4h closes. OI is lower, moderating but not cancelling downside risk."
     },
     "liquidity_inflection": {
-      "status": "BID_HEAVY_SINGLE_SNAPSHOT",
-      "direction": "BYBIT_SPOT_BID_HEAVY",
+      "status": "ASK_HEAVY_SINGLE_SNAPSHOT",
+      "direction": "BYBIT_SPOT_ASK_HEAVY",
       "confidence": "LOW",
-      "bid_ask_depth_ratio": 1.4713267875028992
+      "bid_ask_depth_ratio": 0.5710292729836517
     }
   },
   "accumulation_gate": {
-    "as_of": "2026-10-09T18:55:01.418998Z",
+    "as_of": "2026-10-09T20:42:26.573427Z",
     "valuation": "UNKNOWN",
     "liquidity": "RESTRICTIVE_ETF_OUTFLOW_HIGH_YIELDS_DXY_UNKNOWN",
     "forced_selling": "CURRENT_AGGREGATE_LIQUIDATIONS_UNKNOWN",
-    "stabilization": "M15_AND_SPOT_BELOW_82600_WHILE_COMPLETED_H1_H4_STILL_HOLD",
-    "result": "EARLY_SUPPORT_FAILURE_RISK__NEW_SIZED_CAPITAL_ACTION_NOT_READY",
-    "price_level_policy": "Do not chase or average down. Require a completed 1h reclaim above 82,600 then 82,750/83,016, or a verified lower support hold with known sizing and fees."
+    "stabilization": "H1_H4_CLOSE_BELOW_82600",
+    "result": "H1_H4_SUPPORT_FAILURE_CONFIRMED__NEW_SIZED_CAPITAL_ACTION_NOT_READY",
+    "price_level_policy": "Do not chase or average down. Require a completed 1h reclaim above 82,600 and then 82,750/83,016, or verified lower-support stabilization with known sizing and fees."
   },
   "distribution": {
-    "status": "RECOVERY_PULLBACK_TESTING_82600_WITH_INTRAHOUR_BREAK",
-    "evidence": "Latest completed 15m closed 82478.01 and spot was 82535.36; completed 1h remained 82717.85 and 4h 82884.00."
+    "status": "DOWNSIDE_RISK_REACTIVATED_H1_H4_CLOSE_BELOW_82600",
+    "evidence": "Latest completed 1h and 4h candles both closed 82337.03 below 82,600; spot was 82388.75 and the Bybit depth snapshot was ask-heavy."
   },
   "allocation_gate": {
     "status": "NO_NEW_ACTION",
-    "recomputed_at": "2026-10-09T18:55:01.418998Z",
-    "reason": "M15 and spot are below 82,600 without an hourly close confirmation; ETF/macro evidence remains risk-off, and current cash, fees and exact lot attribution are unknown."
+    "recomputed_at": "2026-10-09T20:42:26.573427Z",
+    "reason": "Completed 1h and 4h closes confirmed a break below 82,600 while ETF/macro evidence remains risk-off; current cash, fees and exact lot attribution are unknown."
   },
   "drawdown_budget": {
     "status": "NO_NEW_PROPOSAL_TO_STRESS_TEST",
@@ -128,7 +128,7 @@
   },
   "portfolio_gates": {
     "portfolio_allocation_gate": "BLOCKED_UNKNOWN_CURRENT_HOLDINGS_CASH_ORDERS_AND_FEES",
-    "drawdown_budget_gate": "BLOCK_NEW_CAPITAL_UNTIL_RECLAIM_OR_SUPPORT_RETEST_AND_SIZING_VERIFIED",
+    "drawdown_budget_gate": "BLOCK_NEW_CAPITAL_UNTIL_RECLAIM_OR_VERIFIED_LOWER_SUPPORT_STABILIZATION",
     "counterparty_gate": "LIMITED_NOT_GREEN",
     "extreme_crash_reserve": "STRICTLY_ISOLATED_20000_USDT_NOT_TRIGGERED",
     "grid_cap": "SEPARATE_14000_USDT__NO_CHANGE",
@@ -136,70 +136,71 @@
   },
   "bybit_counterparty_risk": {
     "status": "MARKET_ENDPOINT_REACHABLE__COUNTERPARTY_SOLVENCY_NOT_VERIFIED",
-    "market_evidence_asof": "2026-10-09T18:55:01.153000+00:00",
+    "market_evidence_asof": "2026-10-09T20:42:26.353000+00:00",
     "venue": "BYBIT_SPOT"
   },
-  "regime": "RECOVERY_PULLBACK_M15_SPOT_BELOW_82600_WHILE_H1_H4_STILL_HOLD",
-  "action": "NO_NEW_BUY_NO_AVERAGING_DO_NOT_CHASE_RECOVERY_PULLBACK_MANAGE_EXISTING_SWING_RISK_NO_CORE_SELL_NO_EXTREME_RESERVE_USE",
+  "regime": "DOWNSIDE_RISK_REACTIVATING_H1_H4_CLOSE_BELOW_82600",
+  "action": "NO_NEW_BUY_NO_AVERAGING_DO_NOT_CHASE_MANAGE_EXISTING_SWING_RISK_NO_CORE_SELL_NO_EXTREME_RESERVE_USE",
   "leading_warning": {
-    "primary_state": "RECOVERY_PULLBACK_M15_SPOT_BELOW_82600_WHILE_H1_H4_STILL_HOLD",
-    "first_detected_at": "2026-10-09T18:54:27.000Z",
-    "main_path": "NEXT_H1_CLOSE_DECISIVE__RECLAIM_82600_82750_THEN_83016_83031_SUPPORTS_83418__H1_CLOSE_BELOW_82600_REOPENS_82519_82469_82400_82209",
+    "primary_state": "DOWNSIDE_RISK_REACTIVATING_H1_H4_CLOSE_BELOW_82600",
+    "first_detected_at": "2026-10-09T19:59:59.999Z",
+    "main_path": "H1_H4_BREAK_BELOW_82600_CONFIRMED__RECLAIM_82600_82750_THEN_83016_NEGATES__FAILURE_EXPOSES_82286_82209_81948",
     "leading_evidence": [
-      "Binance BTC spot 82535.36 USDT at 2026-10-09T18:55:00.004000+00:00; 24h change 1.248%.",
-      "Latest completed 15m candle closed 82478.01 below 82,600; spot also remained below 82,600 at evidence time.",
-      "Latest completed 1h candle closed 82717.85 above 82,600 but below 82,750; high 82788.01, low 82519.15.",
-      "Latest completed 4h candle closed 82884.00, so the 82,600 recovery band has not yet failed on an hourly or 4h close.",
-      "Binance returned-window OI fell -1.789%; funding remained mildly positive at 0.00004115.",
-      "Bybit spot 25-level bid/ask depth ratio was 1.471, bid-heavy in one snapshot; latest complete ETF session (2026-10-08) was a 244.1 million USD net outflow."
+      "Binance BTC spot 82388.75 USDT at 2026-10-09T20:42:25.001000+00:00; 24h change 0.685%.",
+      "Latest completed 15m candle closed 82397.48 below 82,600.",
+      "Latest completed 1h candle closed 82337.03 below 82,600; high 82573.44, low 82285.71.",
+      "Latest completed 4h candle also closed 82337.03 below 82,600; the recovery support failure is now confirmed on 4h.",
+      "Binance returned-window OI fell -0.662%; funding remained positive at 0.00005816.",
+      "Bybit spot 25-level bid/ask depth ratio was 0.571, ask-heavy in one snapshot; latest complete ETF session (2026-10-08) was a 244.1 million USD net outflow."
     ],
     "reversal_triggers": [
-      "A completed 1h reclaim above 82,600 then 82,750/83,016 restores the recovery path toward 83,031-83,418.",
-      "A completed 1h close below 82,600 confirms a weaker phase and reopens 82,519/82,469/82,400 then 82,209/81,948.",
+      "A completed 1h reclaim above 82,600 then 82,750/83,016 would neutralize the immediate breakdown; a completed 4h reclaim above 82,600 would materially improve confidence.",
+      "Failure to reclaim 82,600 keeps 82,286/82,209/81,948 exposed; a break below 81,948 reopens 81,773/80,800/80,393.",
       "A completed break below 80,393 with weak spot demand or renewed leverage stress confirms a materially worse downside path.",
       "Broader repair still requires 84,200-84,500 reclaimed and 85,000-85,500 sustained with improving spot demand and ETF flows."
     ],
     "early_action": "NO_NEW_BUY__NO_AVERAGING_DOWN__DO_NOT_CHASE__MANAGE_EXISTING_USER_CONFIRMED_SWING_RISK__VERIFY_EXIT_ORDERS__NO_CORE_SELL__NO_EXTREME_RESERVE_USE",
-    "confirmation_status": "M15_CLOSE_82478.01_AND_SPOT_BELOW_82600__LATEST_COMPLETED_H1_CLOSE_82717.85_AND_H4_CLOSE_82884.00_STILL_ABOVE_82600",
+    "confirmation_status": "H1_AND_H4_CLOSE_82337.03_BELOW_82600",
     "data_gaps": [
       "Current DXY is UNKNOWN; no timestamped current official DXY value was available, so no stale or proxy value was reused.",
-      "Current comprehensive aggregate liquidations are UNKNOWN; no verified current aggregate value was available.",
+      "Current comprehensive aggregate liquidations are UNKNOWN; no verified current comprehensive value was available.",
       "Fresh comprehensive exchange-solvency and stablecoin market-depeg primary evidence remains incomplete.",
       "A same-session independent second-source ETF cross-check was not available; the direct Farside complete row is retained without averaging.",
       "BTC swing fees, current cash and exact sell-lot attribution remain UNKNOWN; this blocks a new sized capital action but not the market-risk assessment."
     ]
   },
   "operational_reconciliation": {
-    "status": "COMPLETE",
-    "as_of": "2026-10-09T18:55:08.000Z",
-    "source_main_commit": "51b186761b01ea0d5cf62d7ba47c95a4c1e86545",
-    "prewrite_main_commit": "420a91b856f8eb5cc530e5a1296252ec6120ebe4",
+    "status": "PHASE1_PENDING_READBACK",
+    "as_of": "2026-10-09T20:43:35.825Z",
+    "source_main_commit": "01149a1a96c8f61aacce88f1e266650f333895bf",
+    "prewrite_main_commit": "01149a1a96c8f61aacce88f1e266650f333895bf",
     "server_evidence_snapshot_main_sha": "730d4887e109949f1355e7acac642df86110de63",
     "portfolio_sha": "2ce38bbf49623df9171dd1affc4a57596e2cae30",
     "decision_journal_sha": "842605e6c6be35aeb67470ca3515df8f8f8f591a",
     "runtime_sha": "85e24271bdfce0f13c07d95f6c756a918cf37193",
     "logic_sha": "99688407085a0a443942d0d51ac1962b0fb02869",
-    "remaining": [],
-    "phase1_commit_sha": "420a91b856f8eb5cc530e5a1296252ec6120ebe4",
-    "phase1_blob_sha": "183f8331c151ab531daa655c71a60075334a48db",
-    "phase1_readback_verified_at": "2026-10-09T18:55:08.000Z"
+    "remaining": [
+      "PHASE1_EXACT_MAIN_READBACK",
+      "PHASE2_VERIFICATION_MARKER",
+      "PHASE2_EXACT_MAIN_READBACK"
+    ]
   },
-  "run_id": "sentinel-20261009T185427000Z",
-  "last_run_at": "2026-10-09T18:54:27.000Z",
-  "last_successful_scan_at": "2026-10-09T18:55:01.418998Z",
-  "market_data_asof": "2026-10-09T18:55:00.004000+00:00",
+  "run_id": "sentinel-20261009T204150000Z",
+  "last_run_at": "2026-10-09T20:41:50.000Z",
+  "last_successful_scan_at": "2026-10-09T20:42:26.573427Z",
+  "market_data_asof": "2026-10-09T20:42:25.001000+00:00",
   "etf_data_asof": "2026-10-08",
-  "derivatives_data_asof": "2026-10-09T18:55:00.005000+00:00",
-  "macro_data_asof": "2026-10-08",
+  "derivatives_data_asof": "2026-10-09T20:42:26.004000+00:00",
+  "macro_data_asof": "2026-10-09",
   "run_status": "PARTIAL_DATA",
-  "last_persisted_at": "2026-10-09T18:55:08.000Z",
-  "persisted": true,
-  "persist_verified": true,
+  "last_persisted_at": null,
+  "persisted": false,
+  "persist_verified": false,
   "market_snapshot": {
-    "run_id": "sentinel-20261009T185427000Z",
-    "btc_price_usd": 82535.36,
-    "btc_change_pct_24h": 1.248,
-    "btc_volume_24h": 12323.79028,
+    "run_id": "sentinel-20261009T204150000Z",
+    "btc_price_usd": 82388.75,
+    "btc_change_pct_24h": 0.685,
+    "btc_volume_24h": 11879.7094,
     "current_daily_range_usd": {
       "low": 81603.52,
       "high": 83528.98,
@@ -215,36 +216,36 @@
       "volume_btc": 21676.96164,
       "status": "COMPLETED"
     },
-    "structure": "M15_AND_SPOT_BELOW_82600__COMPLETED_H1_H4_STILL_HOLD_82600",
+    "structure": "M15_H1_H4_SPOT_BELOW_82600",
     "timeframes": {
       "m15": {
-        "open_at": "2026-10-09T18:30:00.000Z",
-        "close_at": "2026-10-09T18:44:59.999Z",
-        "open": 82515,
-        "high": 82525.85,
-        "low": 82329.6,
-        "close": 82478.01,
-        "volume_btc": 149.67137,
+        "open_at": "2026-10-09T20:15:00.000Z",
+        "close_at": "2026-10-09T20:29:59.999Z",
+        "open": 82412.01,
+        "high": 82487.84,
+        "low": 82392.6,
+        "close": 82397.48,
+        "volume_btc": 48.77481,
         "status": "COMPLETED"
       },
       "h1": {
-        "open_at": "2026-10-09T17:00:00.000Z",
-        "close_at": "2026-10-09T17:59:59.999Z",
-        "open": 82746.01,
-        "high": 82788.01,
-        "low": 82519.15,
-        "close": 82717.85,
-        "volume_btc": 359.21203,
+        "open_at": "2026-10-09T19:00:00.000Z",
+        "close_at": "2026-10-09T19:59:59.999Z",
+        "open": 82458.73,
+        "high": 82573.44,
+        "low": 82285.71,
+        "close": 82337.03,
+        "volume_btc": 279.85056,
         "status": "COMPLETED"
       },
       "h4": {
-        "open_at": "2026-10-09T12:00:00.000Z",
-        "close_at": "2026-10-09T15:59:59.999Z",
-        "open": 83246.82,
-        "high": 83418,
-        "low": 82468.99,
-        "close": 82884,
-        "volume_btc": 2744.87593,
+        "open_at": "2026-10-09T16:00:00.000Z",
+        "close_at": "2026-10-09T19:59:59.999Z",
+        "open": 82884,
+        "high": 83016,
+        "low": 82285.71,
+        "close": 82337.03,
+        "volume_btc": 1528.26374,
         "status": "COMPLETED"
       },
       "daily": {
@@ -260,9 +261,7 @@
     },
     "support_resistance": {
       "support_usd": [
-        82519.15,
-        82468.99,
-        82400,
+        82285.71,
         82209.2,
         81948.03,
         81773,
@@ -285,13 +284,13 @@
     },
     "spot_orderbook": {
       "bybit": {
-        "asof": "2026-10-09T18:55:01.153000+00:00",
+        "asof": "2026-10-09T20:42:26.353000+00:00",
         "timestamp_quality": "EXCHANGE_RESPONSE_TIMESTAMP",
-        "bid": 82533.4,
-        "ask": 82533.5,
-        "spread_bps": 0.01211629951320595,
-        "bid_depth_usdt_25_levels": 291286.1420786,
-        "ask_depth_usdt_25_levels": 197975.1504239,
+        "bid": 82381.3,
+        "ask": 82381.4,
+        "spread_bps": 0.012138669734262529,
+        "bid_depth_usdt_25_levels": 164133.5574967,
+        "ask_depth_usdt_25_levels": 287434.5769335,
         "scope": "BYBIT_SPOT_EVIDENCE_ONLY"
       }
     }
@@ -301,17 +300,18 @@
     "state": "HEALTHY",
     "prior_status": "HEALTHY",
     "reason": "Valid partial scan completed within the two-hour window.",
-    "last_successful_scan_at": "2026-10-09T18:55:01.418998Z",
+    "last_successful_scan_at": "2026-10-09T20:42:26.573427Z",
     "consecutive_invalid_scans": 0,
     "recovery_event": null
   },
   "notification": {
-    "decision": "SILENT_NO_NEW_MATERIAL_EVENT",
+    "decision": "NOTIFY_NEW_MAJOR_RISK",
     "reasons": [
-      "The 15m/spot break below 82,600 is an early support test, but no completed 1h break or new executable capital action is confirmed; await the hourly close to avoid duplicate/noisy alerts."
+      "Completed 1h and 4h candles both closed 82337.03 below 82,600, upgrading the prior intrahour support test to a 4h-confirmed breakdown."
     ],
-    "delivery_status": "NO_OUTPUT_SILENT",
-    "mobile_push_status": "NOT_APPLICABLE_NO_OUTPUT",
+    "delivery_status": "RESPONSE_QUEUED_ACK_UNVERIFIED",
+    "mobile_push_status": "UNVERIFIED",
+    "event_id": "BTC_H1_H4_CLOSE_BELOW_82600_2026-10-09T19:59:59.999Z",
     "pending_events": [
       {
         "event_id": "BTC_H1_H4_BREAK_81773_LOW_80800_2026-10-08T16:48:34.002000+00:00",
@@ -354,6 +354,12 @@
         "type": "RISK_RECOVERY",
         "state": "SHORT_TERM_RECOVERY_CONFIRMING_H1_H4_CLOSE_ABOVE_82600",
         "first_detected_at": "2026-10-09T08:38:57.763Z"
+      },
+      {
+        "event_id": "BTC_H1_H4_CLOSE_BELOW_82600_2026-10-09T19:59:59.999Z",
+        "type": "MAJOR_RISK",
+        "state": "DOWNSIDE_RISK_REACTIVATING_H1_H4_CLOSE_BELOW_82600",
+        "first_detected_at": "2026-10-09T19:59:59.999Z"
       }
     ]
   },
@@ -369,8 +375,8 @@
     "capital_execution_readiness": "BLOCK_NEW_CAPITAL__EXISTING_SWING_RISK_MANAGEMENT_ONLY__DXY_LIQUIDATIONS_FEES_AND_LOT_ATTRIBUTION_UNKNOWN"
   },
   "source_audit": {
-    "run_id": "sentinel-20261009T185427000Z",
-    "scan_completed_at": "2026-10-09T18:55:01.418998Z",
+    "run_id": "sentinel-20261009T204150000Z",
+    "scan_completed_at": "2026-10-09T20:42:26.573427Z",
     "server_evidence_error": null,
     "sources": [
       {
@@ -380,9 +386,9 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": "USDT_PER_BTC",
-        "attempted_at": "2026-10-09T18:55:00.459243+00:00",
-        "fetched_at": "2026-10-09T18:55:00.712018+00:00",
-        "data_asof": "2026-10-09T18:55:00.004000+00:00",
+        "attempted_at": "2026-10-09T20:42:25.788761+00:00",
+        "fetched_at": "2026-10-09T20:42:26.072773+00:00",
+        "data_asof": "2026-10-09T20:42:25.001000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -393,9 +399,9 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-09T18:55:00.461634+00:00",
-        "fetched_at": "2026-10-09T18:55:00.884328+00:00",
-        "data_asof": "2026-10-09T18:44:59.999Z",
+        "attempted_at": "2026-10-09T20:42:25.805792+00:00",
+        "fetched_at": "2026-10-09T20:42:26.075049+00:00",
+        "data_asof": "2026-10-09T20:29:59.999Z",
         "freshness": "FRESH_COMPLETED_CANDLE_CLOSE",
         "error": null
       },
@@ -406,9 +412,9 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-09T18:55:00.462736+00:00",
-        "fetched_at": "2026-10-09T18:55:00.889150+00:00",
-        "data_asof": "2026-10-09T17:59:59.999Z",
+        "attempted_at": "2026-10-09T20:42:25.810215+00:00",
+        "fetched_at": "2026-10-09T20:42:26.076872+00:00",
+        "data_asof": "2026-10-09T19:59:59.999Z",
         "freshness": "FRESH_COMPLETED_CANDLE_CLOSE",
         "error": null
       },
@@ -419,9 +425,9 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-09T18:55:00.460272+00:00",
-        "fetched_at": "2026-10-09T18:55:00.897130+00:00",
-        "data_asof": "2026-10-09T15:59:59.999Z",
+        "attempted_at": "2026-10-09T20:42:25.801811+00:00",
+        "fetched_at": "2026-10-09T20:42:26.078505+00:00",
+        "data_asof": "2026-10-09T19:59:59.999Z",
         "freshness": "FRESH_COMPLETED_4H_CLOSE",
         "error": null
       },
@@ -432,8 +438,8 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": null,
-        "attempted_at": "2026-10-09T18:55:00.464513+00:00",
-        "fetched_at": "2026-10-09T18:55:00.928278+00:00",
+        "attempted_at": "2026-10-09T20:42:25.824361+00:00",
+        "fetched_at": "2026-10-09T20:42:26.079924+00:00",
         "data_asof": "2026-10-08T23:59:59.999Z",
         "freshness": "VALID_LATEST_COMPLETED_DAILY",
         "error": null
@@ -445,9 +451,9 @@
         "symbol": "BTCUSDT",
         "market_type": "USD_M_FUTURES",
         "unit": "BASE_ASSET",
-        "attempted_at": "2026-10-09T18:55:00.469095+00:00",
-        "fetched_at": "2026-10-09T18:55:00.716887+00:00",
-        "data_asof": "2026-10-09T18:00:00.000000+00:00",
+        "attempted_at": "2026-10-09T20:42:25.829196+00:00",
+        "fetched_at": "2026-10-09T20:42:26.122156+00:00",
+        "data_asof": "2026-10-09T20:00:00.000000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -458,9 +464,9 @@
         "symbol": "BTCUSDT",
         "market_type": "USD_M_FUTURES",
         "unit": "BASE_ASSET",
-        "attempted_at": "2026-10-09T18:55:00.712127+00:00",
-        "fetched_at": "2026-10-09T18:55:00.961357+00:00",
-        "data_asof": "2026-10-09T18:54:54.091000+00:00",
+        "attempted_at": "2026-10-09T20:42:26.072861+00:00",
+        "fetched_at": "2026-10-09T20:42:26.340611+00:00",
+        "data_asof": "2026-10-09T20:42:22.410000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -471,9 +477,9 @@
         "symbol": "BTCUSDT",
         "market_type": "USD_M_FUTURES",
         "unit": "RATE",
-        "attempted_at": "2026-10-09T18:55:00.716984+00:00",
-        "fetched_at": "2026-10-09T18:55:00.958467+00:00",
-        "data_asof": "2026-10-09T18:55:00.005000+00:00",
+        "attempted_at": "2026-10-09T20:42:26.075105+00:00",
+        "fetched_at": "2026-10-09T20:42:26.326989+00:00",
+        "data_asof": "2026-10-09T20:42:26.004000+00:00",
         "freshness": "FRESH",
         "error": null
       },
@@ -484,9 +490,9 @@
         "symbol": "BTCUSDT",
         "market_type": "SPOT",
         "unit": "USDT_AND_BTC",
-        "attempted_at": "2026-10-09T18:55:01.125411+00:00",
-        "fetched_at": "2026-10-09T18:55:01.296224+00:00",
-        "data_asof": "2026-10-09T18:55:01.153000+00:00",
+        "attempted_at": "2026-10-09T20:42:26.346962+00:00",
+        "fetched_at": "2026-10-09T20:42:26.570199+00:00",
+        "data_asof": "2026-10-09T20:42:26.353000+00:00",
         "freshness": "FRESH_EXCHANGE_RESPONSE_TIMESTAMP__BYBIT_ONLY",
         "error": null
       },
@@ -497,9 +503,9 @@
         "symbol": null,
         "market_type": null,
         "unit": "PERCENT",
-        "attempted_at": "2026-10-09T18:55:00.897229+00:00",
-        "fetched_at": "2026-10-09T18:55:01.380999+00:00",
-        "data_asof": "2026-10-08",
+        "attempted_at": "2026-10-09T20:42:26.079984+00:00",
+        "fetched_at": "2026-10-09T20:42:26.433642+00:00",
+        "data_asof": "2026-10-09",
         "freshness": "VALID_DAILY_OBSERVATION_DATE",
         "error": null
       },
@@ -510,8 +516,8 @@
         "symbol": null,
         "market_type": null,
         "unit": "USD_MILLIONS",
-        "attempted_at": "2026-10-09T18:55:00.889221+00:00",
-        "fetched_at": "2026-10-09T18:55:01.227391+00:00",
+        "attempted_at": "2026-10-09T20:42:26.078603+00:00",
+        "fetched_at": "2026-10-09T20:42:26.324958+00:00",
         "data_asof": "2026-10-08",
         "freshness": "VALID_LATEST_COMPLETE_SESSION",
         "error": null
@@ -523,7 +529,7 @@
         "symbol": "DXY",
         "market_type": "MACRO_INDEX",
         "unit": "INDEX_POINTS",
-        "attempted_at": "2026-10-09T18:54:27.000Z",
+        "attempted_at": "2026-10-09T20:41:50.000Z",
         "fetched_at": null,
         "data_asof": null,
         "freshness": "UNKNOWN_CURRENT",
@@ -536,7 +542,7 @@
         "symbol": "BTC",
         "market_type": "AGGREGATE_DERIVATIVES",
         "unit": "USD",
-        "attempted_at": "2026-10-09T18:54:27.000Z",
+        "attempted_at": "2026-10-09T20:41:50.000Z",
         "fetched_at": null,
         "data_asof": null,
         "freshness": "UNKNOWN_CURRENT_AGGREGATE",
@@ -549,7 +555,7 @@
         "symbol": "USDT",
         "market_type": "STABLECOIN_RESERVE_DISCLOSURE",
         "unit": null,
-        "attempted_at": "2026-10-09T18:54:27.000Z",
+        "attempted_at": "2026-10-09T20:41:50.000Z",
         "fetched_at": null,
         "data_asof": null,
         "freshness": "LIMITED_OFFICIAL_DISCLOSURE_NO_CURRENT_MARKET_DEPEG_OBSERVATION",
@@ -557,44 +563,44 @@
       }
     ]
   },
-  "primary_state": "RECOVERY_PULLBACK_M15_SPOT_BELOW_82600_WHILE_H1_H4_STILL_HOLD",
-  "first_detected_at": "2026-10-09T18:54:27.000Z",
-  "main_path": "NEXT_H1_CLOSE_DECISIVE__RECLAIM_82600_82750_THEN_83016_83031_SUPPORTS_83418__H1_CLOSE_BELOW_82600_REOPENS_82519_82469_82400_82209",
+  "primary_state": "DOWNSIDE_RISK_REACTIVATING_H1_H4_CLOSE_BELOW_82600",
+  "first_detected_at": "2026-10-09T19:59:59.999Z",
+  "main_path": "H1_H4_BREAK_BELOW_82600_CONFIRMED__RECLAIM_82600_82750_THEN_83016_NEGATES__FAILURE_EXPOSES_82286_82209_81948",
   "leading_evidence": [
-    "Binance BTC spot 82535.36 USDT at 2026-10-09T18:55:00.004000+00:00; 24h change 1.248%.",
-    "Latest completed 15m candle closed 82478.01 below 82,600; spot also remained below 82,600 at evidence time.",
-    "Latest completed 1h candle closed 82717.85 above 82,600 but below 82,750; high 82788.01, low 82519.15.",
-    "Latest completed 4h candle closed 82884.00, so the 82,600 recovery band has not yet failed on an hourly or 4h close.",
-    "Binance returned-window OI fell -1.789%; funding remained mildly positive at 0.00004115.",
-    "Bybit spot 25-level bid/ask depth ratio was 1.471, bid-heavy in one snapshot; latest complete ETF session (2026-10-08) was a 244.1 million USD net outflow."
+    "Binance BTC spot 82388.75 USDT at 2026-10-09T20:42:25.001000+00:00; 24h change 0.685%.",
+    "Latest completed 15m candle closed 82397.48 below 82,600.",
+    "Latest completed 1h candle closed 82337.03 below 82,600; high 82573.44, low 82285.71.",
+    "Latest completed 4h candle also closed 82337.03 below 82,600; the recovery support failure is now confirmed on 4h.",
+    "Binance returned-window OI fell -0.662%; funding remained positive at 0.00005816.",
+    "Bybit spot 25-level bid/ask depth ratio was 0.571, ask-heavy in one snapshot; latest complete ETF session (2026-10-08) was a 244.1 million USD net outflow."
   ],
   "reversal_triggers": [
-    "A completed 1h reclaim above 82,600 then 82,750/83,016 restores the recovery path toward 83,031-83,418.",
-    "A completed 1h close below 82,600 confirms a weaker phase and reopens 82,519/82,469/82,400 then 82,209/81,948.",
+    "A completed 1h reclaim above 82,600 then 82,750/83,016 would neutralize the immediate breakdown; a completed 4h reclaim above 82,600 would materially improve confidence.",
+    "Failure to reclaim 82,600 keeps 82,286/82,209/81,948 exposed; a break below 81,948 reopens 81,773/80,800/80,393.",
     "A completed break below 80,393 with weak spot demand or renewed leverage stress confirms a materially worse downside path.",
     "Broader repair still requires 84,200-84,500 reclaimed and 85,000-85,500 sustained with improving spot demand and ETF flows."
   ],
   "early_action": "NO_NEW_BUY__NO_AVERAGING_DOWN__DO_NOT_CHASE__MANAGE_EXISTING_USER_CONFIRMED_SWING_RISK__VERIFY_EXIT_ORDERS__NO_CORE_SELL__NO_EXTREME_RESERVE_USE",
-  "confirmation_status": "M15_CLOSE_82478.01_AND_SPOT_BELOW_82600__LATEST_COMPLETED_H1_CLOSE_82717.85_AND_H4_CLOSE_82884.00_STILL_ABOVE_82600",
+  "confirmation_status": "H1_AND_H4_CLOSE_82337.03_BELOW_82600",
   "data_gaps": [
     "Current DXY is UNKNOWN; no timestamped current official DXY value was available, so no stale or proxy value was reused.",
-    "Current comprehensive aggregate liquidations are UNKNOWN; no verified current aggregate value was available.",
+    "Current comprehensive aggregate liquidations are UNKNOWN; no verified current comprehensive value was available.",
     "Fresh comprehensive exchange-solvency and stablecoin market-depeg primary evidence remains incomplete.",
     "A same-session independent second-source ETF cross-check was not available; the direct Farside complete row is retained without averaging.",
     "BTC swing fees, current cash and exact sell-lot attribution remain UNKNOWN; this blocks a new sized capital action but not the market-risk assessment."
   ],
   "server_evidence_consumed": {
     "consumed": true,
-    "attempted_at": "2026-10-09T18:55:00.459243+00:00",
-    "generated_at": "2026-10-09T18:55:01.418998+00:00",
+    "attempted_at": "2026-10-09T20:42:25.788761+00:00",
+    "generated_at": "2026-10-09T20:42:26.573427+00:00",
     "collection_trigger": "ON_DEMAND_PUBLIC_GET",
-    "server_run_id": "sentinel-20261009T185501.418998Z",
+    "server_run_id": "sentinel-20261009T204226.573427Z",
     "source_sha": "730d4887e109949f1355e7acac642df86110de63",
     "collector_code_sha": "730d4887e109949f1355e7acac642df86110de63",
     "evidence_snapshot_main_sha": "730d4887e109949f1355e7acac642df86110de63",
     "evidence_snapshot_scope": "COLLECTOR_CODE_BASELINE_NOT_MAIN_STATE_READBACK",
     "main_readback_verified": false,
-    "content_summary_sha256": "262c25ffe58cb5a161c32412755ad558244df8709bae6b72af10525af0e39e3d",
+    "content_summary_sha256": "cddaf147e294152d5d6e125b437466bfe83a9102e32144bbbdafebddad805e70",
     "error": null
   }
 }
