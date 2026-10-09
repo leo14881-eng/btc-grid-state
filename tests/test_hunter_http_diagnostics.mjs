@@ -128,6 +128,8 @@ test('body read abort and transport failure are not mislabeled invalid JSON', as
     const diagnostic = body.result.failure_diagnostics.BTCUSDT['60'];
     assert.equal(diagnostic.http_status, 200);
     assert.equal(diagnostic.failure_kind, name === 'AbortError' ? 'timeout' : 'transport');
+    assert.equal(body.result.failures.BTCUSDT['60'], name === 'AbortError'
+      ? 'AbortError: upstream aborted' : 'Error: WORKER_KLINE_FAILURE');
     assert(!JSON.stringify(body).includes('SECRET_DO_NOT_STORE'));
   }
 });
@@ -218,4 +220,20 @@ test('spot success preserves the upstream JSON contract and makes one request', 
   globalThis.fetch = async () => { calls++; return Response.json(expected); };
   const response = await worker.fetch(new Request('https://worker.invalid/bybit/spot'), {});
   assert.equal(response.status, 200); assert.deepEqual(await response.json(), expected); assert.equal(calls, 1);
+});
+
+test('HTTP 200 body abort keeps AbortError identity on both public list routes', async t => {
+  t.after(() => { globalThis.fetch = blocked; });
+  for (const route of ['spot', 'tickers']) {
+    globalThis.fetch = async () => new Response(new ReadableStream({start(controller) {
+      const error = new Error('SECRET_DO_NOT_STORE'); error.name = 'AbortError'; controller.error(error);
+    }}));
+    const response = await worker.fetch(new Request('https://worker.invalid/bybit/' + route), {});
+    const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.equal(body.detail, 'AbortError: upstream aborted');
+    assert.equal(body.diagnostics.http_status, 200);
+    assert.equal(body.diagnostics.failure_kind, 'timeout');
+    assert(!JSON.stringify(body).includes('SECRET_DO_NOT_STORE'));
+  }
 });

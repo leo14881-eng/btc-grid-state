@@ -30,14 +30,14 @@ class CompatibilityTests(unittest.TestCase):
             guard.start()
             self.addCleanup(guard.stop)
 
-    def collect(self, module, mode='partial', old_worker=False, error=None):
+    def collect(self, module, mode='partial', old_worker=False, error=None, response_body=None):
         def fetch(path, body=None):
             if path == '/bybit/tickers':
                 return fixtures.partial_fetch({})(path, body)
             self.assertEqual(body, {'symbols': ['BTCUSDT', 'FLUIDUSDT'], 'end': fixtures.END})
             if error is not None:
                 raise error
-            response = copy.deepcopy(CONTRACT[mode])
+            response = copy.deepcopy(CONTRACT[mode] if response_body is None else response_body)
             if old_worker:
                 response['result'].pop('failure_diagnostics', None)
             return response
@@ -85,6 +85,34 @@ class CompatibilityTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertEqual(actual['early_signals'], {})
         self.assertEqual(log.count('HUNTER_BYBIT_HTTP_EVIDENCE '), 4)
+
+    def compare_exception_pair(self, mode, code, kind):
+        pair = CONTRACT['body_failure_pairs'][mode]
+        expected, _ = self.collect(legacy, response_body=pair['legacy'])
+        # Both supported consumers of the real new Worker response must agree.
+        for module in (legacy, current):
+            actual, log = self.collect(module, response_body=pair['current'])
+            self.assertEqual(actual, expected)
+            self.assertEqual(actual['signal_failure_details']['FLUIDUSDT']['15']['code'], code)
+            self.assertEqual(actual['signal_failures']['FLUIDUSDT'],
+                             'ValueError:BYBIT_WORKER_KLINE_FAILURE:FLUIDUSDT:15:' + code)
+            self.assertFalse(actual['venue_status']['signal_complete'])
+            self.assertNotIn('FLUID', actual['early_signals'])
+            if module is current:
+                record = json.loads(log.split(' ', 1)[1])
+                self.assertEqual(record['http_evidence']['failure_kind'], kind)
+                self.assertEqual(record['http_evidence']['http_status'], 0 if mode == 'fetch_abort' else 200)
+
+    def test_body_and_fetch_abort_preserve_legacy_canonical_code_and_error_string(self):
+        for mode in ('body_abort', 'fetch_abort'):
+            with self.subTest(mode=mode):
+                self.compare_exception_pair(mode, 'WORKER_ABORTED', 'timeout')
+
+    def test_body_transport_preserves_legacy_canonical_code_and_error_string(self):
+        self.compare_exception_pair('body_transport', 'WORKER_KLINE_FAILURE', 'transport')
+
+    def test_body_non_json_preserves_legacy_canonical_code_and_error_string(self):
+        self.compare_exception_pair('body_non_json', 'WORKER_KLINE_FAILURE', 'invalid_json')
 
     def test_new_outer_error_categories_use_legacy_snapshot_codes(self):
         for code, kind, status, canonical in [
