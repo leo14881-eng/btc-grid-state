@@ -6,6 +6,7 @@ from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
 from research import hunter_liquidity_probe as books
 from research import hunter_leading_risk as leading
+from research import hunter_manual_stop_once as manual_stop
 from research.hunter_policy import C,LANES,VERSION,stamp
 from concurrent.futures import ThreadPoolExecutor,as_completed
 ROOT=pathlib.Path("research/results");BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
@@ -69,7 +70,24 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  if not v1_mode:scan['venue_management']=(regime_scan or {}).get('venue_management') or {}
  state['last_cycle_generation_id']=scan['generation_id']
  capital_proposals=[] if not v1_mode else None
+ manual_audit=None;pending_manual=[]
+ # Consume only this exact user request during the normal locked monitor run.
+ # The caller's now may precede V1 processing: sample the real clock again so
+ # slow V1 work cannot make an old exit book appear fresh to the manual stop.
+ target_ids={row[0] for row in manual_stop.TARGETS.values()}
+ if not v1_mode and any(p.get('shadow_id') in target_ids for p in state['open_positions']):
+  evaluated_at=dt.datetime.now(dt.timezone.utc)
+  raw_books={a:(liq.get('snapshots',{}).get(a) or {}).get('raw_book_evidence',{}) for a in manual_stop.TARGETS}
+  state,manual_audit=manual_stop.stage(state,manual_stop.request(),raw_books,evaluated_at,eng._execution_source_sha())
+  now=evaluated_at
+  # A blocked user exit must not fall through to a reference-price automatic
+  # SELL or ADD in the same cycle. Other holdings retain ordinary management.
+  pending_manual=[p for p in state['open_positions'] if p.get('shadow_id') in target_ids]
+  position_order={p.get('shadow_id'):i for i,p in enumerate(state['open_positions'])}
+  state['open_positions']=[p for p in state['open_positions'] if p.get('shadow_id') not in target_ids]
  eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
+ if pending_manual:
+  state['open_positions']=sorted(state['open_positions']+pending_manual,key=lambda p:position_order[p.get('shadow_id')])
  # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit
  # responsiveness; capital deployment is owned by the full allocator where BUY
  # and ADD can compete in one ranked queue. V1 keeps its independent Broad Net behavior.
@@ -88,7 +106,12 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
  eng.atomic_json_write(summary_path,eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan)))
- return {"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
+ result={"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
+ if manual_audit is not None:
+  # Embedded in an existing member of the seven-file atomic publication set.
+  # It remains NOT_PUBLISHED until the original publisher verifies main.
+  result['manual_stop_request']=manual_audit
+ return result
 def management_selection(states,cursor,budget):
  # V2 health/recovery needs consecutive fresh five-minute observations. Only
  # the independent V1 management batch rotates; discovery admission is unchanged.

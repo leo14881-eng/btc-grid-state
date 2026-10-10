@@ -2,6 +2,7 @@
 import copy
 import datetime as dt
 import unittest
+from unittest.mock import patch
 from research import hunter_manual_stop_once as manual
 
 NOW = dt.datetime(2026, 10, 10, 22, 10, tzinfo=dt.timezone.utc)
@@ -61,7 +62,7 @@ class ManualStopTests(unittest.TestCase):
             self.assertEqual(event['reason'], manual.REASON)
             self.assertEqual(event['request_id'], manual.REQUEST_ID)
             self.assertEqual(event['requested_at_utc'], manual.REQUESTED_AT)
-            self.assertEqual(event['event_id'], manual.event_id(asset))
+            self.assertEqual(event['manual_event_id'], manual.event_id(asset))
             self.assertEqual(event['execution_venue'], 'BINANCE_SPOT')
             self.assertEqual(pos['post_exit_evaluation']['status'], 'OBSERVING')
             self.assertTrue(result['reentry_registry'][asset]['risk_lock'])
@@ -69,14 +70,25 @@ class ManualStopTests(unittest.TestCase):
     def test_cross_cycle_retry_and_archive(self):
         state, books = fixture()
         done, _ = self.run_stage(state, books)
-        done['closed_trade_archive'] = done['closed_positions'][1:]
-        done['closed_positions'] = done['closed_positions'][:1]
+        for row in done['closed_positions'][1:]:row['observation_complete'] = True
+        with patch.object(manual.eng, 'MAX_CLOSED_HOT', 1):
+            manual.eng.compact_closed_history(done)
+        self.assertEqual(len(done['closed_trade_archive']), 2)
+        self.assertNotIn('manual_request_id', done['closed_trade_archive'][0])
         done['events'] = []  # bounded event history may roll over
         done['last_cycle_generation_id'] = 'LATER_MONITOR'
         again, audit = self.run_stage(done, {}, NOW+dt.timedelta(days=2))
         self.assertEqual(done, again)
         self.assertEqual(audit['staged_count'], 0)
         self.assertEqual([r['status'] for r in audit['targets']], ['ALREADY_APPLIED']*2)
+        # The real archive is bounded to 5000; permanent receipts outlive it.
+        done['closed_trade_archive'] = []
+        again, audit = self.run_stage(done, {}, NOW+dt.timedelta(days=100))
+        self.assertEqual(done, again)
+        self.assertEqual(audit['staged_count'], 0)
+        done['manual_exit_requests'][manual.REQUEST_ID]['receipts']['ENA']['execution']['net_pnl_usdt'] = 123
+        with self.assertRaisesRegex(ValueError, 'IDEMPOTENCY_RECEIPT_COST_INVALID'):
+            self.run_stage(done, {}, NOW+dt.timedelta(days=100))
 
     def test_partial_retry_only_remaining(self):
         state, books = fixture()
@@ -86,7 +98,7 @@ class ManualStopTests(unittest.TestCase):
         self.assertEqual(audit['staged_count'], 1)
         sells = [e for e in done['events'] if e['type'] == 'SHADOW_V2_SELL']
         self.assertEqual(len(sells), 2)
-        self.assertEqual(len({e['event_id'] for e in sells}), 2)
+        self.assertEqual(len({e['manual_event_id'] for e in sells}), 2)
 
     def test_stale_future_missing_depth_crossed_and_wrong_venue(self):
         for mutation in (
@@ -132,6 +144,20 @@ class ManualStopTests(unittest.TestCase):
         done, audit = self.run_stage(state, books)
         self.assertEqual(audit['targets'][0]['status'], 'NOT_OPEN_NO_ACTION')
         self.assertEqual([e['asset'] for e in done['events'][1:]], ['PENDLE'])
+
+    def test_notification_identity_ack_replay_is_unchanged(self):
+        from scripts import hunter_trade_notifications as notifications
+        state, books = fixture()
+        done, _ = self.run_stage(state, books)
+        batch = notifications.make_batch(done, [], SHA)
+        self.assertEqual(len(batch['events']), 2)
+        for event in batch['events']:
+            self.assertEqual(event['event_id'], notifications.event_id(event))
+            self.assertEqual(event['manual_event_id'], manual.event_id(event['asset']))
+        ack = notifications.acknowledge(batch, dict(role='assistant', message_id='synthetic', text=batch['batch_id']))
+        self.assertEqual(notifications.make_batch(done, ack['event_ids'], SHA)['events'], [])
+        retried, _ = self.run_stage(done, {}, NOW + dt.timedelta(days=1))
+        self.assertEqual(notifications.make_batch(retried, ack['event_ids'], SHA)['events'], [])
 
 
 if __name__ == '__main__':

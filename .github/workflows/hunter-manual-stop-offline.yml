@@ -4,6 +4,8 @@ on:
     paths:
       - 'research/hunter_manual_stop_once.py'
       - 'tests/test_hunter_manual_stop_once.py'
+      - 'tests/test_hunter_manual_stop_monitor.py'
+      - 'research/hunter_position_monitor.py'
       - '.github/workflows/hunter-manual-stop-offline.yml'
 permissions:
   contents: read
@@ -16,5 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m unittest discover -s tests -p 'test_hunter_manual_stop_once.py' -v
+      - run: python -m unittest discover -s tests -p 'test_hunter_manual_stop*.py' -v
       - run: python -m unittest discover -s tests -p 'test_hunter_lifecycle_state.py' -v
+      - run: python -m unittest discover -s tests -p 'test_hunter_monitor_persist.py' -v
+      - run: python -m unittest discover -s tests -p 'test_hunter_trade_notifications.py' -v

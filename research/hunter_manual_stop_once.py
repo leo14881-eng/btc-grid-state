@@ -1,7 +1,7 @@
-"""Isolated staged V2 user exit. No I/O, orders, scheduler or publisher.
+"""Exact one-time V2 user exit, consumed by the normal position monitor.
 
-NOT a production execution entry point. The returned copy must only be consumed
-by a reviewed SingleWriter transaction with fresh acquisition and CAS/readback.
+No standalone I/O, orders, scheduler or publisher. The returned copy remains
+unpublished until the normal SingleWriter transaction passes CAS and readback.
 """
 import copy
 import datetime as dt
@@ -16,7 +16,6 @@ from research import hunter_shadow_trader_v2 as eng
 REQUEST_ID = 'Sentinel_035030c90a0881919c51c31e1ac68700'
 REQUESTED_AT = '2026-10-10T22:04:13.099124Z'
 REASON = 'USER_REQUESTED_MANUAL_STOP_LOSS'
-USER_TEXT = '�ǾͰ�ENA��PENDLE���ھ���������ֹ�𣬼�¼��ԭ�򣬲�Ҫһֱ���ţ�Ȼ��Ϊ����ĩ�ĸ�����׼��'
 TARGETS = {
     'ENA': ('SHV2-20261005T075147-ENA-b10cd5', 0.2527, 5.313),
     'PENDLE': ('SHV2-20261005T075147-PENDLE-ea9b45', 2.509, 4.433),
@@ -25,7 +24,7 @@ TARGETS = {
 
 def request():
     return dict(request_id=REQUEST_ID, requested_at_utc=REQUESTED_AT,
-                reason=REASON, user_text=USER_TEXT,
+                reason=REASON,
                 targets={a: row[0] for a, row in TARGETS.items()},
                 capital_authority='NONE_SHADOW_ONLY',
                 real_trading_enabled=False, real_order_count=0)
@@ -61,6 +60,26 @@ def validate_position(pos, asset):
     require(pos.get('capital_authority') == 'NONE_SHADOW_ONLY', 'POSITION_AUTHORITY')
 
 
+def validate_receipt(saved, asset, fingerprint):
+    sid, entry, slip = TARGETS[asset]
+    require(saved.get('manual_event_id') == event_id(asset) and
+            saved.get('request_id') == REQUEST_ID and saved.get('requested_at_utc') == REQUESTED_AT and
+            saved.get('request_sha256') == fingerprint and saved.get('shadow_id') == sid and
+            saved.get('reason') == REASON and saved.get('capital_authority') == 'NONE_SHADOW_ONLY' and
+            saved.get('real_trading_enabled') is False and type(saved.get('real_order_count')) is int and
+            saved.get('real_order_count') == 0, 'IDEMPOTENCY_RECEIPT_INVALID')
+    executed = eng.parse(saved['executed_at_utc'])
+    raw = saved['raw_book']
+    require(executed >= eng.parse(REQUESTED_AT) and lifecycle.fresh(raw.get('fetched_at'), executed, 30)
+            and saved.get('raw_book_sha256') == digest(raw), 'IDEMPOTENCY_RECEIPT_BOOK_INVALID')
+    pos = dict(asset=asset, execution_venue='BINANCE_SPOT', market_symbol=asset+'USDT',
+               market_type='spot', execution_fee_bps=10,
+               tranches=[dict(notional_usdt=1000, price=entry, buy_slippage_bps=slip)])
+    execution = lifecycle.liquidation(pos, raw, executed, 10)
+    require(execution.get('status') == 'SHADOW_RECEIPT_ESTIMATE' and execution == saved.get('execution'),
+            'IDEMPOTENCY_RECEIPT_COST_INVALID')
+
+
 def stage(state, instruction, books, now, source_main_sha):
     """Return (staged_copy, audit); caller state never changes, even on failure.
 
@@ -90,6 +109,7 @@ def stage(state, instruction, books, now, source_main_sha):
     fingerprint = digest(instruction)
     require(not prior or prior.get('request_sha256') == fingerprint, 'REQUEST_ID_COLLISION')
     receipts = copy.deepcopy((prior or {}).get('receipts', {}))
+    require(set(receipts) <= set(TARGETS), 'UNAUTHORIZED_RECEIPT_TARGET')
     rows = []
     generation = 'MANUAL_' + REQUEST_ID
     for asset, (sid, _, _) in TARGETS.items():
@@ -100,12 +120,19 @@ def stage(state, instruction, books, now, source_main_sha):
                  and e.get('type') == 'SHADOW_V2_SELL']
         if asset in receipts:
             saved = receipts[asset]
-            require(not opened and len(closed) == 1 and len(sells) <= 1 and
-                    saved.get('event_id') == event_id(asset) and
-                    saved.get('request_sha256') == fingerprint and
-                    closed[0].get('manual_request_id') == REQUEST_ID and
-                    closed[0].get('manual_event_id') == event_id(asset) and
-                    (not sells or sells[0].get('event_id') == event_id(asset)),
+            validate_receipt(saved, asset, fingerprint)
+            # The real compact archive intentionally drops manual metadata.
+            # Match its retained exit facts to the permanent request receipt;
+            # do not add historical fields or depend on bounded event history.
+            # Both event and closed archives are bounded. A validated permanent
+            # receipt remains sufficient after those histories roll off.
+            require(not opened and len(closed) <= 1 and len(sells) <= 1 and
+                    (not closed or (closed[0].get('asset') == asset and closed[0].get('exit_reason') == REASON and
+                    closed[0].get('closed_at_utc') == saved.get('executed_at_utc') and
+                    closed[0].get('net_pnl_usdt') == round(saved['execution']['net_pnl_usdt'], 2) and
+                    closed[0].get('exit_execution_estimate') == saved.get('execution'))) and
+                    (not sells or (sells[0].get('manual_event_id') == event_id(asset) and
+                                   sells[0].get('request_id') == REQUEST_ID)),
                     'IDEMPOTENCY_STATE_INCONSISTENT')
             rows.append(dict(asset=asset, status='ALREADY_APPLIED', receipt=saved))
             continue
@@ -132,7 +159,7 @@ def stage(state, instruction, books, now, source_main_sha):
         pnl, price, capital = execution['net_pnl_usdt'], execution['vwap'], execution['capital']
         receipt = dict(request_id=REQUEST_ID, requested_at_utc=REQUESTED_AT,
                        executed_at_utc=now.isoformat(), request_sha256=fingerprint,
-                       event_id=event_id(asset), shadow_id=sid, reason=REASON,
+                       manual_event_id=event_id(asset), shadow_id=sid, reason=REASON,
                        source_main_sha=source_main_sha, before_portfolio_sha256=digest(state),
                        raw_book_sha256=digest(book), raw_book=copy.deepcopy(book),
                        execution=copy.deepcopy(execution), capital_authority='NONE_SHADOW_ONLY',
@@ -151,7 +178,7 @@ def stage(state, instruction, books, now, source_main_sha):
         eng.register_exit_for_reentry(result, pos, price, REASON, now)
         eng.record(result, pos, 'EXIT', now, [REASON], receipt, price)
         eng.trade_event(result, pos, 'SELL', now, price, REASON, pnl)
-        result['events'][-1].update(event_id=event_id(asset), request_id=REQUEST_ID,
+        result['events'][-1].update(manual_event_id=event_id(asset), request_id=REQUEST_ID,
                                    requested_at_utc=REQUESTED_AT, generation_id=generation,
                                    execution_quantity=execution['quantity'],
                                    execution_receipt=copy.deepcopy(receipt))

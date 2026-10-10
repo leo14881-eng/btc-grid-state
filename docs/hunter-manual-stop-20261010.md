@@ -1,17 +1,32 @@
-# ENA/PENDLE one-time shadow exit: staged implementation, NOT EXECUTED
+# Exact ENA/PENDLE manual shadow stop: wired draft, NOT EXECUTED
 
-Request: `Sentinel_035030c90a0881919c51c31e1ac68700` at
-`2026-10-10T22:04:13.099124Z`. Reason: `USER_REQUESTED_MANUAL_STOP_LOSS`.
-This request does not authorize real orders, general price/time stops, historical
-backfills of SELL events, or a change to V1, Sentinel, PR35 or capital limits.
+Request ID: Sentinel_035030c90a0881919c51c31e1ac68700.
+Original request time: 2026-10-10T22:04:13.099124Z.
+Reason: USER_REQUESTED_MANUAL_STOP_LOSS.
+The optional user_text field is omitted to avoid encoding ambiguity. The request
+ID, timestamp, explicit reason and exact authorized position IDs are immutable.
 
-## Verified baseline
+## Scope and execution status
 
-Read baseline: `e6e0e8b1963d6a80bfd935174418925af30a4987`, main observed during
-this task. Complete recursive tree contains no AGENTS.md/.agents/SKILL.md.
-All contents below were fetched completely (large JSON via Git blob):
+This draft now wires the exact one-time request into the existing natural V2
+position monitor. Merging/using this code in the approved runner will activate
+the request on its next naturally admitted monitor cycle. This task has NOT
+merged, deployed, manually triggered a trading workflow, or changed live state.
+No actual new SELL/realized loss is claimed by this draft or synthetic CI.
 
-| File under research/results | Git blob |
+Only SHV2-20261005T075147-ENA-b10cd5 and
+SHV2-20261005T075147-PENDLE-ea9b45 are eligible. Both require their original
+single 1000 USDT tranche, BINANCE_SPOT identity and 10 bps fee model.
+The BYBIT execution_channel label never selects a venue. New positions in the
+same asset are ineligible. No arbitrary force-sell CLI or generic request API
+exists. V1, Sentinel, PR35, PR98 and capital/policy settings are not modified.
+
+## Verified baseline and preservation of others' work
+
+Initial complete reads used main e6e0e8b1963d6a80bfd935174418925af30a4987.
+Its complete recursive tree contains no AGENTS.md/.agents/SKILL.md.
+
+| File under research/results | Fixed Git blob |
 | --- | --- |
 | hunter-shadow-v2-portfolio.json | 416d546767bf46ee503559eba95bc03ab0693849 |
 | hunter-shadow-v2-summary.json | a2273042e230fe3be2d489c82ffd9b16b6dcca8f |
@@ -19,104 +34,110 @@ All contents below were fetched completely (large JSON via Git blob):
 | hunter-scheduler-health.json | 1d7488d6e33ba85ceb5f733a31194df592fb5305 |
 | hunter-shadow-v2-overfilter-guard.json | 1de21941370bda102b40040ba423815f5c697956 |
 
-At baseline, the V2 summary is as of 22:06:39.520060Z: 10 open, 24 closed,
-14,000 USDT deployed. ENA and PENDLE are open, each with a single 1,000 USDT
-tranche. Model quantities are 3951.2110854549505 and 397.990745361763.
-Both execution venues are BINANCE_SPOT with 10 bps fees. Their BYBIT channel
-labels are not pricing venues. Old receipt prices are deliberately not used
-for this request. Fresh acquisition must happen inside the eventual writer.
+At that snapshot (22:06:39.520060Z): 10 open, 24 closed, 14000 USDT deployed.
+ENA model quantity 3951.2110854549505; PENDLE 397.990745361763.
+Initial draft final readback main 270ae616c11969c949ce8fab19f1ca164ff03db0,
+portfolio blob e54327a7eb475285fd1f2b5b91eaa97135486f3f, still had both open.
+No historical receipt price is reused for the actual request.
 
-## What this draft implements
+Integration work is based on main cb3891809653f56499849bcc47159b5f1908e417.
+Its monitor, writer and repository runner sources match the initial baseline;
+its other files are preserved through a merge-parent commit, not overwritten
+from the older draft tree. No PR98 branch/files are used or rewritten.
 
-`research.hunter_manual_stop_once.stage` is a pure staging function with no
-network, filesystem, exchange orders or publication. It returns a deep-copied
-candidate state and an audit explicitly marked NOT_PUBLISHED. It is not an
-installed production command and cannot itself sell the authoritative holdings.
+## Natural monitor hook and unchanged publication contract
 
-The exact request, timestamp, reason, two position IDs, original single-tranche
-quantities, execution identities and fee model are pinned. No other asset is
-eligible. Fresh complete Binance depth (maximum 30 seconds old) is passed to
-the existing `lifecycle.liquidation`. Insufficient depth, wrong venue, invalid
-or stale books fail closed per target. No last/best-bid shortcut is used.
+research/hunter_position_monitor.py::run_lane calls the pure stage function
+only for V2 with an exact authorized shadow_id still open. The order is:
+configure V2; update current risk observation; record the natural scan
+generation; stage the manual request; run ordinary management for other
+holdings; build existing summary; let the original publisher validate/publish.
 
-The staged transaction calls existing exit_analysis, refresh_post_exit_status,
+The hook reads the same newly acquired raw exit books from liq.snapshots.
+It samples datetime.now(UTC) at the actual V2 invocation, AFTER any slow V1
+processing. Maximum book age is 30 seconds. It does not use the earlier
+evaluated_at timestamp to pretend stale books are fresh. A stale/failed book
+safely BLOCKS that target until a later natural cycle reacquires it.
+
+Pending blocked exact target positions are excluded from ordinary SELL/ADD
+evaluation for that cycle and restored in their original order. They cannot
+fall through to a reference-price SELL with a different reason. Other holdings
+retain the ordinary scheduled monitor behavior. The hook itself targets no
+other position and never starts a full Research cycle.
+
+Successful target copies use lifecycle.liquidation's FULL held quantity across
+observed bids and existing buy/exit fees; no last-price or best-bid shortcut.
+The handler calls exit_analysis, refresh_post_exit_status,
 update_loss_exit_guard, register_exit_for_reentry, record and trade_event.
-Existing events/closed rows and other open positions stay unchanged. No compact
-or history truncation is run. BTC-relative returns are UNKNOWN (null with an
-explicit status), because this path does not fetch a BTC mark.
+Its staged copy preserves unrelated positions/history; later normal monitor
+observation/compaction behavior is unchanged.
 
-Each target has a deterministic event ID and a durable request receipt in the
-portfolio, independently of the five-minute generation and bounded events.
-Receipts contain the actual request time, actual evaluation time, exact raw
-book, book hash, source-main SHA, before-state hash and cost calculation.
-Partial success is explicit; a retry reloads main and stages only unfinished
-targets. Archived closed trades are checked on retries too. The raw and staged
-portfolio hashes are included in the separate audit. No historical date is
-written as the execution time.
+Receipt and request ledger are embedded in V2 portfolio; the staged audit is
+embedded in the V2 result inside hunter-position-monitor.json. No eighth file,
+new write permission, new host lock, new publisher or fake scheduler generation
+is introduced. scripts/hunter_monitor_persist.py and the runner are unchanged:
+the existing seven-file validator, protected-input CAS, non-force push and
+exact main readback remain the only formal publication route. New modules and
+tests already match the writer's protected research/hunter_ and test_hunter_
+prefixes. Existing CAS conflicts discard the generation and re-enter on fresh
+main/market evidence, as covered by the existing offline real-Git race tests.
 
-Existing loss-exit side effects are material: if both exits lose money, they
-increment loss counters, quarantine the released 2,000 USDT under the existing
-circuit logic, and risk-lock reentry. This is existing policy behavior, not a
-new fixed stop or a capital-limit change. 20k/17k/3k settings remain unchanged.
+Audit status remains NOT_PUBLISHED in the staged data. Only the original
+publisher's authoritative readback is execution confirmation. An uncertain push
+must be resolved from main receipts before any retry or success report.
 
-## Required integration and approval before execution
+## Durable idempotency and notification compatibility
 
-There is no verified one-time production writer entry point. The current
-monitor publisher validates seven files and scheduler success for its natural
-five-minute generation. Reusing it unchanged would misrepresent monitor work.
-The installed host launcher is NOT verified; the server runtime_file request
-for /usr/local/bin/hunter-monitor-runner.sh was denied upstream. Do not try
-alternate paths or interfaces to bypass that denial.
+Each target's permanent receipt contains request/time/reason, its
+manual_event_id, exact raw book and SHA256, execution calculation, source-main
+SHA, before-state hash and actual execution time. The audit also hashes the
+staged state. The request ledger survives ordinary monitor generations.
 
-The smallest integration should consume the exact request inside the existing
-NATURAL monitor, not create a separate local writer that cannot hold the server
-lock. No manual Research run, new server permission, generic force-sell API or
-standalone publisher is proposed.
+The real compact_closed_history drops manual fields and has a 5000-row cap.
+Retry therefore validates the independent permanent receipt, recomputes its
+full-depth cost and matches remaining archived exit facts when present. It
+does not require bounded events or closed/archive rows to remain forever.
+Unexpected receipt targets, reopened exact IDs, conflicting receipts or
+remaining inconsistent history fail closed. Successful targets never sell twice.
 
-1. Parent reviews this staged handler and approves the concrete monitor hook.
-   The hook is V2-only and accepts only this exact checked-in request, not
-   arbitrary targets/reasons. Nothing runs merely by importing this draft.
-2. At the next naturally scheduled monitor under its existing host lock, its
-   isolated checkout fetches current main. The existing acquisition already
-   refreshes all V2 exit books. Call stage with those fresh receipts, actual
-   evaluation time and source-main SHA, before ordinary V2 position management.
-   Unfinished targets remain blocked if receipts are unavailable. Other assets
-   receive only their existing ordinary scheduled handling; the manual handler
-   cannot target them. Do not manually trigger a full cycle on this request.
-3. Persist the request ledger/receipt in V2 portfolio and rebuild V2 summary
-   through the existing builder. Preserve real natural monitor/scheduler
-   generation semantics. This is a genuine scheduled monitor completion, not
-   an invented artificial scheduler success. Use the existing seven-file
-   validator/CAS/push/readback under the original SingleWriter.
-4. Add integration tests for target processing before normal management, summary
-   loss/count consistency, natural scheduler generation, durable receipt/event
-   preservation, unchanged V1 logic, and CAS retry on a fresh authoritative
-   checkout. The existing CAS protects research/hunter_ modules and portfolio
-   files; additionally protect any new request path. Never reuse quotes or
-   staged decisions across a protected-input conflict.
-5. On uncertain push, inspect authoritative main receipts first. A successful
-   report requires actual new SELL IDs, quantities, receipt VWAP/net PnL,
-   reason/request timestamp, partial outcomes, commit/blob hashes and exact
-   main readback. Verify the deployed runner via an approved mechanism; do not
-   assume the denied installed launcher equals repository code.
+Events use manual_event_id for request correlation and do NOT set event_id.
+The notification consumer retains its unchanged canonical digest ID for
+selection, output and acknowledgement. An observed notification acknowledgement
+therefore suppresses the same manual SELL on replay.
 
-Parent review/explicit approval of the monitor hook and merge are still
-required. This draft deliberately includes only the pure handler, offline tests
-and this integration proposal. It neither hooks natural monitoring nor claims
-to have a production execution CLI. The existing denied runtime path must not
-be retried or bypassed.
+## Existing risk effects and review evidence
 
-Offline tests cover full depth costs, partial retry, cross-generation/archive
-idempotency, stale/future/crossed/insufficient books, venue/fee/quantity/scope
-rejection, existing-history preservation and loss/reentry side effects. CI has
-read-only contents permission and synthetic fixtures only; it does not run
-Research or fetch markets.
+Current systemic observation is applied BEFORE manual exits, preventing the
+same observation from immediately advancing recovery after the loss.
+Two losing exits trigger the EXISTING two-consecutive-loss circuit rule:
+TRIPPED, released 2000 USDT quarantined, and reentry risk-locks. Manual reasons
+remain separately identifiable; no guard is bypassed. Replays add no new loss
+count, quarantine or events. 20000/17000/3000 limits remain unchanged.
 
-## Weekend review
+BTC-relative exit metrics are explicit UNKNOWN (null/status), since the pure
+manual handler does not claim an independently fresh BTC mark. Normal
+post-exit lifecycle follows 1/6/24/48/72-hour observation windows for weekend
+review. Keep manual intervention separate from strategy-triggered exits,
+including actual request-to-execution delay.
 
-When execution is safely published, retain the actual receipts and compare
-1/6/24/48/72-hour post-exit observations through the normal lifecycle. Review
-manual intervention separately from strategy-triggered exits, including delay
-from request to execution and the reason the request needed a new entry point.
-Do not count this draft, its synthetic test SELLs, or an unpublished staged
-state as real current shadow exits.
+## Offline acceptance and remaining approval
+
+Tests use synthetic portfolios/books only and cover run_lane integration,
+full-depth costs, partial/new-cycle retry, real compact archive and rolloff,
+notification acknowledgement/replay, stale-after-V1 timing, wrong identity/fee,
+current risk-observation ordering and no repeat circuit side effects.
+Integration output passes the unchanged seven-file validator and exact
+readback checks with natural scheduler generation. Existing offline writer
+tests cover protected/nonprotected Git races and failed publication recovery.
+CI has read-only contents permission; no production workflow is triggered.
+
+Before merge, parent must review the exact final head and its CI. This code is
+now ACTIVE-on-next-natural-monitor if approved/merged, unlike the original
+pure-handler draft. Installed host launcher equivalence remains unverified:
+an upstream runtime_file read of /usr/local/bin/hunter-monitor-runner.sh was
+denied. Do not retry another path/interface to bypass that denial.
+
+Actual completion still requires approved runner/source evidence and main
+readback containing each new manual SELL, quantity, venue, VWAP, simulated net
+PnL, reason, request/time, unique manual_event_id, partial status and fixed
+commit/blob hashes. If those are unavailable, report NOT SOLD/NOT VERIFIED.
