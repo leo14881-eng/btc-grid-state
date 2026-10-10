@@ -111,7 +111,8 @@ def stage(state, instruction, books, now, source_main_sha):
     receipts = copy.deepcopy((prior or {}).get('receipts', {}))
     require(set(receipts) <= set(TARGETS), 'UNAUTHORIZED_RECEIPT_TARGET')
     rows = []
-    generation = 'MANUAL_' + REQUEST_ID
+    generation = state.get('last_cycle_generation_id')
+    require(isinstance(generation, str) and bool(generation), 'NATURAL_MONITOR_GENERATION_REQUIRED')
     for asset, (sid, _, _) in TARGETS.items():
         opened = [p for p in result['open_positions'] if p.get('shadow_id') == sid]
         closed = [p for p in result['closed_positions'] + result.get('closed_trade_archive', [])
@@ -160,6 +161,7 @@ def stage(state, instruction, books, now, source_main_sha):
         receipt = dict(request_id=REQUEST_ID, requested_at_utc=REQUESTED_AT,
                        executed_at_utc=now.isoformat(), request_sha256=fingerprint,
                        manual_event_id=event_id(asset), shadow_id=sid, reason=REASON,
+                       monitor_generation_id=generation, decision_source='USER_MANUAL_INTERVENTION',
                        source_main_sha=source_main_sha, before_portfolio_sha256=digest(state),
                        raw_book_sha256=digest(book), raw_book=copy.deepcopy(book),
                        execution=copy.deepcopy(execution), capital_authority='NONE_SHADOW_ONLY',
@@ -170,6 +172,7 @@ def stage(state, instruction, books, now, source_main_sha):
                    net_pnl_usdt=round(pnl, 2), net_return_pct=round(pnl/capital*100, 4),
                    btc_return_pct=None, btc_relative_return_pct=None,
                    btc_relative_return_status='NOT_OBSERVED_FOR_MANUAL_EXIT',
+                   decision_source='USER_MANUAL_INTERVENTION',
                    exit_execution_estimate=execution, manual_request_id=REQUEST_ID,
                    manual_event_id=event_id(asset), manual_exit_receipt=receipt)
         pos.update(eng.exit_analysis(pos, price, REASON))
@@ -180,6 +183,7 @@ def stage(state, instruction, books, now, source_main_sha):
         eng.trade_event(result, pos, 'SELL', now, price, REASON, pnl)
         result['events'][-1].update(manual_event_id=event_id(asset), request_id=REQUEST_ID,
                                    requested_at_utc=REQUESTED_AT, generation_id=generation,
+                                   decision_source='USER_MANUAL_INTERVENTION',
                                    execution_quantity=execution['quantity'],
                                    execution_receipt=copy.deepcopy(receipt))
         result['closed_positions'].append(pos)

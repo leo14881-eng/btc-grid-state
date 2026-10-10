@@ -52,6 +52,10 @@ only for V2 with an exact authorized shadow_id still open. The order is:
 configure V2; update current risk observation; record the natural scan
 generation; stage the manual request; run ordinary management for other
 holdings; build existing summary; let the original publisher validate/publish.
+SELL generation_id uses that actual natural Monitor generation. Request ID
+and manual_event_id remain separate; no artificial MANUAL scheduler generation
+is introduced. The V2 monitor summary separately reports user_manual and
+automatic_strategy exit cohorts; overall realized PnL and risk include both.
 
 The hook reads the same newly acquired raw exit books from liq.snapshots.
 It samples datetime.now(UTC) at the actual V2 invocation, AFTER any slow V1
