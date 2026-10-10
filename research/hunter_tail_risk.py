@@ -186,8 +186,17 @@ def update_systemic_risk(state,evidence,now,cfg):
     return row,True
 
 def risk_blocks_new(state):
+    """Unified fail-closed gate for every Hunter BUY/ADD path.
+
+    Existing positions remain manageable; only NEW risk is frozen.  Circuit
+    breaker is deliberately checked here so V1 Broad Net and V2 Capital Review
+    cannot diverge or bypass a TRIPPED/RECOVERING breaker.
+    """
     row=(state or {}).get("systemic_risk") or {}
-    return row.get("level") in ("HIGH","CRITICAL") or not row.get("last_observation_id")
+    cb=(state or {}).get("circuit_breaker") or {}
+    systemic_block=row.get("level") in ("HIGH","CRITICAL") or not row.get("last_observation_id")
+    circuit_block=cb.get("status") in ("TRIPPED","RECOVERING")
+    return bool(systemic_block or circuit_block)
 
 def confirmed_systemic_liquidity_shock(state):
     """Only confirmed fresh systemic evidence may suppress liquidity-only hard exits.
@@ -229,7 +238,15 @@ def tail_budget_snapshot(state,cfg,capital_pool_usdt):
             "candidate_budget_caps_usdt":candidates,"realized_profit_expands_tail_budget":False}
 
 def record_loss_exit(state,pnl,reason,released_notional,now,cfg):
-    if pnl>=0:return
+    # "consecutive" means consecutive loss exits. A profitable exit breaks
+    # the sequence, while quarantine/recovery state remains intact.
+    if pnl>=0:
+        cb=(state or {}).get("circuit_breaker")
+        if cb:
+            cb["consecutive_loss_exits"]=0
+            cb["last_profitable_exit_at_utc"]=now.isoformat()
+            cb["updated_at_utc"]=now.isoformat()
+        return
     cb=state.setdefault("circuit_breaker",{"status":"NORMAL","consecutive_loss_exits":0,"quarantined_cash_usdt":0.0,"loss_events":[]})
     events=cb.setdefault("loss_events",[]);events.append({"at_utc":now.isoformat(),"net_pnl_usdt":round(float(pnl),2),"reason":reason,"released_notional_usdt":round(float(released_notional),2)})
     cutoff=now-dt.timedelta(hours=float(cfg["CIRCUIT_BREAKER_WINDOW_HOURS"]))
@@ -239,15 +256,37 @@ def record_loss_exit(state,pnl,reason,released_notional,now,cfg):
     cb["quarantine_base_usdt"]=cb["quarantined_cash_usdt"]
     rolling_loss=sum(abs(float(x.get("net_pnl_usdt") or 0)) for x in events if float(x.get("net_pnl_usdt") or 0)<0)
     trip=cb["consecutive_loss_exits"]>=int(cfg["CIRCUIT_BREAKER_CONSECUTIVE_LOSSES"]) or rolling_loss>=float(cfg["CIRCUIT_BREAKER_REALIZED_LOSS_USDT"])
-    cb["status"]="TRIPPED" if trip else "WATCH"
+    # Another loss cannot downgrade an already blocking circuit to WATCH.
+    cb["status"]="TRIPPED" if trip or cb.get("status") in ("TRIPPED","RECOVERING") else "WATCH"
     cb["rolling_realized_loss_usdt"]=round(rolling_loss,2);cb["recovery_observations"]=0;cb["updated_at_utc"]=now.isoformat()
+    cb["last_recovery_counted_at_utc"]=None
+    cb["last_recovery_seen_observation_id"]=None
     cb["last_loss_exit_observation_id"]=((state.get("systemic_risk") or {}).get("last_observation_id"))
 
 def advance_circuit_breaker(state,systemic,evidence,now,cfg,new_observation):
     cb=state.get("circuit_breaker")
     if not cb or cb.get("status")=="NORMAL" or not new_observation:return cb
+    oid=(evidence or {}).get("observation_id")
+    if not oid or oid in (cb.get("last_recovery_seen_observation_id"),cb.get("last_loss_exit_observation_id")):
+        return cb
+    cb["last_recovery_seen_observation_id"]=oid
     if (systemic or {}).get("raw_level")!="NORMAL":
-        cb["recovery_observations"]=0;cb["updated_at_utc"]=now.isoformat();return cb
+        cb["recovery_observations"]=0;cb["last_recovery_counted_at_utc"]=None
+        cb["updated_at_utc"]=now.isoformat();return cb
+    last=cb.get("last_recovery_counted_at_utc")
+    # Use the existing independent-observation interval; no risk parameter changes.
+    min_gap=float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"])
+    if last:
+        try:gap_ok=(now-parse(last)).total_seconds()>=min_gap
+        except (TypeError,ValueError):gap_ok=False
+        if not gap_ok:
+            cb["recovery_wait_reason"]="CIRCUIT_RECOVERY_OBSERVATION_TOO_SOON"
+            cb["updated_at_utc"]=now.isoformat();return cb
+    elif int(cb.get("recovery_observations") or 0)>0:
+        # Old counts without a durable timestamp cannot establish independence.
+        cb["recovery_observations"]=0
+    cb.pop("recovery_wait_reason",None)
+    cb["last_recovery_counted_at_utc"]=now.isoformat()
     n=int(cb.get("recovery_observations") or 0)+1;cb["recovery_observations"]=n
     wait=int(cfg["CIRCUIT_RECOVERY_OBSERVATIONS_BEFORE_RELEASE"])
     if n>=wait:

@@ -94,4 +94,44 @@ class CircuitBreakerTests(unittest.TestCase):
         after=state["circuit_breaker"]["quarantined_cash_usdt"]
         self.assertGreater(after,0);self.assertLess(after,before)
 
+
+class UnifiedRiskAdmissionRegressionTests(unittest.TestCase):
+    def _normal(self):
+        return {"systemic_risk":{"level":"NORMAL","raw_level":"NORMAL","last_observation_id":"ok","recovery_mode":False,"risk_release_fraction":1.0}}
+
+    def test_tripped_circuit_blocks_new_risk_even_when_systemic_normal(self):
+        state=self._normal();state["circuit_breaker"]={"status":"TRIPPED","quarantined_cash_usdt":1000.0}
+        self.assertTrue(risk.risk_blocks_new(state))
+
+    def test_recovering_circuit_still_blocks_new_risk(self):
+        state=self._normal();state["circuit_breaker"]={"status":"RECOVERING","quarantined_cash_usdt":500.0}
+        self.assertTrue(risk.risk_blocks_new(state))
+
+    def test_normal_circuit_and_systemic_allow_new_risk(self):
+        state=self._normal();state["circuit_breaker"]={"status":"NORMAL","quarantined_cash_usdt":0.0}
+        self.assertFalse(risk.risk_blocks_new(state))
+
+    def test_profitable_exit_resets_consecutive_losses_without_releasing_quarantine(self):
+        state=self._normal()
+        risk.record_loss_exit(state,-100,"HARD_INVALIDATION",1000,NOW,C)
+        q=state["circuit_breaker"]["quarantined_cash_usdt"]
+        self.assertEqual(state["circuit_breaker"]["consecutive_loss_exits"],1)
+        risk.record_loss_exit(state,25,"PROFIT_PROTECTION",1000,NOW+dt.timedelta(minutes=1),C)
+        self.assertEqual(state["circuit_breaker"]["consecutive_loss_exits"],0)
+        self.assertEqual(state["circuit_breaker"]["quarantined_cash_usdt"],q)
+
+    def test_circuit_recovery_requires_temporal_independence(self):
+        state=self._normal()
+        risk.record_loss_exit(state,-100,"HARD_INVALIDATION",1000,NOW,C)
+        risk.record_loss_exit(state,-100,"HARD_INVALIDATION",1000,NOW+dt.timedelta(minutes=1),C)
+        self.assertEqual(state["circuit_breaker"]["status"],"TRIPPED")
+        ev1=evidence("recover-1")
+        systemic={"raw_level":"NORMAL"}
+        risk.advance_circuit_breaker(state,systemic,ev1,NOW+dt.timedelta(minutes=5),C,True)
+        n=state["circuit_breaker"]["recovery_observations"]
+        ev2=evidence("recover-2")
+        risk.advance_circuit_breaker(state,systemic,ev2,NOW+dt.timedelta(minutes=5,seconds=1),C,True)
+        self.assertEqual(state["circuit_breaker"]["recovery_observations"],n)
+        self.assertEqual(state["circuit_breaker"].get("recovery_wait_reason"),"CIRCUIT_RECOVERY_OBSERVATION_TOO_SOON")
+
 if __name__=="__main__":unittest.main()
