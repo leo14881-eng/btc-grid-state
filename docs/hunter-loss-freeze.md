@@ -22,3 +22,9 @@ This PR owns the shared loss gate, risk update and quarantine adapters in hunter
 This PR alone does not enable or write the complete new-strategy label. The parent must review the combined diff and run both sets of lifecycle, BUY/ADD, risk and label tests before approving the combined release. No partial release should label itself as the complete new strategy.
 
 Baseline for resumed implementation: d5f7937ecda1188f2ef367fc5ad1a0e07b9698cf. PR98/35 remain excluded. No real orders, state artifact edits, scheduler triggers, credentials or uploads. Code and offline CI only; separate approval is required before merge/deployment.
+
+## Recovery interruption and effective reporting
+
+Every new UNKNOWN observation interrupts an active episode's consecutive NORMAL count. Unknown data never earns recovery credit; duplicate IDs and older source observations cannot advance recovery. Invalid clocks may interrupt safely but never move the source-time watermark forward. New losing exits interrupt an existing episode even when B is false, update the last-loss boundary, and require recovery to start again. This interruption alone neither creates a freeze nor adds quarantined principal; additional principal still requires the complete L AND BTC_BAD AND ALT_BAD condition.
+
+Both lanes' capital_management and tail_risk_phase1 summaries report the effective circuit_breaker, its source, new_risk_blocked and effective quarantine. The original circuit object is copied under legacy_circuit_breaker with an explicit role. V1 reports these fields even without an equity/capital ceiling. Reporting never rewrites portfolio legacy history.
