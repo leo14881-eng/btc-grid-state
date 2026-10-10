@@ -110,6 +110,11 @@ of historical bars or retroactively serve the missed generations.
             except (TimeoutError, urllib.error.URLError, OSError):
                 status, payload, retry_after = 0, b'', 2**attempt
             now = clock()
+            # A denied response must persist the host-wide stop even when it
+            # arrives too late for this recovery's data deadline.
+            if status == 403:
+                decision = budget.failure(status, payload[:4096].decode('utf-8', 'replace'), now)
+                raise RuntimeError(decision)
             if now >= deadline:
                 raise TimeoutError('RECOVERY_DEADLINE')
             if status == 200:

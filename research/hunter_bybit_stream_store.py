@@ -171,8 +171,12 @@ class Store:
             if changed and ts > state['ws_ts']:
                 db.execute('UPDATE topics SET ws_rx=?,ws_ts=? WHERE topic=?', (received_ms, ts, name))
             self._trim(db, name, ts)
-            needed = {(ts//step-i)*step for i in range(LIMITS[interval])}
             have = {r[0] for r in db.execute('SELECT start FROM bars WHERE topic=?', (name,))}
+            # At a normal boundary the closing previous candle can arrive before
+            # the forming next one. Missing only that not-yet-pushed candle is
+            # not a transport gap; window() stays UNKNOWN until it arrives.
+            anchor = max(have)
+            needed = {anchor-i*step for i in range(LIMITS[interval])}
             if not needed <= have:
                 db.execute("UPDATE topics SET gap=1,error='MISSING_WINDOW' WHERE topic=?", (name,))
         return changed
@@ -207,6 +211,14 @@ class Store:
 
     def window(self, symbol, interval, generation_end, now_ms):
         """Read-only adapter seam. No IO fallback; current bar stays included."""
+        name = topic(symbol, interval)
+        try:
+            return self._window(symbol, interval, generation_end, now_ms)
+        except (sqlite3.Error, OSError, json.JSONDecodeError):
+            return dict(status='UNKNOWN', topic=name, rows=[], generation_end_ms=generation_end,
+                        reason='CACHE_UNAVAILABLE_OR_CORRUPT')
+
+    def _window(self, symbol, interval, generation_end, now_ms):
         name = topic(symbol, interval)
         unknown = {'status': 'UNKNOWN', 'topic': name, 'rows': [], 'generation_end_ms': generation_end}
         with self.db(readonly=True) as db:

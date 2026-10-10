@@ -98,6 +98,27 @@ class StreamTests(unittest.TestCase):
         self.store.ingest_rest(self.epoch,self.topics[0],rest(end=later),later,later)
         self.assertEqual(self.read(end=later,now=later)['status'],'READY')
 
+    def test_normal_rollover_close_then_forming_bar_does_not_force_repair(self):
+        self.seed()
+        start=NOW//900_000*900_000; boundary=start+900_000
+        self.store.ingest_ws(self.epoch,message(ts=boundary,start=start,confirm=True),boundary)
+        self.assertFalse(self.store.states()[0]['gap'])
+        self.assertEqual(self.read(end=boundary,now=boundary)['reason'],'GAPPED_WINDOW')
+        self.store.ingest_ws(self.epoch,message(ts=boundary+1),boundary+1)
+        result=self.read(end=boundary+1,now=boundary+1)
+        self.assertEqual(result['status'],'READY')
+        self.assertTrue(result['provenance'][-2]['confirm'])
+        self.assertFalse(result['provenance'][-1]['confirm'])
+
+    def test_missing_or_corrupt_cache_returns_unknown_without_creating_it(self):
+        path=Path(self.temp.name)/'missing.sqlite3'
+        reader=Store.reader(path)
+        self.assertEqual(reader.window('BTCUSDT','15',NOW,NOW)['reason'],'CACHE_UNAVAILABLE_OR_CORRUPT')
+        self.assertFalse(path.exists())
+        path.write_text('not a database')
+        self.assertEqual(reader.window('BTCUSDT','15',NOW,NOW)['status'],'UNKNOWN')
+        self.assertEqual(path.read_text(),'not a database')
+
     def test_restart_and_reconnect_require_ack_repair_and_new_topic_message(self):
         self.seed()
         self.store.disconnect(self.epoch)
@@ -220,6 +241,17 @@ class StreamTests(unittest.TestCase):
         with self.store.db(readonly=True) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM bars').fetchone()[0],0)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],0)
+
+    def test_late_403_still_persists_global_stop(self):
+        for text,reason in [(b'access too frequent','GLOBAL_COOLDOWN'),(b'country','COUNTRY_403'),(b'other','UNKNOWN_403')]:
+            clock=[NOW];store=Store(Path(self.temp.name)/(reason+'.sqlite3'))
+            epoch=store.begin_session(self.topics,'scope')
+            def get(url):clock[0]+=1001;return 403,text,1
+            with self.assertRaisesRegex(RuntimeError,reason):
+                stream.repair(store,epoch,self.topics[0],NOW+1000,get,lambda:clock[0],lambda s:None)
+            budget=Budget(store).status()
+            if reason=='GLOBAL_COOLDOWN':self.assertGreaterEqual(budget['cooldown_ms'],clock[0]+600_000)
+            else:self.assertIn(reason,budget['halt'])
 
     def test_ws_handshake_country_denial_persists_without_reconnect(self):
         attempts=[]

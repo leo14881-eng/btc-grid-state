@@ -44,6 +44,11 @@ live session, ACK and topic observation age <=90 seconds. Every selected bar's
 source AND receive time must be <=generation end. This latest-only cache cannot
 recreate a past current-bar value after a later revision; it returns UNKNOWN.
 It never uses today's recovery response to repair an old decision.
+The normal close-then-open rollover is allowed without a forced REST repair:
+while the next forming candle has not arrived, reads are UNKNOWN; an interior
+missing candle still marks a transport gap. Missing/corrupt DB reads are UNKNOWN
+and never create a replacement DB. A late 403 still persists the global stop
+even if its response arrived after the recovery's data deadline.
 
 Sources are `OFFICIAL_BYBIT_V5_SPOT_WS` and `OFFICIAL_BYBIT_V5_SPOT_REST`, never
 `OFFICIAL_BYBIT_V5_VIA_WORKER`. The old manifest source describes roster origin
@@ -101,6 +106,65 @@ Local planning only (no network):
 Live `--collect` is intentionally not invoked by CI or this change. There are no
 service/timer templates in this first PR. Test command:
 `python -I -B -X utf8 scripts/check_bybit_stream_offline.py` (Linux).
+
+## Activation proposal (not executed)
+
+This is NOT a completed production integration. The following gates must be
+reviewed before activation; none are granted by passing offline CI alone.
+
+1. Freeze reviewed code SHA and capture the current authoritative roster hash.
+   Recheck exact scope on the server immediately before startup. Do not take a
+   stale repository checkout's snapshot as the current Universe. The code's
+   15-minute manifest age check will reject it. Inventory other programs sharing
+   the same egress/API budget; they are not automatically included in this DB.
+2. Through an existing authorized server execution channel, verify the runtime
+   account, actual launcher, filesystem access, time sync, dependency version,
+   directory location and available disk. Provision only after approval, outside
+   all Git checkouts. Pin `websockets==15.0.1`; no secrets or API keys are needed.
+   Current available server tools are READ_ONLY and cannot install/start this
+   process. A previous launcher-path refusal must not be bypassed.
+3. A separately approved shadow observation starts only the sidecar, with a
+   singleton lock and no auto-restart storm. Require all selected topics' ACKs,
+   independent fresh timestamps, contiguous 25/5 windows and explicit source
+   tags. Measure actual cold/warm timing and disk writes across a 15m and a 60m
+   boundary and one controlled reconnect. An UNKNOWN or denied topic must not
+   become a valid signal. No strategy is manually invoked for this acceptance.
+4. A later integration PR must add an OFF-by-default source selector, coherent
+   generation freeze/read across all symbols plus BTC, explicit UNKNOWN/error
+   propagation, roster-hash enforcement and a new direct-source schema understood
+   by validation/capture/reporting. The existing collector also needs tickers and
+   listings: this PR supplies Klines only and does NOT remove their Worker routes.
+   The latest-only cache may return UNKNOWN if a WS revision arrives after the
+   generation cut; a reviewed atomic freeze or bounded revision history is needed
+   to avoid systematic misses when a consumer reads after that cut. Do not relabel
+   the existing Worker snapshot or synthesize missing bars. Complete end-to-end
+   same-generation fixture and natural-cycle comparisons before selecting it.
+5. Only after review activate the selector at a natural generation boundary.
+   Keep the current strategy/capital/single-writer contract and timer frequency.
+   The sidecar is a market-cache writer, never a portfolio/result publisher.
+
+## Rollback and stop proposal (not executed)
+
+- During sidecar-only observation, production still uses its existing path;
+  stopping the sidecar changes no production source. Preserve its SQLite file,
+  receipts, cooldown/halt and leases. Do not delete state or auto-clear a denial.
+- After a future consumer switch, rollback is a separately reviewed source
+  selection at a generation boundary, with no mixed-source window. On a direct
+  country/unknown 403, stop that attempt and report UNKNOWN: never automatically
+  route the denied request through Worker, a new domain or another egress. A
+  legacy-source rollback cannot be used as a denial bypass.
+- Preserve generation IDs and all existing ledgers/results. Do not reset main,
+  replay strategies, restore historical portfolio snapshots or change V1/V2,
+  Sentinel, PR35, capital limits or evaluation schedules.
+- Exact systemd unit, runtime account, installed launcher and permission steps
+  remain unverified; this proposal deliberately contains no guessed production
+  start/stop/install command. Clean lease recovery needs proof that all previous
+  HTTP requests/processes have stopped and a separately reviewed state repair.
+
+Review against main `2197bce06a5ddb273787267af247b52372421c5b`: changes since the
+original base were existing runtime/result updates; the three consumer modules
+`hunter_bybit_worker`, `hunter_bybit_signal_capture`, and `hunter_cex_scan` were
+unchanged. This PR remains independent of strategy PR102 and reentry work.
 
 ## Primary references
 
