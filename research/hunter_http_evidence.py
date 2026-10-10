@@ -1,6 +1,8 @@
 """Bounded public HTTP failure evidence; raw bodies and arbitrary headers never persist."""
 import json
 import re
+import datetime as dt
+import time
 import urllib.error
 import urllib.request
 
@@ -64,7 +66,7 @@ def read_evidence(stream, headers, status, layer, failure_kind="http"):
     markers = []
     for marker, pattern in (("ACCESS_DENIED_TEXT", r"access denied"),
                             ("COUNTRY_BLOCK_TEXT", r"block access from your country"),
-                            ("RATE_LIMIT_TEXT", r"too many requests|rate limit")):
+                            ("RATE_LIMIT_TEXT", r"too many requests|rate limit|access too frequent")):
         if re.search(pattern, text, re.I):
             markers.append(marker)
     evidence = dict(schema=SCHEMA, layer=layer, http_status=status, failure_kind=failure_kind,
@@ -126,18 +128,57 @@ class ObservedHTTPError(urllib.error.HTTPError):
 
 def request_json(request, timeout):
     """One public request; preserve caller timeout, no retries or cache behavior."""
+    started = dt.datetime.now(dt.timezone.utc)
+    monotonic = time.monotonic()
+    observation = {}
+    try:
+        return _request_json(request, timeout, observation)
+    finally:
+        # Outer Worker requests only: never mistake HTTP 200 for complete
+        # upstream coverage. No raw body, URL, request headers or credentials.
+        try:
+            job = {"/bybit/spot": "spot", "/bybit/tickers": "tickers",
+                   "/bybit/early-klines": "early_klines"}.get(request.selector.split("?", 1)[0])
+            if job is not None:
+                safe = allowed_headers(observation.get("headers"))
+                for key, pattern in (("x-bapi-limit", r"[0-9]{1,10}"),
+                                     ("x-bapi-limit-status", r"[0-9]{1,10}"),
+                                     ("x-bapi-limit-reset-timestamp", r"[0-9]{1,16}")):
+                    value = (observation.get("headers") or {}).get(key)
+                    if isinstance(value, str) and re.fullmatch(pattern, value):
+                        safe[key] = value
+                print("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(dict(
+                    schema="hunter_bybit_request_observation_v1", layer="worker_http", job=job,
+                    started_at_utc=started.isoformat(),
+                    completed_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
+                    duration_ms=max(0, round((time.monotonic()-monotonic)*1000)),
+                    http_status=observation.get("status", 0), ret_code=observation.get("ret_code"),
+                    worker_request_id=safe.get("x-hunter-request-id"), headers=safe,
+                    root_cause="UNKNOWN"), sort_keys=True, separators=(",", ":")), flush=True)
+        except Exception:
+            pass  # Logging must not change successful values or failure propagation.
+
+
+def _request_json(request, timeout, observation):
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
+            observation.update(status=getattr(response, "status", 0), headers=getattr(response, "headers", None))
             try:
-                return json.load(response)
+                body = json.load(response)
+                code = body.get("retCode") if isinstance(body, dict) else None
+                if type(code) is int and abs(code) <= 9999999999:
+                    observation["ret_code"] = code
+                return body
             except (ValueError, UnicodeError):
                 raise ObservedHTTPError("BYBIT_WORKER_NON_JSON",
                     read_evidence(None, response.headers, response.status, "worker_http", "invalid_json")) from None
     except ObservedHTTPError:
         raise
     except urllib.error.HTTPError as exc:
+        observation.update(status=exc.code, headers=exc.headers)
         try:
             evidence = read_evidence(exc, exc.headers, exc.code, "worker_http")
+            observation["ret_code"] = evidence["ret_code"]
         finally:
             try:
                 exc.close()

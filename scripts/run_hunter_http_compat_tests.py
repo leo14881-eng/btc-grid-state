@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "tests")]
 sys.dont_write_bytecode = True
 EXPECTED = {
-    "test_hunter_http_evidence": 11,
+    "test_hunter_http_evidence": 15,
     "test_hunter_http_compatibility": 11,
     "test_hunter_http_listing": 10,
     "test_hunter_bybit_availability": 13,

@@ -45,7 +45,7 @@ async function httpEvidence(response, requestId, failureKind = "http") {
   }
   const markers = [];
   for (const [marker, pattern] of [["ACCESS_DENIED_TEXT", /access denied/i],
-    ["COUNTRY_BLOCK_TEXT", /block access from your country/i], ["RATE_LIMIT_TEXT", /too many requests|rate limit/i]]) {
+    ["COUNTRY_BLOCK_TEXT", /block access from your country/i], ["RATE_LIMIT_TEXT", /too many requests|rate limit|access too frequent/i]]) {
     if (pattern.test(text)) markers.push(marker);
   }
   return { schema: "hunter_http_evidence_v1", layer: "bybit_upstream", http_status: response?.status || 0,
@@ -58,6 +58,35 @@ function evidenceError(code, evidence) {
 }
 
 async function upstream(path, params, signal, requestId) {
+  const started = Date.now(); const monotonic = performance.now(); const observed = {};
+  try { return await upstreamRequest(path, params, signal, requestId, observed); }
+  finally {
+    // One bounded line per existing public request, including successes. Never
+    // log URLs, raw bodies, caller headers, IPs, or the protected Alpha route.
+    // These are observations, not a decision about the cause of HTTP 403.
+    try {
+      const safeHeaders = {};
+      const rules = { ...headerRules, "x-bapi-limit": /^[0-9]{1,10}$/,
+        "x-bapi-limit-status": /^[0-9]{1,10}$/, "x-bapi-limit-reset-timestamp": /^[0-9]{1,16}$/ };
+      for (const [key, pattern] of Object.entries(rules)) {
+        const value = observed.response?.headers.get(key);
+        if (value && pattern.test(value)) safeHeaders[key] = value;
+      }
+      console.log("HUNTER_BYBIT_REQUEST_OBSERVATION " + JSON.stringify({
+        schema: "hunter_bybit_request_observation_v1", layer: "bybit_upstream",
+        job: path === "/v5/market/kline" ? "early_klines" : path === "/v5/market/tickers" ? "tickers" : "spot",
+        symbol: symbolPattern.test(params.symbol || "") ? params.symbol : null,
+        interval: ["15", "60"].includes(params.interval) ? params.interval : null,
+        started_at_utc: new Date(started).toISOString(), completed_at_utc: new Date(Date.now()).toISOString(),
+        duration_ms: Math.max(0, Math.round(performance.now() - monotonic)),
+        http_status: observed.response?.status || 0, ret_code: observed.retCode ?? null,
+        worker_request_id: requestId, worker_build: BUILD, headers: safeHeaders, root_cause: "UNKNOWN"
+      }));
+    } catch { /* Observation failures must not change market results. */ }
+  }
+}
+
+async function upstreamRequest(path, params, signal, requestId, observed) {
   const url = new URL("https://api.bybit.com" + path);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
   let response;
@@ -65,6 +94,7 @@ async function upstream(path, params, signal, requestId) {
     response = await fetch(url, {
       headers: { "User-Agent": "Hunter-Bybit-Proxy/2.0", "Accept": "application/json" }, signal
     });
+    observed.response = response;
   } catch (error) {
     const timeout = error?.name === "AbortError";
     const wrapped = evidenceError(timeout ? "upstream aborted" : "WORKER_KLINE_FAILURE",
@@ -72,7 +102,11 @@ async function upstream(path, params, signal, requestId) {
     if (timeout) wrapped.name = "AbortError";
     throw wrapped;
   }
-  if (!response.ok) throw evidenceError("BYBIT_HTTP_" + response.status, await httpEvidence(response, requestId));
+  if (!response.ok) {
+    const evidence = await httpEvidence(response, requestId);
+    observed.retCode = evidence.ret_code;
+    throw evidenceError("BYBIT_HTTP_" + response.status, evidence);
+  }
   let data;
   try { data = await response.json(); }
   catch (error) {
@@ -83,6 +117,7 @@ async function upstream(path, params, signal, requestId) {
     if (kind === "timeout") wrapped.name = "AbortError";
     throw wrapped;
   }
+  observed.retCode = Number.isSafeInteger(data?.retCode) && Math.abs(data.retCode) <= 9999999999 ? data.retCode : null;
   if (data?.retCode !== 0 || data.result?.category !== "spot") {
     const code = Number.isSafeInteger(data?.retCode) && Math.abs(data.retCode) <= 9999999999 ? data.retCode : "INVALID";
     throw new Error("BYBIT_RET_" + code);
