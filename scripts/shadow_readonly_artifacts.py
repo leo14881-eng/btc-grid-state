@@ -43,10 +43,11 @@ def sha256(raw):
 
 class Snapshot:
     """Bytes must be read from one immutable commit, never a working tree."""
-    def __init__(self, sha, raw):
+    def __init__(self, sha, raw, ancestors=None):
         if not re.fullmatch('[0-9a-f]{40}', sha):
             raise ValueError('FULL_SOURCE_SHA_REQUIRED')
         self.sha, self.raw = sha, raw
+        self.ancestors = ancestors or {}
 
     def doc(self, key):
         return json.loads(self.raw[key])
@@ -60,10 +61,94 @@ def require(condition, reason):
         raise ValueError(reason)
 
 
+def receipt_integrity(s, name, doc=None):
+    doc = s.doc(name) if doc is None else doc
+    stock = name.startswith('stock_')
+    require(doc.get('job') == name.split('_', 1)[1], 'RECEIPT_JOB_MISMATCH')
+    if stock:
+        require(doc.get('schema') == 'stock_shadow_generation_v1' and
+                doc.get('shadow_only') is True and doc.get('real_orders') is False and
+                doc.get('admitted') is True and doc.get('owner') == 'server' and
+                type(doc.get('epoch')) is int and doc['epoch'] > 0 and
+                isinstance(doc.get('run_id'), str) and bool(doc['run_id']) and
+                isinstance(doc.get('generation'), str) and bool(doc['generation']),
+                'STOCK_RECEIPT_SAFETY_OR_IDENTITY_UNKNOWN')
+        refs = [doc.get('source_commit')]
+    else:
+        require(doc.get('schema') == 'hunter_runtime_job_health_v1' and
+                doc.get('source') == 'VULTR_SYSTEMD' and
+                doc.get('real_trading_enabled') is False and
+                doc.get('capital_authority') == 'NONE_SHADOW_ONLY', 'RECEIPT_SHADOW_BOUNDARY_UNKNOWN')
+        require(doc.get('main_readback_verified') is True, 'RECEIPT_READBACK_UNVERIFIED')
+        source = (s.doc('scheduler').get('state_revision') if name == 'hunter_monitor'
+                  else doc.get('source_head_sha'))
+        refs = [source, doc.get('main_readback_head_sha')]
+        if name != 'hunter_monitor':
+            require(instant(doc['started_at_utc']) <= instant(doc['completed_at_utc']),
+                    'RECEIPT_CLOCK_ORDER_INVALID')
+    for ref in refs:
+        require(isinstance(ref, str) and re.fullmatch('[0-9a-f]{40}', ref), 'RECEIPT_SHA_UNKNOWN')
+        require(s.ancestors.get(ref) is True, 'RECEIPT_ANCESTRY_UNVERIFIED')
+    if not stock:
+        require(refs[0] == refs[1] or s.ancestors.get(refs[0] + '..' + refs[1]) is True,
+                'RECEIPT_SOURCE_READBACK_ORDER_UNVERIFIED')
+    return doc
+
+
+def reconcile_hunter_accounting(p, summary):
+    archive = p.get('closed_trade_archive', [])
+    require(isinstance(archive, list), 'CLOSED_ARCHIVE_UNKNOWN')
+    identities = set()
+    for row in p['open_positions'] + p['closed_positions'] + archive:
+        identity = row.get('shadow_id')
+        require(isinstance(identity, str) and bool(identity), 'POSITION_IDENTITY_UNKNOWN')
+        require(identity not in identities, 'DUPLICATE_SHADOW_ID')
+        identities.add(identity)
+    counts = {'open_positions': len(p['open_positions']), 'closed_positions': len(p['closed_positions']),
+              'archived_closed_positions': len(archive),
+              'total_closed_positions': len(p['closed_positions']) + len(archive)}
+    for key, expected in counts.items():
+        require(type(summary.get(key)) is int and summary[key] == expected, 'SUMMARY_COUNT_MISMATCH:' + key)
+    require(summary.get('schema') == 'hunter_shadow_v2_summary_v3' and
+            summary.get('mode') == 'SIMULATION_ONLY_NO_REAL_ORDERS' and
+            summary.get('capital_authority') == 'NONE_SHADOW_ONLY', 'SUMMARY_SHADOW_BOUNDARY_UNKNOWN')
+    realized = sum(number(row.get('net_pnl_usdt'), 'closed.net_pnl_usdt')
+                   for row in p['closed_positions'] + archive)
+    total = strategic = 0
+    for row in p['open_positions']:
+        require(isinstance(row.get('tranches'), list) and bool(row['tranches']), 'TRANCHES_UNKNOWN')
+        for tranche in row['tranches']:
+            amount = number(tranche.get('notional_usdt'), 'notional', positive=True)
+            reserve = number(tranche.get('strategic_notional_usdt', 0), 'strategic_notional')
+            require(0 <= reserve <= amount, 'RESERVE_ALLOCATION_INVALID')
+            total += amount
+            strategic += reserve
+    def equal_amount(doc, key, expected):
+        require(abs(number(doc.get(key), key) - round(expected, 2)) <= 1e-8,
+                'SUMMARY_AMOUNT_MISMATCH:' + key)
+    for key in ('net_pnl_usdt', 'realized_net_pnl_usdt'):
+        equal_amount(summary, key, realized)
+    ordinary = total - strategic
+    capital = summary['policy']['capital_management']
+    amounts = {'used_capital_usdt': total, 'ordinary_used': ordinary,
+               'strategic_reserve_used': strategic, 'ordinary_available': max(0, 17000 - ordinary),
+               'strategic_reserve_available': max(0, 3000 - strategic),
+               'capital_pool': 20000, 'ordinary_opportunity_cap': 17000, 'strategic_reserve': 3000,
+               'initial_capital_usdt': 20000, 'realized_net_pnl_usdt': realized,
+               'equity_usdt': max(0, 20000 + realized), 'total_cash_usdt': max(0, 20000 + realized - total)}
+    for key, expected in amounts.items():
+        equal_amount(capital, key, expected)
+    equal_amount(summary['policy'], 'capital_pool_usdt', 20000)
+    return total, strategic
+
+
 def hunter_coherence(s):
     p, summary, monitor, scheduler = (s.doc(k) for k in
                                       ('portfolio', 'summary', 'hunter_monitor', 'scheduler'))
     validate_portfolio(p)
+    require(s.doc('rules')['lanes']['V2']['capital_pool_usdt'] == 20000, 'CAPITAL_POLICY_CHANGED')
+    reconcile_hunter_accounting(p, summary)
+    receipt_integrity(s, 'hunter_monitor')
     generation = p.get('last_cycle_generation_id')
     require(generation and generation == summary.get('generation_id'), 'PORTFOLIO_SUMMARY_GENERATION')
     require(p.get('updated_at_utc') == summary.get('as_of_utc'), 'PORTFOLIO_SUMMARY_TIMESTAMP')
@@ -80,6 +165,8 @@ def hunter_coherence(s):
     # Monitor bucket IDs and portfolio observation IDs are different namespaces.
     # Their ordering proves a bounded observation, not an invented equality.
     observed = instant(p['updated_at_utc'])
+    for event in verified_events(p).values():
+        require(instant(event['at']) <= observed, 'EVENT_AFTER_PORTFOLIO')
     require(instant(scheduler['monitor_started_at_utc']) <= observed <=
             instant(scheduler['monitor_completed_at_utc']) <= instant(monitor['completed_at_utc']),
             'OBSERVATION_OUTSIDE_MONITOR')
@@ -88,6 +175,10 @@ def hunter_coherence(s):
 
 def candidate_batch(s):
     p = hunter_coherence(s)
+    require(hunter_ledger(s)['status'] == 'COMPLETE', 'HUNTER_LEDGER_NOT_COMPLETE')
+    for name in JOBS:
+        if name.startswith('hunter_'):
+            require(receipt_integrity(s, name).get('status') == 'SUCCESS', 'HUNTER_JOB_NOT_SUCCESSFUL')
     c = s.doc('cursor')
     require(c.get('schema') == 'hunter_notification_runtime_v1' and
             c.get('notification_policy') == 'V2_NEW_TRADE_EVENTS_ONLY' and
@@ -139,26 +230,20 @@ def candidate_batch(s):
 def hunter_ledger(s):
     p = hunter_coherence(s)
     require(s.doc('rules')['lanes']['V2']['capital_pool_usdt'] == 20000, 'CAPITAL_POLICY_CHANGED')
-    total = strategic = 0
-    for position in p['open_positions']:
-        require(isinstance(position.get('tranches'), list) and position['tranches'], 'TRANCHES_UNKNOWN')
-        for tranche in position['tranches']:
-            amount = number(tranche.get('notional_usdt'), 'notional', positive=True)
-            reserve = number(tranche.get('strategic_notional_usdt', 0), 'strategic_notional')
-            require(0 <= reserve <= amount, 'RESERVE_ALLOCATION_INVALID')
-            total += amount
-            strategic += reserve
+    total, strategic = reconcile_hunter_accounting(p, s.doc('summary'))
     ordinary = total - strategic
     breached = total > 20000 + 1e-9 or ordinary > 17000 + 1e-9 or strategic > 3000 + 1e-9
     return {'status': 'PARTIAL' if breached else 'COMPLETE',
             'event_count': len(verified_events(p)), 'capital_limit_breached': breached,
             'total_used_usdt': total, 'ordinary_used_usdt': ordinary, 'reserve_used_usdt': strategic,
             'unchanged_limits_usdt': {'total': 20000, 'ordinary': 17000, 'reserve': 3000},
+            'valuation_and_strategy_risk_reconciliation': 'UNVERIFIED',
             'risk_scope': 'LEDGER_SCHEMA_EVENT_INTEGRITY_AND_CAPITAL_ONLY'}
 
 
 def stock_book(s):
     p, trades, manifest = (s.doc(k) for k in ('stock_portfolio', 'stock_trades', 'stock_manifest'))
+    receipt_integrity(s, 'stock_main', manifest)
     require(p.get('simulation_only') is True and manifest.get('real_orders') is False,
             'STOCK_SHADOW_BOUNDARY_UNKNOWN')
     require(manifest.get('status') == 'RUN_COMPLETED' and manifest.get('admitted') is True,
@@ -195,7 +280,8 @@ def daily_review(s, start, end, timezone):
             'interval_watermark_reached': coverage,
             'timezone': timezone, 'start_inclusive': begin.astimezone(zone).isoformat(),
             'end_exclusive': finish.astimezone(zone).isoformat(),
-            'schedule_status': 'UNCONFIGURED_0823_TIMEZONE_AND_WINDOW_REQUIRE_CONFIRMATION',
+            'schedule_status': 'NOT_DEPLOYED',
+            'historical_daily_contract': '0823_ASIA_BANGKOK_PREVIOUS_LOCAL_CALENDAR_DAY',
             'trade_counts': {t: sum(e['type'] == t for e in selected) for t in ('BUY', 'ADD', 'SELL')},
             'closed_in_interval': len(closed), 'wins': interval['wins'], 'losses': interval['losses'],
             'realized_net_pnl_usdt': interval['realized_net_pnl_usdt'],
@@ -203,7 +289,9 @@ def daily_review(s, start, end, timezone):
             'valuation_note': 'SNAPSHOT_VALUE_IS_NOT_HISTORICAL_INTERVAL_END_VALUE'}
 
 
-def freshness(doc, now, max_age, stock=False):
+def freshness(s, name, now, max_age):
+    doc = receipt_integrity(s, name)
+    stock = name.startswith('stock_')
     require(type(max_age) in (int, float) and 0 < max_age < float('inf'), 'FRESHNESS_BUDGET_REQUIRED')
     at = instant(doc['created_at'] if stock else doc['completed_at_utc'])
     age = (now - at).total_seconds()
@@ -213,8 +301,12 @@ def freshness(doc, now, max_age, stock=False):
     degraded = doc.get('fast_watch_health', {}).get('status', '')
     if degraded.startswith('PARTIAL'):
         status = 'PARTIAL'
+    if stock:
+        status = 'PARTIAL'  # Published manifest does not contain final readback receipt.
     return {'status': status, 'reported_status': doc.get('status', 'UNKNOWN'),
-            'age_seconds': age, 'max_age_seconds': max_age, 'overdue': age > max_age,
+            'age_seconds': age, 'max_age_seconds': max_age, 'age_budget_exceeded': age > max_age,
+            'calendar_coverage': 'UNVERIFIED', 'scheduled_run_overdue': 'UNKNOWN',
+            'readback_status': 'UNVERIFIED_MANIFEST_ONLY' if stock else 'VERIFIED_RECEIPT_AND_ANCESTRY',
             'reported_fast_watch_health': degraded or 'UNKNOWN',
             'scope': 'PUBLISHED_RECEIPT_ONLY_NOT_LIVE_SERVICE_VERIFICATION'}
 
@@ -228,14 +320,14 @@ def guarded(fn):
 
 def build(s, as_of, budgets, start, end, timezone):
     now = instant(as_of)
-    checks = {name: guarded(lambda name=name: freshness(s.doc(name), now, budgets.get(name),
-                                                         name.startswith('stock_'))) for name in JOBS}
+    checks = {name: guarded(lambda name=name: freshness(s, name, now, budgets.get(name))) for name in JOBS}
     stock = guarded(lambda: stock_book(s)[2])
     hunter = guarded(lambda: hunter_ledger(s))
     candidates = guarded(lambda: candidate_batch(s))
     # Stale/unknown monitor receipts cannot authorize a new notification candidate.
-    if checks['hunter_monitor']['status'] != 'COMPLETE':
-        candidates = {'status': 'UNKNOWN', 'reason': 'MONITOR_FRESHNESS_UNVERIFIED'}
+    if any(checks[name]['status'] != 'COMPLETE' for name in
+           ('hunter_monitor', 'hunter_discovery', 'hunter_research')):
+        candidates = {'status': 'UNKNOWN', 'reason': 'CORE_HUNTER_FRESHNESS_UNVERIFIED'}
     daily = guarded(lambda: daily_review(s, start, end, timezone))
     if instant(end) > now:
         daily = {'status': 'UNKNOWN', 'reason': 'REPORT_END_AFTER_AS_OF'}
@@ -245,6 +337,7 @@ def build(s, as_of, budgets, start, end, timezone):
             stock = daily = {'status': 'UNKNOWN', 'reason': 'STOCK_SNAPSHOT_CLOCK_UNVERIFIED'}
     result = {'schema': 'shadow_readonly_artifacts_v1', 'source_main_sha': s.sha,
               'as_of_utc': now.isoformat(), 'source_file_sha256': s.hashes(),
+              'source_ancestry': s.ancestors,
               'shadow_only': True, 'real_trading_enabled': False, 'capital_authority': 'NONE_SHADOW_ONLY',
               'status': 'PARTIAL', 'coverage_note': 'NO_LIVE_DEPLOYMENT_OR_FULL_STRATEGY_RISK_PROOF',
               'health_checks': checks, 'hunter_ledger': hunter, 'stock_ledger': stock,
@@ -264,7 +357,26 @@ def read_snapshot(repo, sha):
         response = git('show', sha + ':' + path)
         if response.returncode == 0:
             raw[key] = response.stdout
-    return Snapshot(sha, raw)
+    refs, pairs = set(), set()
+    for key in (*JOBS, 'scheduler'):
+        try:
+            doc = json.loads(raw[key])
+            for field in ('source_head_sha', 'main_readback_head_sha', 'source_commit', 'state_revision'):
+                ref = doc.get(field)
+                if isinstance(ref, str) and re.fullmatch('[0-9a-f]{40}', ref):
+                    refs.add(ref)
+            if key.startswith('hunter_'):
+                source = (json.loads(raw['scheduler']).get('state_revision') if key == 'hunter_monitor'
+                          else doc.get('source_head_sha'))
+                readback = doc.get('main_readback_head_sha')
+                if all(isinstance(x, str) and re.fullmatch('[0-9a-f]{40}', x) for x in (source, readback)):
+                    pairs.add((source, readback))
+        except (KeyError, ValueError, TypeError, AttributeError):
+            continue
+    ancestors = {ref: git('merge-base', '--is-ancestor', ref, sha).returncode == 0 for ref in sorted(refs)}
+    ancestors.update({a + '..' + b: git('merge-base', '--is-ancestor', a, b).returncode == 0
+                      for a, b in sorted(pairs)})
+    return Snapshot(sha, raw, ancestors)
 
 
 def main():

@@ -24,7 +24,10 @@ receipts are evidence of published observations, not a live server inspection.
 The producer reports nine job receipts, explicit age budgets, missing/future
 timestamps, failed/overdue receipts, V2 portfolio/summary generation and time,
 monitor/scheduler generation and exact byte hash, and stock manifest/ledger hashes
-and run/source binding. Portfolio observation IDs and monitor bucket IDs are
+and run/source binding. Hunter summary counts, realized P&L and capital amounts
+must reconcile to portfolio rows; duplicate shadow IDs across open, closed and
+archived rows are rejected. This does not claim unrealized liquidation-value or
+all strategy-risk reconciliation. Portfolio observation IDs and monitor bucket IDs are
 different namespaces: the observation must fall inside the bound monitor run.
 
 Existing portfolio validators and reporting functions are reused. The capital
@@ -33,8 +36,18 @@ limits. It does not evaluate every strategy risk rule or alter allocations. The
 overall result remains PARTIAL because live deployment and full risk coverage
 are not established. Missing or invalid evidence is UNKNOWN, never empty success.
 Age budgets are caller-supplied observation budgets, not strategy thresholds or
-market-session-aware scheduler deadlines. Weekend/holiday schedule semantics
-still require an approved policy before production alerting.
+market-session-aware scheduler deadlines. `age_budget_exceeded` is an observation,
+not a scheduler failure: `scheduled_run_overdue=UNKNOWN` and
+`calendar_coverage=UNVERIFIED` explicitly prevent weekend/holiday pauses being
+represented as proven missed runs. Calendar-aware policy is not implemented.
+
+Every Hunter receipt requires the correct job/schema/source, explicit shadow
+safety fields, a true main-readback attestation, full source/readback SHAs, and
+their locally verified ancestry to the pinned evidence commit. Missing or
+shallow history remains UNKNOWN; the reader never fetches it. Stock manifests
+require their own safety/identity/source evidence but still remain PARTIAL for
+freshness coverage because they do not contain an independent final readback
+receipt. A corrupt/unsafe Hunter receipt blocks new notification candidates.
 
 ## Candidate delivery contract
 
@@ -62,13 +75,44 @@ snapshot value, not historical interval-end valuation. Missing prices remain
 PARTIAL with null total P&L and a separately labelled known subset. A ledger
 watermark before report end remains PARTIAL. Future report ends are UNKNOWN.
 
-No 08:23 daily-review contract was found in the inspected stock timer, workflow
-and scheduler configuration; the existing hourly :23 main job is not evidence of
-an 08:23 daily report. Confirm the reporting timezone and interval (calendar day,
-exchange session, or trailing window) before configuring a schedule. Confirm
-session-aware freshness budgets and the intended rule-risk inventory separately.
+The original daily-review requirement has now been recovered: send at **08:23
+Vietnam local time**, covering the **previous complete Vietnam calendar day**.
+This is an established requirement, recovered from the original instruction,
+not a new user decision. Private source conversation links are not published.
+For example, the October 5 08:23 report covers October 4 00:00 inclusive through
+October 5 00:00 exclusive at UTC+07:00, including all subsecond events before
+midnight. That equals `[2026-10-03T17:00:00Z, 2026-10-04T17:00:00Z)`. It must not
+be replaced with the previous US exchange session, even when the reporting day
+is a weekend or holiday.
+
+The original stored scheduler TZID has also been recovered as **Asia/Bangkok**
+from the historical configuration.
+08:23 in that zone is 01:23 UTC. This historical evidence is not a current
+scheduler readback. For example, the October 11 report covers
+`[2026-10-09T17:00:00Z, 2026-10-10T17:00:00Z)`.
+
+For the October 5 example, pass `--report-start 2026-10-04T00:00:00+07:00`,
+`--report-end 2026-10-05T00:00:00+07:00`, and
+`--report-timezone Asia/Bangkok`. Tests also check the equivalent modern
+UTC+07:00 boundaries with `Asia/Ho_Chi_Minh`.
+The existing hourly :23 main job does not prove deployment of this daily report.
+No service, timer, or automation is installed by this proposal. Confirm only the
+remaining session-aware freshness budgets and intended rule-risk inventory
+separately; do not ask the user to reconfirm the recovered daily-report semantics.
 FastWatch remains the original acceptance scope; this adds no FastWatch service.
 
 The dedicated PR/push CI runs offline unit tests only, with contents:read and no
 production dispatch. No deployment workflow, runtime authority, portfolio, trade
 ledger, strategy threshold or exit rule is modified.
+
+## Independent review regression evidence
+
+Before the review fix, regression assertions reproduced false COMPLETE results
+for corrupted summary counts/amounts, duplicate position identities and invalid
+receipt safety/readback fields (15 methods ran, 13 failures). After the fix these
+cases fail closed, including new-candidate suppression. The original isolated
+baseline lacks the source/readback ancestry needed for the stronger proof and
+now honestly reports UNKNOWN instead of the earlier candidate-ready result.
+Neither a successful offline test nor a published Git manifest establishes that
+latest-origin acquisition, server publication/readback or live scheduling has
+been implemented by this proposal. It remains uninstalled and undeployed.
