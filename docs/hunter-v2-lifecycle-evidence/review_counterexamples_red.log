@@ -1,0 +1,92 @@
+test_missing_candidate_and_supply_never_authorize_risk_exit (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_missing_candidate_and_supply_never_authorize_risk_exit) ... FAIL
+test_rewrapping_one_closed_window_does_not_confirm_three_times (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_rewrapping_one_closed_window_does_not_confirm_three_times) ... FAIL
+test_old_relative_source_is_not_refreshed_by_new_stamp (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_old_relative_source_is_not_refreshed_by_new_stamp) ... FAIL
+test_live_recovery_veto_is_retained_without_counting_partial_bar_weak (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_live_recovery_veto_is_retained_without_counting_partial_bar_weak) ... ERROR
+test_fresh_hard_book_is_not_hidden_by_stale_signal (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_fresh_hard_book_is_not_hidden_by_stale_signal) ... FAIL
+test_geometry_and_numeric_entry_values_are_not_validated_risk_models (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_geometry_and_numeric_entry_values_are_not_validated_risk_models) ... FAIL
+
+======================================================================
+ERROR: test_live_recovery_veto_is_retained_without_counting_partial_bar_weak (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_live_recovery_veto_is_retained_without_counting_partial_bar_weak)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\Documents\Codex\2026-10-11\task\evidence\counterexample-old-3a20\tests\test_hunter_lifecycle_review_regressions.py", line 50, in test_live_recovery_veto_is_retained_without_counting_partial_bar_weak
+    self.assertTrue(tech['live_recovery_veto'])
+                    ~~~~^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'live_recovery_veto'
+
+======================================================================
+FAIL: test_missing_candidate_and_supply_never_authorize_risk_exit (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_missing_candidate_and_supply_never_authorize_risk_exit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\Documents\Codex\2026-10-11\task\evidence\counterexample-old-3a20\tests\test_hunter_lifecycle_review_regressions.py", line 21, in test_missing_candidate_and_supply_never_authorize_risk_exit
+    self.assertEqual(d['action'],'HOLD')
+AssertionError: 'SELL_RISK_EXIT' != 'HOLD'
+- SELL_RISK_EXIT
++ HOLD
+
+
+======================================================================
+FAIL: test_rewrapping_one_closed_window_does_not_confirm_three_times (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_rewrapping_one_closed_window_does_not_confirm_three_times)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\Documents\Codex\2026-10-11\task\evidence\counterexample-old-3a20\tests\test_hunter_lifecycle_review_regressions.py", line 35, in test_rewrapping_one_closed_window_does_not_confirm_three_times
+    self.assertEqual(state['events'],[])
+AssertionError: Lists differ: [{'type': 'SHADOW_V2_SELL', 'at': '2026-10[340 chars]EL'}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'type': 'SHADOW_V2_SELL', 'at': '2026-10-10T12:10:00+00:00', 'asset': 'ENA', 'shadow_id': 'synthetic-only', 'price': 93.0, 'generation_id': 'wrapper2', 'tranches': 1, 'notional_usdt': 1000, 'reason': 'RISK_EXIT', 'net_pnl_usdt': -71.86, 'execution_venue': 'BINANCE_SPOT', 'market_symbol': 'ENAUSDT', 'market_type': 'spot', 'execution_identity_scope': 'CURRENT_SHADOW_EXECUTION_MODEL'}
+
++ []
+- [{'asset': 'ENA',
+-   'at': '2026-10-10T12:10:00+00:00',
+-   'execution_identity_scope': 'CURRENT_SHADOW_EXECUTION_MODEL',
+-   'execution_venue': 'BINANCE_SPOT',
+-   'generation_id': 'wrapper2',
+-   'market_symbol': 'ENAUSDT',
+-   'market_type': 'spot',
+-   'net_pnl_usdt': -71.86,
+-   'notional_usdt': 1000,
+-   'price': 93.0,
+-   'reason': 'RISK_EXIT',
+-   'shadow_id': 'synthetic-only',
+-   'tranches': 1,
+-   'type': 'SHADOW_V2_SELL'}]
+
+======================================================================
+FAIL: test_old_relative_source_is_not_refreshed_by_new_stamp (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_old_relative_source_is_not_refreshed_by_new_stamp)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\Documents\Codex\2026-10-11\task\evidence\counterexample-old-3a20\tests\test_hunter_lifecycle_review_regressions.py", line 41, in test_old_relative_source_is_not_refreshed_by_new_stamp
+    self.assertEqual(d['thesis_review']['checks']['signal'],'UNKNOWN')
+AssertionError: 'FRESH' != 'UNKNOWN'
+- FRESH
++ UNKNOWN
+
+
+======================================================================
+FAIL: test_fresh_hard_book_is_not_hidden_by_stale_signal (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_fresh_hard_book_is_not_hidden_by_stale_signal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\Documents\Codex\2026-10-11\task\evidence\counterexample-old-3a20\tests\test_hunter_lifecycle_review_regressions.py", line 58, in test_fresh_hard_book_is_not_hidden_by_stale_signal
+    self.assertEqual(d['thesis_status'],'HARD_INVALIDATION')
+AssertionError: 'EVIDENCE_PENDING' != 'HARD_INVALIDATION'
+- EVIDENCE_PENDING
++ HARD_INVALIDATION
+
+
+======================================================================
+FAIL: test_geometry_and_numeric_entry_values_are_not_validated_risk_models (test_hunter_lifecycle_review_regressions.ReviewRegressions.test_geometry_and_numeric_entry_values_are_not_validated_risk_models)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\Documents\Codex\2026-10-11\task\evidence\counterexample-old-3a20\tests\test_hunter_lifecycle_review_regressions.py", line 65, in test_geometry_and_numeric_entry_values_are_not_validated_risk_models
+    self.assertEqual(review['risk_comparison']['status'],'UNKNOWN')
+AssertionError: 'OBSERVED' != 'UNKNOWN'
+- OBSERVED
++ UNKNOWN
+
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.008s
+
+FAILED (failures=5, errors=1)

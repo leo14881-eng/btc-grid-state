@@ -68,7 +68,9 @@ class ChainConsistencyTests(unittest.TestCase):
   for price in (99,110):
    pos={'asset':'X','opened_at_utc':NOW.isoformat(),'tranches':[{'price':100,'notional_usdt':1000}],'mfe_pct':0}
    c={'asset':'X','signal':{'score':12,'independent_signal_count':3,'btc_relative_1h_pct':2,'btc_relative_4h_pct':3,'relative_acceleration_pct':1},'signal_evidence':policy.stamp('X','old',(NOW-dt.timedelta(hours=2)).isoformat()),'execution_scenario':{'estimated_rr':2,'buy_slippage_bps':10},'blockers':[]}
-   state={'open_positions':[pos]};scan={'coins':{'X':{'reference_price':price}}}
+   # Admit a fresh market observation so this exercises expired signal evidence,
+   # rather than the earlier missing market-generation/time guard.
+   state={'open_positions':[pos]};scan={'generation_id':'current','as_of_utc':NOW.isoformat(),'coins':{'X':{'reference_price':price}}}
    liq={'snapshots':{'X':{'as_of_utc':NOW.isoformat(),'spread_bps':10,'bid_depth_2pct_usdt':50000,'ask_depth_2pct_usdt':50000}}}
    with patch.object(eng,'_execution_source_sha',return_value=TEST_ONLY_SOURCE_SHA) as source_sha:
     eng.manage_existing_positions(state,scan,{'candidates':[c]},liq,{},NOW)

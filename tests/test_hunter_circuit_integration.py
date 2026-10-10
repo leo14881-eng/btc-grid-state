@@ -37,6 +37,10 @@ class CircuitProductionPathTests(unittest.TestCase):
             signal=copy.deepcopy(signal), signal_evidence=eng.stamp(a, 'current', now.isoformat()),
             execution_scenario=dict(buy_slippage_bps=10, estimated_rr=2), blockers=[])
             for a in ('X', 'Y')]
+        from test_hunter_lifecycle_v2 import strong_source
+        for c in candidates:
+            c['signal']['relative_acceleration_pct']=1.25
+            c['v2_lifecycle_evidence']=strong_source(now,'current',c['asset'])
         market = {a: dict(reference_price=90, change_24h_pct=0) for a in ('X', 'Y')}
         market['BTC'] = dict(reference_price=100, change_24h_pct=1)
         scan = dict(coins=market, binance_complete=True, generation_id='current', as_of_utc=now.isoformat(),
@@ -151,6 +155,7 @@ class CircuitProductionPathTests(unittest.TestCase):
                 with self.subTest(status=status, lane=lane), self.isolate():
                     now, state, scan, review, liq, supply, _ = self.fixture(status)
                     review['candidates'][0]['blockers'] = ['CONTRACT_MISMATCH']
+                    review['as_of_utc'] = now.isoformat()
                     monitor.configure_lane(lane == 'V1')
                     eng.manage_existing_positions(state, scan, review, liq, supply, now)
                     self.assertEqual(state['open_positions'], [])

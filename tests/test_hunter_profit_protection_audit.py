@@ -1,3 +1,4 @@
+"""Synthetic PP branch fixtures; actual published-cycle replay has separate tests."""
 import datetime as dt
 import json
 import tempfile
@@ -22,8 +23,15 @@ class ProfitProtectionAuditTests(unittest.TestCase):
    life.protect(pos,peak,eng.net_pnl(pos,peak),life.liquidation(pos,book(peak,before),before),before,'prior-real-fixture',before.isoformat())
   scan={"generation_id":"audit-generation","as_of_utc":now.isoformat(),"coins":{"ENA":{"reference_price":price}}}
   liq={'snapshots':{'ENA':{'raw_book_evidence':book(price,now)}}}
-  with patch.object(eng,"ensure_opportunity_observation"),patch.object(eng,"decision",return_value=("HOLD",[],{})),patch.object(eng,"position_health",return_value=(health,[])),patch.object(eng,"refresh_post_exit_status"),patch.object(eng,"exit_analysis",return_value={}):
+  original_enrich=eng.lifecycle_v2.enrich
+  def branch_evidence(*args,**kwargs):
+   evidence,_=original_enrich(*args,**kwargs)
+   # Only force admission to the explicitly selected synthetic health branch.
+   # Retain real receipt construction and its UNKNOWN evidence dimensions.
+   return evidence,True
+  with patch.object(eng,"ensure_opportunity_observation"),patch.object(eng,"decision",return_value=("HOLD",[],{})),patch.object(eng.lifecycle_v2,'enrich',side_effect=branch_evidence),patch.object(eng,"position_health",return_value=(health,[])),patch.object(eng,"refresh_post_exit_status"),patch.object(eng,"exit_analysis",return_value={}):
    eng.manage_existing_positions(state,scan,{}, liq,{},now)
+  self.assertEqual(pos['last_monitor_decision']['thesis_review']['checks']['original_thesis_revalidation'],'UNKNOWN')
   return state,pos
 
  def test_ena_missed_window_is_persisted_without_fabricating_sell(self):

@@ -66,7 +66,7 @@ def protect(pos, price, reference_net, execution, now, generation, market_at, ar
   row['transitions']=(row.get('transitions',[])+[{'from':old,'to':row['state'],'at':now.isoformat(),'generation_id':generation,'net_pnl_usdt':net}])[-32:]
  return dict(result,armed=row['state']!='UNARMED',state=row['state'],evidence_status='FRESH',protected_floor_usdt=row.get('protected_floor_usdt'),incident=row.get('incident'))
 
-def recovery(pos, e, now, pnl, generation, health):
+def recovery(pos, e, now, pnl, generation, health, source_closed_at_ms=None):
  """Observation only: no new loss SELL, time/price stops or partial reductions."""
  if health=='EVIDENCE_PENDING' or not generation or pos.get('recovery_generation_id')==generation:return
  old=pos.get('recovery_state','NONE');row=pos.setdefault('loss_recovery_lifecycle',{'schema':'hunter_loss_recovery_v1','persistent_invalidation_count':0,'recovery_observations':0,'transitions':[]})
@@ -77,7 +77,12 @@ def recovery(pos, e, now, pnl, generation, health):
    row.update(last_recovered_at_utc=recovered['at'],last_recovered_generation_id=recovered['generation_id'])
  if old=='NONE':
   row['persistent_invalidation_count']=0;row['recovery_observations']=0
- if row.get('observed_at_utc') and not fresh(row['observed_at_utc'],now):
+ if source_closed_at_ms is not None:
+  previous_source=row.get('source_closed_at_ms')
+  if previous_source is None or source_closed_at_ms-previous_source!=900000:
+   row['persistent_invalidation_count']=0;row['recovery_observations']=0
+  row['source_closed_at_ms']=source_closed_at_ms
+ elif row.get('observed_at_utc') and not fresh(row['observed_at_utc'],now):
   row['persistent_invalidation_count']=0;row['recovery_observations']=0
  if pnl<0 and health=='THESIS_INVALIDATED':
   row['persistent_invalidation_count']+=1;row['recovery_observations']=0
