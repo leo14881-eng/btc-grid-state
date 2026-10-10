@@ -87,6 +87,73 @@ def artifact(s):
 
 
 class ReadonlyArtifactsTests(unittest.TestCase):
+    def test_review2_observed_live_risk_survives_invalid_receipt(self):
+        d = fixture(); d['hunter_discovery']['real_trading_enabled'] = True
+        d['hunter_discovery']['main_readback_verified'] = False
+        r = artifact(snapshot(d))
+        self.assertTrue(any(a['code'] == 'OBSERVED_REAL_TRADING_ENABLED' for a in r.get('alerts', [])))
+        self.assertEqual(r['observed_source_safety']['status'], 'ALERT')
+        self.assertEqual(r['status'], 'ALERT')
+        self.assertNotIn('real_trading_enabled', r)
+        self.assertFalse(r['producer_boundary']['real_trading_enabled'])
+        self.assertEqual(r['notification_candidates']['status'], 'UNKNOWN')
+        d = fixture(); del d['hunter_discovery']['real_trading_enabled']
+        r = artifact(snapshot(d))
+        self.assertFalse(any(a['code'] == 'OBSERVED_REAL_TRADING_ENABLED' for a in r.get('alerts', [])))
+        self.assertEqual(r['observed_source_safety']['status'], 'UNKNOWN')
+
+    def test_review2_capital_breach_survives_summary_mismatch(self):
+        d = fixture()
+        d['portfolio']['open_positions'] = [dict(shadow_id='over-cap', tranches=[{'notional_usdt': 21000}])]
+        r = artifact(snapshot(d))
+        self.assertEqual(r['hunter_ledger']['status'], 'UNKNOWN')
+        self.assertTrue(any(a['code'] == 'OBSERVED_CAPITAL_LIMIT_BREACH' for a in r.get('alerts', [])))
+        self.assertTrue(any(a['code'] == 'SUMMARY_PORTFOLIO_INCONSISTENCY' for a in r.get('alerts', [])))
+        self.assertEqual(r['capital_observation']['total_used_usdt'], 21000)
+        self.assertEqual(r['notification_candidates']['status'], 'UNKNOWN')
+
+    def test_review2_positive_safety_signals_are_independent_and_deterministic(self):
+        for key, field, value in [('stock_main', 'real_orders', True),
+                                   ('hunter_discovery', 'real_orders', True),
+                                   ('scheduler', 'real_order_count', 2),
+                                   ('stock_portfolio', 'simulation_only', False),
+                                   ('hunter_watchdog', 'capital_authority', 'LIVE')]:
+            with self.subTest(key=key, field=field):
+                d = fixture(); d[key][field] = value
+                s = snapshot(d); s.ancestors = {}
+                before = copy.deepcopy(s.raw)
+                r = artifact(s)
+                self.assertEqual(r['status'], 'ALERT')
+                self.assertTrue(any(a.get('field') == field and a.get('observed_value') == value for a in r['alerts']))
+                self.assertEqual(r, artifact(s))
+                self.assertEqual(before, s.raw)
+                with self.assertRaisesRegex(ValueError, 'OBSERVED_RISK_BLOCKS_NEW_CANDIDATES'):
+                    candidate_batch(s)
+        d = fixture()
+        d['portfolio']['open_positions'] = [dict(shadow_id='over-cap', tranches=[{'notional_usdt': 21000}])]
+        s = snapshot(d); del s.raw['summary']; s.ancestors = {}
+        r = artifact(s)
+        self.assertEqual(r['status'], 'ALERT')
+        self.assertEqual(r['capital_observation']['total_used_usdt'], 21000)
+
+    def test_review2_custom_daily_windows_are_not_historical_contract(self):
+        s = snapshot(fixture())
+        for start, end, zone, as_of in [
+            ('2026-10-04T00:00:00+07:00', '2026-10-05T00:00:00+07:00', 'Asia/Bangkok', '2026-10-05T08:23:00+07:00'),
+            ('2026-10-04T00:00:00Z', '2026-10-05T00:00:00Z', 'UTC', '2026-10-05T08:23:00+07:00'),
+            ('2026-10-04T00:00:00+07:00', '2026-10-05T00:00:00+07:00', 'Asia/Ho_Chi_Minh', '2026-10-05T08:23:00+07:00'),
+            ('2026-10-04T00:00:00+07:00', '2026-10-05T00:00:00+07:00', 'Asia/Bangkok', '2026-10-05T08:22:59+07:00'),
+            ('2026-10-04T01:00:00+07:00', '2026-10-05T00:00:00+07:00', 'Asia/Bangkok', '2026-10-05T08:23:00+07:00'),
+            ('2026-10-04T00:00:00+07:00', '2026-10-05T00:00:00+07:00', 'Asia/Bangkok', '2026-10-06T08:23:00+07:00')]:
+            # A direct report can label the historical contract only with an explicit report clock.
+            with self.subTest(start=start, zone=zone, as_of=as_of):
+                r = daily_review(s, start, end, zone, as_of=as_of)
+                matches = zone == 'Asia/Bangkok' and start == '2026-10-04T00:00:00+07:00' and as_of == '2026-10-05T08:23:00+07:00'
+                self.assertEqual(r['historical_contract_match'], matches)
+                self.assertEqual('historical_daily_contract' in r, matches)
+        self.assertNotIn('historical_daily_contract', daily_review(s, '2026-10-04T00:00:00+07:00',
+                         '2026-10-05T00:00:00+07:00', 'Asia/Bangkok'))
+
     def test_parallel_deterministic_no_mutation(self):
         s = snapshot(fixture())
         before = copy.deepcopy(s.raw)
@@ -95,7 +162,7 @@ class ReadonlyArtifactsTests(unittest.TestCase):
         self.assertTrue(all(r == results[0] for r in results))
         self.assertEqual(s.raw, before)
         self.assertEqual(results[0]['status'], 'PARTIAL')
-        self.assertFalse(results[0]['real_trading_enabled'])
+        self.assertFalse(results[0]['producer_boundary']['real_trading_enabled'])
         self.assertEqual(len(results[0]['notification_candidates']['events']), 1)
 
     def test_all_reservation_locations_suppress_without_ack(self):

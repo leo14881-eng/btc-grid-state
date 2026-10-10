@@ -33,8 +33,9 @@ different namespaces: the observation must fall inside the bound monitor run.
 Existing portfolio validators and reporting functions are reused. The capital
 inspection reports the unchanged V2 20,000 total / 17,000 ordinary / 3,000 reserve
 limits. It does not evaluate every strategy risk rule or alter allocations. The
-overall result remains PARTIAL because live deployment and full risk coverage
-are not established. Missing or invalid evidence is UNKNOWN, never empty success.
+overall result is ALERT when an observed risk is present, otherwise PARTIAL
+because live deployment and full risk coverage are not established. Missing or
+invalid evidence is UNKNOWN, never empty success.
 Age budgets are caller-supplied observation budgets, not strategy thresholds or
 market-session-aware scheduler deadlines. `age_budget_exceeded` is an observation,
 not a scheduler failure: `scheduled_run_overdue=UNKNOWN` and
@@ -48,6 +49,22 @@ shallow history remains UNKNOWN; the reader never fetches it. Stock manifests
 require their own safety/identity/source evidence but still remain PARTIAL for
 freshness coverage because they do not contain an independent final readback
 receipt. A corrupt/unsafe Hunter receipt blocks new notification candidates.
+
+Schema v2 separates `producer_boundary` (this tool has no trading authority)
+from `observed_source_safety` (the inspected evidence). There is deliberately no
+top-level `real_trading_enabled=false` assertion about the observed system.
+Explicit positive real-trading flags, positive real-order counts, disabled
+shadow flags and changed capital authority produce provenance-bearing alerts
+even when that source fails schema/readback/ancestry checks. These are observed
+indicators in pinned files, not a claim that live orders have been confirmed.
+Absence of positive indicators remains UNKNOWN for live-source safety.
+
+`capital_observation` independently validates unique open-position identities
+and tranche arithmetic against the unchanged 20k/17k/3k limits. A provable breach
+is retained even if the summary is missing, disagrees, or lacks readback evidence.
+Summary inconsistency is a separate alert. Neither can mask the other. Invalid
+or duplicate underlying portfolio rows leave the arithmetic UNKNOWN rather than
+inventing a verified total. Alerts block new notification candidates.
 
 ## Candidate delivery contract
 
@@ -99,6 +116,12 @@ The existing hourly :23 main job does not prove deployment of this daily report.
 No service, timer, or automation is installed by this proposal. Confirm only the
 remaining session-aware freshness budgets and intended rule-risk inventory
 separately; do not ask the user to reconfirm the recovered daily-report semantics.
+The historical-contract label is conditional: timezone must be exactly
+`Asia/Bangkok`, the interval must be the previous complete local calendar day
+relative to the supplied `--as-of` clock, and that clock must be at or after
+08:23 local time. This validates the requested interval, not actual scheduled
+delivery. Other intervals/zones, or direct calls without a report clock, are
+labelled `CUSTOM_OR_UNVERIFIED_WINDOW` and omit `historical_daily_contract`.
 FastWatch remains the original acceptance scope; this adds no FastWatch service.
 
 The dedicated PR/push CI runs offline unit tests only, with contents:read and no
@@ -116,3 +139,9 @@ now honestly reports UNKNOWN instead of the earlier candidate-ready result.
 Neither a successful offline test nor a published Git manifest establishes that
 latest-origin acquisition, server publication/readback or live scheduling has
 been implemented by this proposal. It remains uninstalled and undeployed.
+
+The second review added red counterexamples for positive live-trading evidence
+being hidden as UNKNOWN, a 21,000 USDT portfolio breach masked by a stale summary,
+and custom periods carrying the historical contract label. The fix independently
+retains observed risk alerts and validates interval labels against the report
+clock. No private conversation URL is included in the published evidence.

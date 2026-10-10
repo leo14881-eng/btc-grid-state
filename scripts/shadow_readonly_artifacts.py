@@ -174,6 +174,7 @@ def hunter_coherence(s):
 
 
 def candidate_batch(s):
+    require(not observed_safety(s)['alerts'], 'OBSERVED_RISK_BLOCKS_NEW_CANDIDATES')
     p = hunter_coherence(s)
     require(hunter_ledger(s)['status'] == 'COMPLETE', 'HUNTER_LEDGER_NOT_COMPLETE')
     for name in JOBS:
@@ -241,6 +242,67 @@ def hunter_ledger(s):
             'risk_scope': 'LEDGER_SCHEMA_EVENT_INTEGRITY_AND_CAPITAL_ONLY'}
 
 
+def capital_observation(s):
+    """Independent arithmetic evidence; summary/readback cannot suppress a breach."""
+    p = s.doc('portfolio')
+    require(isinstance(p.get('open_positions'), list), 'OPEN_POSITIONS_UNKNOWN')
+    seen, total, reserve = set(), 0, 0
+    for position in p['open_positions']:
+        identity = position.get('shadow_id')
+        require(isinstance(identity, str) and bool(identity), 'POSITION_IDENTITY_UNKNOWN')
+        require(identity not in seen, 'DUPLICATE_SHADOW_ID_CAPITAL_UNVERIFIED')
+        seen.add(identity)
+        require(isinstance(position.get('tranches'), list) and bool(position['tranches']), 'TRANCHES_UNKNOWN')
+        for tranche in position['tranches']:
+            amount = number(tranche.get('notional_usdt'), 'notional', positive=True)
+            strategic = number(tranche.get('strategic_notional_usdt', 0), 'strategic_notional')
+            require(0 <= strategic <= amount, 'RESERVE_ALLOCATION_INVALID')
+            total += amount
+            reserve += strategic
+    number(total, 'capital_total'); number(reserve, 'capital_reserve')
+    used = {'total': total, 'ordinary': total - reserve, 'reserve': reserve}
+    limits = {'total': 20000, 'ordinary': 17000, 'reserve': 3000}
+    breaches = {key: used[key] - limit for key, limit in limits.items() if used[key] > limit + 1e-9}
+    return {'status': 'ALERT' if breaches else 'COMPLETE', 'breaches_usdt': breaches,
+            'total_used_usdt': total, 'ordinary_used_usdt': total - reserve, 'reserve_used_usdt': reserve,
+            'limits_usdt': limits, 'scope': 'PINNED_PORTFOLIO_ARITHMETIC_NOT_LIVE_BALANCE',
+            'source_path': PATHS['portfolio']}
+
+
+def observed_safety(s):
+    """Keep positive danger indicators even if schema, ancestry or freshness fail."""
+    alerts, unreadable = [], []
+    for key in sorted(s.raw):
+        try:
+            doc = s.doc(key)
+            if not isinstance(doc, dict):
+                continue
+        except (ValueError, TypeError):
+            unreadable.append(PATHS[key])
+            continue
+        for field in ('real_trading_enabled', 'real_orders'):
+            if doc.get(field) is True:
+                alerts.append({'code': 'OBSERVED_REAL_TRADING_ENABLED', 'source_path': PATHS[key],
+                               'field': field, 'observed_value': True})
+        count = doc.get('real_order_count')
+        if type(count) in (int, float) and 0 < count < float('inf'):
+            alerts.append({'code': 'OBSERVED_REAL_ORDER_COUNT_POSITIVE', 'source_path': PATHS[key],
+                           'field': 'real_order_count', 'observed_value': count})
+        for field in ('shadow_only', 'simulation_only'):
+            if doc.get(field) is False:
+                alerts.append({'code': 'OBSERVED_SHADOW_BOUNDARY_DISABLED', 'source_path': PATHS[key],
+                               'field': field, 'observed_value': False})
+        authority = doc.get('capital_authority')
+        if isinstance(authority, str) and authority and authority != 'NONE_SHADOW_ONLY':
+            alerts.append({'code': 'OBSERVED_CAPITAL_AUTHORITY_CHANGED', 'source_path': PATHS[key],
+                           'field': 'capital_authority', 'observed_value': authority})
+    # No positive indicator is not proof that live trading is disabled.
+    return {'status': 'ALERT' if alerts else 'UNKNOWN', 'alerts': alerts,
+            'live_state_verified': False, 'coverage': 'TOP_LEVEL_PINNED_SOURCE_FIELDS_ONLY',
+            'unreadable_paths': sorted(set(unreadable)),
+            'missing_paths': sorted({PATHS[k] for k in PATHS if k not in s.raw})}
+
+
 def stock_book(s):
     p, trades, manifest = (s.doc(k) for k in ('stock_portfolio', 'stock_trades', 'stock_manifest'))
     receipt_integrity(s, 'stock_main', manifest)
@@ -256,7 +318,7 @@ def stock_book(s):
     return p, trades, portfolio_statistics(p, trades)
 
 
-def daily_review(s, start, end, timezone):
+def daily_review(s, start, end, timezone, as_of=None):
     zone = ZoneInfo(timezone)  # User-specified reporting zone; no 08:23 assumption.
     begin, finish = instant(start), instant(end)
     require(begin < finish, 'REPORT_INTERVAL_INVALID')
@@ -276,17 +338,27 @@ def daily_review(s, start, end, timezone):
     closed_ids = [(p0.get('symbol'), p0.get('opened_at'), p0['closed_at']) for p0 in closed]
     require(len(set(closed_ids)) == len(closed_ids), 'DUPLICATE_CLOSED_POSITION')
     interval = portfolio_statistics(dict(p, positions={}, closed=closed), selected)
-    return {'status': 'PARTIAL' if not coverage or current['valuation_coverage_status'] == 'PARTIAL' else 'COMPLETE',
+    contract_match = False
+    if as_of is not None and timezone == 'Asia/Bangkok':
+        report_clock = instant(as_of).astimezone(zone)
+        expected_end = report_clock.replace(hour=0, minute=0, second=0, microsecond=0)
+        contract_match = (begin == expected_end - dt.timedelta(days=1) and finish == expected_end
+                          and report_clock.time() >= dt.time(8, 23))
+    result = {'status': 'PARTIAL' if not coverage or current['valuation_coverage_status'] == 'PARTIAL' else 'COMPLETE',
             'interval_watermark_reached': coverage,
             'timezone': timezone, 'start_inclusive': begin.astimezone(zone).isoformat(),
             'end_exclusive': finish.astimezone(zone).isoformat(),
             'schedule_status': 'NOT_DEPLOYED',
-            'historical_daily_contract': '0823_ASIA_BANGKOK_PREVIOUS_LOCAL_CALENDAR_DAY',
+            'historical_contract_match': contract_match,
+            'interval_contract': 'HISTORICAL_DAILY_WINDOW' if contract_match else 'CUSTOM_OR_UNVERIFIED_WINDOW',
             'trade_counts': {t: sum(e['type'] == t for e in selected) for t in ('BUY', 'ADD', 'SELL')},
             'closed_in_interval': len(closed), 'wins': interval['wins'], 'losses': interval['losses'],
             'realized_net_pnl_usdt': interval['realized_net_pnl_usdt'],
             'current_snapshot_valuation': current,
             'valuation_note': 'SNAPSHOT_VALUE_IS_NOT_HISTORICAL_INTERVAL_END_VALUE'}
+    if contract_match:
+        result['historical_daily_contract'] = '0823_ASIA_BANGKOK_PREVIOUS_LOCAL_CALENDAR_DAY'
+    return result
 
 
 def freshness(s, name, now, max_age):
@@ -320,6 +392,8 @@ def guarded(fn):
 
 def build(s, as_of, budgets, start, end, timezone):
     now = instant(as_of)
+    safety = observed_safety(s)
+    capital = guarded(lambda: capital_observation(s))
     checks = {name: guarded(lambda name=name: freshness(s, name, now, budgets.get(name))) for name in JOBS}
     stock = guarded(lambda: stock_book(s)[2])
     hunter = guarded(lambda: hunter_ledger(s))
@@ -328,18 +402,31 @@ def build(s, as_of, budgets, start, end, timezone):
     if any(checks[name]['status'] != 'COMPLETE' for name in
            ('hunter_monitor', 'hunter_discovery', 'hunter_research')):
         candidates = {'status': 'UNKNOWN', 'reason': 'CORE_HUNTER_FRESHNESS_UNVERIFIED'}
-    daily = guarded(lambda: daily_review(s, start, end, timezone))
+    daily = guarded(lambda: daily_review(s, start, end, timezone, as_of=as_of))
     if instant(end) > now:
         daily = {'status': 'UNKNOWN', 'reason': 'REPORT_END_AFTER_AS_OF'}
     elif 'stock_portfolio' in s.raw:
         clock = guarded(lambda: {'future': instant(s.doc('stock_portfolio')['updated_at']) > now})
         if clock.get('future') is True or clock.get('status') == 'UNKNOWN':
             stock = daily = {'status': 'UNKNOWN', 'reason': 'STOCK_SNAPSHOT_CLOCK_UNVERIFIED'}
-    result = {'schema': 'shadow_readonly_artifacts_v1', 'source_main_sha': s.sha,
+    alerts = list(safety['alerts'])
+    if capital.get('status') == 'ALERT':
+        alerts.append({'code': 'OBSERVED_CAPITAL_LIMIT_BREACH', 'source_path': PATHS['portfolio'],
+                       'breaches_usdt': capital['breaches_usdt']})
+    if 'SUMMARY_' in hunter.get('reason', ''):
+        alerts.append({'code': 'SUMMARY_PORTFOLIO_INCONSISTENCY', 'reason': hunter['reason'],
+                       'source_paths': [PATHS['portfolio'], PATHS['summary']]})
+    if alerts:
+        candidates = {'status': 'UNKNOWN', 'reason': 'OBSERVED_RISK_BLOCKS_NEW_CANDIDATES'}
+    result = {'schema': 'shadow_readonly_artifacts_v2', 'source_main_sha': s.sha,
               'as_of_utc': now.isoformat(), 'source_file_sha256': s.hashes(),
               'source_ancestry': s.ancestors,
-              'shadow_only': True, 'real_trading_enabled': False, 'capital_authority': 'NONE_SHADOW_ONLY',
-              'status': 'PARTIAL', 'coverage_note': 'NO_LIVE_DEPLOYMENT_OR_FULL_STRATEGY_RISK_PROOF',
+              'producer_boundary': {'shadow_only': True, 'real_trading_enabled': False,
+                                    'capital_authority': 'NONE_SHADOW_ONLY', 'read_only': True},
+              'observed_source_safety': safety, 'alerts': alerts, 'capital_observation': capital,
+              'risk_status': 'ALERT' if alerts else 'UNVERIFIED',
+              'status': 'ALERT' if alerts else 'PARTIAL',
+              'coverage_note': 'NO_LIVE_DEPLOYMENT_OR_FULL_STRATEGY_RISK_PROOF',
               'health_checks': checks, 'hunter_ledger': hunter, 'stock_ledger': stock,
               'notification_candidates': candidates, 'stock_daily_review': daily}
     result['artifact_id'] = digest(result)
