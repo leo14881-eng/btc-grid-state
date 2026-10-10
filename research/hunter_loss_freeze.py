@@ -1,6 +1,6 @@
-"""V2-only loss freeze policy. Shadow accounting; no order or persistence APIs.
+"""Shared V1/V2 loss freeze policy. Shadow accounting; no order or persistence APIs.
 
-The shared tail-risk module remains the V1 policy and systemic safety authority.
+The tail-risk module remains the independent systemic safety authority.
 Legacy circuits finish naturally before this policy activates. A qualified loss
 episode is separate from loss accounting and never inferred from WATCH.
 """
@@ -14,7 +14,7 @@ except ModuleNotFoundError as exc:
         raise
     import hunter_tail_risk as tail
 
-POLICY = "V2_LOSS_AND_MARKET_V1"
+POLICY = "LOSS_AND_MARKET_V1"
 
 
 def _fresh(value, now):
@@ -30,7 +30,11 @@ def _number(value):
 
 def market_confirmation(evidence, now):
     """B requires one complete, current observation, not a HIGH label."""
-    e = evidence or {}
+    if not isinstance(evidence, dict):
+        evidence = {}
+    e = evidence
+    if any(not isinstance(e.get(k, {}), dict) for k in ("btc_short", "breadth", "liquidity", "stablecoins")):
+        e = {}
     btc, breadth = e.get("btc_short") or {}, e.get("breadth") or {}
     values = [_number(btc.get(k)) for k in
               ("return_5m_pct", "return_15m_pct", "return_1h_pct")]
@@ -64,41 +68,52 @@ def market_confirmation(evidence, now):
     rapid = bool(complete and any(v <= threshold for v, threshold in
                                  zip(values, (-2.5, -4.0, -6.0))))
     broad = bool(complete and (neg >= .85 or loss5 >= .50))
-    return {"complete": bool(complete), "btc_rapid_drop": rapid,
+    return {"state": "CONFIRMED_BAD" if rapid and broad else ("NOT_BAD" if complete else "UNKNOWN"),
+            "complete": bool(complete), "btc_rapid_drop": rapid,
             "broad_altcoin_weakness": broad, "confirmed": rapid and broad,
             "observation_id": e.get("observation_id")}
 
 
 def _activate(state, now):
-    if state.get("loss_control_v2", {}).get("policy") == POLICY:
+    if state.get("loss_control", {}).get("policy") == POLICY:
         return True
     legacy = state.get("circuit_breaker") or {}
     # Do not relabel/clear an existing loss circuit or manufacture historic B.
     if legacy.get("status") not in (None, "NORMAL") or (
             tail.finite(legacy.get("quarantined_cash_usdt")) or 0) > 0:
         return False
-    state["loss_control_v2"] = {
+    state["loss_control"] = {
         "policy": POLICY, "activated_at_utc": now.isoformat(),
         "legacy_completion": copy.deepcopy(legacy),
         "consecutive_loss_exits": int(legacy.get("consecutive_loss_exits") or 0),
         "loss_events": copy.deepcopy(legacy.get("loss_events") or []),
-        "exit_sequence": 0, "episode_consumed_sequence": 0,
+        "exit_sequence": 0, "episode_consumed_sequence": 0, "streak_start_sequence": None,
         "pending_principal_usdt": 0.0,
     }
     return True
 
 
 def _refresh(state, now):
-    control = state["loss_control_v2"]
+    control = state["loss_control"]
     total = 0.0
+    principal = 0.0
     for event in control["loss_events"]:
         try:
             age = (now - tail.parse(event["at_utc"])).total_seconds()
             pnl = float(event["net_pnl_usdt"])
         except (KeyError, TypeError, ValueError):
             continue
-        if 0 <= age <= 6 * 3600 and pnl < 0:
+        in_window = 0 <= age <= 6 * 3600
+        if in_window and pnl < 0:
             total -= pnl
+        sequence = int(event.get("loss_sequence") or 0)
+        in_streak = (control["consecutive_loss_exits"] >= 2
+                     and control.get("streak_start_sequence") is not None
+                     and sequence >= control["streak_start_sequence"])
+        if (pnl < 0 and sequence > control["episode_consumed_sequence"]
+                and (in_window or (age >= 0 and in_streak))):
+            principal += float(event.get("released_notional_usdt") or 0)
+    control["pending_principal_usdt"] = round(principal, 2)
     control["rolling_realized_loss_usdt"] = round(total, 2)
     control["evaluated_at_utc"] = now.isoformat()
     control["loss_threshold_met"] = (
@@ -156,13 +171,13 @@ def risk_blocks_new(state, now):
 
 
 def circuit_for_admission(state):
-    if (state.get("loss_control_v2") or {}).get("policy") == POLICY:
+    if (state.get("loss_control") or {}).get("policy") == POLICY:
         return state.get("loss_freeze_episode") or {}
     return state.get("circuit_breaker") or {}
 
 
 def quarantine(state):
-    if (state.get("loss_control_v2") or {}).get("policy") != POLICY:
+    if (state.get("loss_control") or {}).get("policy") != POLICY:
         row = state.get("circuit_breaker") or {}
     else:
         row = state.get("loss_freeze_episode") or {}
@@ -172,18 +187,20 @@ def quarantine(state):
 def record_loss_exit(state, pnl, reason, released_notional, now, cfg):
     if not _activate(state, now):
         return tail.record_loss_exit(state, pnl, reason, released_notional, now, cfg)
-    control = state["loss_control_v2"]
+    control = state["loss_control"]
     if pnl >= 0:
         control["consecutive_loss_exits"] = 0
+        control["streak_start_sequence"] = None
     else:
         control["exit_sequence"] += 1
+        if control["consecutive_loss_exits"] == 0:
+            control["streak_start_sequence"] = control["exit_sequence"]
         control["consecutive_loss_exits"] += 1
         control["loss_events"].append({
+            "loss_sequence": control["exit_sequence"],
             "at_utc": now.isoformat(), "net_pnl_usdt": round(float(pnl), 2),
             "reason": reason, "released_notional_usdt": round(float(released_notional), 2),
         })
-        control["pending_principal_usdt"] = round(
-            control["pending_principal_usdt"] + float(released_notional), 2)
     _evaluate(state, now)
 
 
@@ -198,7 +215,7 @@ def update_risk_controls(state, evidence, now, cfg):
     _evaluate(state, now)
     episode = state.get("loss_freeze_episode")
     # Use the existing durable-ID and 300-second independent recovery logic.
-    # Additional strict freshness forbids future timestamps for V2 episodes.
+    # Additional strict freshness forbids future timestamps for qualified loss episodes.
     if episode and market_confirmation(evidence, now)["complete"]:
         tail.advance_circuit_breaker(_view(state), systemic, evidence, now, cfg, new_observation)
     return systemic

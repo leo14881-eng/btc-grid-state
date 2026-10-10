@@ -4,7 +4,7 @@ import datetime as dt,json,math,os,pathlib,uuid,urllib.parse,urllib.request,subp
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
- from research import hunter_v2_loss_freeze as v2_loss
+ from research import hunter_loss_freeze as loss_freeze
  from research import hunter_lifecycle_state as lifecycle
  from research.hunter_execution_identity import identity_fields
  from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
@@ -12,7 +12,7 @@ except ModuleNotFoundError as exc:
  if exc.name != 'research':raise
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  import hunter_tail_risk as tail
- import hunter_v2_loss_freeze as v2_loss
+ import hunter_loss_freeze as loss_freeze
  import hunter_lifecycle_state as lifecycle
  from hunter_execution_identity import identity_fields
  from hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
@@ -81,17 +81,14 @@ OPPORTUNITY_BACKFILL_BUDGET=int(os.getenv("HUNTER_OPPORTUNITY_BACKFILL_BUDGET","
 _opportunity_backfill_requests=0
 
 
-def v2_loss_policy():
- return STRATEGY_ID==LANES["V2"]["strategy"]
-
 def risk_blocks_new(state,now):
- return v2_loss.risk_blocks_new(state,now) if v2_loss_policy() else tail.risk_blocks_new(state)
+ return loss_freeze.risk_blocks_new(state,now)
 
 def update_risk_controls(state,evidence,now):
- return (v2_loss if v2_loss_policy() else tail).update_risk_controls(state,evidence,now,C)
+ return loss_freeze.update_risk_controls(state,evidence,now,C)
 
 def loss_quarantine(state):
- return v2_loss.quarantine(state) if v2_loss_policy() else max(0,finite((state.get('circuit_breaker') or {}).get('quarantined_cash_usdt')) or 0)
+ return loss_freeze.quarantine(state)
 
 def entry_allowed(mode,broad,current_price,executable_action):
  return broad=="BUY" and current_price is not None and (mode=="DISCOVERY" or executable_action=="BUY")
@@ -177,7 +174,7 @@ def capital_snapshot(state,scan=None):
  equity=capital_equity(state);used=used_capital(state);regime,meta=market_regime(scan or {});limit=capital_limit(state,scan)
  risk=tail.tail_budget_snapshot({**state,'circuit_breaker':{'quarantined_cash_usdt':loss_quarantine(state)}},C,CAPITAL_POOL_USDT) if equity is not None else None
  if equity is None:return {"initial_capital_usdt":None,"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":None,"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"max_deployable_usdt":None,"allocator_available_usdt":None,"systemic_risk":state.get("systemic_risk")}
- return {**reserve_snapshot(state),"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"max_deployable_usdt":round(limit,2),"allocator_available_usdt":round(max(0.0,min(limit-used,17000-reserve_snapshot(state)['ordinary_used'])),2),"strategic_allocator_available_usdt":round(max(0,min(limit-used,reserve_snapshot(state)['strategic_reserve_available'])),2),"total_cash_usdt":round(max(0.0,equity-used),2),"tail_risk_budget":risk,"systemic_risk":state.get("systemic_risk"),"circuit_breaker":state.get("circuit_breaker"),"loss_control_v2":state.get("loss_control_v2"),"loss_freeze_episode":state.get("loss_freeze_episode")}
+ return {**reserve_snapshot(state),"initial_capital_usdt":float(CAPITAL_POOL_USDT),"realized_net_pnl_usdt":round(realized_net_pnl(state),2),"equity_usdt":round(equity,2),"used_capital_usdt":round(used,2),"market_regime":regime,"market_regime_evidence":meta,"hard_cash_floor_pct":HARD_CASH_FLOOR_PCT,"max_deployable_usdt":round(limit,2),"allocator_available_usdt":round(max(0.0,min(limit-used,17000-reserve_snapshot(state)['ordinary_used'])),2),"strategic_allocator_available_usdt":round(max(0,min(limit-used,reserve_snapshot(state)['strategic_reserve_available'])),2),"total_cash_usdt":round(max(0.0,equity-used),2),"tail_risk_budget":risk,"systemic_risk":state.get("systemic_risk"),"circuit_breaker":state.get("circuit_breaker"),"loss_control":state.get("loss_control"),"loss_freeze_episode":state.get("loss_freeze_episode")}
 
 def load(p,d=None):
  if p.name in PORTFOLIO_NAMES:return load_portfolio(p)
@@ -655,7 +652,7 @@ def update_loss_exit_guard(state,pnl,reason,now,released_notional=0.0):
   g["realized_loss_usdt"]=round(float(g.get("realized_loss_usdt") or 0)+abs(pnl),2)
   if reason=="HARD_INVALIDATION":g["hard_invalidation_loss_exits"]=int(g.get("hard_invalidation_loss_exits") or 0)+1
  g["updated_at_utc"]=now.isoformat()
- (v2_loss if v2_loss_policy() else tail).record_loss_exit(state,pnl,reason,released_notional,now,C)
+ loss_freeze.record_loss_exit(state,pnl,reason,released_notional,now,C)
 
 def register_exit_for_reentry(state,pos,p,reason,now):
  reg=state.setdefault("reentry_registry",{})
@@ -668,7 +665,7 @@ def reentry_allowed(state,c,p):
  row=(state.get("reentry_registry") or {}).get((c or {}).get("asset"))
  if not row:return True,["FIRST_ENTRY"]
  if row.get("risk_lock"):
-  risk=state.get("systemic_risk") or {};cb=(v2_loss.circuit_for_admission(state) if v2_loss_policy() else state.get("circuit_breaker")) or {}
+  risk=state.get("systemic_risk") or {};cb=loss_freeze.circuit_for_admission(state) or {}
   meta=(c or {}).get("signal_evidence") or {}
   fresh_after_exit=False
   try:fresh_after_exit=bool(meta.get("evidence_id") and meta.get("observed_at_utc") and parse(meta["observed_at_utc"])>parse(row.get("last_exit_at_utc")))

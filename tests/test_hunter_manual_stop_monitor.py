@@ -158,11 +158,11 @@ class MonitorHookTests(unittest.TestCase):
             monitor.run_lane(self.path,'SHADOW_V2',market,{'candidates':[]},liq,{},NOW,False,risk_evidence={})
         saved=json.loads(self.path.read_text())
         self.assertEqual(order,['risk','manual'])
-        self.assertEqual(saved['loss_control_v2']['consecutive_loss_exits'],2)
+        self.assertEqual(saved['loss_control']['consecutive_loss_exits'],2)
         self.assertNotIn('loss_freeze_episode',saved)
         again,_,_=self.run_cycle(saved,market,liq)
         self.assertEqual(again['loss_exit_guard'],saved['loss_exit_guard'])
-        self.assertEqual(again['loss_control_v2'],saved['loss_control_v2'])
+        self.assertEqual(again['loss_control'],saved['loss_control'])
         self.assertNotIn('loss_freeze_episode',again)
 
 

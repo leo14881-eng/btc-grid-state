@@ -49,7 +49,7 @@ class ManualStopTests(unittest.TestCase):
         self.assertEqual(result['active_observation_generation_id'], 'OLD_MONITOR')
         self.assertEqual(result['loss_exit_guard']['loss_exit_count'], 2)
         self.assertEqual(result['loss_exit_guard']['hard_invalidation_loss_exits'], 0)
-        self.assertEqual(result['loss_control_v2']['consecutive_loss_exits'], 2)
+        self.assertEqual(result['loss_control']['consecutive_loss_exits'], 2)
         self.assertNotIn('loss_freeze_episode', result)
         for pos, event in zip(result['closed_positions'][1:], result['events'][1:]):
             asset = pos['asset']

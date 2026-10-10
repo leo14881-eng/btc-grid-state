@@ -1,10 +1,10 @@
-"""Offline V2 L AND B policy, production gate, legacy and restart regressions."""
+"""Offline shared V1/V2 L AND B policy, production gate, legacy and restart regressions."""
 import copy
 import datetime as dt
 import json
 import unittest
 from unittest.mock import patch
-from research import hunter_v2_loss_freeze as loss
+from research import hunter_loss_freeze as loss
 from research import hunter_shadow_trader_v2 as eng
 from research import hunter_position_monitor as monitor
 from research import hunter_tail_risk as tail
@@ -34,7 +34,7 @@ def record(s, pnl=-100, now=NOW):
     loss.record_loss_exit(s, pnl, "USER_REQUESTED_MANUAL_STOP_LOSS", 1000, now, C)
 
 
-class V2LossPolicyTests(unittest.TestCase):
+class SharedLossPolicyTests(unittest.TestCase):
     def test_l_and_b_truth_table(self):
         for l in (False, True):
             for b in (False, True):
@@ -97,18 +97,18 @@ class V2LossPolicyTests(unittest.TestCase):
                 self.assertFalse(loss.risk_blocks_new(s, now))
                 self.assertEqual(loss.quarantine(s), 0)
                 self.assertNotIn("loss_freeze_episode", s)
-            self.assertEqual(s["loss_control_v2"]["consecutive_loss_exits"], count)
+            self.assertEqual(s["loss_control"]["consecutive_loss_exits"], count)
 
     def test_six_hour_window_uses_evaluation_time_without_new_exit(self):
         s = state(); record(s, -1000)
         boundary = NOW + dt.timedelta(hours=6)
         loss.risk_blocks_new(s, boundary)
-        self.assertEqual(s["loss_control_v2"]["rolling_realized_loss_usdt"], 1000)
+        self.assertEqual(s["loss_control"]["rolling_realized_loss_usdt"], 1000)
         later = boundary + dt.timedelta(microseconds=1)
         s["systemic_risk"]["evidence"] = market(later, "later", True)
         self.assertFalse(loss.risk_blocks_new(s, later))
-        self.assertEqual(s["loss_control_v2"]["rolling_realized_loss_usdt"], 0)
-        self.assertFalse(s["loss_control_v2"]["loss_threshold_met"])
+        self.assertEqual(s["loss_control"]["rolling_realized_loss_usdt"], 0)
+        self.assertFalse(s["loss_control"]["loss_threshold_met"])
 
     def test_rolling_threshold_independent_of_consecutive_and_profit(self):
         for total, expected in ((999.99, False), (1000, True)):
@@ -165,62 +165,99 @@ class V2LossPolicyTests(unittest.TestCase):
         for i in range(1, 6):
             now = NOW + dt.timedelta(minutes=5*i)
             loss.update_risk_controls(s, market(now, str(i)), now, C)
-            if i < 5: self.assertNotIn("loss_control_v2", s)
+            if i < 5: self.assertNotIn("loss_control", s)
         self.assertEqual(s["circuit_breaker"]["loss_events"], original_events)
         self.assertEqual(s["circuit_breaker"]["status"], "NORMAL")
-        self.assertEqual(s["loss_control_v2"]["policy"], loss.POLICY)
+        self.assertEqual(s["loss_control"]["policy"], loss.POLICY)
         self.assertNotIn("loss_freeze_episode", s)
 
-    def test_v1_accounting_unchanged_and_v2_keeps_asset_lock_and_capital_bounds(self):
-        with patch.object(eng, "STRATEGY_ID", eng.LANES["V1"]["strategy"]):
-            s = state()
-            eng.update_loss_exit_guard(s, -100, "OLD", NOW, 1000)
-            eng.update_loss_exit_guard(s, -100, "OLD", NOW, 1000)
-            self.assertEqual(s["circuit_breaker"]["status"], "TRIPPED")
-            self.assertEqual(s["circuit_breaker"]["quarantined_cash_usdt"], 2000)
-            self.assertNotIn("loss_control_v2", s)
-        with patch.object(eng, "STRATEGY_ID", eng.LANES["V2"]["strategy"]), patch.object(eng, "CAPITAL_POOL_USDT", 20000):
-            s = state(); s.update(open_positions=[], closed_positions=[])
-            eng.update_loss_exit_guard(s, -100, "USER_REQUESTED_MANUAL_STOP_LOSS", NOW, 1000)
-            eng.register_exit_for_reentry(s, {"asset": "X", "net_pnl_usdt": -100}, 1, "USER_REQUESTED_MANUAL_STOP_LOSS", NOW)
-            self.assertTrue(s["reentry_registry"]["X"]["risk_lock"])
-            self.assertEqual(s["loss_exit_guard"]["realized_loss_usdt"], 100)
-            cap = eng.capital_snapshot(s, {"coins": {"BTC": {"change_24h_pct": 4}, "X": {"change_24h_pct": 2}}})
-            self.assertEqual((cap["capital_pool"], cap["ordinary_opportunity_cap"], cap["strategic_reserve"]), (20000, 17000, 3000))
-            self.assertLessEqual(cap["max_deployable_usdt"], 20000)
-            self.assertFalse(eng.capital_available(s, 17001))
+    def test_each_lane_books_losses_and_preserves_own_entry_and_capital_rules(self):
+        helper = CircuitProductionPathTests()
+        for v1 in (True, False):
+            with self.subTest(v1=v1), helper.isolate():
+                monitor.configure_lane(v1)
+                s = state(); s.update(open_positions=[], closed_positions=[])
+                for _ in range(2):
+                    eng.update_loss_exit_guard(s, -100, "USER_REQUESTED_MANUAL_STOP_LOSS", NOW, 1000)
+                eng.register_exit_for_reentry(s, {"asset": "X", "net_pnl_usdt": -100}, 1, "USER_REQUESTED_MANUAL_STOP_LOSS", NOW)
+                self.assertTrue(s["reentry_registry"]["X"]["risk_lock"])
+                self.assertEqual(s["loss_exit_guard"]["realized_loss_usdt"], 200)
+                self.assertFalse(eng.risk_blocks_new(s, NOW))
+                self.assertEqual(eng.loss_quarantine(s), 0)
+                if v1:
+                    self.assertIsNone(eng.CAPITAL_POOL_USDT)
+                    self.assertTrue(eng.capital_available(s, 1000000))
+                    self.assertEqual(eng.ENTRY_MODE, "DISCOVERY")
+                else:
+                    cap = eng.capital_snapshot(s, {"coins": {"BTC": {"change_24h_pct": 4}, "X": {"change_24h_pct": 2}}})
+                    self.assertEqual((cap["capital_pool"], cap["ordinary_opportunity_cap"], cap["strategic_reserve"]), (20000, 17000, 3000))
+                    self.assertFalse(eng.capital_available(s, 17001))
+                    self.assertEqual(eng.ENTRY_MODE, "EXECUTABLE")
+
+    def test_lanes_have_independent_loss_ledgers(self):
+        v1, v2 = state(shock=True), state(shock=True)
+        record(v1); record(v1); record(v2)
+        self.assertTrue(loss.risk_blocks_new(v1, NOW))
+        self.assertFalse(loss.risk_blocks_new(v2, NOW))
+        self.assertEqual(loss.quarantine(v1), 2000)
+        self.assertEqual(loss.quarantine(v2), 0)
+
+    def test_expired_broken_streak_principal_cannot_be_quarantined_later(self):
+        s = state(); record(s, -100); record(s, 1)
+        later = NOW + dt.timedelta(hours=7)
+        s["systemic_risk"]["evidence"] = market(later, "current", True)
+        record(s, -1000, later)
+        self.assertEqual(loss.quarantine(s), 1000)
+        self.assertEqual(s["loss_control"]["rolling_realized_loss_usdt"], 1000)
+
+    def test_unbroken_consecutive_losses_still_qualify_across_window(self):
+        s = state(); record(s, -100)
+        later = NOW + dt.timedelta(hours=7)
+        s["systemic_risk"]["evidence"] = market(later, "current", True)
+        record(s, -100, later)
+        self.assertEqual(loss.quarantine(s), 2000)
+        self.assertEqual(s["loss_control"]["rolling_realized_loss_usdt"], 100)
+
+    def test_broken_expired_losses_do_not_satisfy_l(self):
+        s = state(); record(s, -600); record(s, 1); record(s, -400); record(s, 1)
+        later = NOW + dt.timedelta(hours=7)
+        s["systemic_risk"]["evidence"] = market(later, "current", True)
+        record(s, -100, later)
+        self.assertFalse(loss.risk_blocks_new(s, later))
+        self.assertEqual(loss.quarantine(s), 0)
 
 
-class V2LossProductionGateTests(unittest.TestCase):
+class SharedLossProductionGateTests(unittest.TestCase):
     def test_direct_manager_and_allocator_share_qualified_gate(self):
         helper = CircuitProductionPathTests()
-        for qualified in (False, True):
-            for direct in (False, True):
-                with self.subTest(qualified=qualified, direct=direct), helper.isolate():
-                    now, s, scan, review, liq, supply, _ = helper.fixture("NORMAL")
-                    monitor.configure_lane(False)
-                    s["systemic_risk"]["evidence"] = market(now, shock=qualified)
-                    record(s, now=now); record(s, now=now)
-                    proposals = None if direct else []
-                    eng.manage_existing_positions(s, scan, review, liq, supply, now, capital_proposals=proposals)
-                    if not direct: eng.execute_capital_proposals(s, proposals, scan, now)
-                    self.assertEqual(helper.used(s), 1000 if qualified else 2000)
+        for v1 in (True, False):
+            for qualified in (False, True):
+                for direct in (False, True):
+                    with self.subTest(v1=v1, qualified=qualified, direct=direct), helper.isolate():
+                        now, s, scan, review, liq, supply, _ = helper.fixture("NORMAL")
+                        monitor.configure_lane(v1)
+                        s["systemic_risk"]["evidence"] = market(now, shock=qualified)
+                        record(s, now=now); record(s, now=now)
+                        proposals = None if direct else []
+                        eng.manage_existing_positions(s, scan, review, liq, supply, now, capital_proposals=proposals)
+                        if not direct: eng.execute_capital_proposals(s, proposals, scan, now)
+                        self.assertEqual(helper.used(s), 1000 if qualified else 2000)
 
-    def test_v2_buy_loop_uses_unified_gate(self):
-        # Existing production full-lane fixture executes the real BUY loop.
+    def test_both_buy_loops_use_unified_gate(self):
         helper = CircuitProductionPathTests()
         original = helper.fixture
-        for qualified in (False, True):
-            def fixture(status):
-                result = original(status)
-                now, s = result[:2]
-                s["systemic_risk"]["evidence"] = market(now, shock=qualified)
-                record(s, now=now); record(s, now=now)
-                return result
-            with patch.object(helper, "fixture", side_effect=fixture):
-                saved = helper.full_lane("V2", "NORMAL")
-            self.assertEqual({e["type"].rsplit("_", 1)[-1] for e in saved["events"]},
-                             set() if qualified else {"BUY", "ADD"})
+        for lane in ("V1", "V2"):
+            for qualified in (False, True):
+                def fixture(status):
+                    result = original(status)
+                    now, s = result[:2]
+                    s["systemic_risk"]["evidence"] = market(now, shock=qualified)
+                    record(s, now=now); record(s, now=now)
+                    return result
+                with self.subTest(lane=lane, qualified=qualified), patch.object(helper, "fixture", side_effect=fixture):
+                    saved = helper.full_lane(lane, "NORMAL")
+                self.assertEqual({e["type"].rsplit("_", 1)[-1] for e in saved["events"]},
+                                 set() if qualified else {"BUY", "ADD"})
 
 
 if __name__ == "__main__":
