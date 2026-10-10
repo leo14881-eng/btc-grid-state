@@ -23,6 +23,8 @@ on:
       - 'tests/generate_hunter_observation_contract.mjs'
       - 'tests/fixtures/hunter_observation_responses.json'
       - 'scripts/run_hunter_http_compat_tests.py'
+      - 'scripts/check_hunter_log_volume.py'
+      - 'tests/generate_hunter_log_volume.mjs'
       - '.github/workflows/bybit-http-offline-tests.yml'
 permissions:
   contents: read
@@ -51,3 +53,8 @@ jobs:
           node --test tests/test_hunter_http_diagnostics.mjs tests/test_hunter_bybit_proxy.mjs
       - name: Run guarded compatibility and downstream tests
         run: python -I -B -X utf8 scripts/run_hunter_http_compat_tests.py
+      - name: Prove full-cycle journal footprint and bounded tail readback offline
+        run: |
+          node tests/generate_hunter_log_volume.mjs > "$RUNNER_TEMP/hunter-log-volume.json"
+          node tests/test_hunter_bybit_proxy.mjs > "$RUNNER_TEMP/hunter-validation-node.log"
+          python -I -B -X utf8 scripts/check_hunter_log_volume.py "$RUNNER_TEMP/hunter-log-volume.json" "$RUNNER_TEMP/hunter-validation-node.log"

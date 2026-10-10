@@ -6,6 +6,7 @@ import json
 import pathlib
 import threading
 import time
+import hashlib
 import unittest
 import urllib.error
 import urllib.request
@@ -38,6 +39,30 @@ class ObservationTransportTests(unittest.TestCase):
             guard = patch(target, side_effect=AssertionError('NETWORK_FORBIDDEN'))
             guard.start()
             self.addCleanup(guard.stop)
+
+    def test_grouped_lines_preserve_every_record_with_byte_bounds_and_manifest(self):
+        base = CONTRACT['success']['body']['request_observations'][0]
+        rows = [dict(base, upstream_job_index=index, symbol='ASSET'+str(index)+'USDT') for index in range(40)]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            evidence.emit_record_groups('HUNTER_BYBIT_REQUEST_OBSERVATION', rows)
+        lines = output.getvalue().splitlines()
+        self.assertLess(len(lines), len(rows))
+        self.assertTrue(all(len((line+'\n').encode()) <= evidence.GROUP_LINE_BYTES for line in lines))
+        chunks = [json.loads(line.split(' ', 1)[1]) for line in lines]
+        self.assertEqual([chunk['part'] for chunk in chunks], list(range(len(chunks))))
+        self.assertTrue(all(chunk['parts'] == len(chunks) and chunk['record_total'] == 40 for chunk in chunks))
+        restored = [row for chunk in chunks for row in chunk['records']]
+        self.assertEqual(restored, rows)
+        digest = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        self.assertEqual({chunk['group_id'] for chunk in chunks}, {digest})
+
+    def test_unrepresentable_log_groups_fail_explicitly_without_partial_output(self):
+        for rows in ([{'value': 'x'*evidence.GROUP_LINE_BYTES}], [{}]*41):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                evidence.emit_record_groups('HUNTER_BYBIT_REQUEST_OBSERVATION', rows)
+            self.assertEqual(output.getvalue(), 'HUNTER_BYBIT_OBSERVATION_DROPPED GROUP_LIMIT_OR_INVALID\n')
 
     def test_real_worker_success_and_partial_reach_journal_without_snapshot_changes(self):
         for mode in ('success', 'partial'):

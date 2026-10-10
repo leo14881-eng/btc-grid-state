@@ -6,6 +6,7 @@ import time
 import contextlib
 import contextvars
 import threading
+import hashlib
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -28,6 +29,7 @@ REQUEST_CONTEXT = contextvars.ContextVar("hunter_public_request_context", defaul
 LOG_LOCK = threading.Lock()
 MAX_OBSERVATION_MS = 120000
 WALL_MONOTONIC_TOLERANCE_MS = 1000
+GROUP_LINE_BYTES = 8192  # Includes prefix and newline; journal prefix is external.
 OBSERVATION_HEADERS = {key: value for key, value in HEADER_RULES.items()
                        if not key.startswith("x-hunter-")}
 OBSERVATION_HEADERS.update({"x-bapi-limit": r"[0-9]{1,10}",
@@ -49,6 +51,47 @@ def emit_public_log(line):
         return True
     except Exception:
         return False
+
+
+def emit_record_groups(prefix, records):
+    """Lossless log-only packing; complete JSON lines bounded in UTF-8 bytes.
+
+    Small groups retain the existing individual format. Larger groups carry a
+    digest of the full ordered record set and explicit part/record totals so a
+    tail reader can detect loss, duplication or mixing instead of assuming full
+    coverage. Neither sink errors nor invalid diagnostics affect market data.
+    """
+    try:
+        if not records:
+            return
+        if len(records) > 40:
+            raise ValueError("group scope exceeded")
+        encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"))
+        if len(records) <= 4:
+            lines = [prefix + " " + encode(row) for row in records]
+        else:
+            digest = hashlib.sha256(encode(records).encode("utf-8")).hexdigest()
+            def pack(rows, part, parts):
+                return prefix + "_GROUP " + encode(dict(schema="hunter_public_log_group_v1",
+                    group_id=digest, part=part, parts=parts, record_total=len(records), records=rows))
+            chunks = []
+            current = []
+            for row in records:
+                if len((pack(current+[row], len(records), len(records))+"\n").encode("utf-8")) > GROUP_LINE_BYTES:
+                    if not current:
+                        raise ValueError("record exceeds line limit")
+                    chunks.append(current)
+                    current = []
+                current.append(row)
+            if current:
+                chunks.append(current)
+            lines = [pack(rows, index, len(chunks)) for index, rows in enumerate(chunks)]
+        if any(len((line+"\n").encode("utf-8")) > GROUP_LINE_BYTES for line in lines):
+            raise ValueError("record exceeds line limit")
+        for line in lines:
+            emit_public_log(line)
+    except Exception:
+        emit_public_log("HUNTER_BYBIT_OBSERVATION_DROPPED GROUP_LIMIT_OR_INVALID")
 
 
 @contextlib.contextmanager
@@ -156,9 +199,8 @@ def consume_observations(body, headers, request):
                     or any(not isinstance(value, str) or not re.fullmatch(OBSERVATION_HEADERS[key], value)
                            for key, value in safe.items())):
                 raise ValueError("invalid headers")
-        for row in records:
-            emit_public_log("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(
-                dict(row, **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")))
+        emit_record_groups("HUNTER_BYBIT_REQUEST_OBSERVATION",
+                           [dict(row, **REQUEST_CONTEXT.get()) for row in records])
     except Exception:
         try:
             emit_public_log("HUNTER_BYBIT_OBSERVATION_DROPPED INVALID_OR_UNBOUND")
