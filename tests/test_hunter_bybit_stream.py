@@ -26,7 +26,7 @@ def message(symbol='BTCUSDT', interval='15', ts=NOW, start=None, confirm=False):
     start = ts//step*step if start is None else start
     return dict(topic=topic(symbol, interval), type='snapshot', ts=ts, data=[dict(
         start=start, end=start+step-1, interval=interval, open='100', high='103', low='99',
-        close='101', volume='10', turnover='1000', confirm=confirm, timestamp=min(ts,start+step-1))])
+        close='101.0', volume='10', turnover='1000', confirm=confirm, timestamp=min(ts,start+step-1))])
 
 
 class StreamTests(unittest.TestCase):
