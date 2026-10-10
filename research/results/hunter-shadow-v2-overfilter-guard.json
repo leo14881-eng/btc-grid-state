@@ -2,13 +2,6 @@
   "schema": "hunter_shadow_v2_overfilter_guard_v1",
   "cycles": [
     {
-      "at_utc": "2026-10-10T06:22:57.947191+00:00",
-      "generation_id": "20261010T061759691306Z",
-      "buys": 0,
-      "safe_misses": [],
-      "risk_blocked": false
-    },
-    {
       "at_utc": "2026-10-10T07:22:49.984869+00:00",
       "generation_id": "20261010T071757595413Z",
       "buys": 0,
@@ -147,16 +140,34 @@
         }
       ],
       "risk_blocked": false
+    },
+    {
+      "at_utc": "2026-10-10T18:23:50.307584+00:00",
+      "generation_id": "20261010T181809695631Z",
+      "buys": 0,
+      "safe_misses": [
+        {
+          "asset": "牛来",
+          "change_24h_pct": 8.513,
+          "reasons": [
+            "SCORE_WEAK",
+            "RELATIVE_MOMENTUM_DECELERATING"
+          ],
+          "estimated_rr": 1.808
+        }
+      ],
+      "risk_blocked": false
     }
   ],
-  "status": "NORMAL",
-  "as_of_utc": "2026-10-10T17:23:15.877449+00:00",
-  "consecutive_zero_buy_cycles": 2,
+  "status": "OVER_FILTERING",
+  "as_of_utc": "2026-10-10T18:23:50.307584+00:00",
+  "consecutive_zero_buy_cycles": 3,
   "recent_safe_missed_assets": [
     "DUSK",
-    "PHA"
+    "PHA",
+    "牛来"
   ],
-  "optimizer_action": "NONE",
+  "optimizer_action": "RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST",
   "live_capital_rules_changed": false,
   "capital_authority": "NONE_SHADOW_ONLY"
 }
