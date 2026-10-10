@@ -260,5 +260,134 @@ class SharedLossProductionGateTests(unittest.TestCase):
                                  set() if qualified else {"BUY", "ADD"})
 
 
+
+class SharedLossReviewRegressionTests(unittest.TestCase):
+    def activated(self, v1):
+        monitor.configure_lane(v1)
+        s = state(shock=True)
+        s.update(open_positions=[], closed_positions=[], circuit_breaker={
+            "status": "NORMAL", "quarantined_cash_usdt": 0, "historical_marker": "unchanged"})
+        for _ in range(2):
+            eng.update_loss_exit_guard(s, -100, "USER_REQUESTED_MANUAL_STOP_LOSS", NOW, 1000)
+        return s
+
+    def observe(self, s, seconds, oid, unknown=False):
+        now = NOW + dt.timedelta(seconds=seconds)
+        e = market(now, oid)
+        if unknown:
+            e["missing_or_stale"] = ["BTC_SHORT_TERM_MISSING"]
+            e["btc_short"]["return_5m_pct"] = None
+        eng.update_risk_controls(s, e, now)
+        return e
+
+    def test_both_lanes_unknown_breaks_normal_sequence_with_restart_and_replay(self):
+        helper = CircuitProductionPathTests()
+        for v1 in (True, False):
+            with self.subTest(v1=v1), helper.isolate():
+                s = self.activated(v1)
+                self.observe(s, 300, "normal1")
+                unknown = self.observe(s, 600, "unknown", True)
+                self.assertEqual(s["loss_freeze_episode"]["recovery_observations"], 0)
+                self.assertEqual(loss.quarantine(s), 2000)
+                s = json.loads(json.dumps(s))
+                self.observe(s, 900, "normal2")
+                self.assertEqual(s["loss_freeze_episode"]["recovery_observations"], 1)
+                self.assertEqual(loss.quarantine(s), 2000)
+                before = copy.deepcopy(s["loss_freeze_episode"])
+                eng.update_risk_controls(s, unknown, NOW+dt.timedelta(seconds=950))
+                self.assertEqual(s["loss_freeze_episode"], before)
+                old = market(NOW+dt.timedelta(seconds=800), "out-of-order")
+                old["missing_or_stale"] = ["UNKNOWN"]
+                eng.update_risk_controls(s, old, NOW+dt.timedelta(seconds=1000))
+                self.assertEqual(s["loss_freeze_episode"], before)
+                self.observe(s, 1200, "normal3")
+                self.assertEqual(s["loss_freeze_episode"]["recovery_observations"], 2)
+                self.assertEqual(loss.quarantine(s), 1500)
+
+    def test_both_lanes_missing_or_future_source_clock_never_preserves_recovery_credit(self):
+        helper = CircuitProductionPathTests()
+        for v1 in (True, False):
+            for clock in ("missing", "future"):
+                with self.subTest(v1=v1, clock=clock), helper.isolate():
+                    s = self.activated(v1)
+                    self.observe(s, 300, "normal1")
+                    now = NOW+dt.timedelta(seconds=600)
+                    e = market(now, clock)
+                    if clock == "missing":
+                        e.pop("observed_at_utc")
+                    else:
+                        e["observed_at_utc"] = (now+dt.timedelta(seconds=1)).isoformat()
+                    eng.update_risk_controls(s, e, now)
+                    self.assertEqual(s["loss_freeze_episode"]["recovery_observations"], 0)
+                    self.assertEqual(loss.quarantine(s), 2000)
+                    self.observe(s, 900, "normal2")
+                    self.assertEqual(s["loss_freeze_episode"]["recovery_observations"], 1)
+                    self.assertEqual(loss.quarantine(s), 2000)
+
+    def test_both_lanes_normal_market_new_loss_interrupts_without_extra_quarantine(self):
+        helper = CircuitProductionPathTests()
+        for v1 in (True, False):
+            for prior_normals in (1, 2):
+                with self.subTest(v1=v1, prior_normals=prior_normals), helper.isolate():
+                    s = self.activated(v1)
+                    for i in range(1, prior_normals+1):
+                        self.observe(s, 300*i, "normal"+str(i))
+                    before = copy.deepcopy(s["loss_freeze_episode"])
+                    at = NOW+dt.timedelta(seconds=300*prior_normals+60)
+                    eng.update_loss_exit_guard(s, -10, "USER_REQUESTED_MANUAL_STOP_LOSS", at, 1000)
+                    ep = s["loss_freeze_episode"]
+                    self.assertEqual(ep["episode_id"], before["episode_id"])
+                    self.assertEqual(ep["quarantined_cash_usdt"], before["quarantined_cash_usdt"])
+                    self.assertEqual(ep["quarantine_base_usdt"], before["quarantine_base_usdt"])
+                    self.assertEqual(ep["last_loss_exit_at_utc"], at.isoformat())
+                    self.assertEqual(ep["recovery_observations"], 0)
+                    self.assertIsNone(ep["last_recovery_counted_at_utc"])
+                    self.assertIsNone(ep["last_recovery_counted_observed_at_utc"])
+                    self.assertFalse(s["loss_control"]["market_confirmation"]["confirmed"])
+                    s = json.loads(json.dumps(s))
+                    self.observe(s, 300*prior_normals+360, "first-after-loss")
+                    self.assertEqual(s["loss_freeze_episode"]["recovery_observations"], 1)
+                    self.assertEqual(loss.quarantine(s), before["quarantined_cash_usdt"])
+                    self.assertTrue(eng.risk_blocks_new(s, at+dt.timedelta(seconds=300)))
+
+    def test_both_lane_summaries_show_effective_controls_without_legacy_mutation(self):
+        helper = CircuitProductionPathTests()
+        for v1 in (True, False):
+            with self.subTest(v1=v1), helper.isolate():
+                s = self.activated(v1)
+                before = copy.deepcopy(s)
+                summary = eng.build_summary(s, NOW)
+                capital = summary["policy"]["capital_management"]
+                risk = summary["policy"]["tail_risk_phase1"]
+                for view in (capital, risk):
+                    self.assertEqual(view["circuit_breaker"]["status"], "TRIPPED")
+                    self.assertEqual(view["circuit_breaker"]["quarantined_cash_usdt"], 2000)
+                    self.assertEqual(view["effective_quarantined_cash_usdt"], 2000)
+                    self.assertEqual(view["circuit_breaker_source"], "LOSS_FREEZE_EPISODE")
+                    self.assertEqual(view["legacy_circuit_breaker"], before["circuit_breaker"])
+                    self.assertEqual(view["legacy_circuit_breaker_role"], "INACTIVE_HISTORY")
+                    self.assertTrue(view["new_risk_blocked"])
+                self.assertEqual(s, before)
+                self.assertEqual(summary["capital_authority"], "NONE_SHADOW_ONLY")
+                if v1:
+                    self.assertIsNone(capital["equity_usdt"])
+                    self.assertIsNone(capital["max_deployable_usdt"])
+                else:
+                    self.assertEqual(capital["capital_pool"], 20000)
+                    self.assertEqual(capital["ordinary_opportunity_cap"], 17000)
+                    self.assertEqual(capital["strategic_reserve"], 3000)
+
+    def test_both_lanes_no_episode_normal_loss_does_not_create_freeze(self):
+        helper = CircuitProductionPathTests()
+        for v1 in (True, False):
+            with self.subTest(v1=v1), helper.isolate():
+                monitor.configure_lane(v1)
+                s = state()
+                for _ in range(2):
+                    eng.update_loss_exit_guard(s, -100, "USER_REQUESTED_MANUAL_STOP_LOSS", NOW, 1000)
+                self.assertNotIn("loss_freeze_episode", s)
+                self.assertFalse(eng.risk_blocks_new(s, NOW))
+                self.assertEqual(loss.quarantine(s), 0)
+
 if __name__ == "__main__":
     unittest.main()

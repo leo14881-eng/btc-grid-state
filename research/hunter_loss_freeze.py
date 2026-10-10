@@ -184,6 +184,72 @@ def quarantine(state):
     return max(0.0, tail.finite(row.get("quarantined_cash_usdt")) or 0.0)
 
 
+def _reset_recovery(episode, now, reason):
+    episode["recovery_observations"] = 0
+    episode["last_recovery_counted_at_utc"] = None
+    episode["last_recovery_counted_observed_at_utc"] = None
+    episode["recovery_wait_reason"] = reason
+    episode["updated_at_utc"] = now.isoformat()
+
+
+def _interrupt_unknown(episode, evidence, now):
+    """New UNKNOWN breaks consecutive NORMALs; replay cannot alter recovery.
+
+    Invalid source clocks may interrupt but never advance the source watermark
+    or earn recovery credit. Older valid source observations are ignored.
+    """
+    e = evidence if isinstance(evidence, dict) else {}
+    oid = e.get("observation_id")
+    seen = list(episode.get("recovery_seen_observation_ids") or [])
+    if oid and (oid in seen or oid in (
+            episode.get("last_recovery_seen_observation_id"),
+            episode.get("last_loss_exit_observation_id"))):
+        return
+    try:
+        processing = [tail.parse(episode[k]) for k in
+                      ("updated_at_utc", "last_recovery_seen_at_utc", "last_loss_exit_at_utc")
+                      if episode.get(k)]
+        if processing and now <= max(processing):
+            return
+    except (TypeError, ValueError):
+        return
+    try:
+        observed = tail.parse(e.get("observed_at_utc"))
+        source_times = [tail.parse(episode[k]) for k in
+                        ("last_recovery_seen_observed_at_utc", "last_loss_exit_at_utc")
+                        if episode.get(k)]
+        if source_times and observed <= max(source_times):
+            return
+    except (TypeError, ValueError):
+        observed = None
+    if oid:
+        seen.append(oid)
+        episode["recovery_seen_observation_ids"] = seen
+        episode["last_recovery_seen_observation_id"] = oid
+    episode["last_recovery_seen_at_utc"] = now.isoformat()
+    if observed is not None and observed <= now:
+        episode["last_recovery_seen_observed_at_utc"] = observed.isoformat()
+    _reset_recovery(episode, now, "LOSS_RECOVERY_REQUIRES_COMPLETE_NORMAL_OBSERVATIONS")
+
+
+def control_snapshot(state):
+    """Expose effective controls without rewriting the legacy portfolio object."""
+    activated = (state.get("loss_control") or {}).get("policy") == POLICY
+    effective = copy.deepcopy(circuit_for_admission(state))
+    effective.setdefault("status", "NORMAL")
+    effective.setdefault("quarantined_cash_usdt", 0.0)
+    return {
+        "circuit_breaker": effective,
+        "circuit_breaker_source": "LOSS_FREEZE_EPISODE" if activated else "LEGACY_CIRCUIT",
+        "legacy_circuit_breaker": copy.deepcopy(state.get("circuit_breaker")),
+        "legacy_circuit_breaker_role": "INACTIVE_HISTORY" if activated else "ACTIVE_LEGACY_RECOVERY",
+        "loss_control": copy.deepcopy(state.get("loss_control")),
+        "loss_freeze_episode": copy.deepcopy(state.get("loss_freeze_episode")),
+        "new_risk_blocked": tail.risk_blocks_new({**state, "circuit_breaker": effective}),
+        "effective_quarantined_cash_usdt": quarantine(state),
+    }
+
+
 def record_loss_exit(state, pnl, reason, released_notional, now, cfg):
     if not _activate(state, now):
         return tail.record_loss_exit(state, pnl, reason, released_notional, now, cfg)
@@ -192,6 +258,12 @@ def record_loss_exit(state, pnl, reason, released_notional, now, cfg):
         control["consecutive_loss_exits"] = 0
         control["streak_start_sequence"] = None
     else:
+        episode = state.get("loss_freeze_episode") or {}
+        if episode.get("status") in ("TRIPPED", "RECOVERING"):
+            _reset_recovery(episode, now, "LOSS_RECOVERY_INTERRUPTED_BY_NEW_LOSS")
+            episode["last_loss_exit_at_utc"] = now.isoformat()
+            episode["last_loss_exit_observation_id"] = (
+                state.get("systemic_risk") or {}).get("last_observation_id")
         control["exit_sequence"] += 1
         if control["consecutive_loss_exits"] == 0:
             control["streak_start_sequence"] = control["exit_sequence"]
@@ -216,6 +288,9 @@ def update_risk_controls(state, evidence, now, cfg):
     episode = state.get("loss_freeze_episode")
     # Use the existing durable-ID and 300-second independent recovery logic.
     # Additional strict freshness forbids future timestamps for qualified loss episodes.
-    if episode and market_confirmation(evidence, now)["complete"]:
-        tail.advance_circuit_breaker(_view(state), systemic, evidence, now, cfg, new_observation)
+    if episode and episode.get("status") in ("TRIPPED", "RECOVERING"):
+        if market_confirmation(evidence, now)["complete"]:
+            tail.advance_circuit_breaker(_view(state), systemic, evidence, now, cfg, new_observation)
+        else:
+            _interrupt_unknown(episode, evidence, now)
     return systemic
