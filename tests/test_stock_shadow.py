@@ -1548,3 +1548,80 @@ def test_fundamentals_main_rotates_persisted_frames_through_every_batch(tmp_path
     assert len(set().union(*batches[:5])) == 58
     assert sum(len(batch) for batch in batches[:5]) == 58
     assert batches[5] == batches[0]
+
+
+def test_fundamentals_http_diagnostics_allowlist_metadata_without_reading_body():
+    import io
+    from email.message import Message
+    m = _load_fundamentals_observer()
+    headers = Message()
+    headers["WWW-Authenticate"] = 'Bearer realm="PRIVATE", error_description="SECRET"'
+    headers["X-Request-ID"] = "12345678-abcd-1234-abcd-123456789abc"
+    headers["CF-Ray"] = "0123456789abcdef-LHR"
+    headers["Retry-After"] = "30"
+    headers["Set-Cookie"] = "SECRET"
+    body = io.BytesIO(b"SECRET RESPONSE BODY")
+    error = m.urllib.error.HTTPError(
+        "https://r.jina.ai/https://data.sec.gov/api?token=SECRET",
+        401, "SECRET REASON", headers, body,
+    )
+    details = m.transport_error_details(error)
+    assert details == {
+        "type": "HTTPError", "http_status": 401, "endpoint": "JINA_READER",
+        "auth_challenge_scheme": "bearer",
+        "request_id": "12345678-abcd-1234-abcd-123456789abc",
+        "cf_ray": "0123456789abcdef-LHR", "retry_after_seconds": 30,
+    }
+    assert body.tell() == 0
+    assert "SECRET" not in json.dumps(details)
+    for name in ("X-Request-ID", "CF-Ray", "Retry-After", "WWW-Authenticate"):
+        headers.replace_header(name, "SECRET")
+    assert m.transport_error_details(error) == {
+        "type": "HTTPError", "http_status": 401, "endpoint": "JINA_READER",
+    }
+    assert m.transport_error_details(ValueError("SECRET")) == {"type": "ValueError"}
+
+
+def test_fundamentals_frames_keep_failure_task_and_http_status(monkeypatch):
+    m = _load_fundamentals_observer()
+    def fail(*args):
+        raise m.urllib.error.HTTPError("https://r.jina.ai/https://data.sec.gov/example", 401, "SECRET", {}, None)
+    monkeypatch.setattr(m, "frame_json", fail)
+    evidence, status = m.frame_evidence_by_cik(1)
+    assert evidence == {}
+    assert status["requests"] == 12
+    assert len(status["errors"]) == 12
+    assert len({tuple(sorted(e["task"].items())) for e in status["errors"]}) == 12
+    assert all(e["http_status"] == 401 and e["endpoint"] == "JINA_READER" for e in status["errors"])
+    assert "SECRET" not in json.dumps(status)
+
+
+def test_fundamentals_main_keeps_cik_http_status_without_secrets(tmp_path, monkeypatch):
+    m = _load_fundamentals_observer()
+    state_path = tmp_path / "portfolio-v1.json"
+    out_path = tmp_path / "fundamentals-observer-v1.json"
+    state_path.write_text(json.dumps({"positions": {"TEST": {}}}))
+    original_state = state_path.read_bytes()
+    monkeypatch.setattr(m, "STATE", state_path)
+    monkeypatch.setattr(m, "OUT", out_path)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    calls = []
+    def denied(request, **kwargs):
+        calls.append(request.full_url)
+        code = 401 if request.host == "r.jina.ai" else 403
+        raise m.urllib.error.HTTPError(request.full_url, code, "SECRET", {}, None)
+    monkeypatch.setattr(m.urllib.request, "urlopen", denied)
+    monkeypatch.setattr(m.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(m, "frame_evidence_by_cik", lambda batch: ({}, {"errors": [], "batch_index": batch}))
+    m.main()
+    result = json.loads(out_path.read_text())
+    assert len(calls) == 4  # two SEC maps, one existing proxy fallback, one EFTS query
+    assert [e["http_status"] for e in result["mapping_errors"]] == [403, 403, 401]
+    assert result["mapping_errors"][-1]["endpoint"] == "JINA_READER"
+    assert result["errors"] == [{
+        "symbol": "TEST", "stage": "CIK_RESOLUTION", "type": "HTTPError",
+        "http_status": 403, "endpoint": "SEC_EFTS",
+    }]
+    assert result["status"] == "PARTIAL" and result["strategy_effect"] is False
+    assert state_path.read_bytes() == original_state
+    assert "SECRET" not in json.dumps(result)
