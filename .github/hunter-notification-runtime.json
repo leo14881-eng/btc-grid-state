@@ -6,12 +6,28 @@
   "bootstrap_since_utc": "2026-10-06T18:26:30+00:00",
   "acknowledged_event_ids": [],
   "pending_batch_id": "c054f606a893b5111996fb9738f0a0da31e5327cfdc72553d762452dde8a2eae",
-  "delivery_status": "PREPARED_NOT_DELIVERED",
+  "delivery_status": "DELIVERY_ACK_UNVERIFIABLE",
   "source_main_sha": "2085375e262b6ad5e7221ad07a2f1acdddfa9afb",
   "last_attempt_at": "2026-10-10T03:41:36.000Z",
   "last_successful_check_at": "2026-10-10T03:43:50.353Z",
   "unverified_batch_attempts": 0,
-  "notification_failure": null,
+  "notification_failure": {
+    "at": "2026-10-10T04:22:35.539Z",
+    "phase": "HEALTH_COHERENCE_UNVERIFIED",
+    "tool": "mcp__codex_apps__github_fetch_file",
+    "source_main_sha": "5e346a41af26a062f5265ee0d30eaad0ac66b016",
+    "errors": [
+      {
+        "error_code": "MONITOR_SCHEDULER_GENERATION_MISMATCH",
+        "raw_error": "Fixed snapshot has monitor.monitor_generation_id=2026-10-10T04:15:00Z while scheduler.current_generation_id and last_successful_monitor_generation_id are 2026-10-10T04:20:00Z; portfolio/summary reflect the 04:20 monitor cycle, so full four-file health coherence is not yet proven."
+      },
+      {
+        "error_code": "MESSAGE_ID_UNAVAILABLE",
+        "raw_error": "The pending PROM batch is observable in prior chat output, but no verifiable assistant message_id is available; acknowledgement remains unchanged and the batch is not re-emitted."
+      }
+    ],
+    "effect": "ACK_AND_LAST_SUCCESSFUL_CHECK_NOT_ADVANCED_PENDING_RETAINED_NO_RESEND_RETRY_NEXT_NATURAL_CYCLE"
+  },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
@@ -24,7 +40,7 @@
   "pending_event_ids": [
     "7b0b6b34af15da3771520142ba49efe61baeb9533c9b609d221c24caa7f2c62d"
   ],
-  "last_check_attempt_at": "2026-10-10T03:43:50.353Z",
+  "last_check_attempt_at": "2026-10-10T04:22:35.539Z",
   "unresolved_batches": [
     {
       "batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
@@ -166,8 +182,8 @@
     "event_count": 2,
     "source_set_hash_sha256": "cc28a967146e446b6d55adc51f10f7b267d79eeb1d1b83c6cb719d8512e628ea"
   },
-  "last_check_started_at": "2026-10-10T03:41:36.000Z",
-  "last_check_execution_hash_sha256": "1d138c12b57d1485abd7432542de525b23ca76981ebb9cdeba594b35ea3b399d",
+  "last_check_started_at": "2026-10-10T04:20:49.000Z",
+  "last_check_execution_hash_sha256": "326d43053e560b86d1a9fb0db10ed7c0734878d6e37013aef346ea3a991bf292",
   "pending_attempt_id_sha256": "f9a99e724a82f843ff29cb242dcaa9baccaf1a1165870ccb8a7ed0002ae34b4d",
   "pending_prepared_at": "2026-10-10T03:43:50.353Z",
   "notification_failure_history": [
