@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import './helpers/cloudflare-webcrypto.mjs';
 const source=fs.readFileSync(new URL('../workers/hunter-bybit-proxy.js',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+// The deployed discovery validation invokes this offline script. Keep mocked
+// per-request observations out of its production journal; retain/assert them
+// here, then emit one test summary. Real collector logs are unaffected.
+const originalLog = console.log;
+const mockObservations = [];
+console.log = line => mockObservations.push(line);
 let calls=[]; let active=0; let peak=0;
 globalThis.fetch=async (url,options={})=>{
   calls.push({url:String(url),options});active++;peak=Math.max(peak,active);
@@ -35,4 +41,7 @@ const signedBody='{"tokenTag": 0}';
 assert.equal((await send('/bybit/alpha/token-list',{method:'POST',body:signedBody,headers:{'X-Hunter-Proxy-Token':'test-token','X-BAPI-API-KEY':'test-key','X-BAPI-TIMESTAMP':'1','X-BAPI-RECV-WINDOW':'5000','X-BAPI-SIGN':'test-sign'}})).status,200);
 assert.equal(calls.at(-1).options.body,signedBody);
 assert.equal((await send('/unknown')).status,404);
-console.log('Worker routes, batching, concurrency, validation and Alpha byte preservation passed');
+console.log = originalLog;
+assert.equal(mockObservations.length, 43); // spot twice, tickers once, 40 candles.
+assert(mockObservations.every(line => line.startsWith('HUNTER_BYBIT_REQUEST_OBSERVATION ')));
+console.log('Worker routes, batching, concurrency, validation and Alpha byte preservation passed; 43 mock observations captured');

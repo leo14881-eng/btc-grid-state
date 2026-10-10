@@ -32,6 +32,75 @@ class HTTPDiagnosticsTests(unittest.TestCase):
             guard.start()
             self.addCleanup(guard.stop)
 
+    def test_official_access_too_frequent_marker_keeps_403_and_unknown_cause(self):
+        for text in (b'access too frequent', b'ACCESS TOO FREQUENT'):
+            value = evidence.read_evidence(io.BytesIO(text), {}, 403, 'worker_http')
+            self.assertEqual(value['body_markers'], ['RATE_LIMIT_TEXT'])
+            self.assertEqual(value['http_status'], 403)
+            evidence.validate_evidence(value)
+
+    def test_request_observation_preserves_success_and_partial_body_without_extra_requests(self):
+        for body in ({'retCode': 0, 'result': {'category': 'spot', 'list': []}},
+                     {'retCode': 0, 'result': {'category': 'spot', 'failures':
+                         {'BTCUSDT': {'15': 'Error: BYBIT_HTTP_403'}}}}):
+            response = io.BytesIO(json.dumps(body).encode())
+            response.status = 200
+            response.headers = headers()
+            response.headers['X-Hunter-Request-Id'] = '00000000-0000-4000-8000-000000000001'
+            response.headers['X-Bapi-Limit'] = '600'
+            response.headers['X-Bapi-Limit-Status'] = '599'
+            response.headers['X-Bapi-Limit-Reset-Timestamp'] = '1791660000000'
+            response.headers['X-Forwarded-For'] = '192.0.2.1'
+            output = io.StringIO()
+            request = urllib.request.Request('https://worker.invalid/bybit/early-klines',
+                data=b'{"symbols":["BTCUSDT"],"end":1}', headers={'Authorization': 'SECRET_DO_NOT_STORE'})
+            with contextlib.redirect_stdout(output), patch.object(evidence.urllib.request, 'urlopen', return_value=response) as opened:
+                self.assertEqual(evidence.request_json(request, 60), body)
+            opened.assert_called_once_with(request, timeout=60)
+            self.assertEqual(request.data, b'{"symbols":["BTCUSDT"],"end":1}')
+            self.assertEqual(len(output.getvalue().splitlines()), 1)
+            line = output.getvalue()
+            self.assertLess(len(line), 1400)
+            for forbidden in ('SECRET_DO_NOT_STORE', '192.0.2.1', 'https://', 'symbols', 'failures'):
+                self.assertNotIn(forbidden, line)
+            record = json.loads(line.split(' ', 1)[1])
+            self.assertEqual(record['layer'], 'worker_http')
+            self.assertEqual(record['job'], 'early_klines')
+            self.assertEqual(record['http_status'], 200)  # Not upstream coverage success.
+            self.assertEqual(record['ret_code'], 0)
+            self.assertEqual(record['root_cause'], 'UNKNOWN')
+            self.assertEqual(record['headers']['x-bapi-limit-status'], '599')
+            self.assertGreaterEqual(record['duration_ms'], 0)
+            self.assertGreaterEqual(dt.datetime.fromisoformat(record['completed_at_utc']),
+                                    dt.datetime.fromisoformat(record['started_at_utc']))
+
+    def test_request_observation_keeps_errors_and_rejects_sensitive_header_values(self):
+        unsafe = {'x-bapi-limit': '192.0.2.1', 'x-bapi-limit-status': 'SECRET_DO_NOT_STORE',
+                  'x-bapi-limit-reset-timestamp': '9' * 17, 'authorization': 'SECRET_DO_NOT_STORE'}
+        errors = [urllib.error.HTTPError('https://SECRET_DO_NOT_STORE', 403, 'secret', unsafe,
+                    io.BytesIO(b'access too frequent SECRET_DO_NOT_STORE')), TimeoutError('SECRET_DO_NOT_STORE')]
+        for error, status in zip(errors, (403, 0)):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), patch.object(evidence.urllib.request, 'urlopen', side_effect=error) as opened:
+                with self.assertRaises(evidence.ObservedHTTPError):
+                    worker.request('/bybit/tickers')
+            opened.assert_called_once()
+            record = json.loads(output.getvalue().split(' ', 1)[1])
+            self.assertEqual(record['http_status'], status)
+            self.assertEqual(record['headers'], {})
+            self.assertNotIn('SECRET_DO_NOT_STORE', output.getvalue())
+
+    def test_logging_failure_does_not_replace_success_or_error(self):
+        response = io.BytesIO(b'{"retCode":0}')
+        response.status = 200
+        response.headers = {}
+        with patch('builtins.print', side_effect=OSError('LOG_UNAVAILABLE')):
+            with patch.object(evidence.urllib.request, 'urlopen', return_value=response):
+                self.assertEqual(worker.request('/bybit/tickers'), {'retCode': 0})
+            with patch.object(evidence.urllib.request, 'urlopen', side_effect=TimeoutError('secret')):
+                with self.assertRaisesRegex(evidence.ObservedHTTPError, 'WORKER_TIMEOUT'):
+                    worker.request('/bybit/tickers')
+
     def test_outer_http_errors_preserve_safe_evidence_without_body_or_url(self):
         for status in (403, 429, 502):
             err = urllib.error.HTTPError('https://example.invalid/?key=SECRET_DO_NOT_STORE', status,

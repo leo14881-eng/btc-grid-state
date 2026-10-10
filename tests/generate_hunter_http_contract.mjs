@@ -86,7 +86,9 @@ for (const mode of ['body_abort', 'fetch_abort', 'body_transport', 'body_non_jso
 }
 Date.now = originalNow;
 const file = new URL('./fixtures/hunter_http_worker_responses.json', import.meta.url);
-const serialized = JSON.stringify(output, null, 2) + '\n';
+// Optional transport observations are consumed before business callers. Keep
+// this frozen contract focused on the unchanged market/error payload.
+const serialized = JSON.stringify(output, (key, value) => key === 'request_observations' ? undefined : value, 2) + '\n';
 if (process.argv.includes('--check')) assert.equal(fs.readFileSync(file, 'utf8'), serialized);
 else fs.writeFileSync(file, serialized);
 console.log('OFFLINE_WORKER_CONTRACT_OK: 3 candle batches, 5 spot cases, 4 old/new exception pairs; exact call counts; no network');

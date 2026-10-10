@@ -17,11 +17,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from research import hunter_bybit_availability as availability
     from research.hunter_bybit_signal_capture import capture
-    from research.hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
+    from research.hunter_http_evidence import ObservedHTTPError, emit_record_groups, observation_context, request_json, validate_evidence
 except ModuleNotFoundError:
     import hunter_bybit_availability as availability
     from hunter_bybit_signal_capture import capture
-    from hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
+    from hunter_http_evidence import ObservedHTTPError, emit_record_groups, observation_context, request_json, validate_evidence
 
 DEFAULT = pathlib.Path("research/results/hunter-bybit-worker-snapshot.json")
 SOURCE = "OFFICIAL_BYBIT_V5_VIA_WORKER"
@@ -152,7 +152,8 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
     bases = [base for base in bases if valid(base)]
     refresh_evidence=None
     for ticker_attempt in range(2):
-        ticker_body = fetcher("/bybit/tickers")
+        with observation_context(end):
+            ticker_body = fetcher("/bybit/tickers")
         ticks = result(ticker_body)
         if abs(int(ticker_body.get("time",0))-end)>120000:
             raise ValueError("BYBIT_WORKER_TICKERS_STALE_OR_FUTURE")
@@ -198,8 +199,11 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
     symbols=sorted({r["pair"] for r in required}|{"BTCUSDT"})
     batches=[symbols[i:i+20] for i in range(0,len(symbols),20)]
     bundles={}; failure_details={}
+    def fetch_batch(index, batch):
+        with observation_context(end, index):
+            return fetcher("/bybit/early-klines", {"symbols":batch,"end":end})
     with ThreadPoolExecutor(max_workers=2) as executor:
-        jobs={executor.submit(fetcher,"/bybit/early-klines",{"symbols":batch,"end":end}):(index,batch)
+        jobs={executor.submit(fetch_batch,index,batch):(index,batch)
               for index,batch in enumerate(batches)}
         for job in as_completed(jobs):
             batch_id,batch=jobs[job]
@@ -237,14 +241,17 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
                         failure_details.setdefault(symbol,{})[interval]=contextual(detail,batch_id,symbol,interval,end,stage)
     # Diagnostic evidence is deliberately excluded from the authoritative schema.
     # Existing stdout reaches the systemd journal / Actions log, not a new writer.
+    evidence_batches = {}
     for symbol, intervals in sorted(failure_details.items()):
         for interval, detail in sorted(intervals.items()):
             evidence = detail.pop("http_evidence", None)
             if evidence is not None:
-                print("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
+                evidence_batches.setdefault(detail["batch_id"], []).append(dict(
                     schema="hunter_http_log_v1", source=SOURCE,
                     captured_at_utc=now.isoformat(), **detail,
-                    http_evidence=validate_evidence(evidence)), sort_keys=True, separators=(",", ":")), flush=True)
+                    http_evidence=validate_evidence(evidence)))
+    for records in evidence_batches.values():
+        emit_record_groups("HUNTER_BYBIT_HTTP_EVIDENCE", records)
     def get(symbol,interval,limit):
         detail = failure_details.get(symbol, {}).get(interval)
         if detail:

@@ -45,7 +45,7 @@ async function httpEvidence(response, requestId, failureKind = "http") {
   }
   const markers = [];
   for (const [marker, pattern] of [["ACCESS_DENIED_TEXT", /access denied/i],
-    ["COUNTRY_BLOCK_TEXT", /block access from your country/i], ["RATE_LIMIT_TEXT", /too many requests|rate limit/i]]) {
+    ["COUNTRY_BLOCK_TEXT", /block access from your country/i], ["RATE_LIMIT_TEXT", /too many requests|rate limit|access too frequent/i]]) {
     if (pattern.test(text)) markers.push(marker);
   }
   return { schema: "hunter_http_evidence_v1", layer: "bybit_upstream", http_status: response?.status || 0,
@@ -57,7 +57,41 @@ function evidenceError(code, evidence) {
   const error = new Error(code); error.httpEvidence = evidence; return error;
 }
 
-async function upstream(path, params, signal, requestId) {
+async function upstream(path, params, signal, requestId, observations, jobIndex = 0) {
+  const started = Date.now(); const monotonic = performance.now(); const observed = {};
+  try { return await upstreamRequest(path, params, signal, requestId, observed); }
+  finally {
+    // One bounded line per existing public request, including successes. Never
+    // log URLs, raw bodies, caller headers, IPs, or the protected Alpha route.
+    // These are observations, not a decision about the cause of HTTP 403.
+    try {
+      const safeHeaders = {};
+      const rules = { ...headerRules, "x-bapi-limit": /^[0-9]{1,10}$/,
+        "x-bapi-limit-status": /^[0-9]{1,10}$/, "x-bapi-limit-reset-timestamp": /^[0-9]{1,16}$/ };
+      for (const [key, pattern] of Object.entries(rules)) {
+        const value = observed.response?.headers.get(key);
+        if (value && pattern.test(value)) safeHeaders[key] = value;
+      }
+      const record = {
+        schema: "hunter_bybit_request_observation_v1", layer: "bybit_upstream",
+        job: path === "/v5/market/kline" ? "early_klines" : path === "/v5/market/tickers" ? "tickers" : "spot",
+        upstream_job_index: jobIndex,
+        symbol: symbolPattern.test(params.symbol || "") ? params.symbol : null,
+        interval: ["15", "60"].includes(params.interval) ? params.interval : null,
+        started_at_utc: new Date(started).toISOString(), completed_at_utc: new Date(Date.now()).toISOString(),
+        duration_ms: Math.max(0, Math.round(performance.now() - monotonic)),
+        http_status: observed.response?.status || 0, ret_code: observed.retCode ?? null,
+        worker_request_id: requestId, worker_build: BUILD, headers: safeHeaders, root_cause: "UNKNOWN"
+      };
+      // Optional transport-only metadata reaches the existing Python journal
+      // reader even when Cloudflare console retention is unavailable.
+      if (observations && observations.length < 40) observations.push(record);
+      console.log("HUNTER_BYBIT_REQUEST_OBSERVATION " + JSON.stringify(record));
+    } catch { /* Observation failures must not change market results. */ }
+  }
+}
+
+async function upstreamRequest(path, params, signal, requestId, observed) {
   const url = new URL("https://api.bybit.com" + path);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
   let response;
@@ -65,6 +99,7 @@ async function upstream(path, params, signal, requestId) {
     response = await fetch(url, {
       headers: { "User-Agent": "Hunter-Bybit-Proxy/2.0", "Accept": "application/json" }, signal
     });
+    observed.response = response;
   } catch (error) {
     const timeout = error?.name === "AbortError";
     const wrapped = evidenceError(timeout ? "upstream aborted" : "WORKER_KLINE_FAILURE",
@@ -72,7 +107,11 @@ async function upstream(path, params, signal, requestId) {
     if (timeout) wrapped.name = "AbortError";
     throw wrapped;
   }
-  if (!response.ok) throw evidenceError("BYBIT_HTTP_" + response.status, await httpEvidence(response, requestId));
+  if (!response.ok) {
+    const evidence = await httpEvidence(response, requestId);
+    observed.retCode = evidence.ret_code;
+    throw evidenceError("BYBIT_HTTP_" + response.status, evidence);
+  }
   let data;
   try { data = await response.json(); }
   catch (error) {
@@ -83,6 +122,7 @@ async function upstream(path, params, signal, requestId) {
     if (kind === "timeout") wrapped.name = "AbortError";
     throw wrapped;
   }
+  observed.retCode = Number.isSafeInteger(data?.retCode) && Math.abs(data.retCode) <= 9999999999 ? data.retCode : null;
   if (data?.retCode !== 0 || data.result?.category !== "spot") {
     const code = Number.isSafeInteger(data?.retCode) && Math.abs(data.retCode) <= 9999999999 ? data.retCode : "INVALID";
     throw new Error("BYBIT_RET_" + code);
@@ -112,11 +152,14 @@ export default {
       if (symbol !== null) params.symbol = symbol;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
+      const observations = [];
       try {
         const path = url.pathname === "/bybit/spot" ? "/v5/market/instruments-info" : "/v5/market/tickers";
-        return reply(await upstream(path, params, controller.signal, requestId), 200, diagnosticHeaders);
+        const data = await upstream(path, params, controller.signal, requestId, observations);
+        return reply({ ...data, request_observations: observations }, 200, diagnosticHeaders);
       } catch (error) {
         return reply({ ok: false, error: "BYBIT_FETCH_FAILED", detail: String(error),
+          request_observations: observations,
           ...(error.httpEvidence ? { diagnostics: error.httpEvidence } : {}) }, 502, diagnosticHeaders);
       } finally { clearTimeout(timer); }
     }
@@ -139,13 +182,14 @@ export default {
         { symbol, interval: "60", limit: 5 }, { symbol, interval: "15", limit: 25 }
       ]);
       const klines = {}; const failures = {}; const failureDiagnostics = {}; let index = 0;
+      const observations = [];
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45000);
       const one = async () => {
         while (index < jobs.length) {
-          const job = jobs[index++];
+          const jobIndex = index++; const job = jobs[jobIndex];
           try {
-            const data = await upstream("/v5/market/kline", { category: "spot", ...job, end: body.end }, controller.signal, requestId);
+            const data = await upstream("/v5/market/kline", { category: "spot", ...job, end: body.end }, controller.signal, requestId, observations, jobIndex);
             if (data.result.symbol !== job.symbol || !Array.isArray(data.result.list) || data.result.list.length !== job.limit) throw new Error("INCOMPLETE_KLINE");
             (klines[job.symbol] ||= {})[job.interval] = data;
           } catch (error) {
@@ -156,7 +200,8 @@ export default {
       };
       try { await Promise.all(Array.from({ length: 4 }, one)); }
       finally { clearTimeout(timer); }
-      return reply({ retCode: 0, retMsg: "OK", time: Date.now(), result: { category: "spot", end: body.end, klines, failures,
+      return reply({ retCode: 0, retMsg: "OK", time: Date.now(), request_observations: observations,
+        result: { category: "spot", end: body.end, klines, failures,
         ...(Object.keys(failureDiagnostics).length ? { failure_diagnostics: failureDiagnostics } : {}) } }, 200, diagnosticHeaders);
     }
 
