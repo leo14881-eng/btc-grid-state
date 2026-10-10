@@ -1,0 +1,22 @@
+name: Shadow Readonly Artifact Tests
+on:
+  pull_request:
+    paths:
+      - 'scripts/shadow_readonly_artifacts.py'
+      - 'tests/test_shadow_readonly_artifacts.py'
+      - '.github/workflows/shadow-readonly-artifacts-tests.yml'
+  push:
+    branches: ['codex/shadow-readonly-artifacts-20261010']
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -B -m unittest discover -s tests -p 'test_shadow_readonly_artifacts.py' -v
+      - run: python -B -m unittest discover -s tests -p 'test_hunter_trade_notifications.py' -v
