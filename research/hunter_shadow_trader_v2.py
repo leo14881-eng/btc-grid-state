@@ -5,6 +5,7 @@ try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research import hunter_tail_risk as tail
  from research import hunter_lifecycle_state as lifecycle
+ from research import hunter_reentry as reentry
  from research.hunter_execution_identity import identity_fields
  from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 except ModuleNotFoundError as exc:
@@ -12,6 +13,7 @@ except ModuleNotFoundError as exc:
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  import hunter_tail_risk as tail
  import hunter_lifecycle_state as lifecycle
+ import hunter_reentry as reentry
  from hunter_execution_identity import identity_fields
  from hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 ROOT=pathlib.Path("research/results")
@@ -642,37 +644,17 @@ def update_loss_exit_guard(state,pnl,reason,now,released_notional=0.0):
  g["updated_at_utc"]=now.isoformat()
  tail.record_loss_exit(state,pnl,reason,released_notional,now,C)
 
-def register_exit_for_reentry(state,pos,p,reason,now):
+def register_exit_for_reentry(state,pos,p,reason,now,candidate=None,scan=None,book=None):
  reg=state.setdefault("reentry_registry",{})
  pnl=round(float(pos.get("net_pnl_usdt") or 0),2);risk_lock=bool(pnl<0 or reason=="HARD_INVALIDATION")
  reg[pos["asset"]]={"last_exit_at_utc":now.isoformat(),"last_exit_price":p,"last_exit_reason":reason,
   "last_exit_pnl_usdt":pnl,"post_exit_low":p,"reset_seen":False,"state":"POST_EXIT_OBSERVATION",
   "risk_lock":risk_lock,"risk_lock_observation_id":((state.get("systemic_risk") or {}).get("last_observation_id"))}
+ reentry.capture(reg[pos['asset']],pos,candidate,scan,book)
 
-def reentry_allowed(state,c,p):
- row=(state.get("reentry_registry") or {}).get((c or {}).get("asset"))
- if not row:return True,["FIRST_ENTRY"]
- if row.get("risk_lock"):
-  risk=state.get("systemic_risk") or {};cb=state.get("circuit_breaker") or {}
-  meta=(c or {}).get("signal_evidence") or {}
-  fresh_after_exit=False
-  try:fresh_after_exit=bool(meta.get("evidence_id") and meta.get("observed_at_utc") and parse(meta["observed_at_utc"])>parse(row.get("last_exit_at_utc")))
-  except Exception:fresh_after_exit=False
-  if risk.get("level")!="NORMAL" or risk.get("recovery_mode") or cb.get("status") not in (None,"NORMAL") or not fresh_after_exit:
-   row["state"]="REENTRY_LOCK";return False,["REENTRY_LOCK_TAIL_RISK","MARKET_AND_CIRCUIT_RECOVERY_REQUIRED","FRESH_POST_EXIT_SIGNAL_REQUIRED"]
-  row["risk_lock"]=False;row["risk_unlock_observation_id"]=risk.get("last_observation_id")
- ep=finite(row.get("last_exit_price"))
- if not ep:return False,["REENTRY_EXIT_PRICE_MISSING"]
- row["post_exit_low"]=min(finite(row.get("post_exit_low")) or p,p)
- s=sig(c);ind=int(s.get("independent_signal_count") or 0);r1=finite(s.get("btc_relative_1h_pct"));r4=finite(s.get("btc_relative_4h_pct"));acc=finite(s.get("relative_acceleration_pct"))
- if ind<DISCOVERY_MIN_INDEPENDENT or ((r1 is not None and r1<0) and (r4 is not None and r4<0)):row["reset_seen"]=True
- pullback=(ep-row["post_exit_low"])/ep*100
- fresh_strength=ind>=DISCOVERY_MIN_INDEPENDENT and acc is not None and acc>0 and ((r1 is not None and r1>0) or (r4 is not None and r4>0))
- breakout=p>=ep*(1+REENTRY_BREAKOUT_PCT/100)
- reset=bool(row.get("reset_seen")) or pullback>=REENTRY_PULLBACK_PCT
- if reset and fresh_strength and breakout:
-  row["state"]="REENTRY_ELIGIBLE";return True,["NEW_MOVE_CONFIRMED","RESET_OR_PULLBACK_SEEN","FRESH_RELATIVE_STRENGTH","BREAKOUT_ABOVE_EXIT"]
- row["state"]="REENTRY_BLOCKED_SAME_MOVE";return False,["REENTRY_BLOCKED_SAME_MOVE"]
+def reentry_allowed(state,c,p,scan=None,liq=None,supply=None,now=None,identity=None):
+ import sys
+ return reentry.evaluate(sys.modules[__name__],state,c,p,scan,liq,supply,now or dt.datetime.now(dt.timezone.utc),identity)
 
 def compact_closed_history(state):
  closed=state.get("closed_positions") or []
@@ -710,6 +692,9 @@ def trade_event(state,pos,action,now,p,reason=None,pnl=None):
  event={"type":EVENT_PREFIX+"_"+action,"at":now.isoformat(),"asset":pos["asset"],"shadow_id":pos.get("shadow_id"),"price":p,
   "generation_id":state.get('active_observation_generation_id'),
   "tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0}
+ if action=="BUY":
+  for key in ("strategy_version","strategy_note","strategy_components"):
+   if key in pos:event[key]=pos[key]
  if reason is not None:event["reason"]=reason
  if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
  if EVENT_PREFIX=='SHADOW_V2' and pos.get('execution_venue'):
@@ -867,7 +852,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
     pos['protection_lifecycle']['state']='EXITED'
     pos['protection_lifecycle'].update(exited_at_utc=now.isoformat(),exited_generation_id=scan.get('generation_id'))
     pos['exit_execution_estimate']=execution
-   pos.update(exit_analysis(pos,p,exit_reason));refresh_post_exit_status(pos,now);update_loss_exit_guard(state,pnl,exit_reason,now,notion);register_exit_for_reentry(state,pos,p,exit_reason,now)
+   pos.update(exit_analysis(pos,p,exit_reason));refresh_post_exit_status(pos,now);update_loss_exit_guard(state,pnl,exit_reason,now,notion);register_exit_for_reentry(state,pos,p,exit_reason,now,c,scan,liq_for(liq,pos["asset"]).get("raw_book_evidence"))
    record(state,pos,"EXIT",now,exit_reasons,e,p);trade_event(state,pos,"SELL",now,p,exit_reason,pnl);state["closed_positions"].append(pos);continue
   still.append(pos)
  state["open_positions"]=still;compact_closed_history(state);return state
@@ -896,11 +881,13 @@ def execute_capital_proposals(state,proposals,scan,now):
   ok,gate_reasons=marginal_capital_gate(state,amount,e,kind,scan)
   if not ok:
    if kind=="BUY" and q.get("candidate") is not None:record_deferred_buy(state,q["candidate"],now,p,e,scan)
-   record(state,pos if kind=="ADD" else {"asset":q["asset"],"tranches":[]},"HOLD",now,gate_reasons+["CAPITAL_ALLOCATOR_WAIT"],e,p);continue
+   record(state,pos if kind=="ADD" else {"asset":q["asset"],"tranches":[]},"HOLD",now,gate_reasons+["CAPITAL_ALLOCATOR_WAIT"]+(["REENTRY_CAPITAL_INSUFFICIENT"] if kind=="BUY" and q["asset"] in (state.get("reentry_registry") or {}) else []),e,p);continue
   reserve_amount=max(0,amount-max(0,17000-reserve_snapshot(state)['ordinary_used'])) if CAPITAL_POOL_USDT is not None else 0
   if kind=="ADD":
    add(pos,p,e,now);record(state,pos,"ADD",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"ADD",now,p,"PORTFOLIO_ALLOCATOR_ADD")
   else:
+   import sys
+   pos.update(reentry.buy_annotation(sys.modules[__name__],state))
    add(pos,p,e,now)
    book=q.get('entry_book') or {}
    admit_execution_identity(pos,book,lifecycle.liquidation(pos,book,now,FEE_BPS),scan,now,entry=True)
@@ -984,6 +971,7 @@ def main():
   print(json.dumps({"status":"SHADOW_STRATEGY_FREEZE","strategy":STRATEGY_ID,"writes":0,"capital_pool_usdt":CAPITAL_POOL_USDT}))
   return
  now=dt.datetime.now(dt.timezone.utc);scan=load(SCAN);review=load(REVIEW);liq=load(LIQ);supply=load(SUPPLY);bybit=load(BYBIT,{})
+ identity=load(ROOT/"hunter-identity-audit.json",{})
  if review.get("policy_version")!=VERSION:raise SystemExit("SHADOW_INPUT_POLICY_MISMATCH")
  if not scan.get("binance_complete") or review.get("scan_generation_id")!=scan.get("generation_id"):raise SystemExit("V2_INPUT_GENERATION_MISMATCH")
  btc=price(scan,"BTC")
@@ -1013,24 +1001,29 @@ def main():
     rows.append({"at_utc":now.isoformat(),"asset":a,"price":p,"signal_evidence":c.get("signal_evidence"),"systemic_risk":state.get("systemic_risk"),"would_be_discovery":discovery_decision(c)[0]=="BUY","capital_authority":"NONE_SHADOW_ONLY"})
     state["risk_blocked_samples"]=rows[-MAX_DEFERRED_HISTORY:]
    continue
-  re_ok,re_reasons=reentry_allowed(state,c,p) if p else (False,["CURRENT_PRICE_MISSING"])
+  re_ok,re_reasons=reentry_allowed(state,c,p,scan,liq,supply,now,identity) if p else (False,["CURRENT_PRICE_MISSING"])
   if not re_ok:
-   record(state,{"asset":a,"tranches":[]},"WAIT",now,re_reasons,{},p);continue
+   record(state,{"asset":a,"tranches":[]},"WAIT",now,re_reasons,{"reentry":reentry.audit(state,a)},p);continue
   broad,broad_reasons=discovery_decision(c);fallback,reasons,e=decision(c,scan,liq,supply,"ENTRY")
   act=authoritative_entry_action(c,fallback)
+  is_reentry=a in (state.get('reentry_registry') or {})
+  if is_reentry:e['reentry']=reentry.audit(state,a)
+  if is_reentry and ENTRY_MODE=="EXECUTABLE" and fallback!="BUY":
+   record(state,{"asset":a,"tranches":[]},"REJECT",now,["REENTRY_BUY_REVIEW_FAILED"]+reasons,e,p);continue
   if not entry_allowed(ENTRY_MODE,broad,p,act):
    if broad!="BUY": reject_reasons=broad_reasons
    elif not p: reject_reasons=["CURRENT_PRICE_MISSING"]
    elif ENTRY_MODE=="EXECUTABLE" and act in ("WAIT","SYSTEM_BLOCKED"):
     reject_reasons=[act]+list(c.get("research_gaps") or [])+list(c.get("blockers") or [])
    else: reject_reasons=reasons
-   dummy={"asset":a,"tranches":[]};record(state,dummy,act if act in ("WAIT","SYSTEM_BLOCKED") else "REJECT",now,reject_reasons,e,p);continue
+   dummy={"asset":a,"tranches":[]};record(state,dummy,act if act in ("WAIT","SYSTEM_BLOCKED") else "REJECT",now,(["REENTRY_BUY_REVIEW_FAILED"] if is_reentry else [])+reject_reasons,e,p);continue
   pos={"shadow_id":ID_PREFIX+"-"+now.strftime("%Y%m%dT%H%M%S")+"-"+a+"-"+uuid.uuid4().hex[:6],"asset":a,"opened_at_utc":now.isoformat(),
    "scan_generation_id":scan["generation_id"],"btc_entry_price":btc,"tranches":[],"mfe_pct":0.,"mae_pct":0.,"holding_mfe_pct":0.,"holding_peak_price":p,"holding_peak_at_utc":now.isoformat(),"full_opportunity_mfe_pct":0.,"full_opportunity_peak_price":p,"full_opportunity_peak_at_utc":now.isoformat(),"observation_complete":False,"sample_cohort":("NEW_VERSION_SAMPLE" if now>=NEW_VERSION_CUTOFF_UTC else "MIGRATION_SAMPLE"),"data_provenance":"LIVE_OBSERVATION","last_price":p,
    "last_marked_at_utc":now.isoformat(),"capital_authority":"NONE_SHADOW_ONLY",
    "discovery_gate":"BROAD_FORWARD_SAMPLE","execution_channel":bybit_channel(bybit,a),
    "executable_gate":{"pass":act=="BUY","reasons":reasons,"source":"CAPITAL_REVIEW_FINAL_ACTION","purpose":"SINGLE_AUTHORITATIVE_ENTRY_DECISION"}}
   entry_reasons=(broad_reasons if ENTRY_MODE=="DISCOVERY" else reasons)
+  if is_reentry:entry_reasons=list(entry_reasons)+re_reasons
   capital_proposals.append({"kind":"BUY","asset":a,"pos":pos,"price":p,"evidence":e,"reasons":list(entry_reasons),"amount":TRANCHES[0],"candidate":c,"entry_book":liq_for(liq,a).get('raw_book_evidence',{})})
   open_assets.add(a)
  buy_count=execute_capital_proposals(state,capital_proposals,scan,now)
