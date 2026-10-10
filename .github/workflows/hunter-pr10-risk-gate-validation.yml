@@ -1,0 +1,34 @@
+name: Hunter PR10 Risk Gate Validation
+on:
+  push:
+    branches:
+      - fix/circuit-contract-20261010
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile Hunter modules
+        run: python -m py_compile research/hunter_tail_risk.py research/hunter_shadow_trader_v2.py research/hunter_position_monitor.py research/hunter_leading_risk.py
+      - name: Run Hunter regression suite
+        run: python -m unittest discover -s tests -p 'test_hunter*.py' -v
+      - name: Verify shadow-only invariants
+        run: |
+          python - <<'PY'
+          import json
+          rules=json.load(open('research/results/hunter-shadow-rules.json'))
+          assert rules['lanes']['V2']['capital_pool_usdt']==20000
+          assert rules['capital_authority']=='NONE_SHADOW_ONLY'
+          assert rules['tail_risk_phase1']['real_trading_enabled'] is False
+          print('PR10_SHADOW_INVARIANTS_OK')
+          PY
