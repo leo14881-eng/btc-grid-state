@@ -22,7 +22,7 @@ class ProfitProtectionAuditTests(unittest.TestCase):
    life.protect(pos,peak,eng.net_pnl(pos,peak),life.liquidation(pos,book(peak,before),before),before,'prior-real-fixture',before.isoformat())
   scan={"generation_id":"audit-generation","as_of_utc":now.isoformat(),"coins":{"ENA":{"reference_price":price}}}
   liq={'snapshots':{'ENA':{'raw_book_evidence':book(price,now)}}}
-  with patch.object(eng,"ensure_opportunity_observation"),patch.object(eng,"decision",return_value=("HOLD",[],{})),patch.object(eng,"position_health",return_value=(health,[])),patch.object(eng,"refresh_post_exit_status"),patch.object(eng,"exit_analysis",return_value={}):
+  with patch.object(eng,"ensure_opportunity_observation"),patch.object(eng,"decision",return_value=("HOLD",[],{})),patch.object(eng.lifecycle_v2,'enrich',return_value=({},True)),patch.object(eng,"position_health",return_value=(health,[])),patch.object(eng,"refresh_post_exit_status"),patch.object(eng,"exit_analysis",return_value={}):
    eng.manage_existing_positions(state,scan,{}, liq,{},now)
   return state,pos
 

@@ -20,14 +20,14 @@ class PositionMonitorTests(unittest.TestCase):
   state={"mode":"SIMULATION_ONLY_NO_REAL_ORDERS","open_positions":[{"shadow_id":"X1","asset":"X","opened_at_utc":"2026-10-01T00:00:00+00:00","btc_entry_price":100,"tranches":[{"price":100,"notional_usdt":1000,"buy_slippage_bps":0,"at":"2026-10-03T23:30:00+00:00","signal_evidence_id":"old-evidence","signal_generation_id":"old-generation"}],"mfe_pct":0,"mae_pct":0}],"closed_positions":[],"events":[],"decisions":[],"systemic_risk":{"level":"NORMAL","raw_level":"NORMAL","last_observation_id":"fixture-risk","risk_release_fraction":1.0,"recovery_mode":False}}
   market={"BTC":{"reference_price":100,"change_24h_pct":0},"X":{"reference_price":price,"change_24h_pct":0}}
   review={"candidates":[{"asset":"X","signal":{"score":12,"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1,"return_1h_pct":3},"execution_scenario":{"buy_slippage_bps":10,"estimated_rr":2},"blockers":[]}]}
-  review["candidates"][0]["signal_evidence"]=m.eng.stamp("X","fixture","2026-10-04T00:00:00+00:00")
+  review["candidates"][0]["signal_evidence"]=m.eng.stamp("X","MONITOR_20261004T000000000000Z","2026-10-04T00:00:00+00:00")
   liq={"snapshots":{"X":{"as_of_utc":"2026-10-04T00:00:00+00:00","spread_bps":10,"bid_depth_2pct_usdt":50000,"ask_depth_2pct_usdt":50000}}};supply={}
   return state,market,review,liq,supply
  def test_shared_manager_can_add_but_never_create_new_asset(self):
   state,market,review,liq,supply=self.fixture()
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/"s.json";m.eng.atomic_json_write(p,state)
-   with patch.object(m.v1,"configure_v1",lambda:None):
+   with patch.object(m.v1,"configure_v1",lambda:None),patch.object(m.eng,'ENTRY_MODE','DISCOVERY'):
     out=m.run_lane(p,"V1",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),True)
    saved=m.load(p);summary=m.load(p.with_name(p.stem+"-summary.json"));self.assertEqual([x["asset"] for x in saved["open_positions"]],["X"]);self.assertEqual(len(saved["open_positions"][0]["tranches"]),2);self.assertEqual(out["added"],["X"]);self.assertEqual(summary["open_positions"],1);self.assertEqual(summary["closed_positions"],0)
  def test_v2_monitor_defers_add_to_full_capital_allocator(self):

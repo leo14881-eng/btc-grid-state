@@ -65,7 +65,10 @@ def micro(symbols):
         hi24=max(highs[-24:]); lo24=min(lows[-24:])
         range_pos=(closes[-1]-lo24)/(hi24-lo24) if hi24>lo24 else .5
         return sym,{"volume_acceleration":vol_accel,"compression_ratio":compression,
-                    "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos}
+                    "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos,
+                    "v2_candle_receipt":{"schema":"hunter_v2_candles_v1","exchange":"binance","market":"spot",
+                        "symbol":sym,"interval":"15m","fetched_at":dt.datetime.now(dt.timezone.utc).isoformat(),
+                        "source":"/api/v3/klines","rows":rows}}
     out={}
     with ThreadPoolExecutor(max_workers=64) as ex:
         futs={ex.submit(one,s):s for s in symbols}

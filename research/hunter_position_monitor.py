@@ -107,7 +107,7 @@ def refresh_management_evidence(states,market,review,liq,now):
  selected,next_cursor=management_selection(states,cursor,C["MONITOR_EVIDENCE_BATCH"])
  pairs=[a+"USDT" for a in selected]+["BTCUSDT"]
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
- current={};failures={};raw_books={}
+ current={};failures={};raw_books={};micro={}
  try:
   r1=timed("evidence_1h",signals.rolling,pairs,"1h");r4=timed("evidence_4h",signals.rolling,pairs,"4h");micro=timed("evidence_micro",signals.micro,pairs)
   for a in selected:
@@ -134,6 +134,8 @@ def refresh_management_evidence(states,market,review,liq,now):
     raw_books[a]=snapshot["raw_book_evidence"]
     c=by.setdefault(a,{"asset":a,"blockers":[]})
     c["signal"]=current[a];c["signal_evidence"]=stamp(a,generation,now.isoformat())
+    if any(p.get('asset')==a for st in states[1:] for p in st.get('open_positions',[])):
+     c['v2_lifecycle_evidence']={'generation_id':generation,'micro_receipt':(micro.get(a+'USDT') or {}).get('v2_candle_receipt')}
     c["execution_scenario"]=snapshot["execution_scenarios"].get("3000",{})
     # Old microstructure failures must be replaced by this fresh snapshot.
     market_flags={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","SPREAD_EXCEEDS_50_BPS","DEPTH_BELOW_30K_USDT","BTC_RELATIVE_SIGNAL_MISSING","SIGNAL_EVIDENCE_STALE"}
@@ -145,6 +147,8 @@ def refresh_management_evidence(states,market,review,liq,now):
  review["candidates"]=list(by.values())
  return review,liq,{"generation_id":generation,"observed_at_utc":now.isoformat(),"attempted":selected,"failures":failures,
                    "observed_raw_books":raw_books,
+                   "v2_lifecycle_observations":{a:{'signal':by[a].get('signal'),'signal_evidence':by[a].get('signal_evidence'),
+                     'lifecycle_evidence':by[a].get('v2_lifecycle_evidence')} for a in selected if by.get(a,{}).get('v2_lifecycle_evidence')},
                    "evidence_refresh_cursor":next_cursor,"policy_version":VERSION}
 
 def main():

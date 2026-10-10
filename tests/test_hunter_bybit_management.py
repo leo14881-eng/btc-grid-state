@@ -112,7 +112,9 @@ class BybitManagementTests(unittest.TestCase):
                 else:packet['generation_id']='older'
                 before=copy.deepcopy(self.position)
                 self.manage(packet_scan)
-                self.assertEqual(self.position,before)
+                self.assertEqual({k:v for k,v in self.position.items() if k!='last_monitor_decision'},
+                                 {k:v for k,v in before.items() if k!='last_monitor_decision'})
+                self.assertEqual(self.position['last_monitor_decision']['action'],'HOLD')
                 self.assertEqual(self.state['events'],[])
 
     def test_binance_management_continues_when_bybit_failed(self):
@@ -154,7 +156,9 @@ class BybitManagementTests(unittest.TestCase):
         scan,_=self.scan('monitor-g2')
         scan['venue_management']['BYBIT_SPOT']['XUSDT']['market_source_timestamp']=int(NOW.timestamp()*1000)
         self.manage(scan)
-        self.assertEqual(self.position,previous)
+        self.assertEqual({k:v for k,v in self.position.items() if k!='last_monitor_decision'},
+                         {k:v for k,v in previous.items() if k!='last_monitor_decision'})
+        self.assertEqual(self.position['last_monitor_decision']['thesis_status'],'EVIDENCE_PENDING')
 
     def test_monitor_persists_and_restart_preserves_armed_and_evidence(self):
         scan,_=self.scan()

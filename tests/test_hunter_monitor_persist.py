@@ -39,6 +39,26 @@ def fixture():
 
 
 class ValidationTests(unittest.TestCase):
+    def test_per_position_receipt_and_summary_are_generation_bound(self):
+        from research.hunter_lifecycle_v2 import projection
+        docs={k:json.loads(v) for k,v in fixture().items()}
+        p=docs['hunter-shadow-v2-portfolio.json'];p['last_cycle_generation_id']='monitor-input'
+        pos=p['open_positions'][0]
+        pos['last_monitor_decision']=dict(schema='hunter_v2_monitor_decision_v1',generation_id='monitor-input',
+            checked_at=GEN,action='HOLD',reasons=['NO_EXIT_CONDITION'],thesis_status='WEAKENING',
+            capital_authority='NONE_SHADOW_ONLY',real_trading_enabled=False)
+        s=docs['hunter-shadow-v2-summary.json'];s['position_monitor_states']=[projection(pos)]
+        docs['hunter-position-monitor.json']['evidence_refresh']={'generation_id':'monitor-input'}
+        raw=lambda:{k:json.dumps(v) for k,v in docs.items()}
+        self.assertEqual(m.validate(raw(),GEN),[1,1])
+        for field,value in [('generation_id','other'),('reasons',[]),('real_trading_enabled',True)]:
+            with self.subTest(field=field):
+                before=pos['last_monitor_decision'][field];pos['last_monitor_decision'][field]=value
+                with self.assertRaisesRegex(RuntimeError,'V2_MONITOR_DECISION'):m.validate(raw(),GEN)
+                pos['last_monitor_decision'][field]=before
+        s['position_monitor_states'][0]['last_monitor_action']='SELL'
+        with self.assertRaisesRegex(RuntimeError,'V2_MONITOR_PROJECTION'):m.validate(raw(),GEN)
+
     def test_valid_snapshot(self):
         self.assertEqual(m.validate(fixture(), GEN), [1, 1])
 

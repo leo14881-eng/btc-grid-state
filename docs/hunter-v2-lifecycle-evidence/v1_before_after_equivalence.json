@@ -1,0 +1,134 @@
+{
+  "schema": "hunter_v1_before_after_equivalence_v1",
+  "baseline_sha": "92cb9de49743044a65fa8a0aecc16e4f256cb1dd",
+  "scope": "Synthetic offline V1 lifecycle, persistence and summary outputs; not production execution proof",
+  "all_identical": true,
+  "cases": [
+    {
+      "case": "duplicate",
+      "identical": true,
+      "baseline_sha256": "ffecf0f092a896f17c53fabf0d1acaed72bba325cb1a5b64a9c5599358ff51a5",
+      "modified_sha256": "ffecf0f092a896f17c53fabf0d1acaed72bba325cb1a5b64a9c5599358ff51a5",
+      "final_open": 1,
+      "final_events": [
+        {
+          "asset": "X",
+          "at": "2026-10-04T00:00:00+00:00",
+          "generation_id": "same",
+          "notional_usdt": 2000,
+          "price": 90.0,
+          "reason": "MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION",
+          "shadow_id": "SHV1-synthetic-equivalence",
+          "tranches": 2,
+          "type": "SHADOW_V1_ADD"
+        }
+      ]
+    },
+    {
+      "case": "hard_loss",
+      "identical": true,
+      "baseline_sha256": "8dc7f762b646a4137585a5190834d4d70a1186c9c74c993e7b67bc5b5b03d219",
+      "modified_sha256": "8dc7f762b646a4137585a5190834d4d70a1186c9c74c993e7b67bc5b5b03d219",
+      "final_open": 0,
+      "final_events": [
+        {
+          "asset": "X",
+          "at": "2026-10-04T00:00:00+00:00",
+          "generation_id": "tick0",
+          "net_pnl_usdt": -101.8,
+          "notional_usdt": 1000,
+          "price": 90.0,
+          "reason": "HARD_INVALIDATION",
+          "shadow_id": "SHV1-synthetic-equivalence",
+          "tranches": 1,
+          "type": "SHADOW_V1_SELL"
+        }
+      ]
+    },
+    {
+      "case": "missing_candidate",
+      "identical": true,
+      "baseline_sha256": "2fb737137e01637693bd44d47f83dd4b9c6951d4b51c7dce9c07997080428c5e",
+      "modified_sha256": "2fb737137e01637693bd44d47f83dd4b9c6951d4b51c7dce9c07997080428c5e",
+      "final_open": 1,
+      "final_events": []
+    },
+    {
+      "case": "missing_price",
+      "identical": true,
+      "baseline_sha256": "10eb99394f5cee7a3b28c5ea246fe73e6ff996740c7e6ab996efe24a8d757289",
+      "modified_sha256": "10eb99394f5cee7a3b28c5ea246fe73e6ff996740c7e6ab996efe24a8d757289",
+      "final_open": 1,
+      "final_events": []
+    },
+    {
+      "case": "ordinary_loss",
+      "identical": true,
+      "baseline_sha256": "7b1f67379f9d87a0bb11d5b98857460f50f4a355fa70922d00583ea3341d4845",
+      "modified_sha256": "7b1f67379f9d87a0bb11d5b98857460f50f4a355fa70922d00583ea3341d4845",
+      "final_open": 1,
+      "final_events": []
+    },
+    {
+      "case": "profit_protection",
+      "identical": true,
+      "baseline_sha256": "c9e1d4a594f33f38c70e7274c67f467f39d6f37beaa1df6bb5b66d93a1fce186",
+      "modified_sha256": "c9e1d4a594f33f38c70e7274c67f467f39d6f37beaa1df6bb5b66d93a1fce186",
+      "final_open": 0,
+      "final_events": [
+        {
+          "asset": "X",
+          "at": "2026-10-04T00:05:00+00:00",
+          "generation_id": "tick1",
+          "net_pnl_usdt": 2.99,
+          "notional_usdt": 1000,
+          "price": 100.5,
+          "reason": "PROFIT_PROTECTION",
+          "shadow_id": "SHV1-synthetic-equivalence",
+          "tranches": 1,
+          "type": "SHADOW_V1_SELL"
+        }
+      ]
+    },
+    {
+      "case": "stale_evidence",
+      "identical": true,
+      "baseline_sha256": "56c4b971f74906a6191304d606d23537ccdb94df10e67cda2b05fc88781a5a32",
+      "modified_sha256": "56c4b971f74906a6191304d606d23537ccdb94df10e67cda2b05fc88781a5a32",
+      "final_open": 1,
+      "final_events": []
+    },
+    {
+      "case": "strong_add",
+      "identical": true,
+      "baseline_sha256": "edb8d25c7aba90d1d9c103f0ced1f58f69b045c5a9f70231a64a763ead055172",
+      "modified_sha256": "edb8d25c7aba90d1d9c103f0ced1f58f69b045c5a9f70231a64a763ead055172",
+      "final_open": 1,
+      "final_events": [
+        {
+          "asset": "X",
+          "at": "2026-10-04T00:00:00+00:00",
+          "generation_id": "tick0",
+          "notional_usdt": 2000,
+          "price": 90.0,
+          "reason": "MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION",
+          "shadow_id": "SHV1-synthetic-equivalence",
+          "tranches": 2,
+          "type": "SHADOW_V1_ADD"
+        }
+      ]
+    }
+  ],
+  "source_sha256": {
+    "baseline": {
+      "research/hunter_early_signals.py": "b9a0faf51ad787dbe33593af959bb64d2dd9f40907b195397a36a827ef2fa759",
+      "research/hunter_shadow_trader_v2.py": "b0fabc3e007ec97ecfe7fef72404242ecad571f3f7ee21a8a18ea2010693f8f9",
+      "research/hunter_position_monitor.py": "51816b5c2e8a5e3f654f4e232384d21a1c5c2956724d3b7306d7d534e0b6bb35"
+    },
+    "modified": {
+      "research/hunter_early_signals.py": "bff2dce87afdafa5b91398dbe6d881bf598a1ff7202c21735bbe4b7c918e499f",
+      "research/hunter_shadow_trader_v2.py": "d47dcb2d3fd14b44080f6cf915eb9ae4dd98debc873c112a9f41cd9ba4b4c307",
+      "research/hunter_position_monitor.py": "ecfe89b6b1c390546b6cfab89db4fa35e6b2ede99414976126ea4bf073cab002"
+    }
+  }
+}

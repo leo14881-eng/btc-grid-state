@@ -151,6 +151,7 @@ class CircuitProductionPathTests(unittest.TestCase):
                 with self.subTest(status=status, lane=lane), self.isolate():
                     now, state, scan, review, liq, supply, _ = self.fixture(status)
                     review['candidates'][0]['blockers'] = ['CONTRACT_MISMATCH']
+                    review['as_of_utc'] = now.isoformat()
                     monitor.configure_lane(lane == 'V1')
                     eng.manage_existing_positions(state, scan, review, liq, supply, now)
                     self.assertEqual(state['open_positions'], [])

@@ -97,6 +97,23 @@ def validate(raw, generation):
                             and amount > 0, 'V2_INVALID_TRANCHE_NOTIONAL')
                     exposure += amount
             require(exposure <= 20000.000001, 'V2_EXPOSURE_HARD_CAP_EXCEEDED')
+            # New receipts are optional only for legacy publishers. Once present,
+            # each position and the public projection must belong to this cycle.
+            if 'position_monitor_states' in s:
+                from research.hunter_lifecycle_v2 import projection
+                current = (monitor.get('evidence_refresh') or {}).get('generation_id')
+                require(bool(current) and current == p.get('last_cycle_generation_id'),
+                        'V2_MONITOR_AUDIT_GENERATION_MISMATCH')
+                for position in opened:
+                    decision = position.get('last_monitor_decision') or {}
+                    require(decision.get('schema') == 'hunter_v2_monitor_decision_v1'
+                            and decision.get('generation_id') == current
+                            and decision.get('capital_authority') == 'NONE_SHADOW_ONLY'
+                            and decision.get('real_trading_enabled') is False
+                            and bool(decision.get('reasons')) and bool(decision.get('checked_at')),
+                            'V2_MONITOR_DECISION_MISSING_OR_MIXED')
+                require(s['position_monitor_states'] == [projection(position) for position in opened],
+                        'V2_MONITOR_PROJECTION_MISMATCH')
         counts.append(len(opened))
     return counts
 
