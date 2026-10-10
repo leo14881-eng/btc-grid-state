@@ -21,6 +21,35 @@ OUT=ROOT/"hunter-health-and-queue.json"
 def parse(s):
     return dt.datetime.fromisoformat(s.replace("Z","+00:00"))
 
+def signal_coverage(scan):
+    """Expose scan evidence without changing ticker semantics or capital gates."""
+    venues=scan.get("venue_status")
+    bybit=venues.get("bybit") if isinstance(venues,dict) else None
+    bybit=bybit if isinstance(bybit,dict) else {}
+    def count(value):
+        return value if type(value) is int and value>=0 else None
+    def flag(value):
+        return value if type(value) is bool else None
+    bases=bybit.get("signal_expected_bases")
+    expected=(len(bases) if isinstance(bases,list)
+              and all(isinstance(x,str) and x for x in bases)
+              and len(set(bases))==len(bases) else None)
+    available=count(bybit.get("signal_pairs"))
+    missing=(expected-available if expected is not None and available is not None
+             and available<=expected else None)
+    complete=flag(scan.get("complete"))
+    signals=flag(scan.get("bybit_signal_complete"))
+    partial=complete is False or signals is False or (missing is not None and missing>0)
+    status="PARTIAL_DATA" if partial else "COMPLETE" if complete is True and signals is True else "UNKNOWN"
+    coverage=scan.get("coverage_status")
+    return {"scan_complete":complete,"bybit_signal_complete":signals,
+            "coverage_status":coverage if isinstance(coverage,str) and coverage else "UNKNOWN",
+            "bybit_signal_expected":expected,"bybit_signal_available":available,
+            "bybit_signal_missing":missing,
+            # Includes benchmark failures; do not equate it with missing signals.
+            "bybit_signal_failures":count(bybit.get("signal_failures")),
+            "data_status":status}
+
 def build(data,now):
     scan=data["scan"];research=data["research"];identity=data["identity"]
     dossiers=data["dossiers"];liquidity=data["liquidity"];audit=data["audit"]
@@ -108,6 +137,7 @@ def build(data,now):
             "liquidity_failures":liquidity.get("failures") or {},
             "forward_24h_sample_n":(audit.get("outcomes") or {}).get("24h",{}).get("research_event_n",0),
             "capital_ready":sum(x["capital_ready"] for x in queue)}
+    health.update(signal_coverage(scan))
     if not health["binance_complete"] or mismatches:
         health["status"]="PIPELINE_INCONSISTENT"
     elif health["liquidity_successful"]==0:
