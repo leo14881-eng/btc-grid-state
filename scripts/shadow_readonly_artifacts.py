@@ -89,7 +89,9 @@ def hunter_coherence(s):
 def candidate_batch(s):
     p = hunter_coherence(s)
     c = s.doc('cursor')
-    require(c.get('writer') == 'CHATGPT_NOTIFICATION_CONSUMER_ONLY' and
+    require(c.get('schema') == 'hunter_notification_runtime_v1' and
+            c.get('notification_policy') == 'V2_NEW_TRADE_EVENTS_ONLY' and
+            c.get('writer') == 'CHATGPT_NOTIFICATION_CONSUMER_ONLY' and
             c.get('real_trading_enabled') is False and
             c.get('capital_authority') == 'NONE_SHADOW_ONLY', 'CURSOR_AUTHORITY_UNKNOWN')
     excluded = set()
@@ -106,7 +108,8 @@ def candidate_batch(s):
             require(identity not in hashes or hashes[identity] == content, 'RESERVATION_HASH_CONFLICT')
             hashes[identity] = content
             excluded.add(identity)
-    for key in ('acknowledged_event_ids', 'reserved_event_ids', 'pending_event_ids'):
+    ids(c['acknowledged_event_ids'])
+    for key in ('reserved_event_ids', 'pending_event_ids'):
         ids(c.get(key, []))
     for key in ('reserved_event_content_hashes', 'pending_event_content_hashes'):
         content_hashes(c.get(key, {}))
@@ -122,8 +125,9 @@ def candidate_batch(s):
         require(instant(event['at']) <= instant(p['updated_at_utc']), 'EVENT_AFTER_PORTFOLIO')
         if identity in hashes:
             require(digest(event) == hashes[identity], 'RESERVED_EVENT_CONTENT_CHANGED')
-    cutoff = c.get('event_not_before_utc') or c.get('bootstrap_since_utc')
-    require(isinstance(cutoff, str), 'NOTIFICATION_CUTOFF_REQUIRED')
+    cutoffs = [c[k] for k in ('event_not_before_utc', 'bootstrap_since_utc') if c.get(k)]
+    require(bool(cutoffs), 'NOTIFICATION_CUTOFF_REQUIRED')
+    cutoff = max(cutoffs, key=instant)
     result = make_batch(p, excluded, s.sha, after=cutoff)
     result.update(delivery_status='CANDIDATE_ONLY_NOT_RESERVED_NOT_DELIVERED',
                   cursor_sha256=sha256(s.raw['cursor']),
@@ -235,6 +239,10 @@ def build(s, as_of, budgets, start, end, timezone):
     daily = guarded(lambda: daily_review(s, start, end, timezone))
     if instant(end) > now:
         daily = {'status': 'UNKNOWN', 'reason': 'REPORT_END_AFTER_AS_OF'}
+    elif 'stock_portfolio' in s.raw:
+        clock = guarded(lambda: {'future': instant(s.doc('stock_portfolio')['updated_at']) > now})
+        if clock.get('future') is True or clock.get('status') == 'UNKNOWN':
+            stock = daily = {'status': 'UNKNOWN', 'reason': 'STOCK_SNAPSHOT_CLOCK_UNVERIFIED'}
     result = {'schema': 'shadow_readonly_artifacts_v1', 'source_main_sha': s.sha,
               'as_of_utc': now.isoformat(), 'source_file_sha256': s.hashes(),
               'shadow_only': True, 'real_trading_enabled': False, 'capital_authority': 'NONE_SHADOW_ONLY',

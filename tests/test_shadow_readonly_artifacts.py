@@ -23,7 +23,8 @@ def fixture():
     scheduler = dict(current_generation_id='bucket-1', last_successful_monitor_generation_id='bucket-1',
                      shadow_only=True, real_order_count=0, monitor_started_at_utc=AT,
                      monitor_completed_at_utc=AT)
-    cursor = dict(writer='CHATGPT_NOTIFICATION_CONSUMER_ONLY', real_trading_enabled=False,
+    cursor = dict(schema='hunter_notification_runtime_v1', notification_policy='V2_NEW_TRADE_EVENTS_ONLY',
+                  writer='CHATGPT_NOTIFICATION_CONSUMER_ONLY', real_trading_enabled=False,
                   capital_authority='NONE_SHADOW_ONLY', acknowledged_event_ids=[],
                   event_not_before_utc='2026-10-01T00:00:00Z')
     stock = dict(simulation_only=True, positions={}, closed=[], updated_at=AT,
@@ -150,6 +151,14 @@ class ReadonlyArtifactsTests(unittest.TestCase):
         self.assertEqual(artifact(snapshot(d))['notification_candidates']['status'], 'UNKNOWN')
         d = fixture(); d['hunter_watchdog']['fast_watch_health'] = {'status': 'PARTIAL_FAST_PATH_DEGRADED'}
         self.assertEqual(artifact(snapshot(d))['health_checks']['hunter_watchdog']['status'], 'PARTIAL')
+
+    def test_missing_ack_future_stock_and_later_bootstrap_fail_closed(self):
+        d = fixture(); del d['cursor']['acknowledged_event_ids']
+        self.assertEqual(artifact(snapshot(d))['notification_candidates']['status'], 'UNKNOWN')
+        d = fixture(); d['stock_portfolio']['updated_at'] = '2026-10-11T00:00:00Z'
+        self.assertEqual(artifact(snapshot(d))['stock_daily_review']['status'], 'UNKNOWN')
+        d = fixture(); d['cursor']['bootstrap_since_utc'] = '2026-10-11T00:00:00Z'
+        self.assertEqual(candidate_batch(snapshot(d))['events'], [])
 
     def test_reader_ignores_dirty_checkout_and_moving_head(self):
         with tempfile.TemporaryDirectory() as temp:
