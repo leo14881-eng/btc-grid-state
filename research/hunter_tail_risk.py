@@ -144,18 +144,58 @@ def classify_systemic_risk(e,cfg):
     if high>=1 or elev>=2:return "ELEVATED",reasons
     return "NORMAL",reasons or ["SYSTEMIC_EVIDENCE_NORMAL"]
 
+def admit_recovery_observation(row,evidence,now,cfg,remember=True):
+    """Persist exact recovery identities; never evict IDs and make them reusable.
+
+    Only recovery episodes accumulate IDs, not ordinary NORMAL monitoring.
+    Both source time and processing time must advance. Existing freshness and
+    sampling limits apply; a new ID alone is not independent evidence.
+    """
+    oid=(evidence or {}).get("observation_id")
+    observed=(evidence or {}).get("observed_at_utc")
+    seen=list(row.get("recovery_seen_observation_ids") or [])
+    previous=row.get("last_observation_id") or row.get("last_recovery_seen_observation_id")
+    if not oid or oid in seen or oid==previous:return False
+    max_age=cfg.get("SYSTEMIC_MAX_EVIDENCE_AGE_SECONDS",cfg["MAX_EVIDENCE_AGE_SECONDS"])
+    if not is_fresh(observed,now,max_age):return False
+    loss_times=[x.get("at_utc") for x in row.get("loss_events",[]) if x.get("at_utc")]
+    if row.get("last_loss_exit_at_utc"):loss_times.append(row["last_loss_exit_at_utc"])
+    try:
+        if loss_times:
+            loss_at=max(parse(x) for x in loss_times)
+            if now<=loss_at or parse(observed)<=loss_at:return False
+    except (TypeError,ValueError):return False
+    processing_times=[row.get(key) for key in ("last_recovery_seen_at_utc","updated_at_utc","last_recovery_counted_at_utc") if row.get(key)]
+    last_source=row.get("last_recovery_seen_observed_at_utc") or row.get("last_observed_at_utc")
+    try:
+        if processing_times and now<=max(parse(x) for x in processing_times):return False
+        if last_source and parse(observed)<=parse(last_source):return False
+    except (TypeError,ValueError):return False
+    if remember:
+        if previous and previous not in seen:seen.append(previous)
+        seen.append(oid)
+    row["recovery_seen_observation_ids"]=seen
+    row["last_recovery_seen_at_utc"]=now.isoformat()
+    row["last_recovery_seen_observed_at_utc"]=observed
+    return True
+
 def update_systemic_risk(state,evidence,now,cfg):
     raw,reasons=classify_systemic_risk(evidence,cfg)
-    old=state.get("systemic_risk") or {}
+    old=dict(state.get("systemic_risk") or {})
     oid=(evidence or {}).get("observation_id")
     if oid and oid==old.get("last_observation_id"):return old,False
+    recovering=old.get("level") in ("HIGH","CRITICAL") or old.get("recovery_mode")
+    tracking=recovering or (state.get("circuit_breaker") or {}).get("status") in ("WATCH","TRIPPED","RECOVERING")
+    has_history="recovery_seen_observation_ids" in old
+    accepted=admit_recovery_observation(old,evidence,now,cfg,tracking)
+    if not accepted and raw=="NORMAL":return state.get("systemic_risk") or {},False
     prev=old.get("level") or "NORMAL";required=int(cfg["SYSTEMIC_RECOVERY_OBSERVATIONS"])
     recovery=int(old.get("recovery_observations") or 0)
     recovery_mode=bool(old.get("recovery_mode"))
     last_counted=old.get("last_recovery_counted_at_utc")
     # Migration safety: recovery counts created before temporal independence was
     # enforced are not trusted.
-    if recovery_mode and recovery>0 and not last_counted:recovery=0
+    if recovery_mode and recovery>0 and (not last_counted or not has_history or not old.get("last_recovery_counted_observed_at_utc")):recovery=0;last_counted=None
     if raw in ("HIGH","CRITICAL"):
         level=raw;recovery=0;release=0.0;recovery_mode=True;last_counted=None
     elif prev in ("HIGH","CRITICAL") or recovery_mode:
@@ -163,10 +203,10 @@ def update_systemic_risk(state,evidence,now,cfg):
             min_gap=float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"])
             gap_ok=True
             if last_counted:
-                try:gap_ok=(now-parse(last_counted)).total_seconds()>=min_gap
+                try:gap_ok=(now-parse(last_counted)).total_seconds()>=min_gap and (parse(evidence["observed_at_utc"])-parse(old["last_recovery_counted_observed_at_utc"])).total_seconds()>=min_gap
                 except Exception:gap_ok=False
             if gap_ok:
-                recovery+=1;last_counted=now.isoformat()
+                recovery+=1;last_counted=now.isoformat();old["last_recovery_counted_observed_at_utc"]=evidence["observed_at_utc"]
             if recovery>=required:
                 level="NORMAL";release=1.0;recovery_mode=False
             else:
@@ -182,6 +222,8 @@ def update_systemic_risk(state,evidence,now,cfg):
          "recovery_observations":recovery,"recovery_required":required,"recovery_mode":recovery_mode,
          "last_recovery_counted_at_utc":last_counted,"recovery_min_gap_seconds":float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"]),
          "risk_release_fraction":release,"evidence":evidence,"capital_authority":"NONE_SHADOW_ONLY"}
+    for key in ("recovery_seen_observation_ids","last_recovery_seen_at_utc","last_recovery_seen_observed_at_utc","last_recovery_counted_observed_at_utc"):
+        if key in old:row[key]=old[key]
     state["systemic_risk"]=row
     return row,True
 
@@ -260,7 +302,9 @@ def record_loss_exit(state,pnl,reason,released_notional,now,cfg):
     cb["status"]="TRIPPED" if trip or cb.get("status") in ("TRIPPED","RECOVERING") else "WATCH"
     cb["rolling_realized_loss_usdt"]=round(rolling_loss,2);cb["recovery_observations"]=0;cb["updated_at_utc"]=now.isoformat()
     cb["last_recovery_counted_at_utc"]=None
+    cb["last_recovery_counted_observed_at_utc"]=None
     cb["last_recovery_seen_observation_id"]=None
+    cb["last_loss_exit_at_utc"]=now.isoformat()
     cb["last_loss_exit_observation_id"]=((state.get("systemic_risk") or {}).get("last_observation_id"))
 
 def advance_circuit_breaker(state,systemic,evidence,now,cfg,new_observation):
@@ -269,6 +313,11 @@ def advance_circuit_breaker(state,systemic,evidence,now,cfg,new_observation):
     oid=(evidence or {}).get("observation_id")
     if not oid or oid in (cb.get("last_recovery_seen_observation_id"),cb.get("last_loss_exit_observation_id")):
         return cb
+    has_history="recovery_seen_observation_ids" in cb
+    if not admit_recovery_observation(cb,evidence,now,cfg):return cb
+    if not has_history:
+        cb["recovery_observations"]=0
+        cb["last_recovery_counted_at_utc"]=None
     cb["last_recovery_seen_observation_id"]=oid
     if (systemic or {}).get("raw_level")!="NORMAL":
         cb["recovery_observations"]=0;cb["last_recovery_counted_at_utc"]=None
@@ -277,8 +326,8 @@ def advance_circuit_breaker(state,systemic,evidence,now,cfg,new_observation):
     # Use the existing independent-observation interval; no risk parameter changes.
     min_gap=float(cfg["SYSTEMIC_RECOVERY_MIN_GAP_SECONDS"])
     if last:
-        try:gap_ok=(now-parse(last)).total_seconds()>=min_gap
-        except (TypeError,ValueError):gap_ok=False
+        try:gap_ok=(now-parse(last)).total_seconds()>=min_gap and (parse(evidence["observed_at_utc"])-parse(cb["last_recovery_counted_observed_at_utc"])).total_seconds()>=min_gap
+        except (KeyError,TypeError,ValueError):gap_ok=False
         if not gap_ok:
             cb["recovery_wait_reason"]="CIRCUIT_RECOVERY_OBSERVATION_TOO_SOON"
             cb["updated_at_utc"]=now.isoformat();return cb
@@ -287,6 +336,7 @@ def advance_circuit_breaker(state,systemic,evidence,now,cfg,new_observation):
         cb["recovery_observations"]=0
     cb.pop("recovery_wait_reason",None)
     cb["last_recovery_counted_at_utc"]=now.isoformat()
+    cb["last_recovery_counted_observed_at_utc"]=evidence["observed_at_utc"]
     n=int(cb.get("recovery_observations") or 0)+1;cb["recovery_observations"]=n
     wait=int(cfg["CIRCUIT_RECOVERY_OBSERVATIONS_BEFORE_RELEASE"])
     if n>=wait:

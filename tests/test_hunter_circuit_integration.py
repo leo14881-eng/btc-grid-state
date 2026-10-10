@@ -159,6 +159,33 @@ class CircuitProductionPathTests(unittest.TestCase):
                     self.assertEqual(state['events'][0]['reason'], 'HARD_INVALIDATION')
 
 
+    def test_blocking_circuit_preserves_profit_protection_sell(self):
+        from research import hunter_lifecycle_state as life
+        for status in ('TRIPPED','RECOVERING'):
+            for lane in ('V1','V2'):
+                with self.subTest(status=status,lane=lane), self.isolate():
+                    now,state,scan,review,liq,supply,_=self.fixture(status)
+                    monitor.configure_lane(lane=='V1')
+                    pos=state['open_positions'][0]
+                    def book(price,at):
+                        return dict(exchange='binance',market='spot',symbol='XUSDT',
+                            price_unit='USDT',quantity_unit='BASE',bids=[[price,100]],
+                            asks=[[price+.01,100]],fetched_at=at.isoformat())
+                    before=now-dt.timedelta(minutes=5)
+                    life.protect(pos,104,eng.net_pnl(pos,104),life.liquidation(pos,book(104,before),before),
+                                 before,'armed',before.isoformat())
+                    scan['coins']['X']['reference_price']=101
+                    liq['snapshots']['X']['raw_book_evidence']=book(101,now)
+                    with patch.object(eng,'_execution_source_sha',return_value='0'*40):
+                        eng.manage_existing_positions(state,scan,{},liq,{},now)
+                    self.assertEqual(state['open_positions'],[])
+                    self.assertEqual(state['closed_positions'][0]['exit_reason'],'PROFIT_PROTECTION')
+                    self.assertGreater(state['closed_positions'][0]['net_pnl_usdt'],0)
+                    self.assertEqual([e['type'].rsplit('_',1)[-1] for e in state['events']],['SELL'])
+                    self.assertEqual(state['circuit_breaker']['quarantined_cash_usdt'],1000)
+                    self.assertEqual(state['circuit_breaker']['status'],status)
+
+
 class CircuitRestartTests(unittest.TestCase):
     def tripped(self):
         state = {'systemic_risk': {'level': 'NORMAL', 'raw_level': 'NORMAL',
@@ -171,19 +198,19 @@ class CircuitRestartTests(unittest.TestCase):
         s = self.tripped(); normal = {'raw_level': 'NORMAL'}
         gap = float(C['SYSTEMIC_RECOVERY_MIN_GAP_SECONDS'])
         first = NOW + dt.timedelta(seconds=gap)
-        risk.advance_circuit_breaker(s, normal, evidence('one'), first, C, True)
+        risk.advance_circuit_breaker(s, normal, evidence('one',observed_at=first), first, C, True)
         self.assertEqual(s['circuit_breaker']['recovery_observations'], 1)
         with tempfile.TemporaryDirectory() as tmp:
             p = pathlib.Path(tmp) / 'ledger.json'; eng.atomic_json_write(p, s)
             reloaded = eng.load(p)
             self.assertEqual(reloaded['circuit_breaker'], s['circuit_breaker'])
             self.assertEqual(reloaded['circuit_breaker']['status'], 'TRIPPED')
-            risk.advance_circuit_breaker(reloaded, normal, evidence('one'), first + dt.timedelta(seconds=gap), C, True)
+            risk.advance_circuit_breaker(reloaded, normal, evidence('one',observed_at=first), first + dt.timedelta(seconds=gap), C, True)
             self.assertEqual(reloaded['circuit_breaker']['recovery_observations'], 1)
-            risk.advance_circuit_breaker(reloaded, normal, evidence('too-soon'), first + dt.timedelta(seconds=gap-1), C, True)
+            risk.advance_circuit_breaker(reloaded, normal, evidence('too-soon',observed_at=first+dt.timedelta(seconds=gap-1)), first + dt.timedelta(seconds=gap-1), C, True)
             self.assertEqual(reloaded['circuit_breaker']['recovery_observations'], 1)
             self.assertEqual(reloaded['circuit_breaker']['quarantined_cash_usdt'], 2000)
-            risk.advance_circuit_breaker(reloaded, normal, evidence('boundary'), first + dt.timedelta(seconds=gap), C, True)
+            risk.advance_circuit_breaker(reloaded, normal, evidence('boundary',observed_at=first+dt.timedelta(seconds=gap)), first + dt.timedelta(seconds=gap), C, True)
             self.assertEqual(reloaded['circuit_breaker']['recovery_observations'], 2)
             eng.atomic_json_write(p, reloaded)
             self.assertEqual(eng.load(p)['circuit_breaker'], reloaded['circuit_breaker'])
@@ -193,13 +220,13 @@ class CircuitRestartTests(unittest.TestCase):
         gap = float(C['SYSTEMIC_RECOVERY_MIN_GAP_SECONDS'])
         wait = int(C['CIRCUIT_RECOVERY_OBSERVATIONS_BEFORE_RELEASE'])
         for n in range(1, wait+1):
-            risk.advance_circuit_breaker(s, normal, evidence(str(n)), NOW + dt.timedelta(seconds=gap*n), C, True)
+            risk.advance_circuit_breaker(s, normal, evidence(str(n),observed_at=NOW+dt.timedelta(seconds=gap*n)), NOW + dt.timedelta(seconds=gap*n), C, True)
         self.assertEqual(s['circuit_breaker']['status'], 'RECOVERING')
         original = copy.deepcopy(s['circuit_breaker'])
         with tempfile.TemporaryDirectory() as tmp:
             p = pathlib.Path(tmp) / 'ledger.json'; eng.atomic_json_write(p, s)
             reloaded = eng.load(p)
-            risk.advance_circuit_breaker(reloaded, normal, evidence(str(wait)), NOW + dt.timedelta(seconds=gap*(wait+1)), C, True)
+            risk.advance_circuit_breaker(reloaded, normal, evidence(str(wait),observed_at=NOW+dt.timedelta(seconds=gap*wait)), NOW + dt.timedelta(seconds=gap*(wait+1)), C, True)
             self.assertEqual(reloaded['circuit_breaker'], original)
             self.assertTrue(risk.risk_blocks_new(reloaded))
 
@@ -214,7 +241,7 @@ class CircuitRestartTests(unittest.TestCase):
 
     def test_legacy_count_without_timestamp_is_not_trusted(self):
         s = self.tripped(); s['circuit_breaker']['recovery_observations'] = 10
-        risk.advance_circuit_breaker(s, {'raw_level': 'NORMAL'}, evidence('new'), NOW, C, True)
+        risk.advance_circuit_breaker(s, {'raw_level': 'NORMAL'}, evidence('new',observed_at=NOW+dt.timedelta(minutes=5)), NOW+dt.timedelta(minutes=5), C, True)
         self.assertEqual(s['circuit_breaker']['recovery_observations'], 1)
         self.assertEqual(s['circuit_breaker']['status'], 'TRIPPED')
         self.assertEqual(s['circuit_breaker']['quarantined_cash_usdt'], 2000)
