@@ -5,6 +5,11 @@ on:
   pull_request:
     paths:
       - 'research/hunter_reentry.py'
+      - 'research/hunter_signal_provenance.py'
+      - 'research/hunter_strategy_release.py'
+      - 'research/hunter_early_signals.py'
+      - 'research/hunter_identity_audit.py'
+      - 'research/hunter_tactical_capital_review.py'
       - 'research/hunter_shadow_trader_v2.py'
       - 'tests/test_hunter_reentry.py'
       - 'tests/test_hunter_shadow_trader_v2.py'
@@ -26,11 +31,11 @@ jobs:
         run: python -m pip install -r deploy/hunter-fast-watch-requirements.txt
       - name: Verify exact integration ancestry and immutable history
         run: |
-          git merge-base --is-ancestor bacb14177075564a3656b4efb2eaf1be043c1d9a HEAD
-          git merge-base --is-ancestor 593ce5dd04d55657c0da10bb14c948e9d2d98a64 HEAD
+          git merge-base --is-ancestor 30aad45082e8dd9e62405ab4fb37e5fd65abe3d4 HEAD
+          git merge-base --is-ancestor c9dcd7ab0f33df8185400a806c52db5dfde68eaf HEAD
           git merge-base --is-ancestor 67f661287569b91cf7a01d9d5798af350c1f5276 HEAD
-          git diff --exit-code bacb14177075564a3656b4efb2eaf1be043c1d9a HEAD -- research/results
-          git diff --exit-code 593ce5dd04d55657c0da10bb14c948e9d2d98a64 HEAD -- research/hunter_reentry.py tests/test_hunter_reentry.py
+          git diff --exit-code 30aad45082e8dd9e62405ab4fb37e5fd65abe3d4 HEAD -- research/results
+          git diff --exit-code c9dcd7ab0f33df8185400a806c52db5dfde68eaf HEAD -- research/hunter_reentry.py research/hunter_signal_provenance.py research/hunter_strategy_release.py research/hunter_early_signals.py research/hunter_identity_audit.py research/hunter_tactical_capital_review.py tests/test_hunter_reentry.py
           git diff --exit-code 67f661287569b91cf7a01d9d5798af350c1f5276 HEAD -- research/hunter_loss_freeze.py research/hunter_position_monitor.py tests/test_hunter_loss_freeze.py
       - name: Complete offline Hunter regression and synthetic replays
         run: python -m unittest discover -s tests -p 'test_hunter*.py' -v

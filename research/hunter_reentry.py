@@ -137,7 +137,8 @@ def contract_cause_cleared(cause, original, current, asset, now, exited):
     official, independent = proof.get('official') or {}, proof.get('independent') or {}
     platform = old.get('platform')
     address = str(old.get('contract_address') or '').strip().lower()
-    if (current.get('identity_status') != 'THIRD_PARTY_CORROBORATED' or proof.get('contract_verified') is not True
+    if ((original.get('contract_evidence') or {}).get('contract_verified') is not True
+            or current.get('identity_status') != 'THIRD_PARTY_CORROBORATED' or proof.get('contract_verified') is not True
             or not platform or not address or official.get('platform') != platform
             or str(official.get('contract_address') or '').strip().lower() != address
             or str((independent.get('platforms') or {}).get(platform) or '').strip().lower() != address
@@ -219,6 +220,8 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
     # Original venue matching is common safety; V1 does not inherit V2's
     # quantity/depth/rr entry gates. PP clearance alone needs old-quantity net.
     old_pos = context.get('position') or {}
+    if old_pos.get('execution_venue') not in (None, 'BINANCE_SPOT'):
+        return deny('REENTRY_UNKNOWN', 'PRIMARY_VENUE_SIGNAL_SOURCE_CONTRACT_UNSUPPORTED')
     if old_pos.get('asset') != candidate.get('asset'):
         return deny('REENTRY_UNKNOWN', 'EXIT_ASSET_IDENTITY_MISMATCH')
     execution = engine.lifecycle.liquidation(old_pos, book, now, old_pos.get('execution_fee_bps', engine.FEE_BPS))

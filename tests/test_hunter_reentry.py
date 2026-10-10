@@ -423,7 +423,7 @@ class ReentryTests(unittest.TestCase):
                     'official_contract_source':'https://official.example/contract',
                     'verified_at_utc':self.start.isoformat()}
         c,scan,_,_ = self.inputs(0,100)
-        c['identity_audit'] = {'contract_evidence':{'official':official}}
+        c['identity_audit'] = {'contract_evidence':{'contract_verified':True,'official':official}}
         self.pos.update(net_pnl_usdt=-5,health_reasons=['FATAL_IDENTITY_OR_CONTRACT:THIRD_PARTY_CONTRACT_MISMATCH'])
         eng.register_exit_for_reentry(self.state,self.pos,100,'HARD_INVALIDATION',self.start,c,scan)
         initial = copy.deepcopy(self.state)
