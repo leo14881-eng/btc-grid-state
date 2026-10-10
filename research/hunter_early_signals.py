@@ -31,7 +31,10 @@ def rolling(symbols,window):
         start=finite(rows[0][1]);last=finite(rows[-1][4])
         if not start or not last or start<=0:return None
         return sym,{"return_pct":(last/start-1)*100,
-                   "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
+                   "quote_volume":sum(finite(x[7]) or 0 for x in rows),
+                   "v2_source_receipt":{"schema":"hunter_v2_rolling_source_v1","exchange":"binance",
+                    "market":"spot","symbol":sym,"interval":interval,"lookback":window,
+                    "fetched_at":dt.datetime.now(dt.timezone.utc).isoformat(),"rows":rows}}
     out={}
     with ThreadPoolExecutor(max_workers=64) as ex:
         futs={ex.submit(one,s):s for s in symbols}
@@ -107,6 +110,14 @@ def build(scan,r1,r4,microdata,now,regional_signals=None):
     btc1=r1.get("BTCUSDT");btc4=r4.get("BTCUSDT")
     if not btc1 or not btc4:raise ValueError("BTC benchmark missing")
     rows=[x for sym,base in pairs.items() if (x:=score_row(sym,base,r1,r4,btc1,btc4,microdata))]
+    # Retain the same acquisition receipts for hourly V2 management as Monitor.
+    # This metadata does not enter scoring, discovery or V1 decision arithmetic.
+    for row in rows:
+        symbol=row['pair']
+        row['v2_lifecycle_evidence']={'generation_id':scan.get('generation_id'),
+            'micro_receipt':((microdata or {}).get(symbol) or {}).get('v2_candle_receipt'),
+            'relative_receipts':{role+'_'+window:(data.get(pair) or {}).get('v2_source_receipt')
+                for window,data in (('1h',r1),('4h',r4)) for role,pair in (('asset',symbol),('btc','BTCUSDT'))}}
     bybit_only={base for base,c in (scan.get("coins") or {}).items()
                 if "bybit" in (c.get("venues") or []) and "binance" not in (c.get("venues") or [])}
     signals=regional_signals or {}
@@ -170,5 +181,8 @@ def main():
     report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc),regional_signals)
     OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
     persist_first_early(report)
-    print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]}))
+    # Raw lifecycle receipts belong in OUT/HISTORY, not the bounded journal tail.
+    top=[{key:value for key,value in row.items() if key!='v2_lifecycle_evidence'}
+         for row in report["early"][:10]]
+    print(json.dumps({"early_count":report["early_count"],"top":top},separators=(',',':')))
 if __name__=="__main__":main()

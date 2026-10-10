@@ -174,7 +174,11 @@ class BybitManagementTests(unittest.TestCase):
             monitor.run_lane(path,'SHADOW_V2',self.market,self.review,self.liq,self.supply,self.now,False,regime_scan=scan)
             restarted=monitor.load(path)['open_positions'][0]
             self.assertEqual(restarted['protection_lifecycle']['armed_generation_id'],'monitor-g1')
-            self.assertEqual(restarted['last_health_generation_id'],'monitor-g2')
+            # A new five-minute wrapper around the same closed source window cannot
+            # count as another health confirmation; its final receipt is still new.
+            self.assertEqual(restarted['last_health_generation_id'],'monitor-g1')
+            self.assertEqual(restarted['last_monitor_decision']['generation_id'],'monitor-g2')
+            self.assertIn('THESIS_SOURCE_WINDOW_ALREADY_CONSUMED',restarted['last_monitor_decision']['reasons'])
             self.assertEqual(len(restarted['tranches']),1)
             self.assertEqual(monitor.load(path)['events'],[])
 

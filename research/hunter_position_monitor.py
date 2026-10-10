@@ -135,7 +135,9 @@ def refresh_management_evidence(states,market,review,liq,now):
     c=by.setdefault(a,{"asset":a,"blockers":[]})
     c["signal"]=current[a];c["signal_evidence"]=stamp(a,generation,now.isoformat())
     if any(p.get('asset')==a for st in states[1:] for p in st.get('open_positions',[])):
-     c['v2_lifecycle_evidence']={'generation_id':generation,'micro_receipt':(micro.get(a+'USDT') or {}).get('v2_candle_receipt')}
+     c['v2_lifecycle_evidence']={'generation_id':generation,'micro_receipt':(micro.get(a+'USDT') or {}).get('v2_candle_receipt'),
+       'relative_receipts':{role+'_'+window:(data.get(symbol) or {}).get('v2_source_receipt')
+        for window,data in (('1h',r1),('4h',r4)) for role,symbol in (('asset',a+'USDT'),('btc','BTCUSDT'))}}
     c["execution_scenario"]=snapshot["execution_scenarios"].get("3000",{})
     # Old microstructure failures must be replaced by this fresh snapshot.
     market_flags={"LIVE_ORDERBOOK_MISSING","LIVE_ORDERBOOK_STALE","LIVE_ORDERBOOK_INVALID","SPREAD_EXCEEDS_50_BPS","DEPTH_BELOW_30K_USDT","BTC_RELATIVE_SIGNAL_MISSING","SIGNAL_EVIDENCE_STALE"}

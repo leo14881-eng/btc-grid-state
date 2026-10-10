@@ -73,10 +73,11 @@ def collect(positions, review, generation, fetcher=request, clock=None):
         hourly = fetcher('/v5/market/kline', dict(category='spot',symbol=symbol,interval='60',limit=5))
         quarter = fetcher('/v5/market/kline', dict(category='spot',symbol=symbol,interval='15',limit=25))
         at = clock()
-        return features(candles(hourly,symbol,'60',5,at),candles(quarter,symbol,'15',25,at))
+        r1,r4,micro=features(candles(hourly,symbol,'60',5,at),candles(quarter,symbol,'15',25,at))
+        return r1,r4,micro,dict(symbol=symbol,captured_at=at.isoformat(),hourly=hourly,quarter=quarter)
 
     try:
-        btc1,btc4,_ = signal('BTCUSDT')
+        btc1,btc4,_,btc_source = signal('BTCUSDT')
     except Exception as exc:
         return {}, {p.get('market_symbol',p['asset']):'BYBIT_BTC_EVIDENCE_UNAVAILABLE:'+type(exc).__name__ for p in wanted}
 
@@ -94,7 +95,7 @@ def collect(positions, review, generation, fetcher=request, clock=None):
         price = float(rows[0]['lastPrice'])
         if not math.isfinite(price) or price<=0 or not source_fresh(ticker.get('time'),clock()):
             raise ValueError('BYBIT_TICKER_STALE_OR_INVALID')
-        r1,r4,micro = signal(symbol)
+        r1,r4,micro,asset_source = signal(symbol)
         row = score_row(symbol,pos['asset'],{symbol:r1},{symbol:r4},btc1,btc4,{symbol:micro})
         depth = fetcher('/v5/market/orderbook',dict(category='spot',symbol=symbol,limit=200))
         raw = depth.get('result') or {}; at = clock()
@@ -111,6 +112,8 @@ def collect(positions, review, generation, fetcher=request, clock=None):
         candidate = copy.deepcopy(candidates.get(pos['asset'],{'asset':pos['asset'],'blockers':[]}))
         candidate.update(signal=row,signal_evidence=dict(stamp(pos['asset'],generation,at.isoformat()),
             execution_venue='BYBIT_SPOT',market_symbol=symbol),management_only=True)
+        candidate['v2_lifecycle_evidence']=dict(schema='hunter_bybit_thesis_source_v1',generation_id=generation,
+            asset_source=asset_source,btc_source=btc_source)
         try:
             candidate['execution_scenario'] = estimate({'bids':raw['b'],'asks':raw['a']},3000,fee_bps=fee)
         except ValueError:

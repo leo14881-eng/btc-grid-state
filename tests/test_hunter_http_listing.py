@@ -93,7 +93,7 @@ class ListingDiagnosticsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'BYBIT_WORKER_NON_JSON'):
                 mod.request(mod.SPOT_PROXY + '/bybit/spot')
         request.assert_called_once()
-        record = json.loads(output.getvalue().split(' ', 1)[1])
+        record = json.loads(output.getvalue().split('HUNTER_BYBIT_HTTP_EVIDENCE ', 1)[1])
         self.assertEqual(record['http_evidence']['failure_kind'], 'invalid_json')
         self.assertNotIn(SECRET, output.getvalue())
 

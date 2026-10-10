@@ -31,6 +31,15 @@ def context(row, asset):
 
 
 class ActualProfitProtectionReplayTests(unittest.TestCase):
+    def test_report_hashes_match_portable_lf_git_contents(self):
+        root=pathlib.Path(__file__).resolve().parents[1]
+        report=json.loads((root/'docs/hunter-v2-lifecycle-evidence/profit_protection_actual_replay.json').read_text(encoding='utf-8'))
+        for path,sha_key,blob_key in [(FIXTURE,'fixture_sha256','fixture_git_blob_sha1'),
+                (root/'research/hunter_lifecycle_state.py','current_lifecycle_source_sha256','current_lifecycle_source_git_blob_sha1')]:
+            content=path.read_bytes().replace(b'\r\n',b'\n')
+            self.assertEqual(hashlib.sha256(content).hexdigest(),report[sha_key])
+            self.assertEqual(hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest(),report[blob_key])
+
     def setUp(self):
         self.fixture=json.loads(FIXTURE.read_text(encoding='utf-8'))
         self.assertFalse(self.fixture['synthetic_price_or_book_inputs'])

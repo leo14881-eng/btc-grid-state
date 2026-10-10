@@ -13,6 +13,107 @@ const safeHeaders = {'cf-ray': '0123456789abcdef-SIN', 'retry-after': '37',
   authorization: 'Bearer SECRET_DO_NOT_STORE', 'set-cookie': 'SECRET_DO_NOT_STORE',
   location: 'https://example.invalid/?key=SECRET_DO_NOT_STORE'};
 
+test('official access-too-frequent wording is a marker, never a root-cause verdict', async t => {
+  const logs = []; const original = console.log;
+  console.log = line => logs.push(line);
+  t.after(() => { console.log = original; globalThis.fetch = blocked; });
+  for (const text of ['access too frequent', 'ACCESS TOO FREQUENT']) {
+    globalThis.fetch = async () => new Response(text, {status: 403});
+    const body = await (await send()).json();
+    assert.deepEqual(body.result.failure_diagnostics.BTCUSDT['60'].body_markers, ['RATE_LIMIT_TEXT']);
+    assert.equal(body.result.failures.BTCUSDT['60'], 'Error: BYBIT_HTTP_403');
+  }
+  assert.equal(logs.length, 4);
+  assert(logs.every(line => JSON.parse(line.split(' ').slice(1).join(' ')).root_cause === 'UNKNOWN'));
+});
+
+test('all existing subrequests are bounded observations; 142 symbols remain 284 GETs plus ticker', async t => {
+  const logs = []; const original = console.log; console.log = line => logs.push(line);
+  t.after(() => { console.log = original; globalThis.fetch = blocked; });
+  const end = Date.now(); let calls = 0; let active = 0; let peak = 0;
+  const upstreamHeaders = {...safeHeaders, 'x-bapi-limit': '600', 'x-bapi-limit-status': '599',
+    'x-bapi-limit-reset-timestamp': '1791660000000', 'x-forwarded-for': '192.0.2.1',
+    traceid: '0123456789abcdef', 'x-amz-cf-id': '0123456789abcdef'};
+  globalThis.fetch = async (address, options) => {
+    calls++; active++; peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, 1)); active--;
+    const url = new URL(address);
+    assert.equal(url.origin, 'https://api.bybit.com');
+    assert.equal(options.method, undefined); assert.equal(options.body, undefined);
+    assert.deepEqual(options.headers, {'User-Agent': 'Hunter-Bybit-Proxy/2.0', Accept: 'application/json'});
+    if (url.pathname === '/v5/market/tickers') {
+      assert.equal(url.search, '?category=spot');
+      return Response.json({retCode: 0, time: end, result: {category: 'spot', list: []}}, {headers: upstreamHeaders});
+    }
+    assert.equal(url.pathname, '/v5/market/kline');
+    assert.deepEqual([...url.searchParams.keys()].sort(), ['category', 'end', 'interval', 'limit', 'symbol']);
+    assert.equal(url.searchParams.get('category'), 'spot'); assert.equal(url.searchParams.get('end'), String(end));
+    const symbol = url.searchParams.get('symbol'), interval = url.searchParams.get('interval');
+    const limit = interval === '60' ? 5 : 25; assert.equal(url.searchParams.get('limit'), String(limit));
+    if (symbol === 'ALT0USDT' && interval === '15') return new Response('access too frequent SECRET_DO_NOT_STORE', {status: 403, headers: upstreamHeaders});
+    return Response.json({retCode: 0, time: end, result: {category: 'spot', symbol, list: Array(limit).fill([])}}, {headers: upstreamHeaders});
+  };
+  await worker.fetch(new Request('https://worker.invalid/bybit/tickers'), {});
+  const symbols = Array.from({length: 142}, (_, i) => `ALT${i}USDT`);
+  const batches = Array.from({length: 8}, (_, i) => symbols.slice(i*20, i*20+20));
+  let next = 0; const results = [];
+  // Mirror the unchanged Python two-batch ceiling without running Python/network.
+  await Promise.all(Array.from({length: 2}, async () => {
+    while (next < batches.length) {
+      const batch = batches[next++];
+      results.push(await (await worker.fetch(new Request('https://worker.invalid/bybit/early-klines', {
+        method: 'POST', body: JSON.stringify({symbols: batch, end})}), {})).json());
+    }
+  }));
+  assert.equal(calls, 285); assert.equal(peak, 8); assert.equal(logs.length, 285);
+  const partial = results.find(r => r.result.failures.ALT0USDT);
+  assert.deepEqual(partial.result.failures, {ALT0USDT: {'15': 'Error: BYBIT_HTTP_403'}});
+  assert.deepEqual(Object.keys(partial.result.klines.ALT0USDT), ['60']);
+  assert.equal(results.reduce((n, r) => n + Object.values(r.result.klines).reduce((v, x) => v + Object.keys(x).length, 0), 0), 283);
+  const parsed = logs.map(line => {
+    assert(line.length < 1400); assert(!/SECRET_DO_NOT_STORE|192\.0\.2\.1|authorization|set-cookie|https:/.test(line));
+    const record = JSON.parse(line.slice('HUNTER_BYBIT_REQUEST_OBSERVATION '.length));
+    assert.equal(record.layer, 'bybit_upstream'); assert.equal(record.root_cause, 'UNKNOWN');
+    assert(Number.isInteger(record.duration_ms) && record.duration_ms >= 0);
+    assert(Date.parse(record.completed_at_utc) >= Date.parse(record.started_at_utc));
+    assert.match(record.worker_request_id, /^[0-9a-f-]{36}$/);
+    assert.equal(record.headers['x-bapi-limit-status'], '599');
+    return record;
+  });
+  assert.equal(parsed.filter(r => r.http_status === 403).length, 1);
+  assert.equal(parsed.filter(r => r.http_status === 200 && r.ret_code === 0).length, 284);
+  assert.equal(new Set(parsed.map(r => r.worker_request_id)).size, 9);
+  for (const result of results) {
+    assert.equal(result.request_observations.length, Object.keys(result.result.klines).length * 2);
+    for (const record of result.request_observations) assert(parsed.some(row => JSON.stringify(row) === JSON.stringify(record)));
+    assert(!('request_observations' in result.result));
+    assert(JSON.stringify(result.request_observations).length < 56000);
+  }
+});
+
+test('business errors, transport, invalid headers and logger failures preserve responses', async t => {
+  const logs = []; const original = console.log; console.log = line => logs.push(line);
+  t.after(() => { console.log = original; globalThis.fetch = blocked; });
+  globalThis.fetch = async () => Response.json({retCode: 10006, retMsg: 'SECRET_DO_NOT_STORE', result: {category: 'spot'}},
+    {headers: {'x-bapi-limit': '192.0.2.1', 'x-bapi-limit-status': 'SECRET_DO_NOT_STORE', 'x-bapi-limit-reset-timestamp': '9'.repeat(17)}});
+  let body = await (await send()).json();
+  assert.equal(body.result.failures.BTCUSDT['60'], 'Error: BYBIT_RET_10006');
+  assert(!('request_observations' in body.result));
+  assert(body.request_observations.every(row => row.ret_code === 10006));
+  assert(logs.every(line => {const r = JSON.parse(line.slice(line.indexOf(' ')+1)); return r.ret_code === 10006 && Object.keys(r.headers).length === 0;}));
+  logs.length = 0;
+  globalThis.fetch = async () => { throw new Error('SECRET_DO_NOT_STORE'); };
+  body = await (await send()).json();
+  assert.equal(body.result.failures.BTCUSDT['60'], 'Error: WORKER_KLINE_FAILURE');
+  assert(logs.every(line => JSON.parse(line.slice(line.indexOf(' ')+1)).http_status === 0));
+  console.log = () => { throw new Error('LOGGER_FAILED'); };
+  globalThis.fetch = async address => {const u = new URL(address); return Response.json({retCode: 0, time: Date.now(),
+    result: {category: 'spot', symbol: 'BTCUSDT', list: Array(Number(u.searchParams.get('limit'))).fill([])}});};
+  body = await (await send()).json();
+  assert.deepEqual(Object.keys(body.result.klines.BTCUSDT).sort(), ['15', '60']);
+  assert.deepEqual(body.result.failures, {});
+});
+
 for (const status of [403, 429, 502]) {
   test(`HTTP ${status}: bounded evidence, exact failed scope, no retries`, async t => {
     t.after(() => { globalThis.fetch = blocked; });
@@ -220,7 +321,10 @@ test('spot success preserves the upstream JSON contract and makes one request', 
   let calls = 0;
   globalThis.fetch = async () => { calls++; return Response.json(expected); };
   const response = await worker.fetch(new Request('https://worker.invalid/bybit/spot'), {});
-  assert.equal(response.status, 200); assert.deepEqual(await response.json(), expected); assert.equal(calls, 1);
+  const actual = await response.json();
+  assert.equal(actual.request_observations.length, 1);
+  delete actual.request_observations;
+  assert.equal(response.status, 200); assert.deepEqual(actual, expected); assert.equal(calls, 1);
 });
 
 test('HTTP 200 body abort keeps AbortError identity on both public list routes', async t => {

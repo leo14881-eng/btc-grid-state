@@ -248,6 +248,12 @@ def main():
     except Exception as exc:
         errors["bybit"]=str(exc);statuses["bybit"]=dict(error=str(exc))
     report=build(results,previous,at)
+    # Log-only binding: generation time is not an upstream request timestamp.
+    try:
+        from research.hunter_http_evidence import log_generation_binding
+    except ModuleNotFoundError:
+        from hunter_http_evidence import log_generation_binding
+    log_generation_binding(report["generation_id"], statuses.get("bybit"))
     binance_complete=("binance" in results and
                       not statuses["binance"]["missing_or_invalid"])
     bybit_complete=("bybit" in results and

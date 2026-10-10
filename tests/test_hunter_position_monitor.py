@@ -32,6 +32,17 @@ class PositionMonitorTests(unittest.TestCase):
    saved=m.load(p);summary=m.load(p.with_name(p.stem+"-summary.json"));self.assertEqual([x["asset"] for x in saved["open_positions"]],["X"]);self.assertEqual(len(saved["open_positions"][0]["tranches"]),2);self.assertEqual(out["added"],["X"]);self.assertEqual(summary["open_positions"],1);self.assertEqual(summary["closed_positions"],0)
  def test_v2_monitor_defers_add_to_full_capital_allocator(self):
   state,market,review,liq,supply=self.fixture()
+  from test_hunter_lifecycle_v2 import receipt,relative_packets
+  now=dt.datetime(2026,10,4,tzinfo=dt.timezone.utc);c=review['candidates'][0]
+  micro=receipt(now);micro['symbol']='XUSDT'
+  for r in micro['rows']:r[1]=r[4]=90;r[2]=92;r[3]=89;r[7]=100;r[10]=50
+  packets=relative_packets(now)
+  for key,pkt in packets.items():
+   if key.startswith('asset'):
+    pkt['symbol']='XUSDT'
+    for r in pkt['rows']:r[2]=104;r[4]=102 if key.endswith('1h') else 103
+  c['signal']['relative_acceleration_pct']=1.25
+  c['v2_lifecycle_evidence']={'generation_id':c['signal_evidence']['generation_id'],'micro_receipt':micro,'relative_receipts':packets}
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/"v2.json";m.eng.atomic_json_write(p,state)
    out=m.run_lane(p,"SHADOW_V2",market,review,liq,supply,dt.datetime(2026,10,4,tzinfo=dt.timezone.utc),False)

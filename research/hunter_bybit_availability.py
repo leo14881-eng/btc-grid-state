@@ -5,9 +5,9 @@ Failure is UNKNOWN, never NOT_LISTED.
 """
 import datetime as dt, hashlib, hmac, json, math, os, pathlib, re, time, urllib.error, urllib.parse, urllib.request
 try:
-    from research.hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
+    from research.hunter_http_evidence import ObservedHTTPError, emit_public_log, request_json, validate_evidence
 except ModuleNotFoundError:
-    from hunter_http_evidence import ObservedHTTPError, request_json, validate_evidence
+    from hunter_http_evidence import ObservedHTTPError, emit_public_log, request_json, validate_evidence
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-bybit-availability.json"
 SPOT_CACHE=ROOT/"hunter-bybit-spot-cache.json"
@@ -29,10 +29,10 @@ def request(url, data=None, headers=None):
             return request_json(req, timeout=15)
         except ObservedHTTPError as exc:
             evidence = validate_evidence(exc.http_evidence)
-            print("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
+            emit_public_log("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
                 schema="hunter_http_log_v1", route="/bybit/spot",
                 observed_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
-                http_evidence=evidence), sort_keys=True, separators=(",", ":")), flush=True)
+                http_evidence=evidence), sort_keys=True, separators=(",", ":")))
             if evidence["failure_kind"] == "http":
                 # Preserve old public error classification without URL/raw body.
                 reported = evidence.get("worker_error_code", "")
