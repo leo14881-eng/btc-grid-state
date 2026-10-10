@@ -169,6 +169,36 @@ class ReentryTests(unittest.TestCase):
         data[2]['snapshots']['X']['raw_book_evidence']['last_update_id'] = 99
         self.assertIn('SOURCE_SEQUENCE_NOT_NEW', self.run_observation(1, 101, inputs=data)[1])
 
+    def test_reused_evidence_id_and_nonadjacent_generation(self):
+        self.run_observation(1, 100.1)
+        old_id = self.inputs(1, 100.1)[0]['signal_evidence']['evidence_id']
+        data = self.inputs(2, 100.2)
+        data[0]['signal_evidence']['evidence_id'] = old_id
+        self.assertIn('SAME_OR_REPLAYED_CYCLE', self.run_observation(2, 100.2, inputs=data)[1])
+        self.assertTrue(self.run_observation(2, 100.2)[0])
+        data = self.inputs(3, 100.3)
+        data[0]['signal_evidence']['generation_id'] = 'g1'
+        data[1]['generation_id'] = 'g1'
+        self.assertIn('SAME_OR_REPLAYED_CYCLE', self.run_observation(3, 100.3, inputs=data)[1])
+
+    def test_first_buy_annotation_and_real_order_boundary(self):
+        self.state['reentry_registry'] = {}
+        self.state.update(real_trading_enabled=False, real_order_count=0, capital_authority='NONE_SHADOW_ONLY')
+        before = copy.deepcopy(self.state)
+        self.cycle('V1', 1, 100.1, ready=True)
+        self.assertEqual(self.state['events'][0]['strategy_note'], '2026.0.10.11 新策略')
+        for key in ('real_trading_enabled', 'real_order_count', 'capital_authority', 'closed_positions'):
+            self.assertEqual(before[key], self.state[key])
+
+    def test_lane_capital_difference_at_allocator(self):
+        c, scan, liq, supply = self.inputs(2, 100.2)
+        e = eng.evidence(c, liq, supply)
+        state = {'open_positions': [{'tranches': [{'price': 100, 'notional_usdt': 20000}]}]}
+        with patch.object(eng, 'CAPITAL_POOL_USDT', None):
+            self.assertTrue(eng.marginal_capital_gate(state, 1000, e, 'BUY', scan)[0])
+        with patch.object(eng, 'CAPITAL_POOL_USDT', 20000):
+            self.assertFalse(eng.marginal_capital_gate(state, 1000, e, 'BUY', scan)[0])
+
     def test_legacy_context_read_only_preserves_exited_protection(self):
         pos = copy.deepcopy(self.pos)
         pos.update(closed_at_utc=self.start.isoformat(), exit_reason='PROFIT_PROTECTION')
@@ -220,9 +250,17 @@ class ReentryTests(unittest.TestCase):
             stack.enter_context(patch.object(eng, 'refresh_closed_observations'))
             stack.enter_context(patch.object(eng, 'build_summary', return_value={}))
             stack.enter_context(patch.object(eng, 'update_overfilter_guard', return_value={'status': 'NORMAL'}))
-            stack.enter_context(patch.object(eng.tail, 'collect_systemic_evidence', return_value={}))
-            stack.enter_context(patch.object(eng.tail, 'update_risk_controls'))
-            stack.enter_context(patch.object(eng.tail, 'risk_blocks_new', return_value=False))
+            risk_evidence = {}
+            if ready is None:
+                from tests.test_hunter_loss_freeze import market
+                risk_evidence = market(now, oid='cycle'+str(n))
+            else:
+                stack.enter_context(patch.object(eng.tail, 'update_risk_controls'))
+                stack.enter_context(patch.object(eng.tail, 'risk_blocks_new', return_value=False))
+                stack.enter_context(patch.object(eng, 'update_risk_controls', create=True))
+                stack.enter_context(patch.object(eng, 'risk_blocks_new', lambda *args: False, create=True))
+                if not ready:stack.enter_context(patch.object(eng, 'loss_freeze', None, create=True))
+            stack.enter_context(patch.object(eng.tail, 'collect_systemic_evidence', return_value=risk_evidence))
             stack.enter_context(patch.object(eng, '_execution_source_sha', return_value='a'*40))
             stack.enter_context(patch('builtins.print'))
             if ready:
@@ -230,6 +268,17 @@ class ReentryTests(unittest.TestCase):
                 stack.enter_context(patch.object(eng, 'loss_freeze', SimpleNamespace(POLICY='LOSS_AND_MARKET_V1'), create=True))
                 stack.enter_context(patch.object(eng, 'risk_blocks_new', lambda *args: False, create=True))
             eng.main()
+
+    @unittest.skipUnless(hasattr(eng, 'loss_freeze'), 'requires exact combined PR102 integration checkout')
+    def test_combined_real_risk_activation_new_buy_note_both_lanes(self):
+        initial = copy.deepcopy(self.state)
+        for lane in ('V1', 'V2'):
+            self.state = copy.deepcopy(initial)
+            self.cycle(lane, 1, 100.1, ready=None)
+            self.cycle(lane, 2, 100.2, ready=None)
+            self.assertEqual(self.state['loss_control']['policy'], 'LOSS_AND_MARKET_V1')
+            self.assertEqual(self.state['events'][-1]['strategy_note'], '2026.0.10.11 新策略')
+            self.assertFalse(eng.risk_blocks_new(self.state, self.start+dt.timedelta(minutes=2)))
 
     def test_shared_main_lane_gate_differences_and_no_early_anchor_reset(self):
         initial = copy.deepcopy(self.state)

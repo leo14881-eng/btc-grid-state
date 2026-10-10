@@ -134,6 +134,8 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
         return deny('REENTRY_NO_NEW_EVIDENCE', 'POST_EXIT_FRESH_SOURCE_EVIDENCE_REQUIRED')
     prior = row.get('reentry_last_observation')
     if (generation == context.get('generation') or meta.get('evidence_id') == context['signal_evidence'].get('evidence_id')
+            or generation in row.get('reentry_seen_generations', [])
+            or meta['evidence_id'] in row.get('reentry_seen_evidence_ids', [])
             or (prior and (generation == prior['generation'] or any(t <= time(old) for t, old in zip(times, prior['times']))))):
         return deny('REENTRY_NO_NEW_EVIDENCE', 'SAME_OR_REPLAYED_CYCLE')
     current_hash = signal_hash(candidate)
@@ -185,6 +187,8 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
     row['reentry_last_observation'] = observation
     row.setdefault('reentry_seen_signals', []).append(current_hash)
     row.setdefault('reentry_seen_markets', []).append(market_hash)
+    row.setdefault('reentry_seen_generations', []).append(generation)
+    row.setdefault('reentry_seen_evidence_ids', []).append(meta['evidence_id'])
     row['post_exit_low'] = min(number(row.get('post_exit_low')) or price, price)
     reason = row.get('last_exit_reason')
     if row.get('risk_lock'):
