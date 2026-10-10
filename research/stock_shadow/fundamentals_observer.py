@@ -1,14 +1,122 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
 # FINAL_ACCEPTANCE_20261004
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading, re
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading, re, zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT=Path("research/results/stock-shadow")
 STATE=ROOT/"portfolio-v1.json"; OUT=ROOT/"fundamentals-observer-v1.json"
-UA="stock-shadow-research/1.0 leo14881-eng@users.noreply.github.com"
+UA="stock-shadow-research/1.0"
+SEC_HOSTS=frozenset(("www.sec.gov", "data.sec.gov", "efts.sec.gov"))
+SEC_MAX_WIRE_BYTES=8*1024*1024
+SEC_MAX_DECODED_BYTES=32*1024*1024
+SEC_REQUEST_INTERVAL=0.2
+_sec_request_lock=threading.Lock()
+_sec_next_start=0.0
+_sec_denied_hosts=set()
+
+class SECTransportError(ValueError):
+    def __init__(self, code):
+        self.code=code
+        super().__init__(code)
+
+def sec_user_agent():
+    value=os.getenv("SEC_USER_AGENT", "").strip()
+    if not value:
+        raise SECTransportError("SEC_CONTACT_NOT_CONFIGURED")
+    if (len(value)>256 or any(ord(c)<32 or ord(c)>126 for c in value)
+            or not re.search(r"[^\s@]+@[^\s@]+\.[^\s@]+", value)):
+        raise SECTransportError("SEC_CONTACT_INVALID")
+    return value
+
+def _sec_host(url):
+    parsed=urllib.parse.urlsplit(url)
+    if (parsed.scheme!="https" or parsed.hostname not in SEC_HOSTS
+            or parsed.username or parsed.password or parsed.port not in (None,443)):
+        raise SECTransportError("SEC_URL_NOT_ALLOWED")
+    return parsed.hostname
+
+def _sec_start(url):
+    global _sec_next_start
+    host=_sec_host(url)
+    with _sec_request_lock:
+        if host in _sec_denied_hosts:
+            error=urllib.error.HTTPError(url,403,"SEC_ACCESS_DENIED_CACHED",{},None)
+            error.sec_cached_denial=True
+            raise error
+        wait=max(0.0,_sec_next_start-time.monotonic())
+        if wait: time.sleep(wait)
+        _sec_next_start=time.monotonic()+SEC_REQUEST_INTERVAL
+
+class _SECRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _sec_host(newurl)  # Never forward the operator's contact to another host.
+        _sec_start(newurl)
+        return super().redirect_request(req,fp,code,msg,headers,newurl)
+
+def _sec_urlopen(req, timeout):
+    return urllib.request.build_opener(_SECRedirectHandler()).open(req,timeout=timeout)
+
+def _sec_open(url, accept, timeout=25, encoding="gzip, deflate"):
+    _sec_host(url)
+    req=urllib.request.Request(url,headers={
+        "User-Agent":sec_user_agent(),"Accept":accept,"Accept-Encoding":encoding})
+    _sec_start(url)
+    try:
+        return _sec_urlopen(req,timeout)
+    except urllib.error.HTTPError as error:
+        if error.code==403:
+            with _sec_request_lock:
+                _sec_denied_hosts.add(_sec_host(url))
+        raise
+
+def _sec_decode(payload, encoding):
+    encoding=encoding.strip().lower()
+    if encoding in ("","identity"):
+        decoded=payload
+    elif encoding in ("gzip","deflate"):
+        def inflate(window):
+            stream=zlib.decompressobj(window)
+            data=stream.decompress(payload,SEC_MAX_DECODED_BYTES+1)
+            if len(data)>SEC_MAX_DECODED_BYTES or stream.unconsumed_tail:
+                raise SECTransportError("SEC_DECODED_SIZE_LIMIT")
+            if not stream.eof or stream.unused_data:
+                raise SECTransportError("SEC_COMPRESSED_STREAM_INVALID")
+            return data
+        try:
+            if encoding=="gzip":
+                decoded=inflate(16+zlib.MAX_WBITS)
+            else:
+                try: decoded=inflate(zlib.MAX_WBITS)
+                except zlib.error: decoded=inflate(-zlib.MAX_WBITS)
+        except zlib.error:
+            raise SECTransportError("SEC_COMPRESSED_STREAM_INVALID") from None
+    else:
+        raise SECTransportError("SEC_CONTENT_ENCODING_UNSUPPORTED")
+    if len(decoded)>SEC_MAX_DECODED_BYTES:
+        raise SECTransportError("SEC_DECODED_SIZE_LIMIT")
+    return decoded
+
+def _sec_response(url, accept, timeout=25):
+    with _sec_open(url,accept,timeout) as response:
+        if response.status!=200:
+            raise SECTransportError("SEC_HTTP_STATUS_UNEXPECTED")
+        size=response.headers.get("Content-Length")
+        if size is not None and (not size.isdigit() or int(size)>SEC_MAX_WIRE_BYTES):
+            raise SECTransportError("SEC_WIRE_SIZE_LIMIT")
+        chunks=[]; total=0
+        while True:
+            chunk=response.read(min(65536,SEC_MAX_WIRE_BYTES-total+1))
+            if not chunk: break
+            total+=len(chunk)
+            if total>SEC_MAX_WIRE_BYTES: raise SECTransportError("SEC_WIRE_SIZE_LIMIT")
+            chunks.append(chunk)
+        if size is not None and total!=int(size):
+            raise SECTransportError("SEC_WIRE_LENGTH_MISMATCH")
+        media=response.headers.get("Content-Type","").split(";",1)[0].strip().lower()
+        return _sec_decode(b"".join(chunks),response.headers.get("Content-Encoding","")),media
 BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
@@ -21,16 +129,41 @@ def load(p,d):
     try: return json.loads(p.read_text()) if p.exists() else d
     except Exception: return d
 def get(url):
-    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Accept-Encoding":"identity"})
-    with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
+    raw,media=_sec_response(url,"application/json")
+    if media not in ("application/json","text/json","text/plain","application/octet-stream"):
+        raise SECTransportError("SEC_JSON_CONTENT_TYPE_INVALID")
+    try:
+        text=raw.decode("utf-8-sig")
+        if text.lstrip().startswith("<"):
+            raise SECTransportError("SEC_JSON_HTML_RESPONSE")
+        data=json.loads(text)
+    except (UnicodeDecodeError,json.JSONDecodeError):
+        raise SECTransportError("SEC_JSON_INVALID") from None
+    if not isinstance(data,dict):
+        raise SECTransportError("SEC_JSON_SCHEMA_INVALID")
+    path=urllib.parse.urlsplit(url).path
+    valid=True
+    if "/frames/" in path: valid=isinstance(data.get("data"),list)
+    elif "/companyfacts/" in path: valid=isinstance(data.get("facts"),dict)
+    elif "/submissions/" in path: valid=isinstance(data.get("filings"),dict)
+    elif "search-index" in path: valid=isinstance(data.get("hits"),dict) and isinstance(data["hits"].get("hits"),list)
+    elif path.endswith("company_tickers_exchange.json"):
+        valid=isinstance(data.get("fields"),list) and isinstance(data.get("data"),list)
+    elif path.endswith("company_tickers.json"):
+        valid=bool(data) and all(isinstance(v,dict) and v.get("ticker") and (v.get("cik_str") or v.get("cik")) for v in data.values())
+    if not valid: raise SECTransportError("SEC_JSON_SCHEMA_INVALID")
+    return data
 
 
 def transport_error_details(error):
     """Persist only allowlisted HTTP metadata; never response bodies, URLs or auth values."""
     details = {"type": type(error).__name__}
+    if isinstance(error, SECTransportError):
+        details["code"]=error.code
     if not isinstance(error, urllib.error.HTTPError):
         return details
     details["http_status"] = error.code
+    if getattr(error,"sec_cached_denial",False): details["request_sent"]=False
     host = urllib.parse.urlsplit(error.url or "").hostname
     details["endpoint"] = {
         "www.sec.gov": "SEC_WWW",
@@ -76,10 +209,10 @@ def proxy_json(url):
 
 def download_bulk_zip(url):
     # Stream large SEC archives to disk; do not hold the whole market archive in RAM.
-    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/zip","Accept-Encoding":"identity"})
+    sec_user_agent()  # Configuration must exist before allocating a temporary archive.
     tmp=tempfile.NamedTemporaryFile(prefix="stock-shadow-sec-",suffix=".zip",delete=False)
     try:
-        with urllib.request.urlopen(req,timeout=120) as r:
+        with _sec_open(url,"application/zip",timeout=120,encoding="identity") as r:
             shutil.copyfileobj(r,tmp,length=1024*1024)
         tmp.close()
         with open(tmp.name,"rb") as fp:
@@ -267,7 +400,7 @@ def frame_evidence_by_cik(requested_batch_index=0):
       ("cash","ifrs-full","CashAndCashEquivalents","USD",["CY2024I","CY2025I"]),
       ("total_debt","ifrs-full","Borrowings","USD",["CY2024I","CY2025I"]),
     ]
-    raw={}; transport=set(); request_errors=[]
+    raw={}; transport=set(); request_errors=[]; successful_requests=0
     all_tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
     # Each request is market-wide, but SEC still rate-limits concept/period endpoints.
     # Rotate a fixed request budget and merge persisted evidence across runs.
@@ -295,7 +428,7 @@ def frame_evidence_by_cik(requested_batch_index=0):
         futures={ex.submit(fetch_one,t): t for t in tasks}
         for fut in as_completed(futures):
             try:
-                (key,tax,concept,unit,p),d,t=fut.result(); transport.add(t)
+                (key,tax,concept,unit,p),d,t=fut.result(); transport.add(t); successful_requests+=1
                 for row in d.get("data") or []:
                     cik=int(row.get("cik") or 0)
                     if not cik: continue
@@ -333,7 +466,7 @@ def frame_evidence_by_cik(requested_batch_index=0):
             dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
         ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
         out[cik]=ev
-    return out,{"requests":len(tasks),"request_budget":FRAME_REQUEST_BUDGET,"total_tasks":len(all_tasks),"batch_index":batch_index,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
+    return out,{"successful_requests":successful_requests,"requests":len(tasks),"request_budget":FRAME_REQUEST_BUDGET,"total_tasks":len(all_tasks),"batch_index":batch_index,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
 
 def merge_financial_evidence(prior,current):
     """Accumulate bounded frame batches without erasing evidence learned in prior runs."""
@@ -358,6 +491,9 @@ def ticker_map():
             if isinstance(raw,dict) and "data" in raw and "fields" in raw:
                 fields=raw["fields"]; return {str(dict(zip(fields,row)).get("ticker","")).upper().replace(".","-"):dict(zip(fields,row)) for row in raw["data"]},errs
             return {str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()},errs
+        except SECTransportError as e:
+            errs.append({"url":url,**transport_error_details(e)})
+            return {},errs  # No proxy substitution for invalid config or invalid payload.
         except urllib.error.HTTPError as e: errs.append({"url":url,"status":e.code,**transport_error_details(e)})
         except Exception as e: errs.append({"url":url,"type":type(e).__name__,"message":str(e)[:120]})
     # GitHub-hosted runners can be blocked by SEC edge policy. Try a read-only
@@ -403,9 +539,11 @@ def sec_filing_text(cik, accession, primary_document):
     if not accession or not primary_document: raise ValueError("filing_document_identity_missing")
     acc=str(accession).replace("-","")
     url=f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{primary_document}"
-    req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"text/html,text/plain","Accept-Encoding":"identity"})
     try:
-        with urllib.request.urlopen(req,timeout=25) as r: return r.read().decode("utf-8","replace"),"SEC_DIRECT"
+        raw,media=_sec_response(url,"text/html,text/plain")
+        if media not in ("text/html","text/plain","application/xhtml+xml"):
+            raise SECTransportError("SEC_TEXT_CONTENT_TYPE_INVALID")
+        return raw.decode("utf-8","replace"),"SEC_DIRECT"
     except urllib.error.HTTPError as e:
         if e.code not in (403,429): raise
     # Read-only fallback for SEC edge blocks on GitHub-hosted runners.
@@ -555,7 +693,7 @@ def main():
         OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
         print(json.dumps({k:v for k,v in out.items() if k!="companies"})); return
     # Fundamentals/filings are low-frequency observation data. Reuse persisted SSOT for six hours.
-    _last=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
+    _last=old.get("market_batch_attempted_at") or old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     if _last and old.get("market_batch_schema_version")==MARKET_BATCH_SCHEMA_VERSION:
         try:
             _age=(datetime.now(timezone.utc)-datetime.fromisoformat(str(_last).replace("Z","+00:00"))).total_seconds()
@@ -580,7 +718,7 @@ def main():
             errors.append({"symbol":sym,"stage":"CIK_RESOLUTION",**transport_error_details(e)})
     bulk={"attempted":False,"reason":"DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE","ciks_requested":len(set(symbol_cik.values()))}
 
-    last_batch_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
+    last_batch_at=old.get("market_batch_attempted_at") or old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     fmp_refreshed_at=old.get("fmp_refreshed_at")
     batch_due=True
     if last_batch_at:
@@ -593,6 +731,7 @@ def main():
         batch_due=True
     market_batch_refreshed_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
     frames_refreshed_at=old.get("frames_refreshed_at") or old.get("updated_at")
+    market_batch_attempted_at=old.get("market_batch_attempted_at")
     frames_by_cik={}; fmp_by_symbol={}; stockfit_by_symbol={}
     stockfit_status={"provider":"STOCKFIT_FREE","attempted":False,"status":"CACHE_FRESH"}
     frames_status={"attempted":False,"status":"CACHE_FRESH","reason":"SIX_HOUR_MARKET_BATCH_CACHE"}
@@ -608,7 +747,7 @@ def main():
             frames_by_cik,frames_status=frame_evidence_by_cik(previous_batch_index+1)
             frames_status["attempted"]=True
             frames_status["status"]="OK" if not frames_status.get("errors") else "PARTIAL"
-            frames_refreshed_at=now()
+            if frames_status.get("successful_requests",0): frames_refreshed_at=now()
         except Exception as e:
             frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
         preliminary={sym:merge_financial_evidence((companies.get(sym) or {}).get("financial_evidence"),frames_by_cik.get(cik))
@@ -634,7 +773,9 @@ def main():
             stockfit_refreshed_at=old.get("stockfit_refreshed_at")
         stockfit_quota_day=old.get("stockfit_quota_day")
         stockfit_requests_today=int(old.get("stockfit_requests_today") or 0)+int(stockfit_status.get("requests") or 0)
-        market_batch_refreshed_at=now()
+        market_batch_attempted_at=now()
+        if frames_status.get("successful_requests",0) or stockfit_by_symbol:
+            market_batch_refreshed_at=now()
 
     # Rank only residual gaps after cached + SEC Frames + precise StockFit fallback have been merged.
     ranked=[]
@@ -744,7 +885,7 @@ def main():
     if "stockfit_refreshed_at" not in locals(): stockfit_refreshed_at=old.get("stockfit_refreshed_at")
     if "stockfit_quota_day" not in locals(): stockfit_quota_day=old.get("stockfit_quota_day")
     if "stockfit_requests_today" not in locals(): stockfit_requests_today=old.get("stockfit_requests_today",0)
-    out={"updated_at":now(),"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"stockfit_refreshed_at":stockfit_refreshed_at,"stockfit_quota_day":stockfit_quota_day,"stockfit_requests_today":stockfit_requests_today,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
+    out={"updated_at":now(),"market_batch_attempted_at":market_batch_attempted_at,"market_batch_schema_version":MARKET_BATCH_SCHEMA_VERSION,"stockfit_refreshed_at":stockfit_refreshed_at,"stockfit_quota_day":stockfit_quota_day,"stockfit_requests_today":stockfit_requests_today,"market_batch_refreshed_at":market_batch_refreshed_at,"fmp_refreshed_at":fmp_refreshed_at,"frames_refreshed_at":frames_refreshed_at,"mode":"OBSERVATION_ONLY","strategy_effect":False,"positions":len(symbols),
          "tracked":sum(1 for s in symbols if s in companies),"evidence_complete":complete,
          "evidence_pending":max(0,len(symbols)-complete),"pending_symbols":pending_symbols,"pending_details":pending_details,"refreshed_this_run":refreshed,
          "primary_transport":sec_transport,"stockfit_transport":stockfit_status,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,

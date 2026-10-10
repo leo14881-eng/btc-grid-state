@@ -15,7 +15,7 @@ from .persist import ROOT, changed_paths, persist, snapshot, validate_outputs, P
 from .runtime import JOBS, admission, check_fence, environment, git, require
 
 PROVIDER_ENV_KEYS = ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY',
-                     'STOCKFIT_API_KEY', 'FMP_API_KEY')
+                     'STOCKFIT_API_KEY', 'FMP_API_KEY', 'SEC_USER_AGENT')
 
 COMMANDS = {
     'main': [('research/stock_shadow/fundamentals_observer.py', 480),

@@ -1532,6 +1532,7 @@ def test_fundamentals_main_rotates_persisted_frames_through_every_batch(tmp_path
         if out_path.exists():
             old = json.loads(out_path.read_text())
             old["market_batch_refreshed_at"] = "2000-01-01T00:00:00+00:00"
+            old["market_batch_attempted_at"] = "2000-01-01T00:00:00+00:00"
             out_path.write_text(json.dumps(old))
         requested.clear()
         m.main()
@@ -1606,16 +1607,18 @@ def test_fundamentals_main_keeps_cik_http_status_without_secrets(tmp_path, monke
     monkeypatch.setattr(m, "OUT", out_path)
     monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
     calls = []
-    def denied(request, **kwargs):
+    def denied(request, timeout):
         calls.append(request.full_url)
         code = 401 if request.host == "r.jina.ai" else 403
         raise m.urllib.error.HTTPError(request.full_url, code, "SECRET", {}, None)
-    monkeypatch.setattr(m.urllib.request, "urlopen", denied)
+    monkeypatch.setenv("SEC_USER_AGENT", "Observer Fixture contact@example.invalid")
+    monkeypatch.setattr(m, "_sec_urlopen", denied)
+    monkeypatch.setattr(m.urllib.request, "urlopen", lambda req, **kwargs: denied(req, kwargs["timeout"]))
     monkeypatch.setattr(m.time, "sleep", lambda seconds: None)
     monkeypatch.setattr(m, "frame_evidence_by_cik", lambda batch: ({}, {"errors": [], "batch_index": batch}))
     m.main()
     result = json.loads(out_path.read_text())
-    assert len(calls) == 4  # two SEC maps, one existing proxy fallback, one EFTS query
+    assert len(calls) == 3  # repeated denied SEC host is suppressed; proxy/EFTS unchanged
     assert [e["http_status"] for e in result["mapping_errors"]] == [403, 403, 401]
     assert result["mapping_errors"][-1]["endpoint"] == "JINA_READER"
     assert result["errors"] == [{
@@ -1625,3 +1628,169 @@ def test_fundamentals_main_keeps_cik_http_status_without_secrets(tmp_path, monke
     assert result["status"] == "PARTIAL" and result["strategy_effect"] is False
     assert state_path.read_bytes() == original_state
     assert "SECRET" not in json.dumps(result)
+
+
+import pytest
+
+def _sec_fixture_module(monkeypatch):
+    m = _load_fundamentals_observer()
+    monkeypatch.setenv("SEC_USER_AGENT", "Observer Fixture contact@example.invalid")
+    monkeypatch.setattr(m, "SEC_REQUEST_INTERVAL", 0)
+    return m
+
+
+def _sec_fixture_response(body, encoding="identity", media="application/json", status=200, length=None):
+    import io
+    from email.message import Message
+    response = io.BytesIO(body)
+    response.status = status
+    response.headers = Message()
+    response.headers["Content-Type"] = media
+    response.headers["Content-Encoding"] = encoding
+    if length is not None:
+        response.headers["Content-Length"] = str(length)
+    return response
+
+
+@pytest.mark.parametrize("encoding", ["identity", "gzip", "deflate", "deflate-raw"])
+def test_sec_contact_and_compressed_json_roundtrip(monkeypatch, encoding):
+    import gzip, zlib
+    m = _sec_fixture_module(monkeypatch)
+    expected = {"data": [{"cik": 123, "val": 42}]}
+    plain = json.dumps(expected).encode()
+    if encoding == "gzip": body = gzip.compress(plain)
+    elif encoding == "deflate": body = zlib.compress(plain)
+    elif encoding == "deflate-raw":
+        compressor = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+        body = compressor.compress(plain) + compressor.flush()
+    else: body = plain
+    seen = []
+    def request(req, timeout):
+        seen.append(req)
+        return _sec_fixture_response(body, "deflate" if encoding == "deflate-raw" else encoding)
+    monkeypatch.setattr(m, "_sec_urlopen", request)
+    assert m.get("https://data.sec.gov/api/xbrl/frames/us-gaap/Test/USD/CY2026Q2.json") == expected
+    assert seen[0].get_header("User-agent") == "Observer Fixture contact@example.invalid"
+    assert seen[0].get_header("Accept-encoding") == "gzip, deflate"
+    assert "contact@" not in m.UA  # Other providers never receive the SEC contact.
+
+
+def test_sec_missing_invalid_contact_and_redirect_do_not_send(monkeypatch):
+    m = _sec_fixture_module(monkeypatch)
+    seen = []
+    monkeypatch.setattr(m, "_sec_urlopen", lambda *args: seen.append(args))
+    monkeypatch.delenv("SEC_USER_AGENT")
+    with pytest.raises(m.SECTransportError, match="SEC_CONTACT_NOT_CONFIGURED"):
+        m.get("https://www.sec.gov/files/company_tickers.json")
+    for value in ("not-a-contact", "Fixture contact@example.invalid\r\nX-Test: injected"):
+        monkeypatch.setenv("SEC_USER_AGENT", value)
+        with pytest.raises(m.SECTransportError, match="SEC_CONTACT_INVALID"):
+            m.get("https://www.sec.gov/files/company_tickers.json")
+    monkeypatch.setenv("SEC_USER_AGENT", "Observer Fixture contact@example.invalid")
+    for url in ("https://example.invalid/", "http://www.sec.gov/", "https://www.sec.gov.evil.invalid/"):
+        with pytest.raises(m.SECTransportError, match="SEC_URL_NOT_ALLOWED"):
+            m._sec_open(url, "application/json")
+        req = m.urllib.request.Request("https://www.sec.gov/files/company_tickers.json")
+        with pytest.raises(m.SECTransportError, match="SEC_URL_NOT_ALLOWED"):
+            m._SECRedirectHandler().redirect_request(req, None, 302, "", {}, url)
+    assert seen == []
+
+
+def test_sec_compressed_and_json_failures_are_bounded_and_classified(monkeypatch):
+    import gzip
+    m = _sec_fixture_module(monkeypatch)
+    monkeypatch.setattr(m, "SEC_MAX_WIRE_BYTES", 128)
+    monkeypatch.setattr(m, "SEC_MAX_DECODED_BYTES", 256)
+    good = b'{"data":[]}'
+    zipped = gzip.compress(good)
+    cases = [
+        (b"<html>denied</html>", "identity", "text/html", 200, None, "SEC_JSON_CONTENT_TYPE_INVALID"),
+        (b"<html>denied</html>", "identity", "application/json", 200, None, "SEC_JSON_HTML_RESPONSE"),
+        (b"not json", "identity", "application/json", 200, None, "SEC_JSON_INVALID"),
+        (b"[]", "identity", "application/json", 200, None, "SEC_JSON_SCHEMA_INVALID"),
+        (b'{"error":"denied"}', "identity", "application/json", 200, None, "SEC_JSON_SCHEMA_INVALID"),
+        (good, "br", "application/json", 200, None, "SEC_CONTENT_ENCODING_UNSUPPORTED"),
+        (good, "identity", "application/json", 206, None, "SEC_HTTP_STATUS_UNEXPECTED"),
+        (b"x"*129, "identity", "application/json", 200, None, "SEC_WIRE_SIZE_LIMIT"),
+        (good, "identity", "application/json", 200, 129, "SEC_WIRE_SIZE_LIMIT"),
+        (good, "identity", "application/json", 200, 30, "SEC_WIRE_LENGTH_MISMATCH"),
+        (gzip.compress(b"x"*4096), "gzip", "application/json", 200, None, "SEC_DECODED_SIZE_LIMIT"),
+        (zipped[:-2], "gzip", "application/json", 200, None, "SEC_COMPRESSED_STREAM_INVALID"),
+        (zipped+b"trailing", "gzip", "application/json", 200, None, "SEC_COMPRESSED_STREAM_INVALID"),
+    ]
+    for body, encoding, media, status, length, expected in cases:
+        monkeypatch.setattr(m, "_sec_urlopen", lambda req, timeout: _sec_fixture_response(body, encoding, media, status, length))
+        with pytest.raises(m.SECTransportError) as caught:
+            m.get("https://data.sec.gov/api/xbrl/frames/us-gaap/Test/USD/CY2026Q2.json")
+        assert m.transport_error_details(caught.value) == {"type": "SECTransportError", "code": expected}
+
+
+def test_sec_request_pacing_and_cached_host_denial(monkeypatch):
+    m = _sec_fixture_module(monkeypatch)
+    clock = [0.0]
+    waits = []
+    monkeypatch.setattr(m, "SEC_REQUEST_INTERVAL", 0.2)
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+    def sleep(seconds):
+        waits.append(seconds)
+        clock[0] += seconds
+    monkeypatch.setattr(m.time, "sleep", sleep)
+    for _ in range(3): m._sec_start("https://www.sec.gov/files/company_tickers.json")
+    assert waits == pytest.approx([0.2, 0.2])
+    calls = []
+    def denied(req, timeout):
+        calls.append(req.full_url)
+        raise m.urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+    monkeypatch.setattr(m, "_sec_urlopen", denied)
+    for _ in range(2):
+        with pytest.raises(m.urllib.error.HTTPError) as caught:
+            m.get("https://efts.sec.gov/LATEST/search-index?q=TEST")
+    assert len(calls) == 1
+    assert m.transport_error_details(caught.value)["request_sent"] is False
+
+
+def test_sec_failed_refresh_preserves_evidence_age_and_attempt_cooldown(tmp_path, monkeypatch):
+    m = _sec_fixture_module(monkeypatch)
+    state = tmp_path / "portfolio-v1.json"
+    out = tmp_path / "fundamentals-observer-v1.json"
+    state.write_text(json.dumps({"positions": {"TEST": {}}}))
+    state_before = state.read_bytes()
+    stamp = "2000-01-01T00:00:00+00:00"
+    prior = {"cash": {"values": [{"end": "1999-12-31", "val": 123}]}}
+    out.write_text(json.dumps({
+        "market_batch_schema_version": m.MARKET_BATCH_SCHEMA_VERSION,
+        "market_batch_refreshed_at": stamp, "frames_refreshed_at": stamp,
+        "frames_transport": {"batch_index": 0},
+        "companies": {"TEST": {"financial_evidence": prior}},
+    }))
+    monkeypatch.setattr(m, "STATE", state)
+    monkeypatch.setattr(m, "OUT", out)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    monkeypatch.setattr(m, "ticker_map", lambda: ({"TEST": {"cik_str": 123}}, []))
+    calls = []
+    def invalid(*args):
+        calls.append(args)
+        raise m.SECTransportError("SEC_JSON_HTML_RESPONSE")
+    monkeypatch.setattr(m, "frame_json", invalid)
+    monkeypatch.setattr(m, "sec_companyfacts", invalid)
+    monkeypatch.setattr(m, "sec_submission", invalid)
+    m.main()
+    result = json.loads(out.read_text())
+    assert result["market_batch_refreshed_at"] == stamp
+    assert result["frames_refreshed_at"] == stamp
+    assert result["market_batch_attempted_at"] != stamp
+    assert result["frames_transport"]["batch_index"] == 1
+    assert result["frames_transport"]["successful_requests"] == 0
+    assert result["companies"]["TEST"]["financial_evidence"]["cash"] == prior["cash"]
+    assert result["status"] == "PARTIAL"
+    assert state.read_bytes() == state_before
+    saved = out.read_bytes()
+    calls.clear()
+    m.main()
+    assert calls == [] and out.read_bytes() == saved
+
+
+def test_sec_contact_is_excluded_from_preflight_environment():
+    from research.stock_shadow.server.runner import test_environment
+    env = {"SEC_USER_AGENT": "Observer Fixture contact@example.invalid", "PATH": "/fixture"}
+    assert test_environment(env) == {"PATH": "/fixture"}
