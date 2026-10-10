@@ -3,8 +3,11 @@ import json
 import re
 import datetime as dt
 import time
+import contextlib
+import contextvars
 import urllib.error
 import urllib.request
+import urllib.parse
 
 LIMIT = 4096
 SCHEMA = "hunter_http_evidence_v1"
@@ -20,6 +23,116 @@ HEADER_RULES = {
 MARKERS = {"ACCESS_DENIED_TEXT", "COUNTRY_BLOCK_TEXT", "RATE_LIMIT_TEXT"}
 KEYS = {"schema", "layer", "http_status", "failure_kind", "headers", "body_kind",
         "body_bytes_sampled", "body_truncated", "body_read_failed", "body_markers", "ret_code"}
+REQUEST_CONTEXT = contextvars.ContextVar("hunter_public_request_context", default={})
+OBSERVATION_HEADERS = {key: value for key, value in HEADER_RULES.items()
+                       if not key.startswith("x-hunter-")}
+OBSERVATION_HEADERS.update({"x-bapi-limit": r"[0-9]{1,10}",
+    "x-bapi-limit-status": r"[0-9]{1,10}", "x-bapi-limit-reset-timestamp": r"[0-9]{1,16}"})
+OBSERVATION_KEYS = {"schema", "layer", "job", "upstream_job_index", "symbol", "interval",
+    "started_at_utc", "completed_at_utc", "duration_ms", "http_status", "ret_code",
+    "worker_request_id", "worker_build", "headers", "root_cause"}
+
+
+@contextlib.contextmanager
+def observation_context(generation_end_ms, batch_id=None):
+    """Trusted collect context, scoped to one thread; not request/response content."""
+    token = REQUEST_CONTEXT.set(dict(generation_end_ms=generation_end_ms, batch_id=batch_id))
+    try:
+        yield
+    finally:
+        REQUEST_CONTEXT.reset(token)
+
+
+def log_generation_binding(generation_id, status):
+    """Connect scan generation to the collect timestamp; never a request timer."""
+    try:
+        if (not isinstance(generation_id, str) or not re.fullmatch(r"\d{8}T\d{12}Z", generation_id)
+                or not isinstance(status, dict) or status.get("source") != "OFFICIAL_BYBIT_V5_VIA_WORKER"
+                or not re.fullmatch(r"[0-9a-f]{64}", status.get("snapshot_sha256", ""))):
+            return
+        captured = dt.datetime.fromisoformat(status["captured_at_utc"])
+        print("HUNTER_BYBIT_GENERATION_BINDING " + json.dumps(dict(
+            scan_generation_id=generation_id, generation_end_ms=int(captured.timestamp()*1000),
+            snapshot_sha256=status["snapshot_sha256"]), sort_keys=True, separators=(",", ":")), flush=True)
+    except Exception:
+        pass
+
+
+def consume_observations(body, headers, request):
+    """Strip optional transport metadata before callers see authoritative data.
+
+    A malformed/missing observation never changes market acceptance. Validate the
+    complete bounded set and outer request-id binding before emitting any record.
+    HTTP status is not a claim of valid candles or known root cause.
+    """
+    if not isinstance(body, dict) or "request_observations" not in body:
+        return body
+    body = dict(body)
+    records = body.pop("request_observations")
+    try:
+        if not isinstance(records, list) or not 1 <= len(records) <= 40:
+            raise ValueError("invalid observations")
+        selector = request.selector
+        if len(selector) > 2048:
+            raise ValueError("invalid route")
+        route = urllib.parse.urlsplit(selector)
+        job = {"/bybit/spot": "spot", "/bybit/tickers": "tickers",
+               "/bybit/early-klines": "early_klines"}.get(route.path)
+        expected = [(None, None)]
+        if job == "early_klines":
+            if not isinstance(request.data, bytes) or len(request.data) > 2048:
+                raise ValueError("invalid request scope")
+            sent = json.loads(request.data)
+            symbols = sent.get("symbols")
+            if (not isinstance(symbols, list) or not 1 <= len(symbols) <= 20
+                    or any(not isinstance(s, str) or not re.fullmatch(r"[A-Z0-9]{2,30}", s) for s in symbols)
+                    or len(set(symbols)) != len(symbols)):
+                raise ValueError("invalid request scope")
+            expected = [(symbol, interval) for symbol in symbols for interval in ("60", "15")]
+        elif job in ("spot", "tickers"):
+            symbol = urllib.parse.parse_qs(route.query).get("symbol", [None])[0]
+            expected = [(symbol.upper().strip() if symbol is not None else None, None)]
+        else:
+            raise ValueError("invalid route")
+        request_id = allowed_headers(headers).get("x-hunter-request-id")
+        if request_id is None or len(records) != len(expected):
+            raise ValueError("unbound observations")
+        seen = set()
+        for row in records:
+            if not isinstance(row, dict) or set(row) != OBSERVATION_KEYS:
+                raise ValueError("invalid shape")
+            index = row["upstream_job_index"]
+            if (type(index) is not int or not 0 <= index < len(expected) or index in seen
+                    or (row["symbol"], row["interval"]) != expected[index]
+                    or row["schema"] != "hunter_bybit_request_observation_v1"
+                    or row["layer"] != "bybit_upstream" or row["job"] != job
+                    or row["worker_request_id"] != request_id or row["worker_build"] != BUILD
+                    or row["root_cause"] != "UNKNOWN"
+                    or type(row["http_status"]) is not int
+                    or not (row["http_status"] == 0 or 100 <= row["http_status"] <= 599)
+                    or type(row["duration_ms"]) is not int or not 0 <= row["duration_ms"] <= 120000
+                    or (row["ret_code"] is not None and (type(row["ret_code"]) is not int or abs(row["ret_code"]) > 9999999999))):
+                raise ValueError("invalid scope")
+            seen.add(index)
+            for key in ("started_at_utc", "completed_at_utc"):
+                stamp = row[key]
+                if not isinstance(stamp, str) or not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", stamp):
+                    raise ValueError("invalid timestamp")
+                dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+            safe = row["headers"]
+            if (not isinstance(safe, dict) or set(safe) - set(OBSERVATION_HEADERS)
+                    or any(not isinstance(value, str) or not re.fullmatch(OBSERVATION_HEADERS[key], value)
+                           for key, value in safe.items())):
+                raise ValueError("invalid headers")
+        for row in records:
+            print("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(
+                dict(row, **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")), flush=True)
+    except Exception:
+        try:
+            print("HUNTER_BYBIT_OBSERVATION_DROPPED INVALID_OR_UNBOUND", flush=True)
+        except Exception:
+            pass
+    return body
 
 
 def allowed_headers(headers):
@@ -31,7 +144,7 @@ def allowed_headers(headers):
     return out
 
 
-def read_evidence(stream, headers, status, layer, failure_kind="http"):
+def read_evidence(stream, headers, status, layer, failure_kind="http", request=None):
     sample = b""
     read_failed = False
     try:
@@ -49,6 +162,8 @@ def read_evidence(stream, headers, status, layer, failure_kind="http"):
     try:
         if not truncated and sample:
             body = json.loads(text)
+            if request is not None:
+                body = consume_observations(body, headers, request)
             kind = "json"
             if isinstance(body, dict) and type(body.get("retCode")) is int and abs(body["retCode"]) <= 9999999999:
                 ret_code = body["retCode"]
@@ -154,7 +269,7 @@ def request_json(request, timeout):
                     duration_ms=max(0, round((time.monotonic()-monotonic)*1000)),
                     http_status=observation.get("status", 0), ret_code=observation.get("ret_code"),
                     worker_request_id=safe.get("x-hunter-request-id"), headers=safe,
-                    root_cause="UNKNOWN"), sort_keys=True, separators=(",", ":")), flush=True)
+                    root_cause="UNKNOWN", **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")), flush=True)
         except Exception:
             pass  # Logging must not change successful values or failure propagation.
 
@@ -164,7 +279,7 @@ def _request_json(request, timeout, observation):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             observation.update(status=getattr(response, "status", 0), headers=getattr(response, "headers", None))
             try:
-                body = json.load(response)
+                body = consume_observations(json.load(response), response.headers, request)
                 code = body.get("retCode") if isinstance(body, dict) else None
                 if type(code) is int and abs(code) <= 9999999999:
                     observation["ret_code"] = code
@@ -177,7 +292,7 @@ def _request_json(request, timeout, observation):
     except urllib.error.HTTPError as exc:
         observation.update(status=exc.code, headers=exc.headers)
         try:
-            evidence = read_evidence(exc, exc.headers, exc.code, "worker_http")
+            evidence = read_evidence(exc, exc.headers, exc.code, "worker_http", request=request)
             observation["ret_code"] = evidence["ret_code"]
         finally:
             try:

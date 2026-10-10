@@ -83,6 +83,12 @@ test('all existing subrequests are bounded observations; 142 symbols remain 284 
   assert.equal(parsed.filter(r => r.http_status === 403).length, 1);
   assert.equal(parsed.filter(r => r.http_status === 200 && r.ret_code === 0).length, 284);
   assert.equal(new Set(parsed.map(r => r.worker_request_id)).size, 9);
+  for (const result of results) {
+    assert.equal(result.request_observations.length, Object.keys(result.result.klines).length * 2);
+    for (const record of result.request_observations) assert(parsed.some(row => JSON.stringify(row) === JSON.stringify(record)));
+    assert(!('request_observations' in result.result));
+    assert(JSON.stringify(result.request_observations).length < 56000);
+  }
 });
 
 test('business errors, transport, invalid headers and logger failures preserve responses', async t => {
@@ -92,7 +98,8 @@ test('business errors, transport, invalid headers and logger failures preserve r
     {headers: {'x-bapi-limit': '192.0.2.1', 'x-bapi-limit-status': 'SECRET_DO_NOT_STORE', 'x-bapi-limit-reset-timestamp': '9'.repeat(17)}});
   let body = await (await send()).json();
   assert.equal(body.result.failures.BTCUSDT['60'], 'Error: BYBIT_RET_10006');
-  assert(!JSON.stringify(body).includes('request_observation'));
+  assert(!('request_observations' in body.result));
+  assert(body.request_observations.every(row => row.ret_code === 10006));
   assert(logs.every(line => {const r = JSON.parse(line.slice(line.indexOf(' ')+1)); return r.ret_code === 10006 && Object.keys(r.headers).length === 0;}));
   logs.length = 0;
   globalThis.fetch = async () => { throw new Error('SECRET_DO_NOT_STORE'); };
@@ -314,7 +321,10 @@ test('spot success preserves the upstream JSON contract and makes one request', 
   let calls = 0;
   globalThis.fetch = async () => { calls++; return Response.json(expected); };
   const response = await worker.fetch(new Request('https://worker.invalid/bybit/spot'), {});
-  assert.equal(response.status, 200); assert.deepEqual(await response.json(), expected); assert.equal(calls, 1);
+  const actual = await response.json();
+  assert.equal(actual.request_observations.length, 1);
+  delete actual.request_observations;
+  assert.equal(response.status, 200); assert.deepEqual(actual, expected); assert.equal(calls, 1);
 });
 
 test('HTTP 200 body abort keeps AbortError identity on both public list routes', async t => {

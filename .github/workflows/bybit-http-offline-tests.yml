@@ -7,6 +7,7 @@ on:
       - 'research/hunter_bybit_worker.py'
       - 'research/hunter_bybit_availability.py'
       - 'research/hunter_http_evidence.py'
+      - 'research/hunter_cex_scan.py'
       - 'workers/hunter-bybit-proxy.js'
       - 'tests/test_hunter_http*.py'
       - 'tests/test_hunter_http*.mjs'
@@ -19,6 +20,8 @@ on:
       - 'tests/fixtures/.gitattributes'
       - 'tests/fixtures/hunter_http_worker_responses.json'
       - 'tests/generate_hunter_http_contract.mjs'
+      - 'tests/generate_hunter_observation_contract.mjs'
+      - 'tests/fixtures/hunter_observation_responses.json'
       - 'scripts/run_hunter_http_compat_tests.py'
       - '.github/workflows/bybit-http-offline-tests.yml'
 permissions:
@@ -44,6 +47,7 @@ jobs:
       - name: Verify offline Worker fixtures and route regressions
         run: |
           node tests/generate_hunter_http_contract.mjs --check
+          node tests/generate_hunter_observation_contract.mjs --check
           node --test tests/test_hunter_http_diagnostics.mjs tests/test_hunter_bybit_proxy.mjs
-      - name: Run 111 guarded compatibility and downstream tests
+      - name: Run guarded compatibility and downstream tests
         run: python -I -B -X utf8 scripts/run_hunter_http_compat_tests.py

@@ -57,7 +57,7 @@ function evidenceError(code, evidence) {
   const error = new Error(code); error.httpEvidence = evidence; return error;
 }
 
-async function upstream(path, params, signal, requestId) {
+async function upstream(path, params, signal, requestId, observations, jobIndex = 0) {
   const started = Date.now(); const monotonic = performance.now(); const observed = {};
   try { return await upstreamRequest(path, params, signal, requestId, observed); }
   finally {
@@ -72,16 +72,21 @@ async function upstream(path, params, signal, requestId) {
         const value = observed.response?.headers.get(key);
         if (value && pattern.test(value)) safeHeaders[key] = value;
       }
-      console.log("HUNTER_BYBIT_REQUEST_OBSERVATION " + JSON.stringify({
+      const record = {
         schema: "hunter_bybit_request_observation_v1", layer: "bybit_upstream",
         job: path === "/v5/market/kline" ? "early_klines" : path === "/v5/market/tickers" ? "tickers" : "spot",
+        upstream_job_index: jobIndex,
         symbol: symbolPattern.test(params.symbol || "") ? params.symbol : null,
         interval: ["15", "60"].includes(params.interval) ? params.interval : null,
         started_at_utc: new Date(started).toISOString(), completed_at_utc: new Date(Date.now()).toISOString(),
         duration_ms: Math.max(0, Math.round(performance.now() - monotonic)),
         http_status: observed.response?.status || 0, ret_code: observed.retCode ?? null,
         worker_request_id: requestId, worker_build: BUILD, headers: safeHeaders, root_cause: "UNKNOWN"
-      }));
+      };
+      // Optional transport-only metadata reaches the existing Python journal
+      // reader even when Cloudflare console retention is unavailable.
+      if (observations && observations.length < 40) observations.push(record);
+      console.log("HUNTER_BYBIT_REQUEST_OBSERVATION " + JSON.stringify(record));
     } catch { /* Observation failures must not change market results. */ }
   }
 }
@@ -147,11 +152,14 @@ export default {
       if (symbol !== null) params.symbol = symbol;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);
+      const observations = [];
       try {
         const path = url.pathname === "/bybit/spot" ? "/v5/market/instruments-info" : "/v5/market/tickers";
-        return reply(await upstream(path, params, controller.signal, requestId), 200, diagnosticHeaders);
+        const data = await upstream(path, params, controller.signal, requestId, observations);
+        return reply({ ...data, request_observations: observations }, 200, diagnosticHeaders);
       } catch (error) {
         return reply({ ok: false, error: "BYBIT_FETCH_FAILED", detail: String(error),
+          request_observations: observations,
           ...(error.httpEvidence ? { diagnostics: error.httpEvidence } : {}) }, 502, diagnosticHeaders);
       } finally { clearTimeout(timer); }
     }
@@ -174,13 +182,14 @@ export default {
         { symbol, interval: "60", limit: 5 }, { symbol, interval: "15", limit: 25 }
       ]);
       const klines = {}; const failures = {}; const failureDiagnostics = {}; let index = 0;
+      const observations = [];
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45000);
       const one = async () => {
         while (index < jobs.length) {
-          const job = jobs[index++];
+          const jobIndex = index++; const job = jobs[jobIndex];
           try {
-            const data = await upstream("/v5/market/kline", { category: "spot", ...job, end: body.end }, controller.signal, requestId);
+            const data = await upstream("/v5/market/kline", { category: "spot", ...job, end: body.end }, controller.signal, requestId, observations, jobIndex);
             if (data.result.symbol !== job.symbol || !Array.isArray(data.result.list) || data.result.list.length !== job.limit) throw new Error("INCOMPLETE_KLINE");
             (klines[job.symbol] ||= {})[job.interval] = data;
           } catch (error) {
@@ -191,7 +200,8 @@ export default {
       };
       try { await Promise.all(Array.from({ length: 4 }, one)); }
       finally { clearTimeout(timer); }
-      return reply({ retCode: 0, retMsg: "OK", time: Date.now(), result: { category: "spot", end: body.end, klines, failures,
+      return reply({ retCode: 0, retMsg: "OK", time: Date.now(), request_observations: observations,
+        result: { category: "spot", end: body.end, klines, failures,
         ...(Object.keys(failureDiagnostics).length ? { failure_diagnostics: failureDiagnostics } : {}) } }, 200, diagnosticHeaders);
     }
 
