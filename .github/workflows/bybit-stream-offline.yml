@@ -1,0 +1,29 @@
+name: Bybit Stream Sidecar Offline
+on:
+  push:
+    branches: ['codex/bybit-ws-sidecar-20261010']
+  pull_request:
+    paths:
+      - 'research/hunter_bybit_stream*.py'
+      - 'tests/test_hunter_bybit_stream*.py'
+      - 'scripts/check_bybit_stream_offline.py'
+      - '.github/workflows/bybit-stream-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Guarded fixtures and real multiprocess budget tests (no market calls)
+        run: python -I -B -X utf8 scripts/check_bybit_stream_offline.py
