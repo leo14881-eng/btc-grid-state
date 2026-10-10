@@ -17,7 +17,20 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m unittest discover -s tests -p 'test_hunter*.py'
+      - name: Install existing local transport test dependency
+        run: python -m pip install -r deploy/hunter-fast-watch-requirements.txt
+      - name: Verify exact integration ancestry and immutable history
+        run: |
+          git merge-base --is-ancestor bacb14177075564a3656b4efb2eaf1be043c1d9a HEAD
+          git merge-base --is-ancestor 593ce5dd04d55657c0da10bb14c948e9d2d98a64 HEAD
+          git merge-base --is-ancestor 67f661287569b91cf7a01d9d5798af350c1f5276 HEAD
+          git diff --exit-code bacb14177075564a3656b4efb2eaf1be043c1d9a HEAD -- research/results
+          git diff --exit-code 593ce5dd04d55657c0da10bb14c948e9d2d98a64 HEAD -- research/hunter_reentry.py tests/test_hunter_reentry.py
+          git diff --exit-code 67f661287569b91cf7a01d9d5798af350c1f5276 HEAD -- research/hunter_loss_freeze.py research/hunter_position_monitor.py tests/test_hunter_loss_freeze.py
+      - name: Complete offline Hunter regression and synthetic replays
+        run: python -m unittest discover -s tests -p 'test_hunter*.py' -v
