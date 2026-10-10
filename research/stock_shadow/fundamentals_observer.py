@@ -572,7 +572,9 @@ def main():
         fmp_status={"provider":"FMP_BULK","attempted":False,"status":"FMP_FREE_BULK_UNAVAILABLE","requests":0}
         fmp_refreshed_at=old.get("fmp_refreshed_at")
         try:
-            previous_batch_index=int(((old.get("frames_transport") or {}).get("batch_index") or -1))
+            # Batch zero is a valid completed batch, not a missing cursor.
+            saved_batch_index=(old.get("frames_transport") or {}).get("batch_index")
+            previous_batch_index=int(saved_batch_index if saved_batch_index is not None else -1)
             frames_by_cik,frames_status=frame_evidence_by_cik(previous_batch_index+1)
             frames_status["attempted"]=True
             frames_status["status"]="OK" if not frames_status.get("errors") else "PARTIAL"

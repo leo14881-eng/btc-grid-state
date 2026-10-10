@@ -1500,3 +1500,51 @@ def test_replay_qualifying_qrvo_is_required_without_symbol_specific_exception(mo
     assert {s for symbols, *_ in calls['provider'] for s in symbols} == {'MOVER', 'QRVO', 'SPY', 'QQQ'}
     assert out['results'] == []
     _assert_replay_inputs_unchanged(before)
+
+
+def test_fundamentals_main_rotates_persisted_frames_through_every_batch(tmp_path, monkeypatch):
+    """A persisted zero cursor must advance; every concept gets a turn without network."""
+    m = _load_fundamentals_observer()
+    state_path = tmp_path / "portfolio-v1.json"
+    out_path = tmp_path / "fundamentals-observer-v1.json"
+    state_path.write_text(json.dumps({"positions": {"TEST": {"tranches": [{"price": 10, "notional": 1000}]}}}))
+    original_state = state_path.read_bytes()
+    monkeypatch.setattr(m, "STATE", state_path)
+    monkeypatch.setattr(m, "OUT", out_path)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    monkeypatch.setattr(m, "ticker_map", lambda: ({"TEST": {"cik_str": 123}}, []))
+    monkeypatch.setattr(m, "sec_companyfacts", lambda cik: ({}, "TEST_ONLY"))
+    monkeypatch.setattr(m, "sec_submission", lambda cik: ({}, "TEST_ONLY"))
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("observer regression must not make live requests")
+
+    monkeypatch.setattr(m.urllib.request, "urlopen", no_network)
+    requested = []
+
+    def frame(taxonomy, concept, unit, period):
+        requested.append((taxonomy, concept, unit, period))
+        return {"data": []}, "TEST_ONLY"
+
+    monkeypatch.setattr(m, "frame_json", frame)
+    batches = []
+    for expected_index in (0, 1, 2, 3, 4, 0):
+        if out_path.exists():
+            old = json.loads(out_path.read_text())
+            old["market_batch_refreshed_at"] = "2000-01-01T00:00:00+00:00"
+            out_path.write_text(json.dumps(old))
+        requested.clear()
+        m.main()
+        result = json.loads(out_path.read_text())
+        assert result["frames_transport"]["batch_index"] == expected_index
+        assert result["frames_transport"]["requests"] <= m.FRAME_REQUEST_BUDGET
+        assert result["strategy_effect"] is False
+        assert result["evidence_complete"] == 0
+        assert result["status"] == "PARTIAL"
+        assert state_path.read_bytes() == original_state
+        batches.append(set(requested))
+
+    assert [len(batch) for batch in batches] == [12, 12, 12, 12, 10, 12]
+    assert len(set().union(*batches[:5])) == 58
+    assert sum(len(batch) for batch in batches[:5]) == 58
+    assert batches[5] == batches[0]
