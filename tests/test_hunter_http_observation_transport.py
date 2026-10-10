@@ -5,6 +5,7 @@ import io
 import json
 import pathlib
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -104,20 +105,111 @@ class ObservationTransportTests(unittest.TestCase):
     def test_two_batch_contexts_do_not_cross_threads(self):
         wire = CONTRACT['success']
         barrier = threading.Barrier(2)
-        output = []
+        class FragmentingWriter(io.StringIO):
+            """Real print sink that yields between chunks, not a list.append mock."""
+            def __init__(self):
+                super().__init__()
+                self.active = 0
+                self.peak = 0
+                self.guard = threading.Lock()
+
+            def write(self, text):
+                with self.guard:
+                    self.active += 1
+                    self.peak = max(self.peak, self.active)
+                try:
+                    for offset in range(0, len(text), 17):
+                        super().write(text[offset:offset+17])
+                        time.sleep(0)  # Permit the other real thread to write.
+                    return len(text)
+                finally:
+                    with self.guard:
+                        self.active -= 1
+        output = FragmentingWriter()
         def run(index):
             with evidence.observation_context(CONTRACT['end'] + index, index):
                 barrier.wait(timeout=5)
-                evidence.consume_observations(wire['body'], wire['headers'], request())
+                result = evidence.request_json(request(), 60)
+                self.assertEqual(result, {k: v for k, v in wire['body'].items() if k != 'request_observations'})
             self.assertEqual(evidence.REQUEST_CONTEXT.get(), {})
-        with patch('builtins.print', side_effect=lambda line, **kwargs: output.append(line)):
+        with contextlib.redirect_stdout(output), patch.object(evidence.urllib.request, 'urlopen',
+                side_effect=lambda *args, **kwargs: stream(wire['body'], wire['headers'])):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 list(pool.map(run, (0, 1)))
-        records = [json.loads(line[len(PREFIX):]) for line in output]
-        self.assertEqual(len(records), 8)
+        self.assertEqual(output.peak, 1)
+        lines = output.getvalue().splitlines()
+        self.assertEqual(len(lines), 10)  # Eight subrequests plus two outer calls.
+        self.assertTrue(all(line.startswith(PREFIX) for line in lines))
+        records = [json.loads(line[len(PREFIX):]) for line in lines]
+        self.assertEqual(sum(row['layer'] == 'bybit_upstream' for row in records), 8)
         for row in records:
             self.assertEqual(row['generation_end_ms'], CONTRACT['end'] + row['batch_id'])
         self.assertEqual(evidence.REQUEST_CONTEXT.get(), {})
+        # Negative control: this very sink must expose concurrent writes when
+        # serialization is removed; otherwise the fixture would mask the bug.
+        output = FragmentingWriter()
+        with contextlib.redirect_stdout(output), patch.object(evidence, 'LOG_LOCK', contextlib.nullcontext()), \
+                patch.object(evidence.urllib.request, 'urlopen', side_effect=lambda *args, **kwargs: stream(wire['body'], wire['headers'])):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                list(pool.map(run, (0, 1)))
+        self.assertGreater(output.peak, 1)
+
+    def test_failing_stream_preserves_results_errors_and_releases_output_lock(self):
+        wire = CONTRACT['success']
+        class FailingWriter:
+            def write(self, text):
+                raise OSError('SINK_UNAVAILABLE')
+            def flush(self):
+                raise OSError('SINK_UNAVAILABLE')
+        with contextlib.redirect_stdout(FailingWriter()):
+            with patch.object(evidence.urllib.request, 'urlopen', side_effect=lambda *args, **kwargs: stream(wire['body'], wire['headers'])):
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    results = list(pool.map(lambda _: evidence.request_json(request(), 60), (0, 1)))
+            self.assertEqual(results, [{k: v for k, v in wire['body'].items() if k != 'request_observations'}]*2)
+            with patch.object(evidence.urllib.request, 'urlopen', side_effect=TimeoutError('secret')):
+                with self.assertRaisesRegex(evidence.ObservedHTTPError, 'WORKER_TIMEOUT'):
+                    evidence.request_json(request(), 60)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertTrue(evidence.emit_public_log('RECOVERED {}'))
+        self.assertEqual(output.getvalue(), 'RECOVERED {}\n')
+
+    def test_reversed_out_of_range_and_inconsistent_worker_times_are_dropped(self):
+        wire = CONTRACT['success']
+        changes = [
+            {'started_at_utc': '2026-10-05T18:07:00.001Z'},
+            {'completed_at_utc': '2026-10-05T18:09:00.001Z', 'duration_ms': 120000},
+            {'duration_ms': 120001},
+            {'duration_ms': 1001},
+            {'started_at_utc': '2026-10-05T18:06:57.000Z', 'duration_ms': 1999},
+            {'started_at_utc': '2026-10-05T18:04:59.999Z', 'completed_at_utc': '2026-10-05T18:04:59.999Z'},
+            {'started_at_utc': '2026-10-05T18:07:01.001Z', 'completed_at_utc': '2026-10-05T18:07:01.001Z'},
+            {'started_at_utc': '2026-13-05T18:07:00.000Z'},
+        ]
+        for change in changes:
+            body = copy.deepcopy(wire['body'])
+            body['request_observations'][0].update(change)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = evidence.consume_observations(body, wire['headers'], request())
+            self.assertEqual(result, {k: v for k, v in body.items() if k != 'request_observations'})
+            self.assertEqual(output.getvalue(), 'HUNTER_BYBIT_OBSERVATION_DROPPED INVALID_OR_UNBOUND\n')
+
+    def test_worker_clock_bounds_allow_rounding_without_cross_machine_order_claim(self):
+        wire = copy.deepcopy(CONTRACT['success'])
+        wire['body']['request_observations'][0].update(
+            started_at_utc='2026-10-05T18:06:59.000Z', duration_ms=1000)
+        # Deliberately reverse arrival order and use unrelated local generation
+        # clock. Neither is evidence of subrequest chronological order.
+        wire['body']['request_observations'].reverse()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), evidence.observation_context(CONTRACT['end']+3600000, 0):
+            result = evidence.consume_observations(wire['body'], wire['headers'], request())
+        self.assertEqual(result, {k: v for k, v in wire['body'].items() if k != 'request_observations'})
+        records = [json.loads(line[len(PREFIX):]) for line in output.getvalue().splitlines()]
+        self.assertEqual([row['upstream_job_index'] for row in records], [3, 2, 1, 0])
+        self.assertEqual(records[-1]['duration_ms'], 1000)
+        self.assertTrue(all(row['generation_end_ms'] == CONTRACT['end']+3600000 for row in records))
 
     def test_spot_failure_transport_and_scan_generation_binding(self):
         wire = CONTRACT['spot_failure']

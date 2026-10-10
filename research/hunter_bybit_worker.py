@@ -17,11 +17,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from research import hunter_bybit_availability as availability
     from research.hunter_bybit_signal_capture import capture
-    from research.hunter_http_evidence import ObservedHTTPError, observation_context, request_json, validate_evidence
+    from research.hunter_http_evidence import ObservedHTTPError, emit_public_log, observation_context, request_json, validate_evidence
 except ModuleNotFoundError:
     import hunter_bybit_availability as availability
     from hunter_bybit_signal_capture import capture
-    from hunter_http_evidence import ObservedHTTPError, observation_context, request_json, validate_evidence
+    from hunter_http_evidence import ObservedHTTPError, emit_public_log, observation_context, request_json, validate_evidence
 
 DEFAULT = pathlib.Path("research/results/hunter-bybit-worker-snapshot.json")
 SOURCE = "OFFICIAL_BYBIT_V5_VIA_WORKER"
@@ -245,10 +245,10 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
         for interval, detail in sorted(intervals.items()):
             evidence = detail.pop("http_evidence", None)
             if evidence is not None:
-                print("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
+                emit_public_log("HUNTER_BYBIT_HTTP_EVIDENCE " + json.dumps(dict(
                     schema="hunter_http_log_v1", source=SOURCE,
                     captured_at_utc=now.isoformat(), **detail,
-                    http_evidence=validate_evidence(evidence)), sort_keys=True, separators=(",", ":")), flush=True)
+                    http_evidence=validate_evidence(evidence)), sort_keys=True, separators=(",", ":")))
     def get(symbol,interval,limit):
         detail = failure_details.get(symbol, {}).get(interval)
         if detail:

@@ -5,6 +5,7 @@ import datetime as dt
 import time
 import contextlib
 import contextvars
+import threading
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -24,6 +25,9 @@ MARKERS = {"ACCESS_DENIED_TEXT", "COUNTRY_BLOCK_TEXT", "RATE_LIMIT_TEXT"}
 KEYS = {"schema", "layer", "http_status", "failure_kind", "headers", "body_kind",
         "body_bytes_sampled", "body_truncated", "body_read_failed", "body_markers", "ret_code"}
 REQUEST_CONTEXT = contextvars.ContextVar("hunter_public_request_context", default={})
+LOG_LOCK = threading.Lock()
+MAX_OBSERVATION_MS = 120000
+WALL_MONOTONIC_TOLERANCE_MS = 1000
 OBSERVATION_HEADERS = {key: value for key, value in HEADER_RULES.items()
                        if not key.startswith("x-hunter-")}
 OBSERVATION_HEADERS.update({"x-bapi-limit": r"[0-9]{1,10}",
@@ -31,6 +35,20 @@ OBSERVATION_HEADERS.update({"x-bapi-limit": r"[0-9]{1,10}",
 OBSERVATION_KEYS = {"schema", "layer", "job", "upstream_job_index", "symbol", "interval",
     "started_at_utc", "completed_at_utc", "duration_ms", "http_status", "ret_code",
     "worker_request_id", "worker_build", "headers", "root_cause"}
+
+
+def emit_public_log(line):
+    """Serialize a complete line, including newline/flush, across batch threads.
+
+    A sink error is diagnostic loss only, never a market-data failure. The lock
+    covers print's multiple stream writes, not just JSON serialization.
+    """
+    try:
+        with LOG_LOCK:
+            print(line, flush=True)
+        return True
+    except Exception:
+        return False
 
 
 @contextlib.contextmanager
@@ -51,9 +69,9 @@ def log_generation_binding(generation_id, status):
                 or not re.fullmatch(r"[0-9a-f]{64}", status.get("snapshot_sha256", ""))):
             return
         captured = dt.datetime.fromisoformat(status["captured_at_utc"])
-        print("HUNTER_BYBIT_GENERATION_BINDING " + json.dumps(dict(
+        emit_public_log("HUNTER_BYBIT_GENERATION_BINDING " + json.dumps(dict(
             scan_generation_id=generation_id, generation_end_ms=int(captured.timestamp()*1000),
-            snapshot_sha256=status["snapshot_sha256"]), sort_keys=True, separators=(",", ":")), flush=True)
+            snapshot_sha256=status["snapshot_sha256"]), sort_keys=True, separators=(",", ":")))
     except Exception:
         pass
 
@@ -110,26 +128,40 @@ def consume_observations(body, headers, request):
                     or row["root_cause"] != "UNKNOWN"
                     or type(row["http_status"]) is not int
                     or not (row["http_status"] == 0 or 100 <= row["http_status"] <= 599)
-                    or type(row["duration_ms"]) is not int or not 0 <= row["duration_ms"] <= 120000
+                    or type(row["duration_ms"]) is not int or not 0 <= row["duration_ms"] <= MAX_OBSERVATION_MS
                     or (row["ret_code"] is not None and (type(row["ret_code"]) is not int or abs(row["ret_code"]) > 9999999999))):
                 raise ValueError("invalid scope")
             seen.add(index)
+            stamps = []
             for key in ("started_at_utc", "completed_at_utc"):
                 stamp = row[key]
                 if not isinstance(stamp, str) or not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", stamp):
                     raise ValueError("invalid timestamp")
-                dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+                stamps.append(dt.datetime.fromisoformat(stamp.replace("Z", "+00:00")))
+            wall_ms = round((stamps[1] - stamps[0]).total_seconds()*1000)
+            if (not 0 <= wall_ms <= MAX_OBSERVATION_MS
+                    or abs(wall_ms-row["duration_ms"]) > WALL_MONOTONIC_TOLERANCE_MS):
+                raise ValueError("inconsistent request timing")
+            # Only early-klines has a Worker-generated envelope clock. The
+            # public spot/ticker time belongs to Bybit, not the Worker clock.
+            # Never infer cross-machine order from Vultr/generation wall time or
+            # from the order in which concurrent observations reach stdout.
+            envelope_ms = body.get("time")
+            if (job == "early_klines" and type(envelope_ms) is int and
+                    not envelope_ms-MAX_OBSERVATION_MS <= int(stamps[0].timestamp()*1000)
+                    <= int(stamps[1].timestamp()*1000) <= envelope_ms+WALL_MONOTONIC_TOLERANCE_MS):
+                raise ValueError("request timing outside worker envelope")
             safe = row["headers"]
             if (not isinstance(safe, dict) or set(safe) - set(OBSERVATION_HEADERS)
                     or any(not isinstance(value, str) or not re.fullmatch(OBSERVATION_HEADERS[key], value)
                            for key, value in safe.items())):
                 raise ValueError("invalid headers")
         for row in records:
-            print("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(
-                dict(row, **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")), flush=True)
+            emit_public_log("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(
+                dict(row, **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")))
     except Exception:
         try:
-            print("HUNTER_BYBIT_OBSERVATION_DROPPED INVALID_OR_UNBOUND", flush=True)
+            emit_public_log("HUNTER_BYBIT_OBSERVATION_DROPPED INVALID_OR_UNBOUND")
         except Exception:
             pass
     return body
@@ -262,14 +294,14 @@ def request_json(request, timeout):
                     value = (observation.get("headers") or {}).get(key)
                     if isinstance(value, str) and re.fullmatch(pattern, value):
                         safe[key] = value
-                print("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(dict(
+                emit_public_log("HUNTER_BYBIT_REQUEST_OBSERVATION " + json.dumps(dict(
                     schema="hunter_bybit_request_observation_v1", layer="worker_http", job=job,
                     started_at_utc=started.isoformat(),
                     completed_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
                     duration_ms=max(0, round((time.monotonic()-monotonic)*1000)),
                     http_status=observation.get("status", 0), ret_code=observation.get("ret_code"),
                     worker_request_id=safe.get("x-hunter-request-id"), headers=safe,
-                    root_cause="UNKNOWN", **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")), flush=True)
+                    root_cause="UNKNOWN", **REQUEST_CONTEXT.get()), sort_keys=True, separators=(",", ":")))
         except Exception:
             pass  # Logging must not change successful values or failure propagation.
 
