@@ -65,7 +65,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  quarantine=eng.quarantine_non_crypto_history(state,excluded)
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
- if risk_evidence is not None:eng.tail.update_risk_controls(state,risk_evidence,now,eng.C)
+ if risk_evidence is not None:eng.update_risk_controls(state,risk_evidence,now)
  scan={"coins":market,"as_of_utc":(regime_scan or {}).get('as_of_utc') or now.isoformat(),"generation_id":(regime_scan or {}).get("generation_id") or "MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")};btc=(market.get("BTC") or {}).get("reference_price")
  if not v1_mode:scan['venue_management']=(regime_scan or {}).get('venue_management') or {}
  state['last_cycle_generation_id']=scan['generation_id']

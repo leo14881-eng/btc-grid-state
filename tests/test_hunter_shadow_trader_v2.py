@@ -112,12 +112,13 @@ class V2CapitalDecisionTests(unittest.TestCase):
   import datetime as dt
   e["book_observed_at_utc"]=dt.datetime.now(dt.timezone.utc).isoformat()
   self.assertEqual(position_health(p,e)[0],"HARD_INVALIDATION")
- def test_reentry_blocks_same_move_and_allows_reset_breakout(self):
+ def test_legacy_reset_breakout_without_source_evidence_is_unknown(self):
   state={"reentry_registry":{"X":{"last_exit_price":100,"post_exit_low":100,"reset_seen":False,"state":"POST_EXIT_OBSERVATION"}}}
   c={"asset":"X","signal":{"independent_signal_count":3,"btc_relative_1h_pct":2,"btc_relative_4h_pct":3,"relative_acceleration_pct":1}}
   self.assertFalse(reentry_allowed(state,c,100.5)[0])
   state["reentry_registry"]["X"]["post_exit_low"]=96
-  self.assertTrue(reentry_allowed(state,c,101.5)[0])
+  self.assertFalse(reentry_allowed(state,c,101.5)[0])
+  self.assertIn('REENTRY_UNKNOWN',reentry_allowed(state,c,101.5)[1])
  def test_market_shock_uses_btc_and_breadth(self):
   scan={"coins":{"BTC":{"change_24h_pct":-3},"A":{"change_24h_pct":-5},"B":{"change_24h_pct":-4},"C":{"change_24h_pct":-1}}}
   self.assertTrue(market_shock(scan)[0])
