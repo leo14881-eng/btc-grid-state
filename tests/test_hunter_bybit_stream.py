@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from research import hunter_bybit_stream as stream
 from research.hunter_bybit_stream_store import Store, Budget, LIMITS, topic
@@ -207,6 +208,28 @@ class StreamTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'CONNECTION_BUDGET_EXHAUSTED'):
             stream.collect(self.store,self.topics,'scope',connect,lambda:NOW,lambda s:None)
         self.assertEqual(len(attempts),5)
+
+    def test_recovery_deadline_cannot_publish_late_response(self):
+        clock=[NOW]
+        def get(url):
+            clock[0]+=1001
+            return 200,json.dumps(rest()).encode(),1
+        with self.assertRaisesRegex(TimeoutError,'RECOVERY_DEADLINE'):
+            stream.repair(self.store,self.epoch,self.topics[0],NOW+1000,get,lambda:clock[0],lambda s:None)
+        self.assertTrue(self.store.states()[0]['gap'])
+        with self.store.db(readonly=True) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM bars').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],0)
+
+    def test_ws_handshake_country_denial_persists_without_reconnect(self):
+        attempts=[]
+        class Denied(Exception):
+            response=SimpleNamespace(status_code=403,body=b'country block')
+        def connect():attempts.append(1);raise Denied()
+        with self.assertRaisesRegex(RuntimeError,'COUNTRY_403_MANUAL_REVIEW'):
+            stream.collect(self.store,self.topics,'scope',connect,lambda:NOW,lambda s:None)
+        self.assertEqual(len(attempts),1)
+        self.assertEqual(Budget(Store(self.store.path)).status()['halt'],'COUNTRY_403_MANUAL_REVIEW')
 
     def test_real_session_loop_acks_pings_repairs_then_disconnects(self):
         clock=[NOW];received=[0];sent=[]

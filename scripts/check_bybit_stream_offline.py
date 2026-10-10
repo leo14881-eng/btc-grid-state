@@ -30,7 +30,7 @@ def main():
                           'os.posix_spawn','os.forkpty') or event.startswith(('os.exec','os.spawn'))):
                 blocked.append(event)
                 raise RuntimeError('OFFLINE_NETWORK_OR_EXEC_BLOCKED')
-            if event=='sqlite3.connect':write_path(args[0].removeprefix('file:').split('?')[0])
+            if event=='sqlite3.connect':write_path(os.fsdecode(args[0]).removeprefix('file:').split('?')[0])
             if event=='open':
                 path,mode,flags=args
                 if ((isinstance(mode,str) and any(x in mode for x in 'wax+'))
@@ -46,7 +46,7 @@ def main():
         try:
             suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_hunter_bybit_stream*.py')
             result=unittest.TextTestRunner(verbosity=2).run(suite)
-            good=result.wasSuccessful() and result.testsRun==26 and not result.skipped and not blocked
+            good=result.wasSuccessful() and result.testsRun==28 and not result.skipped and not blocked
             print('BYBIT_STREAM_OFFLINE_ACCEPTANCE '+json.dumps(dict(tests=result.testsRun,
                   failures=len(result.failures),errors=len(result.errors),skipped=len(result.skipped),
                   blocked_effects=len(blocked),passed=good)))
