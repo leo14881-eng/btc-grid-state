@@ -146,7 +146,7 @@ class MonitorHookTests(unittest.TestCase):
     def test_risk_observation_precedes_exits_and_replay_does_not_count_twice(self):
         state,market,liq=fixture();order=[]
         original_stage=manual.stage
-        def risk(st,evidence,now,cfg):
+        def risk(st,evidence,now):
             order.append('risk')
             st['systemic_risk']={'level':'NORMAL','last_observation_id':'CURRENT_OBSERVATION'}
         def stage(st,*args,**kwargs):
@@ -154,17 +154,16 @@ class MonitorHookTests(unittest.TestCase):
             self.assertEqual(st['systemic_risk']['last_observation_id'],'CURRENT_OBSERVATION')
             return original_stage(st,*args,**kwargs)
         self.path.write_text(json.dumps(state))
-        with patch.object(monitor.eng.tail,'update_risk_controls',side_effect=risk),patch.object(manual,'stage',side_effect=stage):
+        with patch.object(monitor.eng,'update_risk_controls',side_effect=risk),patch.object(manual,'stage',side_effect=stage):
             monitor.run_lane(self.path,'SHADOW_V2',market,{'candidates':[]},liq,{},NOW,False,risk_evidence={})
         saved=json.loads(self.path.read_text())
         self.assertEqual(order,['risk','manual'])
-        self.assertEqual(saved['circuit_breaker']['status'],'TRIPPED')
-        self.assertEqual(saved['circuit_breaker']['last_loss_exit_observation_id'],'CURRENT_OBSERVATION')
-        self.assertEqual(saved['circuit_breaker']['consecutive_loss_exits'],2)
-        self.assertEqual(saved['circuit_breaker']['quarantined_cash_usdt'],2000)
+        self.assertEqual(saved['loss_control']['consecutive_loss_exits'],2)
+        self.assertNotIn('loss_freeze_episode',saved)
         again,_,_=self.run_cycle(saved,market,liq)
         self.assertEqual(again['loss_exit_guard'],saved['loss_exit_guard'])
-        self.assertEqual(again['circuit_breaker'],saved['circuit_breaker'])
+        self.assertEqual(again['loss_control'],saved['loss_control'])
+        self.assertNotIn('loss_freeze_episode',again)
 
 
 if __name__=='__main__':unittest.main()
