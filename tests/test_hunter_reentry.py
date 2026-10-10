@@ -7,6 +7,8 @@ from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import patch
 from research import hunter_shadow_trader_v2 as eng
+from research import hunter_early_signals as signals
+from urllib.parse import parse_qs, urlparse
 
 
 class ReentryTests(unittest.TestCase):
@@ -22,13 +24,35 @@ class ReentryTests(unittest.TestCase):
         eng.register_exit_for_reentry(self.state, self.pos, 100, 'PROFIT_PROTECTION', self.start, c, scan)
 
     def inputs(self, n, price, strong=True):
-        at = (self.start + dt.timedelta(minutes=n)).isoformat()
+        now = self.start + dt.timedelta(minutes=n)
+        at = now.isoformat()
+        class SourceClock(dt.datetime):
+            @classmethod
+            def now(cls, tz=None):return now
+        def source(url, timeout):
+            query = parse_qs(urlparse(url).query)
+            interval = query['interval'][0]
+            period = 3600000 if interval == '1h' else 900000
+            count = 5 if interval == '1h' else 25
+            last_open = int(now.timestamp()*1000)//period*period
+            btc = query['symbol'][0] == 'BTCUSDT'
+            last_price = (100 if strong else 120) if btc else price
+            rows = []
+            for i in range(count):
+                o = 100 if btc else ([90, 91, 92, 94, 100][i] if count == 5 else 99)
+                c = last_price if i == count-1 else o
+                start = last_open-(count-1-i)*period
+                rows.append([start, str(o), str(max(o,c)+1), str(min(o,c)-1), str(c), '100',
+                             start+period-1, str(10000+n if i == count-1 else 10000)])
+            return rows[-int(query['limit'][0]):]
+        with patch.object(signals, 'get', side_effect=source), patch.object(signals.dt, 'datetime', SourceClock):
+            r1 = signals.rolling(['XUSDT','BTCUSDT'], '1h')
+            r4 = signals.rolling(['XUSDT','BTCUSDT'], '4h')
+            micro = signals.micro(['XUSDT'])
+            signal = signals.score_row('XUSDT','X',r1,r4,r1['BTCUSDT'],r4['BTCUSDT'],micro)
         c = {'asset': 'X', 'first_discovery_price': 100, 'trade_action': 'BUY',
              'signal_evidence': eng.stamp('X', 'g'+str(n), at), 'blockers': [],
-             'signal': {'score': 12+n/100, 'independent_signal_count': 3,
-                        'btc_relative_1h_pct': 2 if strong else -2,
-                        'btc_relative_4h_pct': 3 if strong else -3,
-                        'relative_acceleration_pct': 1 if strong else -2},
+             'signal': signal,
              'execution_scenario': {'buy_slippage_bps': 10, 'estimated_rr': 2}}
         scan = {'generation_id': 'g'+str(n), 'as_of_utc': at,
                 'coins': {'X': {'reference_price': price, 'change_24h_pct': 3}}}
@@ -77,7 +101,7 @@ class ReentryTests(unittest.TestCase):
         for n in (1, 2):
             data = self.inputs(n, 101+n)
             data[0]['signal'] = base
-            self.assertIn('SIGNAL_CONTENT_NOT_NEW', self.run_observation(n, 101+n, inputs=data)[1])
+            self.assertFalse(self.run_observation(n, 101+n, inputs=data)[0])
 
     def test_replay_after_restart_and_same_cycle_sell_buy_rejected(self):
         self.assertFalse(self.run_observation(0, 100)[0])
@@ -186,7 +210,7 @@ class ReentryTests(unittest.TestCase):
         self.state.update(real_trading_enabled=False, real_order_count=0, capital_authority='NONE_SHADOW_ONLY')
         before = copy.deepcopy(self.state)
         self.cycle('V1', 1, 100.1, ready=True)
-        self.assertEqual(self.state['events'][0]['strategy_note'], '2026.0.10.11 新策略')
+        self.assertNotIn('strategy_note', self.state['events'][0])
         for key in ('real_trading_enabled', 'real_order_count', 'capital_authority', 'closed_positions'):
             self.assertEqual(before[key], self.state[key])
 
@@ -211,7 +235,7 @@ class ReentryTests(unittest.TestCase):
         self.assertEqual(pos, before)
 
     def test_cleared_liquidity_hard_exit_and_identity_clearance(self):
-        for cause in ('CATASTROPHIC_DEPTH', 'FATAL_IDENTITY_OR_CONTRACT:MISMATCH'):
+        for cause in ('CATASTROPHIC_DEPTH',):
             self.state['systemic_risk'] = {'last_observation_id': 'exit'}
             self.pos.update(net_pnl_usdt=-5, health_reasons=[cause])
             c, scan, _, _ = self.inputs(0, 100)
@@ -237,8 +261,13 @@ class ReentryTests(unittest.TestCase):
         scan.update(binance_complete=True, venue_status={'binance': {'excluded_bstocks': ['FAKE_STOCK']}})
         scan['coins']['BTC'] = {'reference_price': 60000, 'change_24h_pct': 1}
         review = {'policy_version': eng.VERSION, 'scan_generation_id': scan['generation_id'], 'candidates': [c]}
-        values = {eng.SCAN: scan, eng.REVIEW: review, eng.LIQ: liq, eng.SUPPLY: supply, eng.STATE: self.state}
+        state_path = eng.ROOT/('hunter-shadow-portfolio.json' if lane == 'V1' else 'hunter-shadow-v2-portfolio.json')
+        peer_path = eng.ROOT/('hunter-shadow-v2-portfolio.json' if lane == 'V1' else 'hunter-shadow-portfolio.json')
+        values = {eng.SCAN: scan, eng.REVIEW: review, eng.LIQ: liq, eng.SUPPLY: supply, state_path: self.state,
+                  peer_path: getattr(self, 'release_peer', {}),
+                  eng.ROOT/'hunter-strategy-release.json': getattr(self, 'release_manifest', {})}
         with ExitStack() as stack:
+            stack.enter_context(patch.object(eng, 'STATE', state_path))
             for name, value in {'ENTRY_MODE': 'DISCOVERY' if lane == 'V1' else 'EXECUTABLE',
                                 'CAPITAL_POOL_USDT': None if lane == 'V1' else 20000,
                                 'DISCOVERY_MIN_SCORE': eng.LANES[lane]['discovery_min_score'],
@@ -272,14 +301,148 @@ class ReentryTests(unittest.TestCase):
 
     @unittest.skipUnless(hasattr(eng, 'loss_freeze'), 'requires exact combined PR102 integration checkout')
     def test_combined_real_risk_activation_new_buy_note_both_lanes(self):
+        from research import hunter_strategy_release as release
+        from tests.test_hunter_loss_freeze import market
         initial = copy.deepcopy(self.state)
-        for lane in ('V1', 'V2'):
+        for lane, first_entry in (('V1',False),('V2',False),('V1',True),('V2',True)):
             self.state = copy.deepcopy(initial)
+            if first_entry:self.state['reentry_registry'] = {}
+            self.state['mode'] = 'SIMULATION_ONLY_NO_REAL_ORDERS'
+            self.release_peer = {'mode': 'SIMULATION_ONLY_NO_REAL_ORDERS'}
+            eng.loss_freeze.update_risk_controls(self.state, market(self.start, oid='init'), self.start, eng.C)
+            eng.loss_freeze.update_risk_controls(self.release_peer, market(self.start, oid='peer'), self.start, eng.C)
+            self.release_manifest = {'schema':'hunter_common_release_v1','release_id':'synthetic-reviewed-release',
+                'enabled':True,'strategy_version':eng.reentry.STRATEGY_VERSION,'components':release.component_receipt(eng),
+                'activated_at_utc':self.start.isoformat(),'real_trading_enabled':False,'real_order_count':0,
+                'capital_authority':'NONE_SHADOW_ONLY','lane_activation_ids':{
+                    'V1':self.start.isoformat(),'V2':self.start.isoformat()}}
             self.cycle(lane, 1, 100.1, ready=None)
             self.cycle(lane, 2, 100.2, ready=None)
             self.assertEqual(self.state['loss_control']['policy'], 'LOSS_AND_MARKET_V1')
             self.assertEqual(self.state['events'][-1]['strategy_note'], '2026.0.10.11 新策略')
             self.assertFalse(eng.risk_blocks_new(self.state, self.start+dt.timedelta(minutes=2)))
+
+    @unittest.skipUnless(hasattr(eng, 'loss_freeze'), 'requires exact combined PR102 integration checkout')
+    def test_common_release_rejects_half_rollout_old_policy_and_unmigrated_peer(self):
+        from research import hunter_strategy_release as release
+        self.test_combined_real_risk_activation_new_buy_note_both_lanes()
+        now = self.start+dt.timedelta(minutes=2)
+        original = {'manifest':self.release_manifest,'lanes':{'V2':self.state,'V1':self.release_peer}}
+        self.assertTrue(release.annotation(eng, self.state, original, now))
+        for kind in ('no_manifest','bad_code','old_policy','peer_migrating','bare_policy','stale_peer','same_lane_twice'):
+            context = copy.deepcopy(original)
+            state = context['lanes']['V2']
+            if kind == 'no_manifest':context['manifest'] = {}
+            if kind == 'bad_code':context['manifest']['components']['code_sha256']['loss'] = '0'*64
+            if kind == 'old_policy':context['lanes']['V1']['loss_control']['policy'] = 'OLD'
+            if kind == 'peer_migrating':context['lanes']['V1']['loss_control']['legacy_completion'] = {'status':'RECOVERING','quarantined_cash_usdt':500}
+            if kind == 'bare_policy':context['lanes']['V1']['loss_control'] = {'policy':'LOSS_AND_MARKET_V1'}
+            if kind == 'stale_peer':context['lanes']['V1']['loss_control']['evaluated_at_utc'] = (now-dt.timedelta(days=1)).isoformat()
+            if kind == 'same_lane_twice':context['lanes']['V1'] = state
+            self.assertEqual(release.annotation(eng, state, context, now), {}, kind)
+
+    def test_new_missing_observation_interrupts_setup_but_duplicate_does_not(self):
+        self.assertFalse(self.run_observation(1,100.1)[0])
+        data = self.inputs(2,100.2)
+        data[0]['signal'].pop('source_provenance')
+        self.assertFalse(self.run_observation(2,100.2,inputs=data)[0])
+        self.assertNotIn('reentry_setup',self.state['reentry_registry']['X'])
+        self.assertFalse(self.run_observation(3,100.3)[0])
+        self.assertFalse(self.run_observation(3,100.3)[0])
+        self.assertTrue(self.run_observation(4,100.4)[0])
+
+    def test_missing_candidate_in_actual_new_cycle_interrupts_both_lanes(self):
+        initial = copy.deepcopy(self.state)
+        for lane in ('V1','V2'):
+            self.state = copy.deepcopy(initial)
+            self.cycle(lane,1,100.1)
+            self.cycle(lane,2,100.2,lambda c,*args:c.clear())
+            self.cycle(lane,3,100.3)
+            self.assertEqual(self.state['events'],[])
+            self.cycle(lane,4,100.4)
+            self.assertEqual(len(self.state['open_positions']),1)
+
+    def test_day_gap_restarts_with_existing_freshness_contract(self):
+        self.assertFalse(self.run_observation(1,100.1)[0])
+        self.assertFalse(self.run_observation(1440,100.2)[0])
+        self.assertTrue(self.run_observation(1441,100.3)[0])
+
+    def test_late_packet_before_unknown_cannot_restart_confirmation(self):
+        self.run_observation(1,100.1)
+        data = self.inputs(3,100.3)
+        data[2]['snapshots']['X'].pop('raw_book_evidence')
+        self.assertFalse(self.run_observation(3,100.3,inputs=data)[0])
+        self.assertFalse(self.run_observation(2,100.2)[0])
+        self.assertFalse(self.run_observation(4,100.4)[0])
+        self.assertTrue(self.run_observation(5,100.5)[0])
+
+    def test_old_source_refetch_or_score_change_is_not_new_market_evidence(self):
+        first = self.inputs(1,100.1)
+        self.run_observation(1,100.1,inputs=first)
+        data = self.inputs(2,100.2)
+        data[0]['signal']['score'] += .01
+        data[0]['signal']['source_provenance'] = copy.deepcopy(first[0]['signal']['source_provenance'])
+        for p in data[0]['signal']['source_provenance'].values():p['observed_at_utc'] = data[1]['as_of_utc']
+        self.assertIn('SOURCE_WINDOW_CONTENT_NOT_NEW',self.run_observation(2,100.2,inputs=data)[1])
+        data = self.inputs(3,100.3)
+        for p in data[0]['signal']['source_provenance'].values():p['observed_at_utc'] = (self.start-dt.timedelta(days=1)).isoformat()
+        self.assertIn('REENTRY_UNKNOWN',self.run_observation(3,100.3,inputs=data)[1])
+
+    def test_source_boundaries_confirmation_content_and_btc_identity_are_checked(self):
+        for kind in ('old_window','confirmed','hash','btc_symbol','gap'):
+            state = copy.deepcopy(self.state)
+            data = self.inputs(1,100.1)
+            p = data[0]['signal']['source_provenance']['btc_1h' if kind=='btc_symbol' else 'asset_1h']
+            if kind == 'old_window':
+                for b in p['bars']:
+                    b['open_ms'] -= 86400000;b['close_ms'] -= 86400000;b['confirmed'] = True
+                p['content_hash'] = eng.reentry.provenance.hash_value(p['bars'])
+            if kind == 'confirmed':p['bars'][-1]['confirmed'] = True
+            if kind == 'hash':p['bars'][-1]['ohlcv_quote'][3] += .001
+            if kind == 'btc_symbol':p['symbol'] = 'XUSDT'
+            if kind == 'gap':p['bars'][-1]['open_ms'] += 1
+            self.assertIn('REENTRY_UNKNOWN',self.run_observation(1,100.1,inputs=data)[1],kind)
+            self.state = state
+
+    def test_new_window_with_same_values_advances_source_identity(self):
+        first = self.inputs(59,100.1)
+        self.assertFalse(self.run_observation(59,100.1,inputs=first)[0])
+        data = self.inputs(60,100.1)
+        for key,p in data[0]['signal']['source_provenance'].items():
+            for old,b in zip(first[0]['signal']['source_provenance'][key]['bars'],p['bars']):
+                b['ohlcv_quote'] = old['ohlcv_quote']
+            p['content_hash'] = eng.reentry.provenance.hash_value(p['bars'])
+        ok,reasons = self.run_observation(60,100.1,inputs=data)
+        self.assertNotIn('SOURCE_WINDOW_CONTENT_NOT_NEW',reasons)
+        self.assertNotIn('MARKET_CONTENT_NOT_NEW',reasons)
+        self.assertEqual(self.state['reentry_registry']['X']['reentry_last_observation']['generation'],'g60')
+
+    def test_contract_mismatch_requires_matching_contract_proof_not_ticker_pass(self):
+        from research import hunter_identity_audit as identity
+        official = {'platform':'ethereum','contract_address':'0xabc','exchange_pair':'XUSDT',
+                    'official_contract_source':'https://official.example/contract',
+                    'verified_at_utc':self.start.isoformat()}
+        c,scan,_,_ = self.inputs(0,100)
+        c['identity_audit'] = {'contract_evidence':{'official':official}}
+        self.pos.update(net_pnl_usdt=-5,health_reasons=['FATAL_IDENTITY_OR_CONTRACT:THIRD_PARTY_CONTRACT_MISMATCH'])
+        eng.register_exit_for_reentry(self.state,self.pos,100,'HARD_INVALIDATION',self.start,c,scan)
+        initial = copy.deepcopy(self.state)
+        for strong_proof in (False,True):
+            self.state = copy.deepcopy(initial)
+            for n in (1,2):
+                now = self.start+dt.timedelta(minutes=n)
+                c,scan,liq,supply = self.inputs(n,100+n/10)
+                scan.update(binance_complete=True)
+                scan['coins']['X'].update(pairs=[{'pair':'XUSDT'}],venues=['binance'])
+                market = {'coingecko':[{'symbol':'X','id':'x-token','platforms':{'ethereum':'0xabc'},
+                    'contract_as_of_utc':now.isoformat(),'source_url':'https://independent.example/x'}]}
+                registry = {'assets':{'X':{'contract_verified':strong_proof,'identity':official}}}
+                audit = identity.build(scan,market,registry,now)
+                self.assertTrue(audit['assets']['X']['capital_identity_pass'])
+                self.state['systemic_risk'] = {'level':'NORMAL','last_observation_id':'post'+str(n),'last_observed_at_utc':now.isoformat()}
+                ok,reasons = eng.reentry_allowed(self.state,c,100+n/10,scan,liq,supply,now,audit)
+                self.assertEqual(ok,strong_proof and n==2)
+                if not strong_proof:self.assertIn('ORIGINAL_IDENTITY_CAUSE_CLEARANCE_UNPROVEN',reasons)
 
     def test_shared_main_lane_gate_differences_and_no_early_anchor_reset(self):
         initial = copy.deepcopy(self.state)
@@ -311,11 +474,9 @@ class ReentryTests(unittest.TestCase):
                 self.cycle(lane, 2, 100.2, ready=ready)
                 pos = self.state['open_positions'][0]
                 event = self.state['events'][-1]
-                self.assertEqual('strategy_note' in pos, ready)
-                self.assertEqual('strategy_note' in event, ready)
-                if ready:
-                    self.assertEqual(event['strategy_note'], '2026.0.10.11 新策略')
-                    self.assertEqual(event['strategy_version'], eng.reentry.STRATEGY_VERSION)
+                # Neither a callable nor a lane-local policy can attest release.
+                self.assertNotIn('strategy_note', pos)
+                self.assertNotIn('strategy_note', event)
                 eng.trade_event(self.state, pos, 'ADD', self.start, 100)
                 self.assertNotIn('strategy_note', self.state['events'][-1])
 

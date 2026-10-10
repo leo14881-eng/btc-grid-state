@@ -85,3 +85,56 @@ offline/in-memory or temporary fixtures; no production portfolio is written.
 
 SHADOW ONLY: real orders remain zero, capital authority NONE_SHADOW_ONLY. No
 merge, deployment, scheduled job, or live trading workflow is authorized here.
+
+
+## Independent-review fixes (source contract v2)
+
+Contract mismatches require matching original chain/address and current official
+plus independent contract evidence, using Identity Audit's existing source
+validity contracts. A ticker-only/native-ID capital pass never resolves a
+contract conflict. Generic ASSET_IDENTITY_MISMATCH is interpreted only when the
+captured original audit identifies supported concrete causes. Missing original
+contract proof remains UNKNOWN. Identity Audit and Capital Review only gain
+provenance metadata; their existing pass/fail rules are unchanged.
+
+Collectors now retain the original Binance REST 1h/4h asset/BTC and 15m micro
+windows: open/close boundaries, OHLCV/quote values, observed time, endpoint and
+confirmation flags. Live partial candles remain partial; formulas/sample rows
+are unchanged. Reentry validates all five packets, content hashes, continuity,
+source identity, freshness and post-exit coverage. Re-fetching an old completed
+window or changing only a score/timestamp is insufficient. New window identity
+with identical numbers is admitted as new evidence; normal trend conditions
+still apply. Bybit reentry without this validated source contract stays UNKNOWN;
+this change does not modify the separate Bybit collection work.
+
+A genuinely new missing/invalid observation interrupts confirmation and creates
+a restart watermark. Delayed packets before that watermark cannot restart it.
+An omitted candidate in a new valid review also interrupts it. Duplicate/old
+packets do not advance or interrupt the setup. The previous observation must
+still satisfy the existing MAX_EVIDENCE_AGE_SECONDS contract at confirmation;
+otherwise it seeds a new setup. No trading cooldown or new time threshold was
+introduced. Consequently sparse hourly observations cannot bridge an expired
+setup; the code does not invent evidence between collections.
+
+## Common release attestation (supersedes lane-local label activation above)
+
+Production labeling is disabled without an explicitly supplied
+research/results/hunter-strategy-release.json. This task never writes that file.
+The reviewed combined deployment owner supplies schema hunter_common_release_v1,
+release_id, enabled=true, strategy_version, activated_at_utc, SHADOW-only fields,
+components from hunter_strategy_release.component_receipt(engine), and separate
+V1/V2 lane_activation_ids matching each loss_control.activated_at_utc.
+
+Receipt hashes bind the actual engine, reentry, provenance, release gate, loss
+module, source/identity/review producers and policy bytes. Both authoritative lane
+portfolios must contain fresh evaluated runtime state, the current loss policy
+and completed legacy migrations. A bare policy string, fake callable, stale
+peer, old policy, unfinished other-lane migration, or partial/mismatched code
+cannot label a BUY. The manifest is consumed read-only and does not enable
+trading. Missing release evidence changes annotations only, never BUY/ADD gates.
+The exact note and stable strategy_version are unchanged. Historical/ADD events
+are never backfilled.
+
+Replay ID/hash arrays remain durable per exit. The unused growing derived-signal
+array is no longer appended; bounded compaction of the remaining replay sets is
+deferred rather than risk accepting a previously consumed packet after pruning.
