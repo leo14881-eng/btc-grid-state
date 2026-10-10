@@ -259,6 +259,7 @@ class ReentryTests(unittest.TestCase):
                 stack.enter_context(patch.object(eng.tail, 'risk_blocks_new', return_value=False))
                 stack.enter_context(patch.object(eng, 'update_risk_controls', create=True))
                 stack.enter_context(patch.object(eng, 'risk_blocks_new', lambda *args: False, create=True))
+                stack.enter_context(patch.object(eng, 'loss_quarantine', return_value=0, create=True))
                 if not ready:stack.enter_context(patch.object(eng, 'loss_freeze', None, create=True))
             stack.enter_context(patch.object(eng.tail, 'collect_systemic_evidence', return_value=risk_evidence))
             stack.enter_context(patch.object(eng, '_execution_source_sha', return_value='a'*40))
