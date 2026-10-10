@@ -144,8 +144,11 @@ def main():
                 assert status['signal_complete'] is (mode == 'success')
                 # Measured validation output + explicit 80-line runner/publication
                 # allowance, not a claim about arbitrary journal flooding.
-                payload = prelude+diagnostic+[f'RUNNER_ALLOWANCE {index}' for index in range(80)]
+                payload = prelude+diagnostic+[f'RUNNER_ALLOWANCE {index} '.ljust(8192, 'R') for index in range(80)]
                 journal = [('J'*256)+line+'\n' for line in payload]
+                print('HUNTER_LOG_VOLUME_MEASURED '+json.dumps(dict(mode=mode,
+                    validation_lines=len(prelude), diagnostic_lines=len(diagnostic),
+                    runner_allowance_lines=80, total_lines=len(journal)), sort_keys=True))
                 reconstructed, reads = retrieve(journal)
                 # Validation itself can contain synthetic diagnostic lines; only
                 # the contiguous measured collector slice is the target cycle.
