@@ -693,7 +693,7 @@ def trade_event(state,pos,action,now,p,reason=None,pnl=None):
   "generation_id":state.get('active_observation_generation_id'),
   "tranches":len(pos.get("tranches",[])),"notional_usdt":total_notional(pos) if pos.get("tranches") else 0}
  if action=="BUY":
-  for key in ("strategy_version","strategy_note","strategy_components"):
+  for key in ("strategy_version","strategy_note","strategy_components","strategy_release_id","strategy_release_activated_at_utc"):
    if key in pos:event[key]=pos[key]
  if reason is not None:event["reason"]=reason
  if pnl is not None:event["net_pnl_usdt"]=round(pnl,2)
@@ -870,7 +870,7 @@ def admit_execution_identity(pos,book,execution,scan,now,entry=False):
  pos.update(identity_fields(pos,book,execution,now,scan.get('generation_id'),source_sha,FEE_BPS,
   source_kind='SHADOW_ENTRY' if entry else ('POSITION_MONITOR' if str(scan.get('generation_id','')).startswith('MONITOR_') else 'HOURLY_RESEARCH'),formal=True,entry=entry))
 
-def execute_capital_proposals(state,proposals,scan,now):
+def execute_capital_proposals(state,proposals,scan,now,release_context=None):
  executed_buys=0
  ranked=sorted(proposals,key=lambda x:opportunity_priority(x.get("evidence"),x.get("kind")),reverse=True)
  for q in ranked:
@@ -887,7 +887,7 @@ def execute_capital_proposals(state,proposals,scan,now):
    add(pos,p,e,now);record(state,pos,"ADD",now,q["reasons"]+gate_reasons,e,p);trade_event(state,pos,"ADD",now,p,"PORTFOLIO_ALLOCATOR_ADD")
   else:
    import sys
-   pos.update(reentry.buy_annotation(sys.modules[__name__],state))
+   pos.update(reentry.buy_annotation(sys.modules[__name__],state,release_context,now))
    add(pos,p,e,now)
    book=q.get('entry_book') or {}
    admit_execution_identity(pos,book,lifecycle.liquidation(pos,book,now,FEE_BPS),scan,now,entry=True)
@@ -987,6 +987,7 @@ def main():
  refresh_closed_observations(state,now,lambda asset:price(scan,asset))
  capital_proposals=[]
  manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
+ reentry.missing_candidates(state,review,scan,now,fresh)
  open_assets={x["asset"] for x in state["open_positions"]};buy_count=0
  ranked=sorted(review.get("candidates") or [],key=lambda c:finite(sig(c).get("score")) or 0,reverse=True)
  for c in ranked:
@@ -1026,7 +1027,16 @@ def main():
   if is_reentry:entry_reasons=list(entry_reasons)+re_reasons
   capital_proposals.append({"kind":"BUY","asset":a,"pos":pos,"price":p,"evidence":e,"reasons":list(entry_reasons),"amount":TRANCHES[0],"candidate":c,"entry_book":liq_for(liq,a).get('raw_book_evidence',{})})
   open_assets.add(a)
- buy_count=execute_capital_proposals(state,capital_proposals,scan,now)
+ lane="V1" if ENTRY_MODE=="DISCOVERY" else "V2"
+ peer="V2" if lane=="V1" else "V1"
+ peer_path=ROOT/("hunter-shadow-v2-portfolio.json" if peer=="V2" else "hunter-shadow-portfolio.json")
+ manifest=load(ROOT/"hunter-strategy-release.json",{})
+ peer_state={}
+ if manifest.get('enabled'):
+  try:peer_state=load(peer_path,{})
+  except (OSError,ValueError,RuntimeError):pass  # Label UNKNOWN; do not alter either lane's BUY policy.
+ release_context={"manifest":manifest,"lanes":{lane:state,peer:peer_state}}
+ buy_count=execute_capital_proposals(state,capital_proposals,scan,now,release_context)
  guard=update_overfilter_guard(state,scan,review,liq,supply,now,buy_count)
  # Trade events and positions are durable audit history. High-frequency HOLD/REJECT
  # decisions are diagnostic only and must not make the authoritative portfolio grow forever.
