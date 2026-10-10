@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
 # FINAL_ACCEPTANCE_20261004
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading, re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +23,35 @@ def load(p,d):
 def get(url):
     req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Accept-Encoding":"identity"})
     with urllib.request.urlopen(req,timeout=25) as r:return json.load(r)
+
+
+def transport_error_details(error):
+    """Persist only allowlisted HTTP metadata; never response bodies, URLs or auth values."""
+    details = {"type": type(error).__name__}
+    if not isinstance(error, urllib.error.HTTPError):
+        return details
+    details["http_status"] = error.code
+    host = urllib.parse.urlsplit(error.url or "").hostname
+    details["endpoint"] = {
+        "www.sec.gov": "SEC_WWW",
+        "data.sec.gov": "SEC_DATA",
+        "efts.sec.gov": "SEC_EFTS",
+        "r.jina.ai": "JINA_READER",
+    }.get(host, "OTHER")
+    headers = error.headers or {}
+    challenge = str(headers.get("WWW-Authenticate", "")).split(None, 1)
+    if challenge and challenge[0].lower() in {"basic", "bearer", "digest"}:
+        details["auth_challenge_scheme"] = challenge[0].lower()
+    request_id = str(headers.get("X-Request-ID", ""))
+    if re.fullmatch(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", request_id):
+        details["request_id"] = request_id
+    cf_ray = str(headers.get("CF-Ray", ""))
+    if re.fullmatch(r"[0-9a-fA-F]{16}-[A-Z]{3}", cf_ray):
+        details["cf_ray"] = cf_ray
+    retry_after = str(headers.get("Retry-After", ""))
+    if re.fullmatch(r"[0-9]{1,6}", retry_after):
+        details["retry_after_seconds"] = int(retry_after)
+    return details
 
 _proxy_rate_lock=threading.Lock()
 _proxy_next_start=0.0
@@ -263,7 +292,7 @@ def frame_evidence_by_cik(requested_batch_index=0):
     # Frames are independent market-wide reads. Small bounded parallelism keeps the observer
     # below workflow timeout without creating per-symbol request storms.
     with ThreadPoolExecutor(max_workers=4) as ex:
-        futures=[ex.submit(fetch_one,t) for t in tasks]
+        futures={ex.submit(fetch_one,t): t for t in tasks}
         for fut in as_completed(futures):
             try:
                 (key,tax,concept,unit,p),d,t=fut.result(); transport.add(t)
@@ -273,7 +302,8 @@ def frame_evidence_by_cik(requested_batch_index=0):
                     raw.setdefault(cik,{}).setdefault(key,[]).append(
                         {"end":row.get("end"),"val":row.get("val"),"form":row.get("form"),"filed":row.get("filed"),"period":p})
             except Exception as e:
-                request_errors.append({"type":type(e).__name__,"message":str(e)[:160]})
+                request_errors.append({**transport_error_details(e),
+                    "task": dict(zip(("field", "taxonomy", "concept", "unit", "period"), futures[fut]))})
     out={}
     for cik,x in raw.items():
         def vals(primary,*alts):
@@ -328,7 +358,7 @@ def ticker_map():
             if isinstance(raw,dict) and "data" in raw and "fields" in raw:
                 fields=raw["fields"]; return {str(dict(zip(fields,row)).get("ticker","")).upper().replace(".","-"):dict(zip(fields,row)) for row in raw["data"]},errs
             return {str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()},errs
-        except urllib.error.HTTPError as e: errs.append({"url":url,"type":"HTTPError","status":e.code,"reason":str(e.reason)})
+        except urllib.error.HTTPError as e: errs.append({"url":url,"status":e.code,**transport_error_details(e)})
         except Exception as e: errs.append({"url":url,"type":type(e).__name__,"message":str(e)[:120]})
     # GitHub-hosted runners can be blocked by SEC edge policy. Try a read-only
     # transport proxy for the same SEC JSON; never use proxy-derived trading data.
@@ -336,7 +366,7 @@ def ticker_map():
         raw=proxy_json("https://www.sec.gov/files/company_tickers.json")
         return {str(v.get("ticker","")).upper().replace(".","-"):v for v in raw.values()},errs
     except Exception as e:
-        errs.append({"url":"SEC_TICKER_MAP_VIA_READONLY_PROXY","type":type(e).__name__,"message":str(e)[:120]})
+        errs.append({"url":"SEC_TICKER_MAP_VIA_READONLY_PROXY",**transport_error_details(e)})
     return {},errs
 
 def resolve_cik_efts(symbol):
@@ -547,7 +577,7 @@ def main():
             if cik: symbol_cik[sym]=cik
             else: companies[sym]={"symbol":sym,"status":"NO_SEC_MAPPING","updated_at":now(),"strategy_effect":False}
         except Exception as e:
-            errors.append({"symbol":sym,"stage":"CIK_RESOLUTION","type":type(e).__name__})
+            errors.append({"symbol":sym,"stage":"CIK_RESOLUTION",**transport_error_details(e)})
     bulk={"attempted":False,"reason":"DISABLED_IN_HOURLY_CI_MULTI_GB_ARCHIVE","ciks_requested":len(set(symbol_cik.values()))}
 
     last_batch_at=old.get("market_batch_refreshed_at") or old.get("frames_refreshed_at") or old.get("updated_at")
