@@ -216,10 +216,19 @@ price for that candle, not a mark-price, orderbook execution price, or permissio
 to trade. Discovery's ticker mark may be newer than the Kline generation cut;
 existing ticker freshness permits response time within +/-120s of the capture
 time. This PR does not assert ticker and WS observations are simultaneous.
-Kline source/receive freshness is <=90s at freeze; the consumer rechecks time at
+Kline source/receive freshness is <=90s at the generation cut; the consumer rechecks time at
 read completion, so lock waits/slow reads cannot reuse an earlier admission time.
 Downstream snapshot validity
 remains the existing <=900s. Measure both lags on the actual server before use.
+
+Precisely, a selected current bar's source/receive timestamps may be up to90s
+before the generation cut, and the read must finish within90s after that cut:
+the combined worst-case observation age at read completion is180s. The WS source
+timestamp is the frame's generation time; REST uses the response time. The WS
+last-trade timestamp is checked for consistency on ingestion but is not retained
+as a separate price-age field. Neither bound guarantees an illiquid asset had a
+new trade, nor does it measure network round-trip latency. Natural-run acceptance
+must report these distinct delays rather than label all of them “real-time”.
 
 “France direct” means a proposed direct request from the existing server's
 egress to fixed official Bybit endpoints. This review made no such market
