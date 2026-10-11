@@ -408,8 +408,8 @@ database or another hostname. This governor cannot police unrelated programs.
             db.execute('UPDATE budget SET next_ms=? WHERE id=1', (now_ms+200,))
             return token
 
-    def release(self, token):
-        with self.store.db() as db:
+    def release(self, token, timeout=10):
+        with self.store.db(timeout=timeout) as db:
             db.execute('DELETE FROM leases WHERE token=?', (token,))
 
     def failure(self, status, text, now_ms=None, retry_after=1, timeout=10):

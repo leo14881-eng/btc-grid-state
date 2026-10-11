@@ -2,8 +2,8 @@
 
 PR101 now includes the public instruments/tickers adapter as well as the Kline
 sidecar. It is a reviewable implementation, not a deployed service. The branch
-integrates main `0fce78b355ced25cd6cebe7fb08b9ac72d095860` (including PR105)
-without changing its scripts, result files or workflow. No production selector,
+integrates main `778e74459cf6d76ce4bea83a666c04dda4adc68c` (including PR105/107)
+without changing their files relative to that main. No production selector,
 service, timer, credential, account permission or strategy threshold was changed.
 
 ## Selection and covered callers
@@ -73,7 +73,9 @@ A monotonic total deadline defaults to 30s and covers budget wait, process start
 DNS, connect/TLS, headers, body and IPC; the inner socket timeout is 10s. Cancellation
 or expiry kills the child and waits up to 1s for reap. Complete responses are
 usable only after reap. Trusted completion atomically retires marker and lease,
-with SQLite busy wait bounded by the remaining deadline (at most 250ms).
+with each SQLite busy wait at most 250ms. Rolled-back lock contention can retry
+only coordination transactions within the original deadline; it never retries
+HTTP or disk faults. Marker and lease stay held throughout completion retries.
 A deadline is a cancellation boundary, not a hard real-time OS scheduling promise:
 if the OS cannot reap the child, the request stays stopped with its lease held.
 No Future timeout pretends an open socket has ended.
@@ -104,7 +106,7 @@ before any owner-file path is opened.
 
 Linux CI runs two independent guarded suites on Python 3.10 and 3.12:
 
-- `python -I -B -X utf8 scripts/check_bybit_stream_offline.py`: 103 fixture tests;
+- `python -I -B -X utf8 scripts/check_bybit_stream_offline.py`: 105 fixture tests;
   no network/DNS/exec and only temporary writes. Forked workers inherit the guard.
   Six different checkout directories contend for one budget. A second six-process
   test mixes instruments/ticker/Kline clients and asserts >=200ms admission and

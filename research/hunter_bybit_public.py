@@ -61,6 +61,21 @@ def worker_command(url):
     return [sys.executable, '-B', str(Path(__file__).with_name('hunter_bybit_http_child.py')), url, str(os.getpid())]
 
 
+def coordinate(operation, deadline, cancelled=lambda:False):
+    """Retry only rolled-back SQLite lock contention, never HTTP or disk faults."""
+    while True:
+        if cancelled() or time.monotonic() >= deadline:
+            raise TimeoutError('PUBLIC_COORDINATOR_DEADLINE')
+        try:
+            return operation()
+        except sqlite3.OperationalError as error:
+            code = getattr(error, 'sqlite_errorcode', None)
+            busy = (code is not None and code & 255 in (5,6)) or str(error) in (
+                'database is locked', 'database table is locked')
+            if not busy: raise
+            time.sleep(min(.02,max(0,deadline-time.monotonic())))
+
+
 def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
     """Monotonic deadline includes start/DNS/TLS/headers/body; cleanup is awaited.
 
@@ -156,19 +171,23 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
 
 
 @contextlib.contextmanager
-def tracked(store, token, deadline):
+def tracked(store, token, deadline, cancelled=lambda:False):
     import fcntl
     path = store.path.parent/('request-'+token+'.lock')
     handle = path.open('xb')
     fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     remove = False
     try:
-        with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
-            db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
+        def begin():
+            with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
+                db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
+        coordinate(begin,deadline,cancelled)
         yield handle.close  # Immediate shared stop if denial persistence fails.
-        with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
-            db.execute('DELETE FROM requests WHERE token=?',(token,))
-            db.execute('DELETE FROM leases WHERE token=?',(token,))
+        def finish():
+            with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
+                db.execute('DELETE FROM requests WHERE token=?',(token,))
+                db.execute('DELETE FROM leases WHERE token=?',(token,))
+        coordinate(finish,deadline)
         remove = True
         if time.monotonic()>=deadline:
             raise TimeoutError('PUBLIC_RESPONSE_FINISHED_AFTER_DEADLINE')
@@ -199,14 +218,15 @@ class Client:
             token = None
             while token is None:
                 check()
-                token = self.budget.acquire(timeout=min(.25,max(0,deadline-time.monotonic())))
+                token = coordinate(lambda:self.budget.acquire(
+                    timeout=min(.25,max(0,deadline-time.monotonic()))),deadline,cancelled)
                 if token is None: time.sleep(min(.02,max(0,deadline-time.monotonic())))
             release = True
             status, payload, retry = 0, b'', 1
             denied = False
             try:
                 check()
-                with tracked(self.store, token, deadline) as orphan:
+                with tracked(self.store, token, deadline, cancelled) as orphan:
                     release = False  # tracked commits marker+lease removal together.
                     def on_denial():
                         nonlocal denied
@@ -221,7 +241,8 @@ class Client:
                             finally:
                                 raise DurableStopError('DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW') from error
                     def before_go():
-                        state = self.budget.status(timeout=max(0,min(.25,deadline-time.monotonic())))
+                        state = coordinate(lambda:self.budget.status(
+                            timeout=max(0,min(.25,deadline-time.monotonic()))),deadline,cancelled)
                         if state['halt'] or time.time_ns()//1_000_000 < state['cooldown_ms']:
                             raise RuntimeError('PUBLIC_ADMISSION_REVOKED')
                     not_sent = None
@@ -255,7 +276,8 @@ class Client:
                 release = False  # Persistent orphan marker is a global stop.
                 raise
             finally:
-                if release: self.budget.release(token)
+                if release:
+                    self.budget.release(token,timeout=max(0,min(.25,deadline-time.monotonic())))
             if status == 403 or decision != 'BOUNDED_RETRY':
                 raise RuntimeError(decision)
         raise RuntimeError('PUBLIC_RETRY_BUDGET_EXHAUSTED')

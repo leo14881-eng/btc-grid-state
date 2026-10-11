@@ -263,5 +263,48 @@ class PublicTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],0)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],0)
 
+    def test_cleanup_busy_retries_state_only_while_holding_marker_and_lease(self):
+        real=self.store.db;remaining=[3]
+        @contextlib.contextmanager
+        def busy(*args,**kwargs):
+            with real(*args,**kwargs) as db:
+                class Connection:
+                    def execute(_,sql,params=()):
+                        if sql.startswith('DELETE FROM requests') and remaining[0]:
+                            remaining[0]-=1
+                            self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],1)
+                            self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],1)
+                            self.assertIsNone(storage.request_gate(self.store,db))
+                            raise sqlite3.OperationalError('database is locked')
+                        return db.execute(sql,params)
+                yield Connection()
+        with patch.object(self.store,'db',busy):
+            self.assertEqual(self.client.request(direct.TICK_PATH)['retCode'],0)
+        self.assertEqual(remaining,[0]);self.assertEqual(self.calls,[direct.TICK_PATH])
+        with real(readonly=True) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],0)
+
+    def test_cleanup_busy_deadline_keeps_orphan_without_second_http(self):
+        real=self.store.db
+        @contextlib.contextmanager
+        def busy(*args,**kwargs):
+            with real(*args,**kwargs) as db:
+                class Connection:
+                    def execute(_,sql,params=()):
+                        if sql.startswith('DELETE FROM requests'):
+                            raise sqlite3.OperationalError('database is locked')
+                        return db.execute(sql,params)
+                yield Connection()
+        start=time.monotonic()
+        with patch.object(self.store,'db',busy),self.assertRaises(TimeoutError):
+            self.client.request(direct.TICK_PATH,timeout=.25)
+        self.assertLess(time.monotonic()-start,1)
+        self.assertEqual(self.calls,[direct.TICK_PATH])
+        self.assertIn('ORPHANED',self.client.budget.status()['halt'])
+        with real(readonly=True) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],1)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],1)
+
 
 if __name__=='__main__':unittest.main()
