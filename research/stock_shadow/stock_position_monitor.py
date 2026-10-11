@@ -141,6 +141,8 @@ class QuoteWindowCache:
 def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
     """Original delayed SIP collection; an explicit cache enables the offline prototype."""
     global QUOTE_USAGE
+    endpoint="https://data.alpaca.markets/v2/stocks/bars"
+    lookback=__import__("datetime").timedelta(days=3)
     began=perf_counter()
     publish_usage=usage is None
     usage={} if usage is None else usage
@@ -151,9 +153,9 @@ def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
                  symbol_coverage="UNKNOWN", interval_coverage="UNKNOWN")
     try:
         if window_cache is None:
-            return _collect_alpaca_quotes(symbols,None,usage)
+            return _collect_alpaca_quotes(symbols,None,usage,endpoint,lookback)
         with window_cache.lock:
-            return _collect_alpaca_quotes(symbols,window_cache.cursors,usage)
+            return _collect_alpaca_quotes(symbols,window_cache.cursors,usage,endpoint,lookback)
     finally:
         usage["elapsed_seconds"]=perf_counter()-began
         if publish_usage:
@@ -162,7 +164,7 @@ def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
             QUOTE_USAGE=dict(usage)
 
 
-def _collect_alpaca_quotes(symbols, window_cache, usage):
+def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
     if not symbols:
         if window_cache is not None: window_cache.clear()
         usage["symbol_coverage"]="EMPTY"
@@ -175,7 +177,7 @@ def _collect_alpaca_quotes(symbols, window_cache, usage):
     prices={}; errors=[]; requests=0
     end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=20)
     # Keep enough calendar lookback to cover weekends/holidays while still issuing one multi-symbol logical batch.
-    start=end-__import__("datetime").timedelta(days=3)
+    start=end-lookback
     full_start=start
     usage["query_end"]=end.isoformat()
     usage["full_start"]=full_start.isoformat()
@@ -220,7 +222,7 @@ def _collect_alpaca_quotes(symbols, window_cache, usage):
             while True:
                 if token: params["page_token"]=token
                 else: params.pop("page_token",None)
-                req=urllib.request.Request("https://data.alpaca.markets/v2/stocks/bars?"+urllib.parse.urlencode(params),headers=headers)
+                req=urllib.request.Request(endpoint+"?"+urllib.parse.urlencode(params),headers=headers)
                 http_began=perf_counter()
                 usage["http_requests"]+=1
                 try:
