@@ -127,7 +127,8 @@ class HourlyReentryTests(unittest.TestCase):
             if kind in ('buy_gate','capital'):
                 if kind=='buy_gate':data[0]['trade_action']='WAIT'
                 else:self.state['open_positions']=[{'asset':'Y','tranches':[{'notional_usdt':20000,'price':1}]}]
-                with patch.object(self,'inputs',return_value=data):self.cycle('V2',82,price)
+                with patch.object(self,'inputs',return_value=data):
+                    self.cycle('V2',82,price,ready=None if getattr(eng,'loss_freeze',None) else False)
                 self.assertNotIn('X',[p['asset'] for p in self.state['open_positions']])
             else:self.assertFalse(self.run_observation(82,price,inputs=data)[0])
 
