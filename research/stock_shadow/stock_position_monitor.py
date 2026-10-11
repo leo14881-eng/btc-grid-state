@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 """Position-only Stock Shadow monitor. Never discovers or opens positions."""
 import json, os, urllib.parse, urllib.request, urllib.error
+from time import perf_counter
+from threading import RLock
 from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+try:
+    from .quote_window_store import QuoteWindowStore
+except ImportError:
+    try:
+        from quote_window_store import QuoteWindowStore
+    except ImportError:
+        from research.stock_shadow.quote_window_store import QuoteWindowStore
 try:
     from .market_session import session_allows_trade
 except ImportError:
@@ -30,6 +39,7 @@ SOURCE_COMMIT=os.getenv("STOCK_SHADOW_SOURCE_COMMIT","LOCAL")
 RUN_ID=os.getenv("STOCK_SHADOW_RUN_ID","LOCAL")
 NY=ZoneInfo("America/New_York")
 CALENDAR_USAGE={"http_requests":0,"cache_hits":0,"cache_misses":0,"errors":0}
+QUOTE_USAGE={}
 
 def now(): return datetime.now(timezone.utc).isoformat()
 def load(p,d):
@@ -124,55 +134,186 @@ def _parse_price(v):
         x=float(str(v).replace("$","").replace(",","").strip()); return x if x>0 else None
     except Exception: return None
 
-def alpaca_snapshot_quotes(symbols):
-    """Batch delayed SIP 5m bars for all held symbols using maximum practical GET batches."""
-    if not symbols: return {},[],0,0
+class QuoteWindowCache:
+    """Explicit in-memory cursors for replay and callers in the same process.
+
+    A cursor is never a returned observation. Shared callers serialize fetch/update;
+    separate instances are independent. Restarting always takes the cold path.
+    """
+    def __init__(self):
+        self.cursors={}
+        self.lock=RLock()
+
+
+def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
+    """Delayed SIP collection; persistent incremental collection is opt-in only."""
+    global QUOTE_USAGE
+    endpoint="https://data.alpaca.markets/v2/stocks/bars"
+    lookback=__import__("datetime").timedelta(days=3)
+    config={"endpoint":endpoint,"lookback_seconds":int(lookback.total_seconds()),
+            "delay_minutes":20,"timeframe":"5Min","feed":"sip","adjustment":"all",
+            "limit":10000,"target_chars":MAX_REQUEST_TARGET_CHARS,
+            "source":"ALPACA_SIP_5M_DELAYED","selection_version":2,
+            "enforce_delay_endpoint":window_cache is not None or os.getenv("STOCK_SHADOW_INCREMENTAL_QUOTES")=="1",
+            "scope":os.getenv("STOCK_SHADOW_QUOTE_CACHE_SCOPE","direct")}
+    began=perf_counter()
+    publish_usage=usage is None
+    usage={} if usage is None else usage
+    usage.clear()
+    usage.update(http_requests=0, pages=0, bars=0, response_bytes=0,
+                 http_seconds=0.0, elapsed_seconds=0.0, cache_hits=0,
+                 fallback_batches=0, incremental=window_cache is not None,
+                 symbol_coverage="UNKNOWN", interval_coverage="UNKNOWN")
+    try:
+        if window_cache is None and os.getenv("STOCK_SHADOW_INCREMENTAL_QUOTES")=="1":
+            return _persistent_alpaca_quotes(symbols,usage,config,lookback)
+        if window_cache is None:
+            return _collect_alpaca_quotes(symbols,None,usage,config,lookback)
+        with window_cache.lock:
+            return _collect_alpaca_quotes(symbols,window_cache.cursors,usage,config,lookback)
+    finally:
+        usage["elapsed_seconds"]=perf_counter()-began
+        if publish_usage:
+            # Publish one completed snapshot; concurrent calls never accumulate
+            # counters in the same mutable dictionary while waiting for the cache.
+            QUOTE_USAGE=dict(usage)
+
+
+def _persistent_alpaca_quotes(symbols, usage, config, lookback):
+    end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=config["delay_minutes"])
+    disk=usage["disk_cache"]={}
+    path=Path(os.getenv("STOCK_SHADOW_QUOTE_CACHE_PATH",""))
+    # Runner chooses an absolute path outside its isolated checkout. Direct
+    # invocations cannot turn repository data into a runtime cache by accident.
+    try:
+        resolved=path.resolve(); checkout=Path.cwd().resolve()
+        allowed=path.is_absolute() and checkout != resolved and checkout not in resolved.parents
+    except (OSError, ValueError, RuntimeError):
+        allowed=False
+    if not allowed:
+        disk["read_status"]="PATH_REJECTED"
+        return _collect_alpaca_quotes(symbols,None,usage,config,lookback,end)
+    store=QuoteWindowStore(path,config)
+    lease=store.read(symbols,end,lookback,disk)
+    cursors=lease.cursors if lease is not None else None
+    usage["incremental"]=lease is not None
+    result=_collect_alpaca_quotes(symbols,cursors,usage,config,lookback,end)
+    if lease is not None:
+        # An interrupted/failed batch cannot extend the useful life of prior
+        # cursors. Publish an empty snapshot and let the next process cold-start.
+        store.publish(lease,{} if result[1] else cursors,end,lookback,disk)
+    return result
+
+
+def _collect_alpaca_quotes(symbols, window_cache, usage, config, lookback, end=None):
+    if not symbols:
+        if window_cache is not None: window_cache.clear()
+        usage["symbol_coverage"]="EMPTY"
+        return {},[],0,0
     key=os.getenv("APCA_API_KEY_ID"); secret=os.getenv("APCA_API_SECRET_KEY")
-    if not key or not secret: return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0,0
+    if not key or not secret:
+        if window_cache is not None: window_cache.clear()
+        return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0,0
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow-position-monitor/3.0"}
     prices={}; errors=[]; requests=0
-    end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=20)
+    end=end or datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=config["delay_minutes"])
     # Keep enough calendar lookback to cover weekends/holidays while still issuing one multi-symbol logical batch.
-    start=end-__import__("datetime").timedelta(days=3)
-    batches=[]; batch=[]
-    for sym in symbols:
-        candidate=batch+[sym]
-        probe={"symbols":",".join(s.replace("-",".") for s in candidate),"timeframe":"5Min",
-               "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
-               "limit":10000,"feed":"sip","adjustment":"all"}
-        target="/v2/stocks/bars?"+urllib.parse.urlencode(probe)
-        if batch and len(target)>MAX_REQUEST_TARGET_CHARS:
-            batches.append(batch); batch=[sym]
-        else:
-            batch=candidate
-    if batch: batches.append(batch)
-    for batch_index,batch in enumerate(batches):
-        params={"symbols":",".join(s.replace("-",".") for s in batch),"timeframe":"5Min",
+    start=end-lookback
+    full_start=start
+    usage["query_end"]=end.isoformat()
+    usage["full_start"]=full_start.isoformat()
+    windows=[(symbols,full_start)]
+    if window_cache is not None:
+        warm=[]; cold=[]; cursors=[]
+        for symbol in symbols:
+            try:
+                cursor=datetime.fromisoformat(window_cache[symbol].replace("Z","+00:00"))
+                if cursor.tzinfo is None or not full_start <= cursor <= end: raise ValueError("cursor outside window")
+                warm.append(symbol); cursors.append(cursor)
+            except (KeyError, TypeError, ValueError, AttributeError):
+                cold.append(symbol)
+        if warm:
+            # Inclusive: re-read same-timestamp corrections. Cold/missing symbols
+            # remain batched and cannot force every warm holding back to three days.
+            windows=[(warm,min(cursors))]+([(cold,full_start)] if cold else [])
+            usage["cache_hits"]=len(warm)
+    usage["windows"]=[{"symbols":len(group),"start":start.isoformat()} for group,start in windows]
+    batches=[]
+    for group,start in windows:
+        batch=[]
+        for sym in group:
+            candidate=batch+[sym]
+            probe={"symbols":",".join(s.replace("-",".") for s in candidate),"timeframe":config["timeframe"],
+                   "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
+                   "limit":config["limit"],"feed":config["feed"],"adjustment":config["adjustment"]}
+            target="/v2/stocks/bars?"+urllib.parse.urlencode(probe)
+            if batch and len(target)>config["target_chars"]:
+                batches.append((batch,start)); batch=[sym]
+            else:
+                batch=candidate
+        if batch: batches.append((batch,start))
+    for batch_index,(batch,start) in enumerate(batches):
+        params={"symbols":",".join(s.replace("-",".") for s in batch),"timeframe":config["timeframe"],
                 "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
-                "limit":10000,"feed":"sip","adjustment":"all"}
+                "limit":config["limit"],"feed":config["feed"],"adjustment":config["adjustment"]}
         token=None
         try:
             latest={}
+            fallback=False
             while True:
                 if token: params["page_token"]=token
                 else: params.pop("page_token",None)
-                req=urllib.request.Request("https://data.alpaca.markets/v2/stocks/bars?"+urllib.parse.urlencode(params),headers=headers)
-                with urllib.request.urlopen(req,timeout=35) as r: body=json.load(r)
+                req=urllib.request.Request(config["endpoint"]+"?"+urllib.parse.urlencode(params),headers=headers)
+                http_began=perf_counter()
+                usage["http_requests"]+=1
+                try:
+                    with urllib.request.urlopen(req,timeout=35) as r: payload=r.read()
+                    usage["response_bytes"]+=len(payload)
+                    body=json.loads(payload)
+                finally:
+                    usage["http_seconds"]+=perf_counter()-http_began
+                usage["pages"]+=1
                 requests+=1
                 for raw,rows in (body.get("bars") or {}).items():
+                    if isinstance(rows,list): usage["bars"]+=len(rows)
                     if rows:
                         row=max(rows,key=lambda x:str(x.get("t") or ""))
-                        latest[raw.replace(".","-")]={"price":row.get("c"),"price_asof":row.get("t"),"source":"ALPACA_SIP_5M_DELAYED"}
+                        if config["enforce_delay_endpoint"]:
+                            try:
+                                stamp=datetime.fromisoformat(row.get("t","").replace("Z","+00:00"))
+                            except (ValueError, TypeError, AttributeError):
+                                stamp=None  # Existing quote validity rejects missing/invalid timestamps.
+                            if stamp is not None and stamp.tzinfo is not None and stamp > end:
+                                raise ValueError("BAR_AFTER_DELAY_ENDPOINT")
+                        latest[raw.replace(".","-")]={"price":row.get("c"),"price_asof":row.get("t"),"source":config["source"]}
                 token=body.get("next_page_token")
-                if not token: break
+                if not token:
+                    if start > full_start and not fallback and any(s not in latest for s in batch):
+                        # Re-fetch the entire logical batch, preserving batch failure semantics.
+                        # No manufactured price for missing/halted symbols; only one backfill.
+                        params["start"]=full_start.isoformat().replace("+00:00","Z")
+                        latest={}; fallback=True
+                        usage["fallback_batches"]+=1
+                        continue
+                    break
             prices.update(latest)
         except urllib.error.HTTPError as e:
             requests+=1; errors.append({"batch":batch_index,"reason":f"HTTP_{e.code}","detail":str(e.reason)})
         except Exception as e:
             requests+=1; errors.append({"batch":batch_index,"reason":type(e).__name__,"detail":str(e)[:120]})
+    if window_cache is not None:
+        window_cache.clear()
+        for symbol, observation in prices.items():
+            # Invalid/stale observations cannot seed the next incremental request.
+            if symbol in symbols and quote_validity(symbol,observation,end+__import__("datetime").timedelta(minutes=config["delay_minutes"]),config["timeframe"])=="VALID":
+                cursor=datetime.fromisoformat(observation["price_asof"].replace("Z","+00:00"))
+                if full_start <= cursor <= end:
+                    window_cache[symbol]=observation["price_asof"]
+    usage["symbol_coverage"]="COMPLETE" if all(s in prices for s in symbols) else ("PARTIAL" if prices else "UNKNOWN")
     return prices,errors,requests,len(batches)
 
 def main(force=False):
+    monitor_began=perf_counter(); stages={}
     state=load(STATE,{"positions":{},"closed":[]}); events=load(EVENTS,[])
     validate_inputs(state,events)
     if state.get("reset_reason") or state.get("reset_at"):
@@ -180,12 +321,20 @@ def main(force=False):
     positions=state.get("positions",{}); symbols=sorted(positions)
     starting_positions=len(symbols); starting_events=len(events); starting_closed=len(state.get("closed",[]))
     starting_fingerprint=continuity_fingerprint(state,events)
+    stages["load_validate_seconds"]=perf_counter()-monitor_began
+    stage_began=perf_counter()
     session=_alpaca_exchange_session()
     is_open=market_open(session=session)
+    stages["calendar_seconds"]=perf_counter()-stage_began
     if not force and not is_open:
-        save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False,"calendar_api_usage":dict(CALENDAR_USAGE)})
+        stages["through_market_gate_seconds"]=perf_counter()-monitor_began
+        save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":"SKIPPED_MARKET_CLOSED","positions":len(symbols),"requests":0,"provider":"ALPACA_SIP_5M_DELAYED","buy_capability":False,"calendar_api_usage":dict(CALENDAR_USAGE),"stage_timings":stages})
         print(json.dumps(load(HEALTH,{}))); return
+    QUOTE_USAGE.clear()
+    stage_began=perf_counter()
     prices,errors,requests,logical_batches=alpaca_snapshot_quotes(symbols)
+    stages["quotes_seconds"]=perf_counter()-stage_began
+    stage_began=perf_counter()
     trade_actions_enabled=is_open
     sells=0; updated=0; invalid_quotes={}
     checked_at=datetime.fromisoformat(now())
@@ -243,13 +392,17 @@ def main(force=False):
         if continuity_fingerprint(state,events)!=starting_fingerprint:
             raise RuntimeError("state_continuity:off_session_forward_cohort_identity_changed")
     validate_ledger(state,events)
+    stages["evaluate_validate_seconds"]=perf_counter()-stage_began
+    stage_began=perf_counter()
     save(STATE,state); save(EVENTS,events)
     summary=load(ROOT/"summary-v1.json",{})
     summary.update(portfolio_statistics(state,events))
     summary["scan_state_stale"]=summary.get("run_id") != state.get("run_id")
     save(ROOT/"summary-v1.json",summary)
+    stages["local_save_summary_seconds"]=perf_counter()-stage_began
+    stages["through_summary_seconds"]=perf_counter()-monitor_began
     status="OK" if updated==len(symbols) else ("PARTIAL" if updated else ("OK_EMPTY" if not symbols else "DATA_UNAVAILABLE"))
-    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"invalid_quotes":invalid_quotes,"valid_quotes":updated,"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
+    save(HEALTH,{"updated_at":now(),"source_commit":SOURCE_COMMIT,"run_id":RUN_ID,"status":status,"provider":"ALPACA_SIP_5M_DELAYED","positions_before":len(symbols),"quotes_received":len(prices),"positions_updated":updated,"missing_symbols":sorted(set(symbols)-set(prices)),"invalid_quotes":invalid_quotes,"valid_quotes":updated,"shadow_sells":sells,"requests":requests,"logical_batches":logical_batches,"batch_policy":"MAX_REQUEST_TARGET_CHARS_7000","errors":errors,"quote_collection":dict(QUOTE_USAGE),"stage_timings":stages,"buy_capability":False,"real_orders":False,"trade_actions_enabled":trade_actions_enabled,"calendar_api_usage":dict(CALENDAR_USAGE)})
     print(json.dumps(load(HEALTH,{}),ensure_ascii=False))
 if __name__=="__main__":
     run_with_health(main,ROOT/"monitor-run-health-v1.json",SOURCE_COMMIT,RUN_ID,save,
