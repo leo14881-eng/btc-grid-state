@@ -18,7 +18,7 @@ from research import hunter_bybit_worker as worker
 from research import hunter_cex_scan as scan
 from research import hunter_early_signals as early
 from research.hunter_bybit_signal_capture import capture
-from test_hunter_bybit_stream import NOW, rest, message
+from test_hunter_stream import NOW, rest, message
 
 
 class ConsumerTests(unittest.TestCase):

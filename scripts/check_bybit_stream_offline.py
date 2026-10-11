@@ -44,7 +44,9 @@ def main():
         previous=Path.cwd()
         os.chdir(scratch)
         try:
-            suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_hunter_bybit_stream*.py')
+            # Keep fork-based sidecar acceptance out of the deployed discovery
+            # prelude's test_hunter_bybit*.py (and its stricter no-fork log guard).
+            suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_hunter_stream*.py')
             result=unittest.TextTestRunner(verbosity=2).run(suite)
             good=result.wasSuccessful() and result.testsRun==66 and not result.skipped and not blocked
             print('BYBIT_STREAM_OFFLINE_ACCEPTANCE '+json.dumps(dict(tests=result.testsRun,
