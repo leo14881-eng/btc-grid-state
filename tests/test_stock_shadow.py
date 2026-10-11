@@ -1787,6 +1787,7 @@ def test_sec_failed_refresh_preserves_evidence_age_and_attempt_cooldown(tmp_path
     assert result["market_batch_attempted_at"] != stamp
     assert result["frames_transport"]["batch_index"] == 1
     assert result["frames_transport"]["successful_requests"] == 0
+    assert result["frames_transport"]["status"] == "PARTIAL"
     assert result["companies"]["TEST"]["financial_evidence"]["cash"] == prior["cash"]
     assert result["status"] == "PARTIAL"
     assert result["refreshed_this_run"] == 0
@@ -1833,7 +1834,7 @@ def test_sec_valid_frame_rows_are_counted_after_validation(monkeypatch):
     assert status["status"] == "OK" and not status["errors"]
 
 
-@pytest.mark.parametrize("failure", ["frames", "mapping"])
+@pytest.mark.parametrize("failure", ["frames", "mapping", "empty"])
 def test_sec_transport_failure_keeps_complete_cache_partial(tmp_path, monkeypatch, failure):
     m = _load_fundamentals_observer()
     state = tmp_path / "portfolio.json"
@@ -1853,7 +1854,8 @@ def test_sec_transport_failure_keeps_complete_cache_partial(tmp_path, monkeypatc
         [{"type": "SECTransportError"}] if failure == "mapping" else []))
     monkeypatch.setattr(m, "frame_evidence_by_cik", lambda *args: ({},
         {"status": "PARTIAL", "errors": [{"code": "SEC_FRAME_ROW_INVALID"}]}
-        if failure == "frames" else {"status": "OK", "errors": []}))
+        if failure == "frames" else {"status": "PARTIAL", "empty_requests": 12, "errors": []}
+        if failure == "empty" else {"status": "OK", "errors": []}))
     monkeypatch.setattr(m, "sec_submission", lambda *args: ({"filings": {"recent": {}}}, "FIXTURE"))
     monkeypatch.setattr(m, "sec_companyfacts", lambda *args: pytest.fail("complete cache queried facts"))
     m.main()

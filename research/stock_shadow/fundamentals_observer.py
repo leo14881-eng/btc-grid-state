@@ -830,7 +830,8 @@ def main():
             previous_batch_index=int(saved_batch_index if saved_batch_index is not None else -1)
             frames_by_cik,frames_status=frame_evidence_by_cik(previous_batch_index+1)
             frames_status["attempted"]=True
-            frames_status["status"]="OK" if not frames_status.get("errors") else "PARTIAL"
+            frames_status["status"]="PARTIAL" if (frames_status.get("errors") or frames_status.get("empty_requests")
+                or frames_status.get("status")=="PARTIAL") else "OK"
             if frames_status.get("successful_requests",0): frames_refreshed_at=now()
         except Exception as e:
             frames_status={"attempted":True,"status":"FAILED","error":f"{type(e).__name__}:{str(e)[:160]}"}
