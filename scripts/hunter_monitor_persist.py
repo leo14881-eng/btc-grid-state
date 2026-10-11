@@ -3,9 +3,11 @@
 import argparse
 import json
 import math
+import os
 import pathlib
 import subprocess
 import sys
+import time
 
 # The installed host launcher invokes this file directly, not with -m.
 if not __package__:
@@ -19,11 +21,30 @@ NAMES = (
     'hunter-scheduler-health.json',
 )
 PATHS = tuple(RESULTS + name for name in NAMES)
+# Monitor's complete result read/write set, separate from Research's inputs.
+# OUT supplies the evidence cursor, leading-risk retains history, and scheduler
+# health supplies generation admission. Summary guard status is also read.
+MONITOR_RESULT_PATHS = frozenset(PATHS) | frozenset(RESULTS + name for name in (
+    'hunter-shadow-rules.json', 'hunter-cex-universe-run.json',
+    'hunter-tactical-capital-review.json', 'hunter-liquidity-probe.json',
+    'hunter-tactical-supply-risk.json', 'hunter-shadow-v1-overfilter-guard.json',
+    'hunter-shadow-v2-overfilter-guard.json',
+))
+
+
+def timed(stage, fn, *args, **kwargs):
+    start = time.monotonic()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        print('HUNTER_MONITOR_PERSIST_TIMING ' + json.dumps(dict(
+            stage=stage, seconds=round(time.monotonic()-start, 6))), flush=True)
 
 
 def git(*args, check=True):
-    return subprocess.run(['git', *args], check=check, capture_output=True,
-                          text=True)
+    # Only the Git operation name is logged, never URLs or command arguments.
+    return timed('git_' + args[0], subprocess.run, ['git', *args], check=check,
+                 capture_output=True, text=True)
 
 
 def require(condition, message):
@@ -37,7 +58,7 @@ def snapshot(ref=None):
 
 
 def validate(raw, generation):
-    docs = {name: json.loads(raw[name]) for name in NAMES}
+    docs = timed('parse_snapshot', lambda: {name: json.loads(raw[name]) for name in NAMES})
     h = docs['hunter-scheduler-health.json']
     require(h.get('schema') == 'hunter_scheduler_health_v1', 'INVALID_HEALTH_SCHEMA')
     require(h.get('current_generation_id') == generation and
@@ -101,15 +122,45 @@ def validate(raw, generation):
     return counts
 
 
-def protected(path):
-    # Transitive Hunter inputs are protected too, not just directly edited modules.
-    return (path in PATHS or path == RESULTS + 'hunter-shadow-rules.json' or
+def tested_input(path):
+    # Inputs to prepared code/tests must not change before locked admission.
+    return (path == RESULTS + 'hunter-shadow-rules.json' or
+            path in ('research/__init__.py', 'scripts/__init__.py', 'tests/__init__.py') or
             path.startswith('research/hunter_') or
             path.startswith('tests/test_hunter_') or
-            path.startswith('scripts/hunter_monitor_') or
+            path.startswith('scripts/hunter_') or
             path.startswith('deploy/systemd/hunter-position-monitor.') or
             path == '.github/workflows/hunter-position-monitor.yml' or
             path == '.github/hunter-runtime.json')
+
+
+def protected(path):
+    # Reject changes to anything this transaction reads or publishes. Independent
+    # diagnostics and Research-only outputs can rebase without stale decisions.
+    # Imported modules' unused main() entrypoints do not expand Monitor's read set.
+    return tested_input(path) or path in MONITOR_RESULT_PATHS
+
+
+def rebind_after_prepare(base, isolated=False):
+    """Under the host lock, discard the prepared snapshot and read latest state.
+
+    Tests ran outside the lock. If their protected inputs changed, fail closed
+    instead of running untested code or committing from the prepared snapshot.
+    Only this disposable checkout may be reset. No production state is written.
+    """
+    require(isolated and os.environ.get('HUNTER_MONITOR_ISOLATED_CHECKOUT') == '1',
+            'DISPOSABLE_MONITOR_CHECKOUT_REQUIRED')
+    require(git('rev-parse', 'HEAD').stdout.strip() == base, 'MONITOR_PREPARE_BASE_MISMATCH')
+    require(not git('status', '--porcelain', '--untracked-files=no').stdout.strip(),
+            'UNEXPECTED_MONITOR_PREPARE_MUTATION')
+    git('fetch', 'origin', 'main')
+    latest = git('rev-parse', 'origin/main').stdout.strip()
+    changes = git('diff', '--name-only', base, latest).stdout.splitlines()
+    conflicts = [p for p in changes if tested_input(p)]
+    require(not conflicts, 'MONITOR_PREPARATION_INVALIDATED ' + ' '.join(conflicts))
+    git('reset', '--hard', latest)
+    print('HUNTER_MONITOR_REBOUND', latest, flush=True)
+    return latest
 
 
 def cas(base):
@@ -132,16 +183,16 @@ def readback(expected, generation, commit=None):
 
 
 def persist(base, generation):
-    expected = snapshot()
+    expected = timed('read_worktree_snapshot', snapshot)
     validate(expected, generation)
     changes = git('status', '--porcelain', '--untracked-files=no').stdout.splitlines()
     require(all(line[3:] in PATHS for line in changes), 'UNEXPECTED_TRACKED_MUTATION')
     cas(base)
     git('add', '-f', '--', *PATHS)
     if git('diff', '--cached', '--quiet', check=False).returncode == 0:
-        verified_commit = readback(expected, generation)
+        verified_commit = timed('authoritative_readback', readback, expected, generation)
         from scripts.hunter_monitor_runtime import publish_verified
-        publish_verified(expected, generation, verified_commit)
+        timed('primary_proof_publication', publish_verified, expected, generation, verified_commit)
         return
     git('commit', '-m', 'state: five-minute Hunter position monitor')
     for attempt in range(1, 6):
@@ -150,9 +201,9 @@ def persist(base, generation):
         pushed = git('push', 'origin', 'HEAD:main', check=False)
         if pushed.returncode == 0:
             commit = git('rev-parse', 'HEAD').stdout.strip()
-            verified_commit = readback(expected, generation, commit)
+            verified_commit = timed('authoritative_readback', readback, expected, generation, commit)
             from scripts.hunter_monitor_runtime import publish_verified
-            publish_verified(expected, generation, verified_commit)
+            timed('primary_proof_publication', publish_verified, expected, generation, verified_commit)
             print('SHADOW_STATE_PUSH_VERIFIED', f'attempt={attempt}')
             return
         print('SHADOW_STATE_PUSH_RACE', f'attempt={attempt}', flush=True)
@@ -161,10 +212,16 @@ def persist(base, generation):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('command', choices=['validate', 'persist'])
-    p.add_argument('--generation', required=True)
+    p.add_argument('command', choices=['validate', 'persist', 'rebind'])
+    p.add_argument('--generation')
     p.add_argument('--base')
+    p.add_argument('--isolated-checkout', action='store_true')
     a = p.parse_args()
+    if a.command == 'rebind':
+        require(bool(a.base), 'BASE_SHA_REQUIRED')
+        rebind_after_prepare(a.base, a.isolated_checkout)
+        return
+    require(bool(a.generation), 'GENERATION_REQUIRED')
     if a.command == 'validate':
         validate(snapshot(), a.generation)
         print('SERVER_PRE_PERSIST_VALIDATION_OK')
@@ -175,3 +232,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -60,6 +60,10 @@ class ResearchRebindTests(unittest.TestCase):
         self.command(self.writer, "config", "user.name", "test")
         self.command(self.writer, "config", "user.email", "test@example.invalid")
         self.fixture(self.writer)
+        # Runtime configuration is a protected input. Seed the same configuration
+        # before research starts; later tests publish only verified monitor proof.
+        self.write(self.writer, ".github/hunter-runtime.json",
+                   {"shadow_only": True, "primary_jobs": {"monitor": True}})
         self.write(self.writer, r.SCAN, {"generation_id": "scan", "binance_complete": True})
         self.write(self.writer, "research/results/hunter-forward-research.json", {"old": True})
         self.command(self.writer, "add", ".")
@@ -101,6 +105,90 @@ class ResearchRebindTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "CAS_REJECTED"):
             r.check_current(base, "scan")
 
+    @unittest.skipUnless(os.name == "posix", "Real portfolio flock requires POSIX")
+    def test_bound_monitor_close_removes_old_held_capital_candidate_without_history_mutation(self):
+        import datetime as dt
+        import fcntl
+        from research import hunter_tactical_capital_review as capital
+        from scripts.hunter_portfolio_lock import PortfolioLock
+
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        # X is present only in all_signals, not the new-entry EARLY shortlist.
+        # The real review includes it solely because the prepared ledgers hold X.
+        signal = {"base": "X", "stage": "EARLY", "execution_supported": True,
+                  "independent_signal_count": capital.C["DISCOVERY_MIN_INDEPENDENT"],
+                  "score": capital.C["MIN_SCORE"] + 10,
+                  "btc_relative_1h_pct": capital.C["MIN_REL_1H"] + 1,
+                  "btc_relative_4h_pct": capital.C["MIN_REL_4H"] + 1,
+                  "relative_acceleration_pct": capital.C["MIN_ACCEL"] + 1}
+        documents = {
+            r.SCAN: {"generation_id": "scan", "as_of_utc": now, "binance_complete": True,
+                     "coins": {"X": {"venues": ["binance"], "reference_price": 1,
+                                     "change_24h_pct": 0}}},
+            str(capital.EARLY): {"scan_generation_id": "scan", "as_of_utc": now,
+                                 "early": [], "all_signals": [signal]},
+            str(capital.LIQ): {"scan_as_of_utc": now, "snapshots": {"X": {
+                "as_of_utc": now, "spread_bps": 0,
+                "bid_depth_2pct_usdt": capital.C["MIN_DEPTH_USDT"] * 2,
+                "ask_depth_2pct_usdt": capital.C["MIN_DEPTH_USDT"] * 2,
+                "execution_scenarios": {"3000": {"buy_slippage_bps": 0,
+                                                  "estimated_rr": capital.C["MIN_RR"] + 1}}}}},
+            str(capital.SUPPLY): {"scan_as_of_utc": now, "assets": {}},
+            str(capital.IDENTITY): {"scan_as_of_utc": now,
+                                    "assets": {"X": {"capital_identity_pass": True}}},
+            str(capital.CAPITAL): {"capital_pool_usdt": 20000, "open_cost_usdt": 1000,
+                                   "pending_reservations_usdt": 0},
+            str(capital.FACTS): {"assets": {}},
+            str(capital.HISTORY): {"assets": {"X": {"first_early_price": 1}}},
+        }
+        for path, doc in documents.items():
+            self.write(self.writer, path, doc)
+        self.publish()
+        # These inputs belong to the tested preparation baseline, not a later
+        # conflicting discovery/research update. Only the temp checkout is reset.
+        self.command(self.checkout, "fetch", "origin", "main")
+        self.command(self.checkout, "reset", "--hard", "origin/main")
+        prepared = self.command(self.checkout, "rev-parse", "HEAD").strip()
+
+        with patch("urllib.request.urlopen", side_effect=AssertionError("NETWORK_FORBIDDEN")), \
+             patch("socket.create_connection", side_effect=AssertionError("NETWORK_FORBIDDEN")), \
+             contextlib.redirect_stdout(io.StringIO()):
+            capital.main()
+            old_review = json.loads(capital.OUT.read_text())
+            self.assertEqual([row["asset"] for row in old_review["candidates"]], ["X"])
+            self.assertEqual(old_review["scan_generation_id"], "scan")
+
+            # Simulate a real competing Monitor commit closing X in BOTH lanes.
+            self.fixture(self.writer, closed=True)
+            self.publish()
+            latest = self.command(self.writer, "rev-parse", "HEAD").strip()
+            self.assertNotEqual(latest, prepared)
+            expected = {path: (self.writer / path).read_bytes() for path in r.PATHS[:2]}
+            lock_path = str(self.root / "capital-rebind.lock")
+            lock = PortfolioLock("research", "scan", prepared, path=lock_path).acquire(.5)
+            try:
+                rebound = r.rebind("scan", isolated=True)
+                self.assertEqual(rebound, latest)
+                self.assertEqual({p: pathlib.Path(p).read_bytes() for p in expected}, expected)
+                # rebind retains prepared research outputs; rerunning review is
+                # what must remove the stale held-only candidate before execution.
+                self.assertEqual(json.loads(capital.OUT.read_text()), old_review)
+                with open(lock_path, "a+") as contender:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                capital.main()
+                current = json.loads(capital.OUT.read_text())
+                self.assertEqual(current["scan_generation_id"], "scan")
+                self.assertEqual(json.loads(pathlib.Path(r.SCAN).read_text())["generation_id"], "scan")
+                self.assertEqual(current["candidates"], [])
+                self.assertEqual(current["executable_buy"], [])
+                self.assertEqual({p: pathlib.Path(p).read_bytes() for p in expected}, expected)
+                for raw in expected.values():
+                    self.assertEqual(json.loads(raw)["events"], [{"type": "SELL", "pnl": 12}])
+                    self.assertEqual(json.loads(raw)["closed_positions"], [{"asset": "X", "pnl": 12}])
+            finally:
+                lock.close()
+
     def test_new_discovery_generation_rejected_without_reset(self):
         before = r.git("rev-parse", "HEAD").stdout
         self.write(self.writer, r.SCAN, {"generation_id": "new", "binance_complete": True})
@@ -115,6 +203,15 @@ class ResearchRebindTests(unittest.TestCase):
         self.publish()
         with self.assertRaisesRegex(RuntimeError, "RESEARCH_INPUT_CHANGED"):
             r.rebind("scan", isolated=True)
+
+    def test_changed_runtime_configuration_rejected(self):
+        self.write(self.writer, ".github/hunter-runtime.json",
+                   {"shadow_only": True, "primary_jobs": {"monitor": False}})
+        self.publish()
+        before = r.git("rev-parse", "HEAD").stdout
+        with self.assertRaisesRegex(RuntimeError, "RESEARCH_INPUT_CHANGED"):
+            r.rebind("scan", isolated=True)
+        self.assertEqual(r.git("rev-parse", "HEAD").stdout, before)
 
     def test_other_research_update_rejected(self):
         self.write(self.writer, "research/results/hunter-forward-research.json", {"other": True})
@@ -149,6 +246,11 @@ class ResearchRebindTests(unittest.TestCase):
         self.assertLess(s.index("Run historical leading-risk replay"),
                         s.index("Bind latest authoritative monitor state"))
         self.assertLess(s.index("Bind latest authoritative monitor state"),
+                        s.index("Run V1 broad-net shadow orders"))
+        self.assertLess(s.index("Validate shadow engines"), s.index("Bind latest authoritative monitor state"))
+        self.assertLess(s.index("Bind latest authoritative monitor state"),
+                        s.index("Revalidate capital decisions against bound monitor state"))
+        self.assertLess(s.index("Revalidate capital decisions against bound monitor state"),
                         s.index("Run V1 broad-net shadow orders"))
         self.assertIn("LATEST_EXECUTION_BASE_REQUIRED", s)
         self.assertIn("HUNTER_STATE_CAS_REJECTED_STALE_WRITER", s)
@@ -243,3 +345,4 @@ class MonitorTimingTests(unittest.TestCase):
         rows = [json.loads(line.split(" ", 1)[1]) for line in output.getvalue().splitlines()]
         self.assertEqual([x["stage"] for x in rows], ["ok", "failure"])
         self.assertTrue(all(x["seconds"] >= 0 for x in rows))
+
