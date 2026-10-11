@@ -31,7 +31,7 @@ def assets(states):
  # Observe open positions plus closed positions whose 72h opportunity window is
  # incomplete. This is observation-only and cannot create entries or alter exits.
  return sorted({p.get("asset") for s in states for p in ((s.get("open_positions") or [])+(s.get("closed_positions") or []))
-                if p.get("asset") and (not p.get("closed_at_utc") or not p.get("observation_complete"))})
+                if p.get("asset") and (not p.get("closed_at_utc") or not eng.observation_complete(p))})
 def batch_market(wanted):
  rows=get(BN+"/api/v3/ticker/24hr");out={}
  # Keep the full USDT market snapshot from the same request. Existing-position
@@ -102,10 +102,16 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
   n=len(state["events"])-eng.MAX_EVENT_HISTORY;state["event_history_truncated"]=int(state.get("event_history_truncated") or 0)+n;state["events"]=state["events"][-eng.MAX_EVENT_HISTORY:]
  after={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  added=sorted(a for a,n in after.items() if n>before.get(a,0));closed=sorted(set(before)-set(after))
+ # Persist bounded migration progress before writing the portfolio. Summary
+ # construction must not add metadata to a blocked manual-exit holding.
+ for pos in state.get('open_positions') or []:
+  if pos not in pending_manual and eng.sample_cohort(pos)=='MIGRATION_SAMPLE' and pos.get('data_provenance')!='HISTORICAL_BACKFILL':
+   eng.ensure_opportunity_observation(pos,pos.get('last_price'),now)
+   eng.backfill_opportunity_history(pos,now)
  state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
- summary=eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan))
+ summary=eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan),backfill_open=False)
  if not v1_mode and manual_stop.REQUEST_ID in state.get('manual_exit_requests',{}):
   all_closed=state.get('closed_positions',[])+state.get('closed_trade_archive',[])
   manual_rows=[p for p in all_closed if p.get('exit_reason')==manual_stop.REASON]
@@ -183,14 +189,18 @@ def main():
  TIMINGS.clear();monitor_started=time.perf_counter()
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
  if not wanted:
-  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False})
+  results=[{"lane":label,"open":0,"added":[],"deferred_adds":[],"closed":[],"quarantined_non_crypto":[],"quarantine_counts":{}} for label in ('SHADOW_V1','SHADOW_V2')]
+  eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"results":results,"policy_version":VERSION,"real_trading_enabled":False,"capital_authority":"NONE_SHADOW_ONLY"})
   print(json.dumps({"assets":[],"status":"NO_OPEN_POSITIONS"}))
   return
  market=timed('market',batch_market,wanted)
  # A Bybit-only holding must not require a Binance same-name market to exist.
  binance_states=[states[0],dict(states[1],open_positions=[p for p in states[1].get('open_positions',[]) if p.get('execution_venue')!='BYBIT_SPOT'],closed_positions=[p for p in states[1].get('closed_positions',[]) if p.get('execution_venue')!='BYBIT_SPOT'])]
- missing=sorted(set(assets(binance_states))-set(market))
+ required={p['asset'] for state in binance_states for p in state.get('open_positions',[]) if p.get('asset')}
+ missing=sorted(required-set(market))
  if missing:raise SystemExit("FAST_MONITOR_MARKET_DATA_MISSING "+",".join(missing))
+ observation_missing=sorted(set(assets(binance_states))-required-set(market))
+ observation_market_data={'status':'MARKET_DATA_MISSING' if observation_missing else 'AVAILABLE','missing_assets':observation_missing,'scope':'CLOSED_OBSERVATIONS_ONLY'}
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
  review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now)
  persisted_universe=load(UNIVERSE)
@@ -247,6 +257,6 @@ def main():
   source_sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True,timeout=5).strip()
  except (OSError,subprocess.SubprocessError):source_sha='UNKNOWN'
  fast_reconciliation=observe(load(V2),{'evidence_refresh':refresh,'batch_endpoint':'/api/v3/ticker/24hr','capital_authority':'NONE_SHADOW_ONLY'},source_sha,dt.datetime.now(dt.timezone.utc))
- eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"timing_seconds":dict(TIMINGS),"evidence_refresh":refresh,"fast_watch_reconciliation":fast_reconciliation,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY"})
+ eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":wanted,"batch_endpoint":"/api/v3/ticker/24hr","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"shared_manager":"hunter_shadow_trader_v2.manage_existing_positions","results":results,"timing_seconds":dict(TIMINGS),"evidence_refresh":refresh,"fast_watch_reconciliation":fast_reconciliation,"systemic_risk_evidence":risk_evidence,"leading_risk":leading_row,"leading_risk_changed":leading_changed,"evidence_refresh_cursor":refresh["evidence_refresh_cursor"],"policy_version":VERSION,"capital_authority":"NONE_SHADOW_ONLY","real_trading_enabled":False,"observation_market_data":observation_market_data})
  print(json.dumps({"assets":wanted,"results":results}))
 if __name__=="__main__":main()

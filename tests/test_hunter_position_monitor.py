@@ -2,6 +2,7 @@ import datetime as dt,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from research import hunter_position_monitor as m
+from tests.test_hunter_observation_fixtures import certify_horizons
 class PositionMonitorTests(unittest.TestCase):
  def test_v2_health_is_refreshed_every_bucket_without_v1_discovery_change(self):
   states=[{'open_positions':[{'asset':str(i)} for i in range(200)]},{'open_positions':[{'asset':'ENA'},{'asset':'PENDLE'}]}]
@@ -99,7 +100,7 @@ class ClosedOpportunityMonitorTests(unittest.TestCase):
  def test_assets_includes_incomplete_closed_observation(self):
   states=[{"open_positions":[{"asset":"OPEN"}],"closed_positions":[
    {"asset":"CLOSED_PENDING","closed_at_utc":"2026-10-05T00:00:00+00:00","observation_complete":False},
-   {"asset":"CLOSED_DONE","closed_at_utc":"2026-10-04T00:00:00+00:00","observation_complete":True}]}]
+   certify_horizons({"asset":"CLOSED_DONE","closed_at_utc":"2026-10-04T00:00:00+00:00","observation_complete":True})]}]
   self.assertEqual(m.assets(states),["CLOSED_PENDING","OPEN"])
 
  def test_closed_observation_is_updated_without_creating_trade(self):
