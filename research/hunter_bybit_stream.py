@@ -261,6 +261,15 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
             finally:
                 for job in jobs.values():
                     job.cancel()
+                # __exit__ waits but does not propagate Future exceptions. A
+                # late denied response may fail to persist its halt after the
+                # WS already broke; that failure must outrank the WS exception.
+                pool.shutdown(wait=True, cancel_futures=True)
+                failures=[job.exception() for job in jobs.values() if not job.cancelled()]
+                for kind in (DurableStopError, sqlite3.Error):
+                    for error in failures:
+                        if isinstance(error, kind):
+                            raise error
 
 
 def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False):

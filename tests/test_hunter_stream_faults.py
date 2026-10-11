@@ -149,6 +149,39 @@ class FaultTests(unittest.TestCase):
         self.assertEqual(len(opened),1)
         self.assertIsNone(Budget(self.store).status()['halt'])  # Never claim a durable stop was written.
 
+    def test_disconnect_does_not_hide_late_unpersisted_denial_in_future(self):
+        started=Event();closed=Event();opened=[];sent=[];reads=[0]
+        original_disconnect=self.store.disconnect
+        real_session=stream.session
+        def disconnect(epoch):
+            try:original_disconnect(epoch)
+            finally:closed.set()
+        class WS:
+            def send(self,payload):sent.append(json.loads(payload))
+            def recv(self,timeout):
+                reads[0]+=1
+                if reads[0]==1:
+                    return json.dumps(dict(op='subscribe',req_id=sent[0]['req_id'],success=True))
+                if not started.wait(2):raise AssertionError('repair did not begin')
+                raise OSError('fixture WS disconnected before HTTP completed')
+        @contextlib.contextmanager
+        def connect():opened.append(1);yield WS()
+        def get(url):
+            started.set()
+            if not closed.wait(2):raise AssertionError('session did not disconnect')
+            return 403,b'country',1
+        def repairer(store,epoch,name,deadline,*,cancelled):
+            return stream.repair(store,epoch,name,deadline,get,lambda:NOW,cancelled=cancelled)
+        def session(store,topics,scope,ws,stop,clock,sleep):
+            return real_session(store,topics,scope,ws,stop,clock,sleep,repairer)
+        with patch.object(self.store,'disconnect',disconnect),patch.object(stream,'session',session), \
+             patch.object(Budget,'failure',side_effect=sqlite3.OperationalError('disk is full')):
+            with self.assertRaisesRegex(stream.DurableStopError,'DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW'):
+                stream.collect(self.store,self.topics,'a'*64,connect,lambda:NOW,lambda seconds:None)
+        self.assertEqual(len(opened),1)
+        self.assertIsNone(Budget(self.store).status()['halt'])
+        self.no_leases()
+
     def test_stop_before_connect_and_during_backoff(self):
         calls=[];stopped=Event()
         def connect():calls.append(1);raise OSError('fixture')
