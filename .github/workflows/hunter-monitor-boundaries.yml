@@ -1,0 +1,28 @@
+name: Hunter Monitor Boundary Regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'research/hunter_position_monitor.py'
+      - 'research/hunter_shadow_trader_v2.py'
+      - 'research/hunter_observation_history.py'
+      - 'tests/test_hunter_observation_fixtures.py'
+      - 'tests/test_hunter*.py'
+      - '.github/workflows/hunter-monitor-boundaries.yml'
+permissions:
+  contents: read
+jobs:
+  offline-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Complete Hunter regression including CAS, generation, locks and boundary states
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -m unittest discover -s tests -p 'test_hunter*.py' -v
+      - name: Historical ledgers and policy remain unchanged
+        run: git diff --exit-code -- research/results research/hunter-capital-state.json
