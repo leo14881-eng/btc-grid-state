@@ -6,33 +6,38 @@
   "bootstrap_since_utc": "2026-10-06T18:26:30+00:00",
   "acknowledged_event_ids": [],
   "pending_batch_id": "9b267187532ba4e05dcc5a3442792899dacfb17cee62a89350703962017989ce",
-  "delivery_status": "PREPARED_NOT_DELIVERED",
-  "source_main_sha": "866bde65b1929cc50ab01d9c0555893d1fbc77ff",
+  "delivery_status": "DELIVERY_ACK_UNVERIFIABLE",
+  "source_main_sha": "33da7fe889e026431194c658c21636b4d13c8e9f",
   "last_attempt_at": "2026-10-10T23:18:06.055Z",
-  "last_successful_check_at": "2026-10-10T23:18:06.055Z",
+  "last_successful_check_at": "2026-10-11T00:53:04.000Z",
   "unverified_batch_attempts": 0,
   "notification_failure": {
-    "at": "2026-10-10T23:18:06.055Z",
-    "phase": "PREPARED_NOT_DELIVERED",
-    "tool": "mcp__codex_apps__github_update_file",
-    "source_main_sha": "866bde65b1929cc50ab01d9c0555893d1fbc77ff",
-    "errors": [],
-    "effect": "NEW_EVENT_IDS_RESERVED_OUTPUT_ELIGIBILITY_ONLY_NOT_DELIVERED_ACK_UNCHANGED"
+    "at": "2026-10-11T00:53:04.000Z",
+    "phase": "DELIVERY_ACK_UNVERIFIABLE",
+    "tool": "CHATGPT_CONVERSATION_CONTEXT",
+    "source_main_sha": "33da7fe889e026431194c658c21636b4d13c8e9f",
+    "errors": [
+      {
+        "error_code": "MESSAGE_ID_UNAVAILABLE",
+        "raw_error": "The pending batch 9b267187532ba4e05dcc5a3442792899dacfb17cee62a89350703962017989ce is observable as a prior assistant transaction notification, but no verifiable assistant message_id is available; acknowledgement remains unchanged and the batch is not re-emitted."
+      }
+    ],
+    "effect": "DATA_CHECK_SUCCEEDED_NO_NEW_UNRESERVED_EVENTS_ACK_UNCHANGED_PENDING_RETAINED_NO_RESEND"
   },
   "notification_policy": "V2_NEW_TRADE_EVENTS_ONLY",
   "event_not_before_utc": "2026-10-06T18:26:30+00:00",
   "cancelled_historical_batch_id": "a92974377ef612b9e5992c85e86e124d3a5e46ad78ebd8d344e9d167267b8472",
   "source_file_hashes": {
-    "portfolio": "db03596afd369c65747b58761e85ef312e5c267bed1a3db504b09e62f9e738d4",
-    "summary": "d96f5a21bd4e7dd1c76395333b722b4951e37355ac8943fdda35768b180c7ebf",
-    "monitor": "27bb0aa347a4005843f9d6a32fbe8ee1a77168a61de6d4e09a112fe81fd770a8",
-    "scheduler": "4a0b5edce0bbf31fc4877ad0839a19e5ecc05fec98b2c3408af2a76cfa35b4e1"
+    "portfolio": "dec30c18965ae5bdc0be0a5c3467a24e6da4e0df5e4777cd6cb777c566d294e5",
+    "summary": "ca229ec27b35384ede5e40612c348f930d2e30a709dd3f30d243ca74bd702a96",
+    "monitor": "8f248ecfc377ea20ce6df67dd38ecd4d93c20ed4d185a90bfdfe5056570fd80a",
+    "scheduler": "9931de25c3b6772ad1e19108c462387ebe400eecba0c5f152442e35194225019"
   },
   "pending_event_ids": [
     "c1c4e3e8ca21a30c82cbe033a6189c23d8d9585a6067204a906af9639df65f03",
     "f7d32c85a45ef4996b69305d13af4fa3d38f6cbc747b63cabdee6adb8d68e597"
   ],
-  "last_check_attempt_at": "2026-10-10T23:18:06.055Z",
+  "last_check_attempt_at": "2026-10-11T00:53:04.000Z",
   "unresolved_batches": [
     {
       "batch_id": "7a6fa82c43e101e7031fdf45a7d65d44e6be805ac62a0a795010d95d97ff3183",
@@ -348,8 +353,8 @@
     "event_count": 2,
     "source_set_hash_sha256": "cc28a967146e446b6d55adc51f10f7b267d79eeb1d1b83c6cb719d8512e628ea"
   },
-  "last_check_started_at": "2026-10-10T23:15:26.000Z",
-  "last_check_execution_hash_sha256": "307b498e6e159f5702ac91ea52cc65a96c1ca221a19314d859837b0c1e0c6002",
+  "last_check_started_at": "2026-10-11T00:53:04.000Z",
+  "last_check_execution_hash_sha256": "c29d1e0c8ae08e2ad71e6682978dd94e04914030ce722caa8809852b223b1fbc",
   "pending_attempt_id_sha256": "90359397e357c3a2798f546ee2a536ce6675b98ea12163d0ae26bcf6d35bb9e5",
   "pending_prepared_at": "2026-10-10T23:18:06.055Z",
   "notification_failure_history": [
@@ -525,6 +530,19 @@
         }
       ],
       "effect": "DATA_CHECK_SUCCEEDED_NO_NEW_UNRESERVED_EVENTS_ACK_UNCHANGED_PENDING_RETAINED_NO_RESEND"
+    },
+    {
+      "at": "2026-10-11T00:53:04.000Z",
+      "phase": "DELIVERY_ACK_UNVERIFIABLE",
+      "tool": "CHATGPT_CONVERSATION_CONTEXT",
+      "source_main_sha": "33da7fe889e026431194c658c21636b4d13c8e9f",
+      "errors": [
+        {
+          "error_code": "MESSAGE_ID_UNAVAILABLE",
+          "raw_error": "The pending batch 9b267187532ba4e05dcc5a3442792899dacfb17cee62a89350703962017989ce is observable as a prior assistant transaction notification, but no verifiable assistant message_id is available; acknowledgement remains unchanged and the batch is not re-emitted."
+        }
+      ],
+      "effect": "DATA_CHECK_SUCCEEDED_NO_NEW_UNRESERVED_EVENTS_ACK_UNCHANGED_PENDING_RETAINED_NO_RESEND"
     }
   ],
   "pending_event_content_hashes": {
@@ -532,9 +550,9 @@
     "f7d32c85a45ef4996b69305d13af4fa3d38f6cbc747b63cabdee6adb8d68e597": "1981105cc26711ba6d4abb8267ee560cc6d4078a05da76a780eaabd6561604d5"
   },
   "source_file_blob_shas": {
-    "portfolio": "69c6fa02f88cea5d45599743951b2402decb3794",
-    "summary": "d8dbb83c1ba595fe3bdb1e5b92654ce10343e1e2",
-    "monitor": "97e1ba528f4d2ec8971ce45183e51f38e015078f",
-    "scheduler": "ff855aa9141e22c459b4ca9ab1cd14d823b43eb2"
+    "portfolio": "afee3fa34794c9a5276a1b66dc73daad10844ee5",
+    "summary": "8d901b2e817e4508ce4141ad0c1e15a6722b8010",
+    "monitor": "8f7ec2619da90967400d60a537fee6fb9e6ed0ba",
+    "scheduler": "cb9405536f8309afd7faff9c6ca3d4f9c6701daa"
   }
 }
