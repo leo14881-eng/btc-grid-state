@@ -152,19 +152,22 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
 
 
 @contextlib.contextmanager
-def tracked(store, token):
+def tracked(store, token, deadline):
     import fcntl
     path = store.path.parent/('request-'+token+'.lock')
     handle = path.open('xb')
     fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     remove = False
     try:
-        with store.db(timeout=0) as db:
+        with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
             db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
         yield
-        with store.db(timeout=0) as db:
+        with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
             db.execute('DELETE FROM requests WHERE token=?',(token,))
+            db.execute('DELETE FROM leases WHERE token=?',(token,))
         remove = True
+        if time.monotonic()>=deadline:
+            raise TimeoutError('PUBLIC_RESPONSE_FINISHED_AFTER_DEADLINE')
     finally:
         handle.close()
         if remove: path.unlink()
@@ -192,14 +195,15 @@ class Client:
             token = None
             while token is None:
                 check()
-                token = self.budget.acquire(timeout=min(.05,max(0,deadline-time.monotonic())))
+                token = self.budget.acquire(timeout=min(.25,max(0,deadline-time.monotonic())))
                 if token is None: time.sleep(min(.02,max(0,deadline-time.monotonic())))
             release = True
             status, payload, retry = 0, b'', 1
             denied = False
             try:
                 check()
-                with tracked(self.store, token):
+                with tracked(self.store, token, deadline):
+                    release = False  # tracked commits marker+lease removal together.
                     def on_denial():
                         nonlocal denied
                         denied = True
@@ -211,7 +215,7 @@ class Client:
                         except sqlite3.Error as error:
                             raise DurableStopError('DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW') from error
                     def before_go():
-                        state = self.budget.status(timeout=0)
+                        state = self.budget.status(timeout=max(0,min(.25,deadline-time.monotonic())))
                         if state['halt'] or time.time_ns()//1_000_000 < state['cooldown_ms']:
                             raise RuntimeError('PUBLIC_ADMISSION_REVOKED')
                     not_sent = None

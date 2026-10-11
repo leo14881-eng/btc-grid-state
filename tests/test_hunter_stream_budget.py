@@ -125,18 +125,17 @@ class BudgetTests(unittest.TestCase):
                             else:time.sleep(.005)
                         if not saturated.exists():raise RuntimeError('not saturated')
                         time.sleep(.1)
+                        record['end']=time.monotonic_ns()//1_000_000
                         return 200,b'{"retCode":0,"result":{"category":"spot"}}',1
                     client=Client(Store.reader(self.path),transport)
-                    acquire,release=client.budget.acquire,client.budget.release
+                    acquire=client.budget.acquire
                     def admission(*args,**kwargs):
                         token=acquire(*args,**kwargs)
                         if token:
                             with client.store.db(readonly=True) as db:
                                 record['start']=db.execute('SELECT acquired_ms FROM leases WHERE token=?',(token,)).fetchone()[0]
                         return token
-                    def finish(token):
-                        record['end']=time.monotonic_ns()//1_000_000;release(token)
-                    client.budget.acquire=admission;client.budget.release=finish
+                    client.budget.acquire=admission
                     params=dict(category='spot')
                     if path.endswith('/kline'):params.update(symbol='BTCUSDT',interval='15',limit=25,end=1000)
                     client.request(path,params,timeout=12)

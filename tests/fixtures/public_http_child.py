@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import sys
+import stat
 sys.dont_write_bytecode=True
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
@@ -27,6 +28,7 @@ def guard(event,args):
         if not isinstance(path,int) and ((isinstance(mode,str) and any(x in mode for x in 'wax+'))
                 or isinstance(flags,int) and flags&(os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC|os.O_APPEND)):
             target=Path(os.fsdecode(path)).resolve()
+            if target==Path(os.devnull) and stat.S_ISCHR(target.stat().st_mode):return
             if target!=scratch and scratch not in target.parents:raise RuntimeError('EXTERNAL_WRITE_FORBIDDEN')
     if event in ('os.remove','os.mkdir','os.rmdir','os.chmod','os.utime'):
         target=Path(os.fsdecode(args[0])).resolve()

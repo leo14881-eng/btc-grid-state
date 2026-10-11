@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import sys
+import stat
 import tempfile
 import unittest
 
@@ -16,9 +17,13 @@ def main():
         helper=(ROOT/'tests/fixtures/public_http_child.py').resolve()
         blocked=[]
         def reject(message):blocked.append(message);raise RuntimeError(message)
-        def inside(path):
+        def inside(path,dir_fd=None):
             if isinstance(path,int):return
-            target=Path(os.fsdecode(path).removeprefix('file:').split('?')[0]).resolve()
+            target=Path(os.fsdecode(path).removeprefix('file:').split('?')[0])
+            if not target.is_absolute() and isinstance(dir_fd,int) and dir_fd>=0:
+                target=Path(os.readlink('/proc/self/fd/'+str(dir_fd)))/target
+            target=target.resolve()
+            if target==Path(os.devnull) and stat.S_ISCHR(target.stat().st_mode):return
             if target!=scratch and scratch not in target.parents:reject('WRITE_OUTSIDE_SCRATCH')
         def guard(event,args):
             if event in ('socket.bind','socket.connect','socket.connect_ex'):
@@ -37,7 +42,9 @@ def main():
                 path,mode,flags=args
                 if ((isinstance(mode,str) and any(x in mode for x in 'wax+'))
                         or isinstance(flags,int) and flags&(os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC|os.O_APPEND)):inside(path)
-            if event in ('os.mkdir','os.remove','os.rmdir','os.chmod','os.utime'):inside(args[0])
+            if event in ('os.mkdir','os.remove','os.rmdir','os.chmod','os.utime'):
+                index={'os.mkdir':2,'os.remove':1,'os.rmdir':1,'os.chmod':2,'os.utime':3}[event]
+                inside(args[0],args[index] if len(args)>index else None)
             if event=='os.rename':inside(args[0]);inside(args[1])
             if event in ('os.symlink','os.link'):reject('LINK_FORBIDDEN')
         sys.addaudithook(guard)
