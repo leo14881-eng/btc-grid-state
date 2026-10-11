@@ -1,223 +1,157 @@
-# Remaining server-direct Bybit spot work
+# Bybit public spot candidate: default off
 
-Read-only code review, 2026-10-11, against implementation commit
-`11d267b878d73c66668f289992a4da7a7a23d74b`. PR101 is **partially complete**:
-opt-in Kline cache exists, but public listings/tickers still depend on Worker.
-This document proposes the remaining implementation; it changes no runtime
-code, selector, service, permissions, credentials, strategy or ledger.
+PR101 now includes the public instruments/tickers adapter as well as the Kline
+sidecar. It is a reviewable implementation, not a deployed service. The branch
+integrates main `0fce78b355ced25cd6cebe7fb08b9ac72d095860` (including PR105)
+without changing its scripts, result files or workflow. No production selector,
+service, timer, credential, account permission or strategy threshold was changed.
 
-## Verified call sites and budgets
+## Selection and covered callers
 
-| Caller | Current request | Existing bounds / missing shared coverage |
-| --- | --- | --- |
-| `hunter_bybit_worker.collect` | `availability.spot_proxy_universe()`; `request('/bybit/tickers')` | Full listing cache24h; ticker once per discovery generation. A cached-list contradiction permits exactly one full-list refresh and one new bulk ticker request. Python ticker socket timeout60s. |
-| `hunter_bybit_availability.spot_proxy_universe` | Worker `/bybit/spot` | Python timeout15s; complete full-list validation, BTC/ETH anchors, duplicate/category/cursor checks. Local cache lives in the job checkout; it is not a host-wide refresh lock. |
-| `hunter_bybit_availability.main` | Same listing function, independently of Discovery | Called by the research pipeline; replacing only the Discovery fetcher leaves this Worker dependency. |
-| Worker public routes | Official `/v5/market/instruments-info?category=spot` and `/v5/market/tickers?category=spot` | AbortController15s includes response body; one upstream request per route. No persistent cross-invocation host/IP governor in this JavaScript. |
-| Legacy Worker Klines | Two Python batches in parallel, each <=20 symbols x2 intervals | Worker concurrency4 per batch, AbortController45s per batch; potentially8 upstream requests across two batches, not one host-wide max4. Cache-selected mode sends no Kline batch. |
-| New sidecar | Official spot WS plus REST Kline repair | One collector lock, SQLite budget shared by cooperating processes: >=200ms admission, max4 held requests, three attempts per topic/session, durable cooldown/halt. |
-| `hunter_bybit_management.collect` | Direct official ticker, two Klines, orderbook per held position; BTC two Klines | Four position workers, socket timeout12s, no common budget. With P valid positions and no early failures:2+4P requests per invocation. Must count alongside sidecar traffic. |
+| Selection | Discovery metadata | Discovery Klines | Research spot availability |
+| --- | --- | --- | --- |
+| Unset / `HUNTER_BYBIT_SPOT_SOURCE=WORKER` | Existing Worker path | Existing `HUNTER_BYBIT_KLINE_SOURCE` selection, default WORKER | Existing Worker path |
+| `HUNTER_BYBIT_KLINE_SOURCE=SPOT_CACHE` alone | Existing Worker path | Single-generation read-only cache | Existing Worker path |
+| `HUNTER_BYBIT_SPOT_SOURCE=SERVER_DIRECT` | Fixed official public HTTP | Same single-generation cache | Same direct instruments adapter |
 
-Discovery selects Worker at `hunter_cex_scan.bybit_from_authorized_region`.
-The scheduled workflow explicitly sets `HUNTER_BYBIT_WORKER_MARKET_ENABLED=1`
-and `HUNTER_BYBIT_DIRECT_DISABLED=1`. `SPOT_CACHE` currently requires the former.
-The old `bybit_with_fallback` path is not a candidate for this migration: it has
-alternate-host behavior and different validation. Do not reach it on a cache
-or direct-request failure.
+SERVER_DIRECT requires SPOT_CACHE if the Kline selector is explicitly present.
+Unknown selectors, conflicting selectors and `HUNTER_BYBIT_DIRECT_DISABLED=1`
+fail before IO. The deployed disabled flag is not changed or overridden.
+Missing cache, denied direct access or bad metadata never selects another source.
 
-The authenticated Alpha request in `hunter_bybit_availability.alpha()` also
-uses Worker, but is not part of the public spot listings/ticker/Kline plane.
-No credentials were read or changed. A public spot migration must not be
-described as removal of every Worker dependency while Alpha remains configured.
-Moving that signed endpoint would need a separate scope and credential review.
+`hunter_bybit_direct.Adapter` is shared by Discovery and availability. It keeps
+one complete instruments receipt for 24h in the existing SQLite state, with a
+host-level refresh flock. It preserves full-list validation, BTC/ETH anchors,
+Trading/USDT and xstocks filtering. Corrupt/future cache is rejected. A listing
+contradiction uses the existing exactly-one full refresh and one new bulk ticker
+request. Each generation fetches a bulk ticker; there is no per-coin ticker loop.
 
-## Candidate: one Kline collector and one shared direct transport
+The authenticated `availability.alpha()` implementation and call remain intact.
+Existing held-position `hunter_bybit_management` traffic is also unchanged and
+outside this budget. At P valid positions with no early failure it can make
+2+4P public requests, with four position workers and its existing 12s socket
+setting. Adapting that module crosses the strategy release/hash and runtime
+permission boundary; it requires its own scoped review. Do not claim that all
+server traffic or all Worker dependencies have been unified or removed.
 
-Use a single explicit server-spot selector for the entire public spot bundle;
-default remains the exact current Worker path. The final selector name is to be
-chosen during implementation. Reject unknown/conflicting selectors before IO.
-An explicit `DIRECT_DISABLED=1` remains a veto; its deployed value must be
-reviewed separately before activation, not silently overridden in code. A
-GitHub executor with no server cache stays on its explicitly selected path.
+## Receipts, manifests and source identity
 
-The smallest code candidate keeps the one resident Kline sidecar and adds a
-common direct public transport used by the existing Discovery and availability
-one-shot jobs. They fetch only metadata, not a second Kline history. All direct
-requests acquire/release the **same existing host SQLite budget**; a separate
-semaphore, per-checkout DB or independent 5rps limiter would be incorrect.
-Use fixed official host/path/category allowlists, no proxy/redirect/host change,
-no private headers, and the same durable403 handling for every endpoint.
+The direct snapshot uses `hunter_bybit_direct_snapshot_v1` and
+`OFFICIAL_BYBIT_V5_SPOT_DIRECT_CACHE`; metadata is
+`OFFICIAL_BYBIT_V5_SPOT_DIRECT`, and Klines retain
+`OFFICIAL_BYBIT_V5_SPOT_CACHE`. Full instruments/ticker response receipts carry
+capture time, actual receive time, source/path identity and checksum. Validators
+rederive listing coverage and ticker row values and bind the listing receipt.
+Worker/cache-only snapshots cannot silently accept the direct metadata contract.
 
-The two missing endpoints are:
+The same existing output filename and publisher/CAS/readback path remain.
+There is no second result or ledger writer. Cold direct metadata can create a
+valid UNKNOWN manifest with no signals, using the authoritative Binance exclusion
+set and selected Bybit-only assets plus BTC. It needs no fabricated Worker
+receipt. Adopting a changed roster still requires an explicit validated manifest
+and collector restart; no automatic roster operator was installed.
 
-- `GET https://api.bybit.com/v5/market/instruments-info?category=spot`, without a
-  symbol restriction, cursor or limit. Current official spot documentation says
-  pagination is unsupported. Unexpected nonempty cursor/partial shape is UNKNOWN.
-- `GET https://api.bybit.com/v5/market/tickers?category=spot`, one bulk response;
-  preserve `lastPrice`, `turnover24h`, `price24hPcnt`, all-symbol validation and
-  existing price/source semantics. Do not replace it with per-symbol REST loops
-  or a ticker WS reconstruction in this minimal change.
+## Cancellable public HTTP and cooperative budget
 
-Keep full-list TTL24h, Trading/USDT filtering, xstocks exclusions, and the
-one-time cached-list/ticker contradiction refresh. Move direct-list cache and
-refresh coordination into shared host state, with a separate source identity
-from the old Worker cache. Concurrent cold refreshes must join one in-flight
-request. Tickers are bound to one discovery generation and not reused for a new
-generation; retry of the same generation may use only its complete immutable
-receipt. Cache claims must not auto-expire while an old request can still run.
+All three implemented request families use `hunter_bybit_public.Client`:
+full instruments, bulk tickers, and production Kline REST bootstrap/repair.
+They share the pre-existing `/var/lib/hunter-bybit-stream/state.sqlite3`, with
+>=200ms admission spacing and at most four held leases. This is a cooperative
+local budget, not proof of Bybit quota acceptance or total same-IP accounting.
+Clients use existing-only SQLite opens and cannot create an empty replacement
+budget. The collector's explicit state initialization is separate.
 
-This choice shares accounting across processes and does **not** create a second
-persistent collector. It does, however, require metadata requesters to write
-budget/receipt coordination records. SQLite has no per-table OS permissions:
-granting DB write is broader than today's read-only Kline consumer contract.
-The actual server accounts and existing rights are unknown. This is a release
-prerequisite, not permission to grant new access now. Request clients must open
-only preprovisioned state, never initialize a replacement empty budget.
+Each admitted request runs a disposable Linux HTTP child. This is not another
+resident collector. The child accepts only the fixed official host and allowed
+spot paths/parameters, has no proxy or redirect, receives no credential env,
+and cannot read the SQLite state. It execs first, sets parent-death SIGKILL,
+checks the parent, announces READY, and waits for GO before DNS/network work.
+The supervisor commits an owned request marker and rechecks the global gate
+before GO. No preexec callback runs inside a threaded parent.
 
-If consumers must retain filesystem read-only access, the alternative is a
-typed local IPC request to the **same sidecar**, which alone owns upstream IO
-and DB writes. Bound the queue, deduplicate by generation/request kind, enforce
-peer/path permissions, and return immutable receipts. It requires more IPC and
-shutdown code, but no second daemon, TCP listener or firewall change. Do not
-pretend direct multi-process DB writes and this single-owner alternative have
-the same permission footprint. Select between them after the runtime-account
-read, before implementing the complete plane.
+A monotonic total deadline defaults to 30s and covers budget wait, process startup,
+DNS, connect/TLS, headers, body and IPC; the inner socket timeout is 10s. Cancellation
+or expiry kills the child and waits up to 1s for reap. Complete responses are
+usable only after reap. Trusted completion atomically retires marker and lease,
+with SQLite busy wait bounded by the remaining deadline (at most 250ms).
+A deadline is a cancellation boundary, not a hard real-time OS scheduling promise:
+if the OS cannot reap the child, the request stays stopped with its lease held.
+No Future timeout pretends an open socket has ended.
 
-Both designs need a Worker-independent bootstrap manifest. Derive exactly the
-current Bybit-only set plus BTC from validated direct metadata and the existing
-authoritative Binance set; bind listing receipt, exclusion inputs and roster
-hash. Initial lack of Kline history stays UNKNOWN. An explicit roster adoption
-invalidates readiness, then requires full25/5 recovery, subscription ACKs and
-fresh WS observations before READY. Never manufacture a Worker snapshot just
-to satisfy today's `roster()` validator, widen to all symbols, or run an extra
-strategy workflow to seed it. Manifest turnover and restart/adoption ownership
-must be included; otherwise the migration still has a bootstrap dependency.
+Before-GO cancellation may clean up a proven-unsent request. After GO, incomplete,
+malformed, cancelled or otherwise uncertain outcomes retain marker plus lease
+and block future requests after their owner lock closes. Reaping alone cannot
+prove that an unreported 403 did not occur. There is no automatic lease TTL,
+orphan reset, DB recreation or alternate source. A child that outlives its
+supervisor is killed by the Linux parent-death signal; the marker remains.
 
-Let N be selected Bybit-only assets plus BTC. With no retries, cold metadata
-plus Kline repair costs2+2N requests; a warm generation costs one bulk ticker
-and zero Kline REST requests. A cached-list contradiction costs three metadata
-requests total (ticker, full list, ticker). Three-attempt repair allows up to6N
-Kline requests; every metadata retry must also be explicitly bounded and
-charged. These are request counts, not latency/online-quota guarantees.
-The theoretical5rps admission floor for R requests is(R-1)*0.2s, also subject
-to max4 outstanding, storage waits, response latency and cooldown.
+A 403 header marks a pending global stop before body processing. If that write
+fails, the supervisor first closes its owner lock so other clients see an orphan,
+then kills/reaps the child; it reports that denial persistence failed. Complete
+frequency403 classification preserves >=600s cooldown; country/unknown403 is a
+manual-review halt. Partial/slow403 remains pending/manual-review. Only complete
+429/5xx and the existing API retry codes receive at most three attempts within
+the same total request deadline. Unknown transport outcomes are never retried.
 
-To claim a shared budget for **all public Bybit requests on the server**, adapt
-`hunter_bybit_management.request` to the same transport too, preserving its
-12s timeout, endpoints, per-position validation, fees and protective behavior.
-This crosses the strategy-release module hash and needs its existing review
-process; it is a separate scope item, not an incidental refactor. Until then,
-inventory and measure its2+4P traffic and other server callers explicitly.
-Public-spot Worker removal alone does not prove global same-IP accounting.
+Admission and cooldown use a boot-bound monotonic clock. Wall-clock changes
+cannot shorten them. A changed boot or a nonempty old budget without that clock
+domain blocks HTTP, WS startup and cache consumption pending manual review.
+The old explicit-clock repair seam exists only for injected offline fixtures;
+real entrypoints have no relaxed-clock selection. Corrupt request markers stop
+before any owner-file path is opened.
 
-## Smallest code scope after the design decision
+## Offline evidence and its limits
 
-| Area | Intended change |
-| --- | --- |
-| New shared direct transport module; `hunter_bybit_stream.py` | Extract fixed endpoint admission, denial, retries and response receipts; Kline repair continues through the same budget. Do not expand the existing prefix URL check into an arbitrary URL fetcher. |
-| `hunter_bybit_stream_store.py` | Shared metadata receipts/refresh coordination, direct manifest identity and safe roster adoption; migration preserves budget halt/cooldown/leases. IPC option adds a bounded broker in the same service instead of client DB writes. |
-| `hunter_bybit_availability.py` | Pure common full-list validation plus explicit direct adapter for both callers; old Worker cache/source and Alpha stay untouched. |
-| `hunter_bybit_worker.py` / new direct snapshot adapter | Reuse row/features/publish logic; metadata comes from the selected direct adapter. New explicit direct source/schema instead of relabelling Worker evidence. |
-| `hunter_cex_scan.py`, `hunter_bybit_stream_consumer.py` | Atomic bundle selector, explicit source validation, independent bootstrap, fail closed on missing metadata/roster mismatch. |
-| `hunter_early_signals.py` | Accept the new verified snapshot contract without changing score, freshness or entry gates. |
-| Offline tests, guarded runner, docs | Legacy equivalence, new direct receipts/failure tests and aggregate budget coverage. Existing output filenames/CAS/ledger writer stay unchanged. |
+Linux CI runs two independent guarded suites on Python 3.10 and 3.12:
 
-No Worker JavaScript, timer or runtime env change is required to prepare that
-code. Actual source selection and account/service configuration remain separate
-deployment actions. Holdings transport sharing is additional to this minimum.
+- `python -I -B -X utf8 scripts/check_bybit_stream_offline.py`: 103 fixture tests;
+  no network/DNS/exec and only temporary writes. Forked workers inherit the guard.
+  Six different checkout directories contend for one budget. A second six-process
+  test mixes instruments/ticker/Kline clients and asserts >=200ms admission and
+  an observed peak of exactly four held requests. Default-off dispatch, consumer
+  formulas, listing expiry/contradiction, receipts, bootstrap UNKNOWN, cooldown,
+  restart, migration and storage/denial failures are covered.
+- `python -B scripts/check_bybit_public_transport.py`: eight real process/socket
+  tests against literal 127.0.0.1 only. Each exec child installs its own audit guard.
+  Slow headers/body, simulated stalled resolution, cancellation, lost403 event,
+  pending403 and supervisor death prove actual socket closure or retained leases.
+  The 1s deadline fixtures require completion within 2.5s; that is CI evidence,
+  not a French-server shutdown SLA or a live DNS/TLS performance measurement.
 
-## 180-second age: what the current contract actually guarantees
+Exact commit/check results are recorded in PR101. Windows Python execution is
+blocked by the local OS, so runtime checks use the authorized offline GitHub CI;
+no alternate interpreter or security bypass was attempted. Independent static
+review identified legacy-clock, one-character symbol and failed-denial-admission
+gaps; all three now have focused regression coverage. No real market request,
+rate stress test or strategy workflow was invoked.
 
-For generation cut G, current-bar source/receive time T and read completion R,
-the code independently checks `0<=G-T<=90s` and `0<=R-G<=90s`. Therefore
-`R-T<=180s`. The store and provenance validator deliberately reference G;
-consumer code rechecks R after SQLite returns. An example with T=G-90s and
-R=G+90s is allowed by those checks, not evidence of a90s-at-consumption bound.
+## Production prerequisites, not executed
 
-The old Worker checks upstream response time within +/-120s of its own current
-time, Python bulk ticker time within +/-120s of captured time, and current
-Kline window coverage. The snapshot/early-reader gate is<=900s from capture.
-These are different reference points, not an existing universal90s raw-price
-contract. No contradiction with a frozen strategy threshold was established
-in this review, so no runtime threshold was silently changed.
+1. Verify the exact release SHA, actual runtime accounts/launcher/env, Python and
+   SQLite versions, Linux parent-death behavior, time sync, disk/inodes/headroom,
+   current services and pinned `websockets==15.0.1`. Read-only server status is
+   not installation authority. No denied SSH or launcher route was bypassed.
+2. Review shared state provisioning and schema/boot migration. Metadata requesters
+   need DB/journal and request/refresh-lock write access; this is broader than the
+   existing read-only Kline consumer. SQLite offers no per-table OS permissions.
+   Actual account rights are unknown. Do not grant them implicitly, create a
+   per-checkout budget, or clear old cooldown/leases. A broker would be a separate
+   design, not an implemented capability of this candidate.
+3. Review one collector, `Restart=no` during observation, bounded stop/start
+   controls, resource/log retention, roster adoption and recovery ownership.
+   Inventory held-position and other same-IP traffic separately. No unit/timer or
+   dependency has been installed by this PR.
+4. Separately authorize natural-cycle observation and source activation. Require
+   complete roster, source receipts, 15m/hour rollover, cold/warm timing, actual
+   shutdown, metadata turnover and unchanged single-writer CAS/readback. No manual
+   strategy rerun or live order is part of acceptance. GitHub executors without
+   the host state retain their existing explicit source.
 
-The180s figure applies only at cache-read completion, not final publication or
-later use. At the snapshot gate alone, a G-90s source timestamp could be990s
-old when a G snapshot is accepted at G+900s. Existing independent policy and
-management freshness gates still apply and must not be weakened. Frame/REST
-response time is not a last-trade timestamp. Neither180s nor990s is an approval
-of that latency for production decisions.
+Unresolved403, incomplete metadata, stale/corrupt cache, missing budget coverage
+or unacceptable latency blocks activation. Preserve state and receipts on stop.
+A future rollback is a reviewed source decision at a generation boundary; it
+must not bypass a denial or mix a partially produced generation's sources.
 
-If the required release contract is instead<=90s observation age at read exit,
-the focused follow-up is to check R against **every selected current bar's**
-source and receive time, retain both old cut checks, persist the read-completion
-receipt and validate it downstream. Test89,999/90,000/90,001ms and the two90s
-windows together. This tightens data admission; it is a contract decision, not
-a justified change to trading policy or an already implemented fix.
-
-## 600-second recovery and socket timeouts
-
-`direct_get` already passes `timeout=10` to urllib. This limits socket blocking
-operations, not the entire DNS/connect/TLS/headers/body lifecycle. The single
-`response.read(1_048_577)` has a size limit but no monotonic total deadline.
-A slowly advancing header/body can outlast10s; DNS resolution is not separately
-bounded here. The600s checks prevent admission/acceptance after the recovery
-deadline, but do not interrupt an in-flight operation. ThreadPool shutdown waits
-for it. WS has open10s, close5s and receive1s settings; SQLite lock wait is10s.
-None establishes a total REST shutdown SLA.
-
-The existing code keeps the request lease until the request really returns,
-rejects late data and classifies a late403 before cancellation. No failure of
-those admission/publication protections was established by this review. It does
-have an unresolved availability/stop-time limitation. In particular a403 whose
-body keeps progressing can delay global classification; do not claim immediate
-denial propagation from these existing socket settings.
-
-Before promising a hard wall-clock recovery/stop SLA, the shared transport needs
-a monotonic total deadline, bounded resolution/connect/header/body phases, and
-cancellation that actually closes the socket before releasing the lease. A
-Future timeout or cancelled thread alone is not a fix and could exceed max4 by
-releasing a still-active request. Ensure a known403 becomes a global stop even
-when its body cannot finish, preserving UNKNOWN/manual-review classification.
-This needs focused transport work and tests, not changing strategy thresholds.
-No new runtime library/process or server setting was installed in this review.
-
-## Acceptance before activation
-
-1. Offline default-path equivalence: unset selector issues exactly the existing
-   Worker calls; direct mode issues zero public-spot Worker requests, including
-   availability, cold bootstrap and listing contradiction. Cache/direct failures
-   never invoke the old fallback. Alpha exclusion remains explicit.
-2. Metadata fixtures: full vs partial/cursor, duplicate/missing symbol, nonfinite
-   price, stale/future response,24h expiry, delist/new-list contradiction and
-   concurrent cold refresh. Preserve one fresh ticker receipt per generation.
-3. Coherence: listing receipt, requested Bybit-only roster, cache epoch and all
-   asset/BTC windows agree. New roster starts UNKNOWN; no mixed source receipts,
-   cross-generation ticker reuse, forged Worker labels or second result writer.
-4. Budget/fault fixtures: mixed list/ticker/Kline clients in multiple checkouts,
-   total >=200ms spacing/max4; cooldown/halt shared across endpoints; late403,
-   storage full/corruption, crashed refresh owner and unreleased leases. A held
-   position adapter, if approved, must join these tests without policy changes.
-5. Transport fixtures before a hard deadline claim: stalled DNS/header/body,
-   progress just inside each socket timeout, cancellation and concurrent403;
-   prove actual socket termination before lease release and bounded teardown.
-   Age tests distinguish cut age, read age, downstream age and last trade time.
-6. Only after a separate deployment decision: observe natural server cycles,
-   full-roster direct availability, zero public-spot Worker calls, actual shared
-   request counts,15m/hour rollover, metadata turnover, delay distribution,
-   disk/lock load, process shutdown and unchanged CAS/readback. No real orders,
-   manual strategy rerun or online rate stress test is part of this proposal.
-
-Unresolved403, metadata incompleteness, roster/source mismatch, missing budget
-coverage, storage failures or unacceptable latency blocks activation. Rollback
-must preserve denial state and receipts; it is never an automatic route change.
-The read-only server tools and earlier SSH/path denials have not been bypassed.
-
-## References
-
-- [Official spot instruments](https://bybit-exchange.github.io/docs/v5/market/instrument)
-- [Official spot tickers](https://bybit-exchange.github.io/docs/v5/market/tickers)
-- [Python urllib timeout semantics](https://docs.python.org/3.12/library/urllib.request.html)
-- [Python HTTP connection timeout](https://docs.python.org/3.12/library/http.client.html)
-
-Official documentation checked 2026-10-11. No Bybit market endpoint was called.
+See [the sidecar and freshness contract](bybit-stream-sidecar.md). No actual
+French-server access, throughput, geography or sustained-latency evidence was
+obtained here; those problems are not claimed solved.
