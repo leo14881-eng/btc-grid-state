@@ -148,6 +148,15 @@ historical trend; the original increasing-price continuation/recovery logic is
 unchanged. No new high/low breakout or volume threshold is introduced. Legacy
 expired strong booleans cannot authorize entry; fresh raw history must prove it.
 
+The trajectory's current price is the validated same-venue REST book midpoint,
+not the earlier Discovery reference price. Its book hash, bid/ask, venue/symbol,
+fetch time and time basis are persisted. Binance records receipt time explicitly
+as REST_FETCH_NOT_TRADE_EVENT; Bybit uses its existing exchange book timestamp,
+which must not exceed receipt time. The current point must be strictly later
+than the prior live point or reconstructed close. Pre-fix setups lacking price
+provenance cannot be mixed into this comparison. This local comparison does not
+alter the BUY fill model, current STRONG calculation, or any admission threshold.
+
 ## Common release attestation (supersedes lane-local label activation above)
 
 Production labeling is disabled without an explicitly supplied

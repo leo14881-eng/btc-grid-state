@@ -31,7 +31,8 @@ def buy_annotation(engine, state, context=None, now=None):
 def audit(state, asset):
     row = (state.get('reentry_registry') or {}).get(asset) or {}
     return copy.deepcopy({k: row[k] for k in ('last_exit_reason', 'risk_lock', 'state',
-        'reentry_path', 'last_reassessment', 'reentry_last_observation', 'reentry_historical_trend') if k in row})
+        'reentry_path', 'last_reassessment', 'reentry_last_observation', 'reentry_historical_trend',
+        'reentry_trajectory_comparison') if k in row})
 
 
 def missing_candidates(state, review, scan, now, fresh):
@@ -256,12 +257,26 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
             return deny('REENTRY_NO_NEW_EVIDENCE', 'MARKET_CONTENT_NOT_NEW', False)
     if number(price) is None or price <= 0:
         return deny('REENTRY_UNKNOWN', 'CURRENT_PRICE_INVALID')
+    # Discovery's reference mark can precede a reconstructed closed candle.
+    # Bind this comparison only to the already validated current venue book.
+    # This local midpoint is NOT the BUY fill model or a trade-event timestamp.
+    price = (bids[0][0]+asks[0][0])/2
+    price_at = dt.datetime.fromtimestamp(sequence/1000,dt.timezone.utc) if expected == 'bybit' else times[2]
+    if price_at > times[2]:
+        return deny('REENTRY_UNKNOWN', 'TRAJECTORY_BOOK_TIME_AFTER_RECEIPT')
+    price_evidence = {'source':'REST_ORDERBOOK_MIDPOINT','venue':expected,'symbol':book['symbol'],
+                      'at_utc':price_at.isoformat(),'fetched_at_utc':times[2].isoformat(),
+                      'time_basis':'EXCHANGE_BOOK_TIMESTAMP' if expected == 'bybit' else 'REST_FETCH_NOT_TRADE_EVENT',
+                      'book_hash':market_hash,'best_bid':bids[0][0],'best_ask':asks[0][0]}
+    # Pre-fix persisted setups contain an unbound Discovery price. Never mix
+    # them with a new book point; current raw history can reconstruct a baseline.
+    if prior and not (prior.get('price_evidence') or {}).get('at_utc'):prior = None
     e = engine.evidence(candidate, liq or {}, supply or {})
     health, health_reasons = engine.position_health({}, e, now)
     strong = health == 'STRONG' and all(number(e.get(k)) is not None and e[k] > 0
                                                       for k in ('btc_rel_1h', 'btc_rel_4h', 'rel_accel'))
     observation = {'generation': generation, 'evidence_id': meta['evidence_id'],
-                   'times': [t.isoformat() for t in times], 'price': price, 'strong': strong,
+                   'times': [t.isoformat() for t in times], 'price': price, 'price_evidence':price_evidence, 'strong': strong,
                    'signal_hash': current_hash, 'market_hash': market_hash, 'source_sequence': sequence,
                    'cost_audit': execution, 'signal_sources': sources,
                    'validity_times': [t.isoformat() for t in times]+[s['observed_at_utc'] for s in sources.values()]}
@@ -338,8 +353,14 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
                      and all(hs[k] > 0 for k in ('btc_relative_1h_pct','btc_relative_4h_pct','relative_acceleration_pct')))
             historical['relative_trend_positive'] = trend
             row['reentry_historical_trend'] = historical
-            prior = {'price':historical['price'], 'strong':trend}
+            prior = {'price':historical['price'], 'strong':trend,
+                     'price_evidence':{'source':'RECONSTRUCTED_CLOSED_KLINE','at_utc':historical['market_at_utc']}}
             row['post_exit_low'] = min(row['post_exit_low'], historical['price'])
+    prior_at = time((prior.get('price_evidence') or {}).get('at_utc')) if prior else None
+    row['reentry_trajectory_comparison'] = {'current':{'price':price,**price_evidence},
+        'previous':{'price':prior['price'],**prior['price_evidence']} if prior else None}
+    if not prior_at or not exited < prior_at < price_at:
+        return deny('REENTRY_UNKNOWN', 'TRAJECTORY_PRICE_TIME_NOT_ORDERED')
     if not prior or not strong or price <= prior['price']:
         return deny('REENTRY_TREND_NOT_RESTORED', 'ORDERED_POST_EXIT_RECOVERY_REQUIRED', False)
     # No % reset or sell-price breakout prerequisite: actual dip then recovery,
