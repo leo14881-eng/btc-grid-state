@@ -22,6 +22,8 @@ except ModuleNotFoundError as exc:
 SOURCE = 'OFFICIAL_BYBIT_V5_SPOT_CACHE'
 SCHEMA = 'hunter_bybit_stream_snapshot_v1'
 WORKER_SOURCE = 'OFFICIAL_BYBIT_V5_VIA_WORKER'
+DIRECT_SOURCE = 'OFFICIAL_BYBIT_V5_SPOT_DIRECT_CACHE'
+DIRECT_SCHEMA = 'hunter_bybit_direct_snapshot_v1'
 
 
 def topics_for(bases):
@@ -93,10 +95,22 @@ def validate(snapshot):
     names = topics_for(bases)
     symbols = {b+'USDT' for b in bases}|{'BTCUSDT'}
     generation = snapshot.get('cache_generation', {})
+    direct=snapshot.get('source')==DIRECT_SOURCE
+    if direct:
+        try:
+            from research.hunter_bybit_direct import validate_metadata
+        except ModuleNotFoundError as error:
+            if error.name!='research': raise
+            from hunter_bybit_direct import validate_metadata
+        validate_metadata(snapshot)
+    elif 'public_metadata' in snapshot:
+        raise ValueError('CACHE_METADATA_SOURCE_CONFLICT')
+    source=DIRECT_SOURCE if direct else SOURCE
+    metadata_source='OFFICIAL_BYBIT_V5_SPOT_DIRECT' if direct else WORKER_SOURCE
     end = int(dt.datetime.fromisoformat(snapshot['captured_at_utc']).timestamp()*1000)
-    if (snapshot.get('schema') != SCHEMA or snapshot.get('source') != SOURCE
-            or status.get('source') != SOURCE or status.get('ticker_source') != WORKER_SOURCE
-            or status.get('listing_source') != WORKER_SOURCE or status.get('kline_source') != SOURCE
+    if (snapshot.get('schema') != (DIRECT_SCHEMA if direct else SCHEMA) or snapshot.get('source') != source
+            or status.get('source') != source or status.get('ticker_source') != metadata_source
+            or status.get('listing_source') != metadata_source or status.get('kline_source') != SOURCE
             or status.get('captured_at_utc') != snapshot['captured_at_utc']
             or status.get('kline_batch_requests') != 0 or 'signal_failure_details' in snapshot
             or generation.get('schema') != 'bybit_stream_generation_v1'

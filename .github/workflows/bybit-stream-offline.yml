@@ -5,16 +5,36 @@ on:
   pull_request:
     paths:
       - 'research/hunter_bybit_stream*.py'
+      - 'research/hunter_bybit_public.py'
+      - 'research/hunter_bybit_http_child.py'
+      - 'research/hunter_bybit_direct.py'
+      - 'research/hunter_bybit_availability.py'
       - 'research/hunter_bybit_worker.py'
       - 'research/hunter_cex_scan.py'
       - 'research/hunter_early_signals.py'
       - 'research/hunter_signal_provenance.py'
       - 'tests/test_hunter_stream*.py'
+      - 'tests/test_hunter_public_transport_process.py'
+      - 'tests/fixtures/public_http_child.py'
+      - 'scripts/check_bybit_public_transport.py'
       - 'scripts/check_bybit_stream_offline.py'
       - '.github/workflows/bybit-stream-offline.yml'
 permissions:
   contents: read
 jobs:
+  transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -B scripts/check_bybit_public_transport.py
   offline:
     runs-on: ubuntu-latest
     timeout-minutes: 5

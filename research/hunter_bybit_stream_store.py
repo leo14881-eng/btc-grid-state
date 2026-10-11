@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -61,12 +62,14 @@ class Store:
     def reader(cls, path=STATE_PATH):
         instance = cls.__new__(cls)
         instance.path = Path(path)
+        instance._existing = True
         if not instance.path.is_absolute():
             raise ValueError('ABSOLUTE_STATE_PATH_REQUIRED')
         return instance
 
     def __init__(self, path=STATE_PATH):
         self.path = Path(path)
+        self._existing = False
         if not self.path.is_absolute() or not self.path.parent.is_dir():
             raise ValueError('PREPROVISIONED_ABSOLUTE_STATE_PATH_REQUIRED')
         with self.db() as db:
@@ -85,6 +88,9 @@ class Store:
                     cooldown_ms INTEGER DEFAULT 0, halt TEXT, last_ms INTEGER DEFAULT 0);
                 INSERT OR IGNORE INTO budget(id) VALUES(1);
                 CREATE TABLE IF NOT EXISTS leases (token TEXT PRIMARY KEY, acquired_ms INTEGER);
+                CREATE TABLE IF NOT EXISTS requests (token TEXT PRIMARY KEY, denied INTEGER DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS budget_clock (id INTEGER PRIMARY KEY CHECK(id=1), boot TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS metadata (kind TEXT PRIMARY KEY, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS revisions (
                     topic TEXT, start INTEGER, row_json TEXT NOT NULL,
                     observed INTEGER, source_time INTEGER, confirmed INTEGER,
@@ -94,11 +100,13 @@ class Store:
                     epoch TEXT, ack INTEGER, ws_rx INTEGER, ws_ts INTEGER, gap INTEGER);
                 CREATE INDEX IF NOT EXISTS readiness_topic ON readiness(topic,observed);
             ''')
+        self._existing = True
 
     @contextlib.contextmanager
-    def db(self, readonly=False):
-        db = sqlite3.connect(self.path.as_uri()+'?mode=ro' if readonly else str(self.path),
-                             uri=readonly, timeout=10)
+    def db(self, readonly=False, timeout=10):
+        existing = readonly or self._existing
+        address = self.path.as_uri()+('?mode=ro' if readonly else '?mode=rw') if existing else str(self.path)
+        db = sqlite3.connect(address, uri=existing, timeout=timeout)
         db.row_factory = sqlite3.Row
         try:
             db.execute('BEGIN' if readonly else 'BEGIN IMMEDIATE')
@@ -274,7 +282,7 @@ class Store:
             with self.db(readonly=True) as db:
                 meta = dict(db.execute('SELECT key,value FROM meta'))
                 states = {r['topic']: r for r in db.execute('SELECT * FROM topics')}
-                budget = db.execute('SELECT * FROM budget WHERE id=1').fetchone()
+                budget = budget_state(db)
                 if (type(generation_end) is not int or type(now_ms) is not int
                         or not 0 <= now_ms-generation_end <= FRESH_MS):
                     return dict(out, reason='GENERATION_STALE_OR_FUTURE')
@@ -282,7 +290,7 @@ class Store:
                         or not re.fullmatch('[a-f0-9]{64}', meta.get('scope_hash', ''))):
                     return dict(out, reason='ROSTER_OR_MANIFEST_MISMATCH')
                 out.update(epoch=meta.get('epoch'), manifest_sha256=meta['scope_hash'])
-                if (meta.get('connected') != '1' or not budget or budget['halt']
+                if (meta.get('connected') != '1' or not budget or budget['halt'] or request_gate(self, db)
                         or now_ms < budget['cooldown_ms']):
                     return dict(out, reason='COLLECTOR_DISCONNECTED_OR_GLOBAL_STOP')
                 windows = {}
@@ -379,16 +387,18 @@ database or another hostname. This governor cannot police unrelated programs.
     def __init__(self, store):
         self.store = store
 
-    def acquire(self, now_ms=None):
-        with self.store.db() as db:
-            if now_ms is None:
-                now_ms = time.time_ns()//1_000_000
+    def acquire(self, now_ms=None, timeout=10):
+        with self.store.db(timeout=timeout) as db:
             b = db.execute('SELECT * FROM budget WHERE id=1').fetchone()
+            now_ms = budget_time(db, b, now_ms)
             if now_ms < b['last_ms']:
                 raise RuntimeError('CLOCK_ROLLBACK')
             db.execute('UPDATE budget SET last_ms=? WHERE id=1', (now_ms,))
             if b['halt']:
                 raise RuntimeError(b['halt'])
+            gate = request_gate(self.store, db)
+            if gate:
+                raise RuntimeError(gate)
             if now_ms < max(b['next_ms'], b['cooldown_ms']):
                 return None
             if db.execute('SELECT COUNT(*) FROM leases').fetchone()[0] >= 4:
@@ -402,9 +412,11 @@ database or another hostname. This governor cannot police unrelated programs.
         with self.store.db() as db:
             db.execute('DELETE FROM leases WHERE token=?', (token,))
 
-    def failure(self, status, text, now_ms, retry_after=1):
+    def failure(self, status, text, now_ms=None, retry_after=1, timeout=10):
         text = text.lower()
-        with self.store.db() as db:
+        with self.store.db(timeout=timeout) as db:
+            b = db.execute('SELECT * FROM budget WHERE id=1').fetchone()
+            now_ms = budget_time(db,b,now_ms)
             if status == 403:
                 if 'access too frequent' in text and 'country' not in text:
                     db.execute('UPDATE budget SET cooldown_ms=MAX(cooldown_ms,?) WHERE id=1', (now_ms+600_000,))
@@ -418,6 +430,64 @@ database or another hostname. This governor cannot police unrelated programs.
                 return 'BOUNDED_RETRY'
             return 'NONRETRYABLE_RESPONSE'
 
-    def status(self):
-        with self.store.db(readonly=True) as db:
-            return dict(db.execute('SELECT * FROM budget WHERE id=1').fetchone())
+    def status(self, timeout=10):
+        with self.store.db(readonly=True,timeout=timeout) as db:
+            value = budget_state(db)
+            value['halt'] = value['halt'] or request_gate(self.store, db)
+            return value
+
+
+def boot_id():
+    return Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+
+
+def budget_time(db, state, explicit=None):
+    domain=db.execute('SELECT boot FROM budget_clock WHERE id=1').fetchone()
+    if explicit is not None:
+        if domain: raise RuntimeError('EXPLICIT_CLOCK_ON_MONOTONIC_BUDGET')
+        return explicit  # Only injected legacy fixture clocks use this path.
+    boot=boot_id()
+    if domain is None:
+        if state['next_ms'] or state['last_ms'] or state['cooldown_ms'] or db.execute('SELECT 1 FROM leases LIMIT 1').fetchone():
+            raise RuntimeError('BUDGET_CLOCK_MIGRATION_REQUIRES_REVIEW')
+        db.execute('INSERT INTO budget_clock(id,boot) VALUES(1,?)',(boot,))
+    elif domain[0]!=boot:
+        raise RuntimeError('BUDGET_BOOT_CHANGED_MANUAL_REVIEW')
+    return time.monotonic_ns()//1_000_000
+
+
+def budget_state(db):
+    value=dict(db.execute('SELECT * FROM budget WHERE id=1').fetchone())
+    domain=db.execute('SELECT boot FROM budget_clock WHERE id=1').fetchone()
+    if domain:
+        if domain[0]!=boot_id(): value['halt']=value['halt'] or 'BUDGET_BOOT_CHANGED_MANUAL_REVIEW'
+        # Project remaining monotonic cooldown only for existing UTC consumers.
+        # Actual admission never uses the wall clock or this projection.
+        remain=max(0,value['cooldown_ms']-time.monotonic_ns()//1_000_000)
+        value['cooldown_ms']=time.time_ns()//1_000_000+remain if remain else 0
+    return value
+
+
+def request_gate(store, db):
+    """An interrupted tracked HTTP operation is never silently treated as done.
+
+    Locks belong to the supervising process, not its HTTP child. A lost owner
+    leaves a persistent marker; no TTL, PID reuse or restart clears it.
+    """
+    rows = db.execute('SELECT token,denied FROM requests').fetchall()
+    if not rows:
+        return None
+    import fcntl
+    for row in rows:
+        if row['denied']:
+            return 'HTTP_403_PENDING_MANUAL_REVIEW'
+        try:
+            with (store.path.parent/('request-'+row['token']+'.lock')).open('rb') as handle:
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                return 'ORPHANED_HTTP_REQUEST_MANUAL_REVIEW'
+        except OSError:
+            return 'HTTP_REQUEST_OWNER_UNKNOWN_MANUAL_REVIEW'
+    return None

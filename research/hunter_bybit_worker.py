@@ -139,11 +139,16 @@ def candles(body, symbol, interval, limit, end):
     return rows
 
 def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
-            listing_refresher=None, *, kline_source='WORKER', cache_reader=None, cache_clock=None):
+            listing_refresher=None, *, kline_source='WORKER', cache_reader=None, cache_clock=None, public_adapter=None):
     if kline_source not in ('WORKER', 'SPOT_CACHE'):
         raise ValueError('BYBIT_KLINE_SOURCE_UNKNOWN')
     now = now or dt.datetime.now(dt.timezone.utc)
     end = int(now.timestamp() * 1000)
+    if public_adapter is not None:
+        if kline_source!='SPOT_CACHE': raise ValueError('DIRECT_REQUIRES_CACHE_KLINES')
+        fetcher=public_adapter.fetch
+        listing_fetcher=public_adapter.listings
+        listing_refresher=lambda:public_adapter.listings(force_refresh=True)
     listing_fetcher = listing_fetcher or availability.spot_proxy_universe
     listing_refresher = listing_refresher or (lambda: availability.spot_proxy_universe(now, force_refresh=True))
     bases, cache = listing_fetcher()
@@ -207,18 +212,22 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
                 raise
             import hunter_bybit_stream_consumer as consumer
         signals, failures, generation = consumer.collect(required, now, cache_reader, cache_clock)
+        source=consumer.DIRECT_SOURCE if public_adapter is not None else consumer.SOURCE
+        metadata_source=public_adapter.receipts['tickers']['source'] if public_adapter is not None else SOURCE
         status=dict(active_pairs=len(bases),valid_pairs=len(rows),missing_or_invalid=[],
-            source=consumer.SOURCE,captured_at_utc=now.isoformat(),signal_pairs=len(signals),
+            source=source,captured_at_utc=now.isoformat(),signal_pairs=len(signals),
             signal_failures=len(failures),signal_complete=not failures and len(signals)==len(required),
             signal_expected_bases=sorted(r['base'] for r in required),listing_cache=cache,
             ticker_requests=ticker_attempt+1,kline_batch_requests=0,
-            ticker_source=SOURCE,listing_source=SOURCE,kline_source=consumer.SOURCE,
+            ticker_source=metadata_source,listing_source=metadata_source,kline_source=consumer.SOURCE,
             cache_generation_sha256=generation['generation_sha256'])
         if refresh_evidence is not None:
             status['listing_refresh']=refresh_evidence
-        return persist(dict(schema=consumer.SCHEMA,source=consumer.SOURCE,captured_at_utc=now.isoformat(),
+        extra={'public_metadata':public_adapter.receipts} if public_adapter is not None else {}
+        return persist(dict(schema=consumer.DIRECT_SCHEMA if public_adapter is not None else consumer.SCHEMA,
+            source=source,captured_at_utc=now.isoformat(),
             rows=rows,venue_status=status,early_signals=signals,signal_failures=failures,
-            cache_generation=generation),now)
+            cache_generation=generation,**extra),now)
     batches=[symbols[i:i+20] for i in range(0,len(symbols),20)]
     bundles={}; failure_details={}
     def fetch_batch(index, batch):
@@ -309,7 +318,7 @@ def persist(payload,now):
     return payload['rows'],{**payload['venue_status'],"snapshot_sha256":payload["snapshot_sha256"]}
 
 def validate(snapshot,now):
-    cache_source = snapshot.get('source') == 'OFFICIAL_BYBIT_V5_SPOT_CACHE'
+    cache_source = snapshot.get('source') in ('OFFICIAL_BYBIT_V5_SPOT_CACHE','OFFICIAL_BYBIT_V5_SPOT_DIRECT_CACHE')
     if cache_source:
         try:
             from research.hunter_bybit_stream_consumer import validate as validate_cache

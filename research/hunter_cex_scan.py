@@ -139,6 +139,18 @@ def bybit_from_authorized_region(binance_bases=()):
     On a missing or stale snapshot, attempt direct official endpoints and keep
     failure explicit; never claim a Binance or third-party proxy as Bybit.
     """
+    try:
+        from research.hunter_bybit_public import selected
+    except ModuleNotFoundError as error:
+        if error.name!='research': raise
+        from hunter_bybit_public import selected
+    if selected()=='SERVER_DIRECT':
+        try:
+            from research.hunter_bybit_direct import collect as direct_collect
+        except ModuleNotFoundError as error:
+            if error.name!='research': raise
+            from hunter_bybit_direct import collect as direct_collect
+        return direct_collect(binance_bases)
     kline_source = os.getenv('HUNTER_BYBIT_KLINE_SOURCE', 'WORKER')
     if kline_source not in ('WORKER', 'SPOT_CACHE'):
         raise ValueError('BYBIT_KLINE_SOURCE_UNKNOWN')

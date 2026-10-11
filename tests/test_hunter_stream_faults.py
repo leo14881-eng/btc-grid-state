@@ -43,7 +43,7 @@ class FaultTests(unittest.TestCase):
             epoch=store.begin_session(self.topics,'b'*64)
             with patch.object(stream.urllib.request,'build_opener',return_value=Opener()) as opener:
                 with self.assertRaisesRegex(RuntimeError,'UNKNOWN_403_MANUAL_REVIEW'):
-                    stream.repair(store,epoch,self.topics[0],NOW+1000,clock=lambda:NOW)
+                    stream.repair(store,epoch,self.topics[0],NOW+1000,get=stream.direct_get,clock=lambda:NOW)
             self.assertEqual(opener.call_count,1)
             self.assertEqual(Budget(store).status()['halt'],'UNKNOWN_403_MANUAL_REVIEW')
 

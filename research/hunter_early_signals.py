@@ -155,7 +155,7 @@ def main():
     regional_signals={}
     if scan.get("bybit_complete"):
         expected_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")
-        worker_source=expected_source in ('OFFICIAL_BYBIT_V5_VIA_WORKER','OFFICIAL_BYBIT_V5_SPOT_CACHE')
+        worker_source=expected_source in ('OFFICIAL_BYBIT_V5_VIA_WORKER','OFFICIAL_BYBIT_V5_SPOT_CACHE','OFFICIAL_BYBIT_V5_SPOT_DIRECT_CACHE')
         try:
             from research import hunter_bybit_regional as regional
             from research import hunter_bybit_worker as worker

@@ -21,6 +21,7 @@ import urllib.request
 import uuid
 
 from research.hunter_bybit_stream_store import Budget, FRESH_MS, LIMITS, STATE_PATH, Store, split_topic, topic
+from research.hunter_bybit_public import Client, DurableStopError
 
 WS_URL = 'wss://stream.bybit.com/v5/public/spot'
 REST_URL = 'https://api.bybit.com/v5/market/kline'
@@ -28,13 +29,9 @@ MAX_CONNECTION_ATTEMPTS = 5
 MAX_REST_ATTEMPTS = 3
 
 
-class DurableStopError(RuntimeError):
-    """A known denial could not be persisted; never reconnect automatically."""
-
-
-def record_failure(budget, status, text, now, retry_after=1):
+def record_failure(budget, status, text, now, retry_after=1, real_clock=False):
     try:
-        return budget.failure(status, text, now, retry_after)
+        return budget.failure(status, text, None if real_clock else now, retry_after)
     except sqlite3.Error as error:
         if status == 403:
             raise DurableStopError('DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW') from error
@@ -107,7 +104,7 @@ def direct_get(url):
         raise
 
 
-def repair(store, epoch, name, deadline, get=direct_get, clock=millis, sleep=time.sleep,
+def repair(store, epoch, name, deadline, get=None, clock=millis, sleep=time.sleep,
            cancelled=lambda:False):
     """Every initialization, retry and gap repair uses the same host budget.
 
@@ -121,6 +118,18 @@ of historical bars or retroactively serve the missed generations.
             raise RuntimeError('RECOVERY_CANCELLED')
         with store.db(readonly=True) as db:
             store.check_epoch(db, epoch)
+    if get is None:
+        active()
+        end=clock()
+        if end>=deadline: raise TimeoutError('RECOVERY_DEADLINE')
+        body=Client(store).request('/v5/market/kline',dict(category='spot',symbol=symbol,
+            interval=interval,limit=LIMITS[interval],end=end),
+            timeout=min(30,(deadline-end)/1000),cancelled=cancelled)
+        active()
+        now=clock()
+        if now>=deadline: raise TimeoutError('RECOVERY_DEADLINE')
+        store.ingest_rest(epoch,name,body,end,now)
+        return
     for attempt in range(MAX_REST_ATTEMPTS):
         token = None
         while token is None:
@@ -309,7 +318,8 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             response = getattr(error, 'response', None)
             status = getattr(response, 'status_code', 0)
             if status:
-                record_failure(Budget(store), status, bytes(getattr(response, 'body', b'')).decode('utf-8','replace'), clock())
+                record_failure(Budget(store), status, bytes(getattr(response, 'body', b'')).decode('utf-8','replace'),
+                               clock(),real_clock=clock is millis)
             last_error = type(error).__name__
         if stop():
             return
@@ -323,7 +333,7 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--manifest', required=True, type=Path, help='Existing captured Worker snapshot, read-only roster')
+    parser.add_argument('--manifest', required=True, type=Path, help='Existing validated direct/Worker snapshot, read-only roster')
     parser.add_argument('--collect', action='store_true', help='Opt-in live sidecar only; requires separately approved rollout')
     args = parser.parse_args()
     snapshot = json.loads(args.manifest.read_text(encoding='utf-8'))
