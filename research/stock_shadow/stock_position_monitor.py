@@ -140,8 +140,10 @@ class QuoteWindowCache:
 
 def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
     """Original delayed SIP collection; an explicit cache enables the offline prototype."""
+    global QUOTE_USAGE
     began=perf_counter()
-    usage=QUOTE_USAGE if usage is None else usage
+    publish_usage=usage is None
+    usage={} if usage is None else usage
     usage.clear()
     usage.update(http_requests=0, pages=0, bars=0, response_bytes=0,
                  http_seconds=0.0, elapsed_seconds=0.0, cache_hits=0,
@@ -154,6 +156,10 @@ def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
             return _collect_alpaca_quotes(symbols,window_cache.cursors,usage)
     finally:
         usage["elapsed_seconds"]=perf_counter()-began
+        if publish_usage:
+            # Publish one completed snapshot; concurrent calls never accumulate
+            # counters in the same mutable dictionary while waiting for the cache.
+            QUOTE_USAGE=dict(usage)
 
 
 def _collect_alpaca_quotes(symbols, window_cache, usage):

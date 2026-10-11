@@ -286,7 +286,8 @@ def test_invalid_price_is_not_replaced_by_an_older_valid_bar_or_cached(monkeypat
 
 
 @pytest.mark.parametrize('shared', [True, False])
-def test_concurrent_callers_have_isolated_metrics_and_safe_cache_updates(monkeypatch, shared):
+@pytest.mark.parametrize('explicit_usage', [True, False])
+def test_concurrent_callers_have_isolated_metrics_and_safe_cache_updates(monkeypatch, shared, explicit_usage):
     rows = {'AAPL': [{'t': '2026-10-09T16:35:00Z', 'c': 100}]}
     provider = Provider(rows)
     guard = threading.Lock()
@@ -311,8 +312,9 @@ def test_concurrent_callers_have_isolated_metrics_and_safe_cache_updates(monkeyp
     cache = warm()
     def run(index):
         usage = {}
-        result = monitor.alpaca_snapshot_quotes(['AAPL'], window_cache=cache if shared else warm(), usage=usage)
-        return result, usage
+        result = monitor.alpaca_snapshot_quotes(['AAPL'], window_cache=cache if shared else warm(),
+                                               usage=usage if explicit_usage else None)
+        return result, usage if explicit_usage else copy.deepcopy(monitor.QUOTE_USAGE)
     with ThreadPoolExecutor(2) as pool:
         results = list(pool.map(run, range(2)))
     assert results[0][0] == results[1][0]
