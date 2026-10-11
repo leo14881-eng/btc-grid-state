@@ -139,11 +139,18 @@ def bybit_from_authorized_region(binance_bases=()):
     On a missing or stale snapshot, attempt direct official endpoints and keep
     failure explicit; never claim a Binance or third-party proxy as Bybit.
     """
+    kline_source = os.getenv('HUNTER_BYBIT_KLINE_SOURCE', 'WORKER')
+    if kline_source not in ('WORKER', 'SPOT_CACHE'):
+        raise ValueError('BYBIT_KLINE_SOURCE_UNKNOWN')
+    if kline_source == 'SPOT_CACHE' and os.getenv('HUNTER_BYBIT_WORKER_MARKET_ENABLED') != '1':
+        raise ValueError('CACHE_REQUIRES_EXISTING_WORKER_LISTING_TICKERS')
     if os.getenv("HUNTER_BYBIT_WORKER_MARKET_ENABLED")=="1":
         try:
             from research import hunter_bybit_worker
         except ModuleNotFoundError:
             import hunter_bybit_worker
+        if kline_source == 'SPOT_CACHE':
+            return hunter_bybit_worker.collect(binance_bases, kline_source=kline_source)
         return hunter_bybit_worker.collect(binance_bases)
     path=pathlib.Path(os.getenv(
         "HUNTER_BYBIT_REGIONAL_SNAPSHOT",

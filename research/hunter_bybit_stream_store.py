@@ -1,10 +1,6 @@
-"""Sidecar-only durable public data. No production consumers import this module.
-
-One absolute SQLite path is shared by all cooperating checkouts/processes on a
-host. Latest-only bars deliberately cannot reconstruct an older generation after
-an update: that read is UNKNOWN, never a future-data backfill.
-"""
+"""Durable public data with bounded revisions and atomic generation reads."""
 import contextlib
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -16,7 +12,21 @@ import uuid
 STATE_PATH = Path('/var/lib/hunter-bybit-stream/state.sqlite3')
 LIMITS = {'15': 25, '60': 5}
 FRESH_MS = 90_000
+HISTORY_MS = 180_000
+MAX_REVISIONS = 256
 SYMBOL = re.compile(r'[A-Z0-9]{2,30}USDT\Z')
+
+
+def content_hash(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+
+def roster_hash(topics):
+    for name in topics:
+        split_topic(name)
+    if not topics or len(topics) != len(set(topics)):
+        raise ValueError('INVALID_SCOPE')
+    return content_hash(sorted(topics))
 
 
 def topic(symbol, interval):
@@ -75,6 +85,14 @@ class Store:
                     cooldown_ms INTEGER DEFAULT 0, halt TEXT, last_ms INTEGER DEFAULT 0);
                 INSERT OR IGNORE INTO budget(id) VALUES(1);
                 CREATE TABLE IF NOT EXISTS leases (token TEXT PRIMARY KEY, acquired_ms INTEGER);
+                CREATE TABLE IF NOT EXISTS revisions (
+                    topic TEXT, start INTEGER, row_json TEXT NOT NULL,
+                    observed INTEGER, source_time INTEGER, confirmed INTEGER,
+                    origin TEXT, epoch TEXT, PRIMARY KEY(topic,start,source_time));
+                CREATE TABLE IF NOT EXISTS readiness (
+                    id INTEGER PRIMARY KEY, topic TEXT, observed INTEGER,
+                    epoch TEXT, ack INTEGER, ws_rx INTEGER, ws_ts INTEGER, gap INTEGER);
+                CREATE INDEX IF NOT EXISTS readiness_topic ON readiness(topic,observed);
             ''')
 
     @contextlib.contextmanager
@@ -100,11 +118,14 @@ class Store:
         epoch = uuid.uuid4().hex
         with self.db() as db:
             db.execute('DELETE FROM topics')
+            db.execute('DELETE FROM readiness')
             db.executemany('INSERT INTO topics(topic,epoch) VALUES(?,?)', [(t, epoch) for t in topics])
-            for k, v in [('epoch', epoch), ('scope_hash', scope_hash), ('connected', '1')]:
+            for k, v in [('epoch', epoch), ('scope_hash', scope_hash),
+                         ('roster_hash', roster_hash(topics)), ('connected', '1')]:
                 db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)', (k, v))
             # Bound storage and remove symbols no longer in this captured roster.
             db.execute('DELETE FROM bars WHERE topic NOT IN (SELECT topic FROM topics)')
+            db.execute('DELETE FROM revisions WHERE topic NOT IN (SELECT topic FROM topics)')
         return epoch
 
     def check_epoch(self, db, epoch):
@@ -133,6 +154,16 @@ class Store:
             return False  # Duplicate, delayed revision, or attempted un-close.
         db.execute('INSERT OR REPLACE INTO bars VALUES(?,?,?,?,?,?,?,?)',
                    (name, int(row[0]), json.dumps(row), observed, source_time, int(confirmed), origin, epoch))
+        db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?,?)',
+                   (name, int(row[0]), json.dumps(row), observed, source_time, int(confirmed), origin, epoch))
+        # Keep one pre-horizon baseline plus bounded recent revisions per bar.
+        db.execute('''DELETE FROM revisions WHERE topic=? AND start=? AND source_time NOT IN
+            (SELECT source_time FROM revisions WHERE topic=? AND start=? AND
+             (observed>=? OR source_time=(SELECT MAX(source_time) FROM revisions
+              WHERE topic=? AND start=? AND observed<?))
+             ORDER BY source_time DESC LIMIT ?)''',
+            (name, int(row[0]), name, int(row[0]), observed-HISTORY_MS,
+             name, int(row[0]), observed-HISTORY_MS, MAX_REVISIONS))
         return True
 
     def _trim(self, db, name, end):
@@ -140,6 +171,16 @@ class Store:
         step = int(interval)*60_000
         db.execute('DELETE FROM bars WHERE topic=? AND start<?',
                    (name, (end//step-LIMITS[interval]-2)*step))
+        db.execute('DELETE FROM revisions WHERE topic=? AND start<?',
+                   (name, (end//step-LIMITS[interval]-2)*step))
+
+    def _record_readiness(self, db, name, observed):
+        db.execute('''INSERT INTO readiness(topic,observed,epoch,ack,ws_rx,ws_ts,gap)
+            SELECT topic,?,epoch,ack,ws_rx,ws_ts,gap FROM topics WHERE topic=?''', (observed, name))
+        db.execute('''DELETE FROM readiness WHERE topic=? AND id NOT IN
+            (SELECT id FROM readiness WHERE topic=? AND observed>=?
+             ORDER BY observed DESC,id DESC LIMIT ?)''',
+            (name, name, observed-HISTORY_MS, MAX_REVISIONS))
 
     def ingest_ws(self, epoch, message, received_ms):
         name = message['topic']
@@ -179,6 +220,8 @@ class Store:
             needed = {anchor-i*step for i in range(LIMITS[interval])}
             if not needed <= have:
                 db.execute("UPDATE topics SET gap=1,error='MISSING_WINDOW' WHERE topic=?", (name,))
+            if changed:
+                self._record_readiness(db, name, received_ms)
         return changed
 
     def ingest_rest(self, epoch, name, body, requested_end, received_ms):
@@ -204,6 +247,77 @@ class Store:
                           int(row[0])+step <= source_time, 'OFFICIAL_BYBIT_V5_SPOT_REST', epoch)
             self._trim(db, name, requested_end)
             db.execute('UPDATE topics SET gap=0,error=NULL WHERE topic=?', (name,))
+            self._record_readiness(db, name, received_ms)
+
+    def freeze(self, topics, generation_end, now_ms):
+        """One read transaction for ALL requested topics; never repair or publish.
+
+        A stable topic digest (not the changing manifest receipt hash) binds the
+        consumer's current Bybit-only roster + BTC to the collector subscription.
+        Revisions received after the cut cannot supply or overwrite that cut.
+        Reconnect, roster drift, global denial or any missing topic fails closed.
+        """
+        expected = roster_hash(topics)
+        out = dict(schema='bybit_stream_generation_v1', status='UNKNOWN',
+                   generation_end_ms=generation_end, roster_hash=expected, windows={})
+        try:
+            with self.db(readonly=True) as db:
+                meta = dict(db.execute('SELECT key,value FROM meta'))
+                states = {r['topic']: r for r in db.execute('SELECT * FROM topics')}
+                budget = db.execute('SELECT * FROM budget WHERE id=1').fetchone()
+                if (type(generation_end) is not int or type(now_ms) is not int
+                        or not 0 <= now_ms-generation_end <= FRESH_MS):
+                    return dict(out, reason='GENERATION_STALE_OR_FUTURE')
+                if (set(states) != set(topics) or meta.get('roster_hash') != expected
+                        or not re.fullmatch('[a-f0-9]{64}', meta.get('scope_hash', ''))):
+                    return dict(out, reason='ROSTER_OR_MANIFEST_MISMATCH')
+                out.update(epoch=meta.get('epoch'), manifest_sha256=meta['scope_hash'])
+                if (meta.get('connected') != '1' or not budget or budget['halt']
+                        or now_ms < budget['cooldown_ms']):
+                    return dict(out, reason='COLLECTOR_DISCONNECTED_OR_GLOBAL_STOP')
+                windows = {}
+                for name in sorted(topics):
+                    current = states[name]
+                    state = db.execute('''SELECT * FROM readiness WHERE topic=? AND observed<=?
+                        ORDER BY observed DESC,id DESC LIMIT 1''', (name, generation_end)).fetchone()
+                    if (not current['ack'] or current['gap'] or not state or not state['ack'] or state['gap']
+                            or state['epoch'] != meta['epoch']
+                            or not 0 <= generation_end-state['ws_rx'] <= FRESH_MS
+                            or not 0 <= generation_end-state['ws_ts'] <= FRESH_MS):
+                        return dict(out, reason='TOPIC_NOT_READY_OR_STALE', failed_topic=name)
+                    _, interval = split_topic(name)
+                    step = int(interval)*60_000
+                    starts = sorted((generation_end//step-i)*step for i in range(LIMITS[interval]))
+                    chosen = []
+                    for start in starts:
+                        bar = db.execute('''SELECT * FROM revisions WHERE topic=? AND start=?
+                            AND observed<=? AND source_time<=? ORDER BY source_time DESC LIMIT 1''',
+                            (name, start, generation_end, generation_end)).fetchone()
+                        if bar is None:
+                            return dict(out, reason='HISTORY_MISSING_FOR_GENERATION', failed_topic=name)
+                        if (bar['origin'] not in ('OFFICIAL_BYBIT_V5_SPOT_WS','OFFICIAL_BYBIT_V5_SPOT_REST')
+                                or type(bar['confirmed']) is not int or bar['confirmed'] not in (0,1)
+                                or not isinstance(bar['epoch'], str) or not re.fullmatch('[a-f0-9]{32}',bar['epoch'])
+                                or type(bar['observed']) is not int or type(bar['source_time']) is not int
+                                or not 0 <= start <= bar['source_time'] <= bar['observed'] <= generation_end
+                                or (bar['confirmed'] and start+step-1 > bar['source_time'])
+                                or (bar['origin'].endswith('_REST') and bool(bar['confirmed']) != (start+step <= bar['source_time']))):
+                            return dict(out, reason='CACHE_UNAVAILABLE_OR_CORRUPT')
+                        chosen.append(bar)
+                    # A fresh delayed close is not evidence of a fresh current bar.
+                    if (chosen[-1]['epoch'] != meta['epoch'] or
+                            any(not 0 <= generation_end-chosen[-1][k] <= FRESH_MS for k in ('observed','source_time'))):
+                        return dict(out, reason='CURRENT_BAR_STALE', failed_topic=name)
+                    windows[name] = dict(rows=[valid_row(json.loads(r['row_json']), interval) for r in chosen],
+                        provenance=[dict(source=r['origin'], received_at_ms=r['observed'],
+                            source_time_ms=r['source_time'], confirm=bool(r['confirmed']),
+                            confirmation='WS_EXPLICIT' if r['origin'].endswith('_WS') else 'REST_INFERRED',
+                            session=r['epoch']) for r in chosen])
+                out.update(status='READY', windows=windows)
+                out['generation_sha256'] = content_hash(out)
+                return out
+        except (sqlite3.Error, OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            return dict(out, status='UNKNOWN', reason='CACHE_UNAVAILABLE_OR_CORRUPT', windows={})
 
     def states(self):
         with self.db(readonly=True) as db:

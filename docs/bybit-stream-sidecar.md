@@ -1,10 +1,11 @@
 # Bybit spot Kline sidecar: review stage only
 
-This PR adds an opt-in sidecar and a read-only cache API. It does not wire the
-production scan to that API, install a service, alter a timer, or change any
-capital, strategy, ledger, Worker or Sentinel file. No market requests were made
-to develop or test it. A separate reviewed rollout and consumer integration are
-required; an approved code PR is not a deployment approval.
+This PR adds an opt-in sidecar and connects the production discovery consumer to
+its read-only cache behind `HUNTER_BYBIT_KLINE_SOURCE=SPOT_CACHE`. The default is
+`WORKER`; no deployment configuration enables the new selector. It installs no
+service, alters no timer, and changes no capital/strategy rules, ledgers, Worker
+JavaScript or Sentinel files. No market requests were made to develop or test
+it. An approved code PR is not a deployment approval.
 
 ## Scope and protocol
 
@@ -29,30 +30,58 @@ No implicit environment proxy, redirect, alternate host, or Worker fallback.
 
 ## Cache contract
 
-SQLite stores per-topic ACK, receive/source times, gap status and latest bar
-versions keyed by (topic,start). REST must validate all 25/5 consecutive rows.
+SQLite stores per-topic ACK, receive/source times, gap status and bar revisions.
+REST must validate all 25/5 consecutive rows.
 WS updates cannot reopen a confirmed bar or replace a newer observation.
 Duplicate packets do not refresh freshness. Reconnect invalidates all ACKs and
 requires both a repaired window and a new WS observation per topic. Historical
 REST confirmation is marked `REST_INFERRED`, never claimed as a WS confirmation.
 
-`Store.reader().window(symbol, interval, generation_end_ms, now_ms)` returns
-READY with ascending seven-column rows and per-bar provenance, or explicit
-UNKNOWN with no rows. It includes the current forming bar, exactly as the
-existing feature extractor does. Readiness requires continuous coverage, a
-live session, ACK and topic observation age <=90 seconds. Every selected bar's
-source AND receive time must be <=generation end. This latest-only cache cannot
-recreate a past current-bar value after a later revision; it returns UNKNOWN.
-It never uses today's recovery response to repair an old decision.
+`Store.reader().freeze(topics, generation_end_ms, now_ms)` reads ALL selected
+symbols and BTC in one SQLite transaction. Both source and receive times must
+be <= the cut. It uses a 180-second revision horizon with one older baseline per
+bar, a maximum of 256 revisions per bar, 256 readiness events per topic, and a
+rolling 25/5 + 3 bar range. Eviction, missing history, stale/current bar, reconnect,
+roster drift, global cooldown/halt or any incomplete topic makes the entire
+generation UNKNOWN with no windows. A usable generation is at most 90 seconds
+old when frozen. Later revisions cannot backfill or overwrite that cut. Frozen
+rows are copied into memory before concurrent feature extraction.
+
+The stable digest of the sorted topic roster is checked against the current
+Bybit-only assets + BTC on every consumption. The original manifest receipt
+hash remains separate evidence: a new ticker generation need not have the same
+receipt hash as the earlier manifest. A changed asset set requires a reviewed
+manifest refresh/restart; it is never silently subtracted from coverage.
+
+The single-topic `window()` API remains for isolated diagnostics, using latest
+values and rejecting later observations. Production uses only `freeze()`.
+Both APIs include the forming bar without changing feature formulas.
 The normal close-then-open rollover is allowed without a forced REST repair:
 while the next forming candle has not arrived, reads are UNKNOWN; an interior
 missing candle still marks a transport gap. Missing/corrupt DB reads are UNKNOWN
 and never create a replacement DB. A late 403 still persists the global stop
 even if its response arrived after the recovery's data deadline.
 
-Sources are `OFFICIAL_BYBIT_V5_SPOT_WS` and `OFFICIAL_BYBIT_V5_SPOT_REST`, never
-`OFFICIAL_BYBIT_V5_VIA_WORKER`. The old manifest source describes roster origin
-only. Production consumers still use their existing Worker adapter in this PR.
+Per-bar sources are `OFFICIAL_BYBIT_V5_SPOT_WS` / `OFFICIAL_BYBIT_V5_SPOT_REST`.
+The new snapshot uses schema `hunter_bybit_stream_snapshot_v1` and source
+`OFFICIAL_BYBIT_V5_SPOT_CACHE`; ticker/listing sources remain explicitly
+`OFFICIAL_BYBIT_V5_VIA_WORKER`. Cache selection requires the existing Worker
+market route for those two inputs and sends ZERO Worker Kline requests. Unknown
+selector values fail before any route is called; cache failure never falls back.
+
+The unchanged discovery publisher writes the same `hunter-bybit-worker-snapshot.json`
+artifact, through the existing runner output list, single writer, CAS and readback.
+The filename is retained for that publication contract; its source/schema are
+explicit and strictly validated. No sidecar writes repo results or ledgers.
+The early-signals reader checks source, snapshot checksum and generation receipt.
+UNKNOWN retains valid ticker/listing coverage with zero signals and explicit
+failures for all expected symbols, so downstream reports show unscored assets.
+
+All six asset/BTC provenance packets carry the same generation hash, roster hash,
+manifest receipt and session. Their real receive/source times and WS confirmation
+are preserved; reading an old unconfirmed bar later never confirms it. The
+historical trend reader validates these packets and rejects missing confirmation
+instead of inventing history. Existing REST sources keep their existing behavior.
 
 ## Shared budget and failure behavior
 
@@ -97,8 +126,10 @@ deadline; this PR makes no such claim.
 3. Later, separately authorized: preprovision shared directory and the pinned
    optional `websockets==15.0.1` dependency, run a bounded server-side observation,
    compare natural same-generation windows/source chains and startup timing.
-4. Separate PR: consume the cache with explicit UNKNOWN propagation; no strategy
-   evaluation cadence or indicator change. Only after review consider deployment.
+4. Offline consumer acceptance in this PR: multi-symbol revisions at the cut,
+   concurrent reconnect snapshot isolation, bounded history eviction, roster/source
+   drift, BTC or asset gaps, strict provenance and unchanged numerical features.
+   Only after review and a natural-cycle comparison consider source deployment.
 
 Local planning only (no network):
 `python -m research.hunter_bybit_stream --manifest /absolute/captured-snapshot.json`
@@ -109,8 +140,8 @@ service/timer templates in this first PR. Test command:
 
 ## Activation proposal (not executed)
 
-This is NOT a completed production integration. The following gates must be
-reviewed before activation; none are granted by passing offline CI alone.
+The code integration is present but OFF. The following gates must be reviewed
+before activation; none are granted by passing offline CI alone.
 
 1. Freeze reviewed code SHA and capture the current authoritative roster hash.
    Recheck exact scope on the server immediately before startup. Do not take a
@@ -129,16 +160,10 @@ reviewed before activation; none are granted by passing offline CI alone.
    tags. Measure actual cold/warm timing and disk writes across a 15m and a 60m
    boundary and one controlled reconnect. An UNKNOWN or denied topic must not
    become a valid signal. No strategy is manually invoked for this acceptance.
-4. A later integration PR must add an OFF-by-default source selector, coherent
-   generation freeze/read across all symbols plus BTC, explicit UNKNOWN/error
-   propagation, roster-hash enforcement and a new direct-source schema understood
-   by validation/capture/reporting. The existing collector also needs tickers and
-   listings: this PR supplies Klines only and does NOT remove their Worker routes.
-   The latest-only cache may return UNKNOWN if a WS revision arrives after the
-   generation cut; a reviewed atomic freeze or bounded revision history is needed
-   to avoid systematic misses when a consumer reads after that cut. Do not relabel
-   the existing Worker snapshot or synthesize missing bars. Complete end-to-end
-   same-generation fixture and natural-cycle comparisons before selecting it.
+4. Review this PR's consumer selector, atomic generation freeze, revision history,
+   source validation and UNKNOWN propagation with the deployed runner. Complete
+   natural-cycle comparisons before selecting it. Ticker/listing Worker routes
+   still apply and are not a fallback for denied direct Kline access.
 5. Only after review activate the selector at a natural generation boundary.
    Keep the current strategy/capital/single-writer contract and timer frequency.
    The sidecar is a market-cache writer, never a portfolio/result publisher.
@@ -161,10 +186,10 @@ reviewed before activation; none are granted by passing offline CI alone.
   start/stop/install command. Clean lease recovery needs proof that all previous
   HTTP requests/processes have stopped and a separately reviewed state repair.
 
-Review against main `2197bce06a5ddb273787267af247b52372421c5b`: changes since the
-original base were existing runtime/result updates; the three consumer modules
-`hunter_bybit_worker`, `hunter_bybit_signal_capture`, and `hunter_cex_scan` were
-unchanged. This PR remains independent of strategy PR102 and reentry work.
+Integrated main `305c2a412166fa9a7f38a66778e93f25830e97e1` before consumer work.
+Its new signal provenance/reentry contracts are preserved and extended only to
+validate explicit cache transport evidence. No strategy thresholds, capital
+rules, historical results, PR35 or paused Sentinel migration changes are included.
 
 ## Primary references
 
@@ -174,5 +199,5 @@ unchanged. This PR remains independent of strategy PR102 and reentry work.
 - https://bybit-exchange.github.io/docs/v5/rate-limit
 - https://websockets.readthedocs.io/en/15.0.1/reference/sync/client.html
 
-Checked 2026-10-10. Official HTTP limit is 600 requests/5s/IP; 5rps is our
+Checked 2026-10-11. Official HTTP limit is 600 requests/5s/IP; 5rps is our
 deliberately lower admission budget, not a claim that the official maximum is 5rps.

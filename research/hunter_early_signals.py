@@ -154,7 +154,8 @@ def main():
     r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
     regional_signals={}
     if scan.get("bybit_complete"):
-        worker_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")=="OFFICIAL_BYBIT_V5_VIA_WORKER"
+        expected_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")
+        worker_source=expected_source in ('OFFICIAL_BYBIT_V5_VIA_WORKER','OFFICIAL_BYBIT_V5_SPOT_CACHE')
         try:
             from research import hunter_bybit_regional as regional
             from research import hunter_bybit_worker as worker
@@ -165,6 +166,8 @@ def main():
             "research/results/hunter-bybit-regional-snapshot.json"))
         snapshot=json.loads(path.read_text())
         (worker if worker_source else regional).validate(snapshot,dt.datetime.now(dt.timezone.utc))
+        if worker_source and snapshot.get('source') != expected_source:
+            raise SystemExit('BYBIT_SIGNAL_SNAPSHOT_SOURCE_MISMATCH')
         if worker_source and snapshot["snapshot_sha256"]!=(scan.get("venue_status") or {}).get("bybit",{}).get("snapshot_sha256"):
             raise SystemExit("BYBIT_SIGNAL_SNAPSHOT_HASH_MISMATCH")
         if snapshot["captured_at_utc"]!=(scan.get("venue_status") or {}).get("bybit",{}).get("captured_at_utc"):

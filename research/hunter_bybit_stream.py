@@ -1,7 +1,7 @@
 """Opt-in Bybit spot sidecar; no strategy, ticker, listing or ledger execution.
 
 Default CLI is a local plan. Live collection requires --collect and a separately
-provisioned shared state directory. Production adapters are deliberately untouched.
+provisioned shared state directory. The consumer selector remains OFF by default.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
