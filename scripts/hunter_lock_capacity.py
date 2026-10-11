@@ -36,7 +36,7 @@ def error_detail(exc):
     return detail
 
 
-def git_at(directory, *args, check=True, text=True):
+def git_at(directory, *args, check=True, text=True, input=None):
     # No hooks, credential helpers, user URL rewrites or network protocols. Only
     # local file transport is needed by this harness, including subprocess Git.
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
@@ -46,7 +46,8 @@ def git_at(directory, *args, check=True, text=True):
                "-c", "core.hooksPath=" + os.devnull, "-c", "core.autocrlf=false",
                "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args]
     return subprocess.run(command, cwd=directory, env=env, check=check,
-                          capture_output=True, text=text, encoding="utf-8" if text else None)
+                          capture_output=True, text=text, encoding="utf-8" if text else None,
+                          input=input)
 
 
 def parse(raw):
