@@ -32,13 +32,18 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: |
           limits=()
+          test_home=/tmp/preflight-home
           if [[ "$PROFILE" == service ]]; then
-            limits=(--cpus=0.5 --memory=1g --pids-limit=64)
+            limits=(--cpus=0.5 --memory=1g --pids-limit=64 --read-only
+                    --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs /home:mode=000
+                    --cap-drop=ALL --security-opt=no-new-privileges)
+            test_home=/home/stock-shadow
           fi
           docker run --rm -i --network=none "${limits[@]}" \
-            --user "$(id -u):$(id -g)" -e PROFILE -e HOME=/tmp/preflight-home \
+            --user "$(id -u):$(id -g)" -e PROFILE -e HOME="$test_home" \
             -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e TZ=UTC \
-            -v "$PWD:/workspace" -w /workspace stock-preflight python - <<'PY'
+            -v "$PWD:/var/lib/stock-shadow/work/preflight/repo" \
+            -w /var/lib/stock-shadow/work/preflight/repo stock-preflight python - <<'PY'
           import ast
           import json
           import os
@@ -50,7 +55,8 @@ jobs:
 
           if os.environ['PROFILE'] == 'service':
               os.umask(0o077)
-          Path(os.environ['HOME']).mkdir()
+          else:
+              Path(os.environ['HOME']).mkdir()
           source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           identity = dict(source_commit=source, owner='server', epoch=3, job='main',
                           run_id='offline-preflight-contract', attempt=1)
