@@ -1,8 +1,13 @@
 import copy
+import builtins
+import contextlib
 import datetime as dt
+import io
 import json
 from pathlib import Path
 import sqlite3
+import runpy
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -214,6 +219,48 @@ class ConsumerTests(unittest.TestCase):
             with self.store.db() as db:
                 db.execute('UPDATE revisions SET '+field+'=? WHERE topic=? AND start=? AND source_time=?',
                     (original[field],name,original['start'],original['source_time']))
+
+    def test_early_reader_uses_cache_artifact_and_rejects_different_receipt_or_source(self):
+        _, status, snapshot, _=self.snapshot()
+        root=Path(self.temp.name)
+        snapshot_path=root/'snapshot.json'
+        snapshot_path.write_text(json.dumps(snapshot))
+        scan_path=root/'scan.json'
+        fixture=dict(generation_id='fixture',binance_complete=True,bybit_complete=True,
+            venue_status=dict(bybit=status),coins={b:dict(venues=['bybit']) for b in self.bases})
+        benchmark={'BTCUSDT':dict(return_pct=0)}
+        now=self.now
+        class Clock(dt.datetime):
+            @classmethod
+            def now(cls,tz=None):return now
+        with patch.object(early,'SCAN',scan_path),patch.object(early,'OUT',root/'early.json'), \
+             patch.object(early,'HISTORY',root/'history.json'),patch.object(worker,'DEFAULT',snapshot_path), \
+             patch.object(early,'rolling',return_value=benchmark),patch.object(early,'micro',return_value={}), \
+             patch.object(early.dt,'datetime',Clock),contextlib.redirect_stdout(io.StringIO()):
+            scan_path.write_text(json.dumps(fixture))
+            early.main()
+            report=json.loads(early.OUT.read_text())
+            self.assertEqual(report['bybit_only_unscored'],[])
+            self.assertEqual({s['base'] for s in report['all_signals']},set(self.bases))
+            for key,value in [('source',worker.SOURCE),('snapshot_sha256','0'*64),('captured_at_utc',now.replace(second=0).isoformat())]:
+                bad=copy.deepcopy(fixture)
+                bad['venue_status']['bybit'][key]=value
+                scan_path.write_text(json.dumps(bad))
+                with self.assertRaises(SystemExit):early.main()
+
+    def test_direct_script_import_layout_supports_cache_consumer(self):
+        directory=Path(worker.__file__).resolve().parent
+        original=builtins.__import__
+        def flat_only(name,*args,**kwargs):
+            if name=='research' or name.startswith('research.'):
+                raise ModuleNotFoundError('No package in direct script layout',name='research')
+            return original(name,*args,**kwargs)
+        with patch.object(sys,'path',[str(directory)]+sys.path),patch('builtins.__import__',side_effect=flat_only):
+            module=runpy.run_path(str(directory/'hunter_bybit_stream_consumer.py'),run_name='offline_import_check')
+            signals,failures,generation=module['collect'](self.required,self.now,self.store,lambda:self.end)
+        self.assertEqual(generation['status'],'READY')
+        self.assertEqual(set(signals),set(self.bases))
+        self.assertEqual(failures,{})
 
 
 if __name__ == '__main__':
