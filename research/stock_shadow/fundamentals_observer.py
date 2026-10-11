@@ -873,7 +873,8 @@ def main():
         merged=merge_financial_evidence(merged,stockfit_by_symbol.get(sym))
         if not evidence_sufficient(merged):
             ranked.append(sym)
-    ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("gap_refresh_at") or (companies.get(sym) or {}).get("updated_at") or ""))
+    ranked.sort(key=lambda sym:str((companies.get(sym) or {}).get("gap_attempted_at")
+        or (companies.get(sym) or {}).get("gap_refresh_at") or (companies.get(sym) or {}).get("updated_at") or ""))
     refresh_budget=4
     refresh_set=set(ranked[:refresh_budget])
     # Semantic filing review rotates independently from financial gaps so complete financial evidence
@@ -924,6 +925,7 @@ def main():
                 else:
                     companies[s]={"symbol":s,"cik":cik,"company":meta.get("title"),"status":"SEC_REFRESH_PENDING",
                         "transport":transport,"companyfacts_transport":facts_transport,"updated_at":None,"processed_at":now(),
+                        "gap_attempted_at":now() if s in refresh_set else prev.get("gap_attempted_at"),
                         "strategy_effect":False,"note":"SEC per-company refresh pending; prior evidence unavailable."}
                 continue
             recent=((sub or {}).get("filings") or {}).get("recent") or {}

@@ -1956,3 +1956,73 @@ def test_sec_direct_filing_does_not_verify_error_documents(tmp_path, monkeypatch
     monkeypatch.setattr(m, "_sec_response", lambda *a: (payload, "text/html"))
     with pytest.raises(m.SECTransportError, match="SEC_TEXT_PAYLOAD_INVALID"):
         m.sec_filing_text(123, "fixture", "filing.htm")
+
+
+@pytest.mark.parametrize("outcome", ["failure", "partial_success", "complete_success"])
+@pytest.mark.parametrize("prior_cache", [False, True])
+def test_sec_gap_budget_rotates_after_attempts_without_refreshing_failed_evidence(
+        tmp_path, monkeypatch, outcome, prior_cache):
+    from datetime import datetime as RealDatetime, timedelta, timezone
+    m = _load_fundamentals_observer()
+    clock = [RealDatetime(2026, 10, 10, 10, tzinfo=timezone.utc)]
+    class Clock(RealDatetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+    monkeypatch.setattr(m, "datetime", Clock)
+    state = tmp_path / "portfolio.json"
+    out = tmp_path / "observer.json"
+    symbols = list("ABCDE")
+    state.write_text(json.dumps({"positions": {s: {} for s in symbols}}))
+    original_state = state.read_bytes()
+    stamp = "2000-01-01T00:00:00+00:00"
+    prior = {"cash": {"values": [{"end": "1999-12-31", "val": 1}]}} if prior_cache else {}
+    companies = {s: {"financial_evidence": prior, "updated_at": stamp,
+                     "source_evidence_at": stamp, "gap_refresh_at": stamp} for s in symbols}
+    # E is newer than the oldest four but has never used a request slot.
+    companies["E"]["updated_at"] = companies["E"]["gap_refresh_at"] = "2000-01-02T00:00:00+00:00"
+    out.write_text(json.dumps({"market_batch_schema_version": m.MARKET_BATCH_SCHEMA_VERSION,
+        "market_batch_refreshed_at": stamp, "frames_refreshed_at": stamp, "companies": companies}))
+    monkeypatch.setattr(m, "STATE", state)
+    monkeypatch.setattr(m, "OUT", out)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    monkeypatch.setattr(m, "ticker_map", lambda: ({s: {"cik_str": i+1} for i,s in enumerate(symbols)}, []))
+    monkeypatch.setattr(m, "frame_evidence_by_cik", lambda *a: ({},
+        {"status": "PARTIAL", "empty_requests": 12, "successful_requests": 0, "errors": []}))
+    monkeypatch.setattr(m, "sec_submission", lambda *a: ({"filings": {"recent": {}}}, "FIXTURE"))
+    calls = []
+    def facts(cik):
+        calls.append(cik)
+        if outcome == "failure":
+            raise m.SECTransportError("SEC_JSON_INVALID")
+        concepts = ["CashAndCashEquivalentsAtCarryingValue"]
+        if outcome == "complete_success":
+            concepts += ["Revenues", "NetIncomeLoss"]
+        return {"facts": {"us-gaap": {name: {"units": {"USD": [
+            {"end": "2026-06-30", "val": 10, "form": "10-Q", "filed": "2026-08-01"}]}}
+            for name in concepts}}}, "FIXTURE"
+    monkeypatch.setattr(m, "sec_companyfacts", facts)
+    m.main()
+    first = json.loads(out.read_text())
+    assert set(calls) == {1, 2, 3, 4}
+    for s in "ABCD":
+        assert first["companies"][s]["gap_attempted_at"] == clock[0].isoformat()
+        if outcome == "failure" and prior_cache:
+            assert first["companies"][s]["gap_refresh_at"] == stamp
+            assert first["companies"][s]["source_evidence_at"] == stamp
+            assert first["companies"][s]["updated_at"] == stamp
+    assert first["companies"]["E"].get("gap_attempted_at") is None
+    assert first["refreshed_this_run"] == (0 if outcome == "failure" else 4)
+    saved = out.read_bytes()
+    calls.clear()
+    m.main()  # A cache hit consumes no request slot and changes no attempt ordering.
+    assert calls == [] and out.read_bytes() == saved
+    clock[0] += timedelta(hours=7)
+    m.main()
+    second = json.loads(out.read_text())
+    assert 5 in calls and len(calls) <= 4
+    assert second["companies"]["E"]["gap_attempted_at"] == clock[0].isoformat()
+    if outcome == "complete_success":
+        assert calls == [5]  # Complete prior successes no longer consume gap slots.
+    assert second["status"] == "PARTIAL"
+    assert state.read_bytes() == original_state
