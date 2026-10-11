@@ -19,6 +19,8 @@ MAX_SYMBOLS = 2048
 MAX_PAYLOAD_BYTES = 256 * 1024
 MAX_DATABASE_BYTES = 1024 * 1024
 BUSY_TIMEOUT_SECONDS = 0.25
+# SQLite INTEGER is signed 64-bit. A loaded revision must leave room for +1.
+MAX_INCREMENTABLE_REVISION = (1 << 63) - 2
 ENV_KEYS = ('STOCK_SHADOW_INCREMENTAL_QUOTES', 'STOCK_SHADOW_QUOTE_CACHE_PATH',
             'STOCK_SHADOW_QUOTE_CACHE_SCOPE')
 
@@ -38,6 +40,10 @@ def asof(value):
 
 def digest(config, query_end, payload):
     return hashlib.sha256(canonical([config, query_end, payload]).encode()).hexdigest()
+
+
+def _incrementable_revision(value):
+    return type(value) is int and 0 <= value <= MAX_INCREMENTABLE_REVISION
 
 
 @dataclass
@@ -105,7 +111,7 @@ class QuoteWindowStore:
                 return None
             con = self._connect()
             row = con.execute('SELECT token, revision, config, query_end, payload, digest FROM cache WHERE id=1').fetchone()
-            if not row or not isinstance(row[0], str) or len(row[0]) != 32 or not isinstance(row[1], int) or row[1] < 0:
+            if not row or not isinstance(row[0], str) or len(row[0]) != 32 or not _incrementable_revision(row[1]):
                 raise ValueError('INVALID_CACHE_HEADER')
             token, revision, config, query_end, payload, checksum = row
             lease = Lease(token, revision, {})
@@ -140,7 +146,7 @@ class QuoteWindowStore:
                 # full successful query. Corrupt SQLite/schema fails closed above.
                 usage['read_status'] = 'CORRUPT_PAYLOAD'
             return lease
-        except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+        except (OSError, sqlite3.Error, ValueError, TypeError, OverflowError) as exc:
             usage['read_error_type'] = type(exc).__name__
             return None
         finally:
@@ -152,6 +158,8 @@ class QuoteWindowStore:
         began = perf_counter()
         con = None
         try:
+            if not _incrementable_revision(getattr(lease, 'revision', None)):
+                raise ValueError('INVALID_CACHE_REVISION')
             if len(cursors) > MAX_SYMBOLS:
                 usage['publish_status'] = 'CAPACITY_BYPASS'
                 return
@@ -181,7 +189,7 @@ class QuoteWindowStore:
                          digest(self.config, query_end, payload)))
             con.execute('COMMIT')
             usage.update(publish_status='PUBLISHED', published_entries=len(cursors))
-        except (OSError, sqlite3.Error, ValueError, TypeError) as exc:
+        except (OSError, sqlite3.Error, ValueError, TypeError, OverflowError) as exc:
             usage.update(publish_status='UNAVAILABLE', publish_error_type=type(exc).__name__)
         finally:
             if con is not None:

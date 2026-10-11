@@ -214,6 +214,102 @@ def test_empty_holdings_publishes_empty_snapshot(monkeypatch, tmp_path):
     assert read(path)[1].cursors == {}
 
 
+@pytest.mark.parametrize('fail_at', [None, 1])
+def test_corrupt_max_sqlite_revision_falls_back_without_dropping_fresh_quote(monkeypatch, tmp_path, fail_at):
+    path = enable(monkeypatch, tmp_path)
+    seed(path)
+    with sqlite3.connect(path) as con:
+        # The existing payload digest remains valid: revision is header metadata.
+        con.execute('UPDATE cache SET revision=?', ((1 << 63) - 1,))
+    rows = {'AAPL': [{'t': '2026-10-09T16:35:00Z', 'c': 107}]}
+    expected = collect(monkeypatch, rows, old=True, fail_at=fail_at)[0]
+    actual, usage, provider = collect(monkeypatch, rows, fail_at=fail_at)
+    assert actual == expected
+    if fail_at is None:
+        assert actual[0]['AAPL']['price'] == 107
+    else:
+        assert actual[0] == {} and actual[1][0]['reason'] == 'HTTP_429'
+    assert provider.calls[0]['start'] == ['2026-10-06T16:40:00Z']
+    assert usage['disk_cache']['read_status'] == 'UNAVAILABLE'
+    assert usage['disk_cache']['publish_status'] == 'NOT_ATTEMPTED'
+    with sqlite3.connect(path) as con:
+        assert con.execute('SELECT revision FROM cache').fetchone()[0] == (1 << 63) - 1
+
+
+def test_last_incrementable_revision_publishes_safely_then_next_read_is_cold(monkeypatch, tmp_path):
+    path = enable(monkeypatch, tmp_path)
+    seed(path)
+    with sqlite3.connect(path) as con:
+        con.execute('UPDATE cache SET revision=?', (storage.MAX_INCREMENTABLE_REVISION,))
+    result, usage, _ = collect(monkeypatch, ROW)
+    assert result == collect(monkeypatch, ROW, old=True)[0]
+    assert usage['disk_cache']['read_status'] == 'HIT'
+    assert usage['disk_cache']['publish_status'] == 'PUBLISHED'
+    again, usage, _ = collect(monkeypatch, ROW)
+    assert again == result and usage['disk_cache']['read_status'] == 'UNAVAILABLE'
+    assert usage['cache_hits'] == 0
+
+
+def test_publisher_rejects_nonincrementable_lease_before_database_mutation(tmp_path):
+    path = tmp_path / 'quotes.sqlite3'
+    seed(path)
+    store, lease, _ = read(path)
+    before = path.read_bytes()
+    lease.revision = (1 << 63) - 1
+    usage = {}
+    store.publish(lease, {}, END, LOOKBACK, usage)
+    assert usage['publish_status'] == 'UNAVAILABLE'
+    assert usage['publish_error_type'] == 'ValueError'
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('fail_at', [None, 1])
+def test_binding_overflow_is_optional_and_preserves_provider_result(monkeypatch, tmp_path, fail_at):
+    path = enable(monkeypatch, tmp_path)
+    seed(path)
+    original_connect = sqlite3.connect
+    class BindingOverflow(sqlite3.Connection):
+        def execute(self, sql, *args, **kwargs):
+            if sql.startswith('UPDATE cache'):
+                raise OverflowError('offline binding overflow')
+            return super().execute(sql, *args, **kwargs)
+    rows = {'AAPL': ROW['AAPL'] + [{'t': '2026-10-09T16:40:00Z', 'c': 107}]}
+    with monkeypatch.context() as scoped:
+        scoped.setattr(storage.sqlite3, 'connect', lambda *a, **k: original_connect(*a, **k, factory=BindingOverflow))
+        result, usage, _ = collect(scoped, rows, fail_at=fail_at)
+        assert result == collect(scoped, rows, old=True, fail_at=fail_at)[0]
+        assert usage['disk_cache']['publish_status'] == 'UNAVAILABLE'
+        assert usage['disk_cache']['publish_error_type'] == 'OverflowError'
+    assert read(path)[1].cursors == {'AAPL': '2026-10-09T16:35:00Z'}
+
+
+def test_corrupt_revision_cannot_abort_monitor_or_erase_existing_ledger(monkeypatch, tmp_path):
+    path = enable(monkeypatch, tmp_path)
+    seed(path)
+    with sqlite3.connect(path) as con:
+        con.execute('UPDATE cache SET revision=?', ((1 << 63) - 1,))
+    rows_path = tmp_path / 'rows.json'
+    rows_path.write_text(json.dumps({'AAPL': [{'t': '2026-10-09T16:35:00Z', 'c': 107}]}))
+    state_root = tmp_path / 'monitor-state'
+    state_root.mkdir()
+    tranche = {'at': '2026-10-08T15:00:00Z', 'price': 100, 'notional': 1000, 'reason': 'FIXTURE'}
+    position = {'symbol': 'AAPL', 'opened_at': tranche['at'], 'tranches': [tranche],
+                'mfe_net_pct': 0, 'mae_net_pct': -1}
+    events = [{'type': 'BUY', 'symbol': 'AAPL', **tranche}]
+    (state_root / 'portfolio-v1.json').write_text(json.dumps({'positions': {'AAPL': position}, 'closed': []}))
+    (state_root / 'trades-v1.json').write_text(json.dumps(events))
+    completed = subprocess.run([sys.executable, str(PROCESS_FIXTURE), '--rows', str(rows_path),
+                                '--now', CURRENT.isoformat(), '--state-root', str(state_root)],
+                               capture_output=True, text=True, check=True, timeout=30)
+    health = json.loads(completed.stdout)
+    state = json.loads((state_root / 'portfolio-v1.json').read_text())
+    assert health['status'] == 'OK' and health['positions_updated'] == 1
+    assert state['positions']['AAPL']['last_price'] == 107
+    assert state['positions']['AAPL']['tranches'] == [tranche] and state['closed'] == []
+    assert json.loads((state_root / 'trades-v1.json').read_text()) == events
+    assert health['quote_collection']['disk_cache']['read_status'] == 'UNAVAILABLE'
+
+
 @pytest.mark.parametrize('stage', ['UPDATE cache', 'COMMIT'])
 def test_simulated_disk_full_rolls_back_without_losing_fresh_observations(monkeypatch, tmp_path, stage):
     path = enable(monkeypatch, tmp_path)

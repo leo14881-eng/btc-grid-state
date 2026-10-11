@@ -222,6 +222,22 @@ tightened rejection of unknown SQLite versions before applying database pragmas.
 No existing stock strategy/security test was changed. This execution review does
 not replace an external reviewer or authorize deployment.
 
+External review identified a damaged revision-header case: SQLite's maximum
+signed integer could pass the old nonnegative-only validation and overflow at
+`revision + 1` after fresh quotes had already been fetched. An offline regression
+first reproduced that exact `OverflowError`. Loaded and published revisions must
+now be integers in `0..2^63-2`, and SQLite binding overflow is an optional cache
+failure. An exhausted/damaged header takes the full-query path without modifying
+the database or portfolio. Tests cover the exact maximum, the last safe increment,
+defensive publication failure, unchanged provider errors, and a real monitor
+subprocess retaining its tranches/events while accepting the fresh quote.
+
+The latest-main combination was checked against
+`e5ad477ed8e1e9c8b5cd356605608e66ef6d8a38`, which includes merged PR105
+`0fce78b355ced25cd6cebe7fb08b9ac72d095860`. The actual three-way merge was clean;
+no stock/crypto source conflict repair was needed. The final candidate includes
+that main snapshot with both sets of changes preserved, and is revalidated by CI.
+
 ## Remaining validation before activation
 
 The persistent lifecycle and actual runner binding are now implemented and
