@@ -244,7 +244,9 @@ automatic alternative after direct Kline denial.
 - SQLite errors stop the collector instead of reconnecting. If a known denial
   cannot be stored, `DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW` explicitly means its
   durable stop was **not** written. External automatic restart must stay disabled
-  until an operator reviews/recoveries storage and the denial state.
+  until an operator reviews storage recovery and the denial state. Session
+  teardown joins running repairs and propagates their fatal storage/denial
+  exceptions; a prior WS exception or failed lease release cannot hide them.
 - Storage failure, hard kill or SIGKILL may prevent the disconnect record. The
   last committed cache can remain readable only within the existing <=90s
   freshness bound; there is no claim of instantaneous invalidation after an

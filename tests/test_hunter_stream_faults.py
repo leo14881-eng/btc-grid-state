@@ -182,6 +182,16 @@ class FaultTests(unittest.TestCase):
         self.assertIsNone(Budget(self.store).status()['halt'])
         self.no_leases()
 
+    def test_denial_and_lease_release_failure_preserves_durable_stop_diagnosis(self):
+        with patch.object(Budget,'failure',side_effect=sqlite3.OperationalError('disk is full')), \
+             patch.object(Budget,'release',side_effect=sqlite3.OperationalError('release also failed')):
+            with self.assertRaisesRegex(stream.DurableStopError,'DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW'):
+                stream.repair(self.store,self.epoch,self.topics[0],NOW+1000,
+                    lambda url:(403,b'country',1),lambda:NOW,lambda seconds:None)
+        with self.store.db(readonly=True) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],1)
+        self.assertIsNone(Budget(self.store).status()['halt'])
+
     def test_stop_before_connect_and_during_backoff(self):
         calls=[];stopped=Event()
         def connect():calls.append(1);raise OSError('fixture')

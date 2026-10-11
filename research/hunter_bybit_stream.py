@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import signal
 import sqlite3
+import sys
 from threading import Event
 import time
 import urllib.error
@@ -168,7 +169,13 @@ of historical bars or retroactively serve the missed generations.
             if decision != 'BOUNDED_RETRY':
                 raise RuntimeError(decision)
         finally:
-            budget.release(token)
+            primary_error = sys.exc_info()[1]
+            try:
+                budget.release(token)
+            except sqlite3.Error:
+                if isinstance(primary_error, DurableStopError):
+                    raise primary_error  # Preserve the unrecorded-denial diagnosis.
+                raise
     raise RuntimeError('REST_RETRY_BUDGET_EXHAUSTED')
 
 
