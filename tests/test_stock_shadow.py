@@ -1532,6 +1532,7 @@ def test_fundamentals_main_rotates_persisted_frames_through_every_batch(tmp_path
         if out_path.exists():
             old = json.loads(out_path.read_text())
             old["market_batch_refreshed_at"] = "2000-01-01T00:00:00+00:00"
+            old["market_batch_attempted_at"] = "2000-01-01T00:00:00+00:00"
             out_path.write_text(json.dumps(old))
         requested.clear()
         m.main()
@@ -1606,16 +1607,19 @@ def test_fundamentals_main_keeps_cik_http_status_without_secrets(tmp_path, monke
     monkeypatch.setattr(m, "OUT", out_path)
     monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
     calls = []
-    def denied(request, **kwargs):
+    def denied(request, timeout):
         calls.append(request.full_url)
         code = 401 if request.host == "r.jina.ai" else 403
         raise m.urllib.error.HTTPError(request.full_url, code, "SECRET", {}, None)
-    monkeypatch.setattr(m.urllib.request, "urlopen", denied)
+    monkeypatch.setenv("SEC_USER_AGENT", "Observer Fixture contact@example.invalid")
+    monkeypatch.setenv("SEC_TRANSPORT_STATE", str(tmp_path / "sec-budget.sqlite3"))
+    monkeypatch.setattr(m, "_sec_urlopen", denied)
+    monkeypatch.setattr(m.urllib.request, "urlopen", lambda req, **kwargs: denied(req, kwargs["timeout"]))
     monkeypatch.setattr(m.time, "sleep", lambda seconds: None)
     monkeypatch.setattr(m, "frame_evidence_by_cik", lambda batch: ({}, {"errors": [], "batch_index": batch}))
     m.main()
     result = json.loads(out_path.read_text())
-    assert len(calls) == 4  # two SEC maps, one existing proxy fallback, one EFTS query
+    assert len(calls) == 3  # repeated denied SEC host is suppressed; proxy/EFTS unchanged
     assert [e["http_status"] for e in result["mapping_errors"]] == [403, 403, 401]
     assert result["mapping_errors"][-1]["endpoint"] == "JINA_READER"
     assert result["errors"] == [{
@@ -1625,3 +1629,400 @@ def test_fundamentals_main_keeps_cik_http_status_without_secrets(tmp_path, monke
     assert result["status"] == "PARTIAL" and result["strategy_effect"] is False
     assert state_path.read_bytes() == original_state
     assert "SECRET" not in json.dumps(result)
+
+
+import pytest
+
+def _sec_fixture_module(monkeypatch, tmp_path):
+    m = _load_fundamentals_observer()
+    monkeypatch.setenv("SEC_USER_AGENT", "Observer Fixture contact@example.invalid")
+    monkeypatch.setenv("SEC_TRANSPORT_STATE", str(tmp_path / "sec-budget.sqlite3"))
+    monkeypatch.setattr(m, "SEC_REQUEST_INTERVAL", 0)
+    return m
+
+
+def _sec_fixture_response(body, encoding="identity", media="application/json", status=200, length=None):
+    import io
+    from email.message import Message
+    response = io.BytesIO(body)
+    response.status = status
+    response.headers = Message()
+    response.headers["Content-Type"] = media
+    response.headers["Content-Encoding"] = encoding
+    if length is not None:
+        response.headers["Content-Length"] = str(length)
+    return response
+
+
+@pytest.mark.parametrize("encoding", ["identity", "gzip", "deflate", "deflate-raw"])
+def test_sec_contact_and_compressed_json_roundtrip(monkeypatch, tmp_path, encoding):
+    import gzip, zlib
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    expected = {"data": [{"cik": 123, "val": 42, "end": "2026-06-30"}]}
+    plain = json.dumps(expected).encode()
+    if encoding == "gzip": body = gzip.compress(plain)
+    elif encoding == "deflate": body = zlib.compress(plain)
+    elif encoding == "deflate-raw":
+        compressor = zlib.compressobj(wbits=-zlib.MAX_WBITS)
+        body = compressor.compress(plain) + compressor.flush()
+    else: body = plain
+    seen = []
+    def request(req, timeout):
+        seen.append(req)
+        return _sec_fixture_response(body, "deflate" if encoding == "deflate-raw" else encoding)
+    monkeypatch.setattr(m, "_sec_urlopen", request)
+    assert m.get("https://data.sec.gov/api/xbrl/frames/us-gaap/Test/USD/CY2026Q2.json") == expected
+    assert seen[0].get_header("User-agent") == "Observer Fixture contact@example.invalid"
+    assert seen[0].get_header("Accept-encoding") == "gzip, deflate"
+    assert "contact@" not in m.UA  # Other providers never receive the SEC contact.
+
+
+def test_sec_missing_invalid_contact_and_redirect_do_not_send(monkeypatch, tmp_path):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    seen = []
+    monkeypatch.setattr(m, "_sec_urlopen", lambda *args: seen.append(args))
+    monkeypatch.delenv("SEC_USER_AGENT")
+    with pytest.raises(m.SECTransportError, match="SEC_CONTACT_NOT_CONFIGURED"):
+        m.get("https://www.sec.gov/files/company_tickers.json")
+    for value in ("not-a-contact", "Fixture contact@example.invalid\r\nX-Test: injected"):
+        monkeypatch.setenv("SEC_USER_AGENT", value)
+        with pytest.raises(m.SECTransportError, match="SEC_CONTACT_INVALID"):
+            m.get("https://www.sec.gov/files/company_tickers.json")
+    monkeypatch.setenv("SEC_USER_AGENT", "Observer Fixture contact@example.invalid")
+    monkeypatch.setenv("SEC_TRANSPORT_STATE", str(tmp_path / "sec-budget.sqlite3"))
+    for url in ("https://example.invalid/", "http://www.sec.gov/", "https://www.sec.gov.evil.invalid/"):
+        with pytest.raises(m.SECTransportError, match="SEC_URL_NOT_ALLOWED"):
+            m._sec_open(url, "application/json")
+        req = m.urllib.request.Request("https://www.sec.gov/files/company_tickers.json")
+        with pytest.raises(m.SECTransportError, match="SEC_URL_NOT_ALLOWED"):
+            m._SECRedirectHandler().redirect_request(req, None, 302, "", {}, url)
+    assert seen == []
+
+
+def test_sec_compressed_and_json_failures_are_bounded_and_classified(monkeypatch, tmp_path):
+    import gzip
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "SEC_MAX_WIRE_BYTES", 128)
+    monkeypatch.setattr(m, "SEC_MAX_DECODED_BYTES", 256)
+    good = b'{"data":[]}'
+    zipped = gzip.compress(good)
+    cases = [
+        (b"<html>denied</html>", "identity", "text/html", 200, None, "SEC_JSON_CONTENT_TYPE_INVALID"),
+        (b"<html>denied</html>", "identity", "application/json", 200, None, "SEC_JSON_HTML_RESPONSE"),
+        (b"not json", "identity", "application/json", 200, None, "SEC_JSON_INVALID"),
+        (b"[]", "identity", "application/json", 200, None, "SEC_JSON_SCHEMA_INVALID"),
+        (b'{"error":"denied"}', "identity", "application/json", 200, None, "SEC_JSON_SCHEMA_INVALID"),
+        (good, "br", "application/json", 200, None, "SEC_CONTENT_ENCODING_UNSUPPORTED"),
+        (good, "identity", "application/json", 206, None, "SEC_HTTP_STATUS_UNEXPECTED"),
+        (b"x"*129, "identity", "application/json", 200, None, "SEC_WIRE_SIZE_LIMIT"),
+        (good, "identity", "application/json", 200, 129, "SEC_WIRE_SIZE_LIMIT"),
+        (good, "identity", "application/json", 200, 30, "SEC_WIRE_LENGTH_MISMATCH"),
+        (gzip.compress(b"x"*4096), "gzip", "application/json", 200, None, "SEC_DECODED_SIZE_LIMIT"),
+        (zipped[:-2], "gzip", "application/json", 200, None, "SEC_COMPRESSED_STREAM_INVALID"),
+        (zipped+b"trailing", "gzip", "application/json", 200, None, "SEC_COMPRESSED_STREAM_INVALID"),
+    ]
+    for body, encoding, media, status, length, expected in cases:
+        monkeypatch.setattr(m, "_sec_urlopen", lambda req, timeout: _sec_fixture_response(body, encoding, media, status, length))
+        with pytest.raises(m.SECTransportError) as caught:
+            m.get("https://data.sec.gov/api/xbrl/frames/us-gaap/Test/USD/CY2026Q2.json")
+        assert m.transport_error_details(caught.value) == {"type": "SECTransportError", "code": expected}
+
+
+def test_sec_request_pacing_and_cached_host_denial(monkeypatch, tmp_path):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    clock = [0.0]
+    waits = []
+    monkeypatch.setattr(m, "SEC_REQUEST_INTERVAL", 0.2)
+    monkeypatch.setattr(m.time, "time", lambda: clock[0])
+    def sleep(seconds):
+        waits.append(seconds)
+        clock[0] += seconds
+    monkeypatch.setattr(m.time, "sleep", sleep)
+    for _ in range(3): m._sec_start("https://www.sec.gov/files/company_tickers.json")
+    assert waits == pytest.approx([0.2, 0.2])
+    calls = []
+    def denied(req, timeout):
+        calls.append(req.full_url)
+        raise m.urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+    monkeypatch.setattr(m, "_sec_urlopen", denied)
+    for _ in range(2):
+        with pytest.raises(m.urllib.error.HTTPError) as caught:
+            m.get("https://efts.sec.gov/LATEST/search-index?q=TEST")
+    assert len(calls) == 1
+    assert m.transport_error_details(caught.value)["request_sent"] is False
+
+
+@pytest.mark.parametrize("payload", [None, {"data": [None]},
+    {"data": [{"cik": 123, "val": 9, "end": "2026-06-30"}, None]}, {"data": []}])
+def test_sec_failed_refresh_preserves_evidence_age_and_attempt_cooldown(tmp_path, monkeypatch, payload):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    state = tmp_path / "portfolio-v1.json"
+    out = tmp_path / "fundamentals-observer-v1.json"
+    state.write_text(json.dumps({"positions": {"TEST": {}}}))
+    state_before = state.read_bytes()
+    stamp = "2000-01-01T00:00:00+00:00"
+    prior = {"cash": {"values": [{"end": "1999-12-31", "val": 123}]}}
+    out.write_text(json.dumps({
+        "market_batch_schema_version": m.MARKET_BATCH_SCHEMA_VERSION,
+        "market_batch_refreshed_at": stamp, "frames_refreshed_at": stamp,
+        "frames_transport": {"batch_index": 0},
+        "companies": {"TEST": {"financial_evidence": prior, "updated_at": stamp,
+                                  "gap_refresh_at": stamp, "source_evidence_at": stamp}},
+    }))
+    monkeypatch.setattr(m, "STATE", state)
+    monkeypatch.setattr(m, "OUT", out)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    monkeypatch.setattr(m, "ticker_map", lambda: ({"TEST": {"cik_str": 123}}, []))
+    calls = []
+    def invalid(*args):
+        calls.append(args)
+        raise m.SECTransportError("SEC_JSON_HTML_RESPONSE")
+    monkeypatch.setattr(m, "frame_json", invalid if payload is None else lambda *args: (payload, "FIXTURE"))
+    monkeypatch.setattr(m, "sec_companyfacts", invalid)
+    monkeypatch.setattr(m, "sec_submission", invalid)
+    m.main()
+    result = json.loads(out.read_text())
+    assert result["market_batch_refreshed_at"] == stamp
+    assert result["frames_refreshed_at"] == stamp
+    assert result["market_batch_attempted_at"] != stamp
+    assert result["frames_transport"]["batch_index"] == 1
+    assert result["frames_transport"]["successful_requests"] == 0
+    assert result["frames_transport"]["status"] == "PARTIAL"
+    assert result["companies"]["TEST"]["financial_evidence"]["cash"] == prior["cash"]
+    assert result["status"] == "PARTIAL"
+    assert result["refreshed_this_run"] == 0
+    for field in ("updated_at", "gap_refresh_at", "source_evidence_at"):
+        assert result["companies"]["TEST"][field] == stamp
+    assert result["companies"]["TEST"]["processed_at"] != stamp
+    assert state.read_bytes() == state_before
+    saved = out.read_bytes()
+    calls.clear()
+    m.main()
+    assert calls == [] and out.read_bytes() == saved
+
+
+def test_sec_contact_is_excluded_from_preflight_environment():
+    from research.stock_shadow.server.runner import test_environment
+    env = {"SEC_USER_AGENT": "Observer Fixture contact@example.invalid",
+           "SEC_TRANSPORT_STATE": "/fixture/stock-budget.sqlite3", "PATH": "/fixture"}
+    assert test_environment(env) == {"PATH": "/fixture"}
+
+
+@pytest.mark.parametrize("rows", [[None], [{"cik": 123, "val": 1, "end": "2026-06-30"}, None],
+    [{"cik": True, "val": 1, "end": "2026-06-30"}],
+    [{"cik": 123, "val": float("nan"), "end": "2026-06-30"}],
+    [{"cik": 123, "val": 1, "end": "2026-02-30"}], []])
+def test_sec_frame_rows_are_atomic_and_empty_is_not_refresh(monkeypatch, rows):
+    m = _load_fundamentals_observer()
+    monkeypatch.setattr(m, "frame_json", lambda *args: ({"data": rows}, "FIXTURE"))
+    evidence, status = m.frame_evidence_by_cik()
+    assert evidence == {} and status["successful_requests"] == 0
+    assert status["status"] == "PARTIAL"
+    if rows:
+        assert len(status["errors"]) == 12
+        assert all(e["code"] == "SEC_FRAME_ROW_INVALID" for e in status["errors"])
+    else:
+        assert status["errors"] == [] and status["empty_requests"] == 12
+
+
+def test_sec_valid_frame_rows_are_counted_after_validation(monkeypatch):
+    m = _load_fundamentals_observer()
+    monkeypatch.setattr(m, "frame_json", lambda *args: (
+        {"data": [{"cik": 123, "val": 42, "end": "2026-06-30"}]}, "FIXTURE"))
+    evidence, status = m.frame_evidence_by_cik()
+    assert 123 in evidence and status["successful_requests"] == 12
+    assert status["status"] == "OK" and not status["errors"]
+
+
+@pytest.mark.parametrize("failure", ["frames", "mapping", "empty"])
+def test_sec_transport_failure_keeps_complete_cache_partial(tmp_path, monkeypatch, failure):
+    m = _load_fundamentals_observer()
+    state = tmp_path / "portfolio.json"
+    out = tmp_path / "observer.json"
+    state.write_text(json.dumps({"positions": {"TEST": {}}}))
+    stamp = "2000-01-01T00:00:00+00:00"
+    prior = {field: {"values": [{"end": "1999-12-31", "val": 1}]}
+             for field in ("revenue", "net_income", "operating_cash_flow", "cash", "total_debt")}
+    out.write_text(json.dumps({"market_batch_schema_version": m.MARKET_BATCH_SCHEMA_VERSION,
+        "market_batch_refreshed_at": stamp, "frames_refreshed_at": stamp,
+        "companies": {"TEST": {"updated_at": stamp, "financial_evidence": prior,
+            "risk_evidence": {"semantic_review_status": "TEXT_VERIFIED"}}}}))
+    monkeypatch.setattr(m, "STATE", state)
+    monkeypatch.setattr(m, "OUT", out)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    monkeypatch.setattr(m, "ticker_map", lambda: ({"TEST": {"cik_str": 123}},
+        [{"type": "SECTransportError"}] if failure == "mapping" else []))
+    monkeypatch.setattr(m, "frame_evidence_by_cik", lambda *args: ({},
+        {"status": "PARTIAL", "errors": [{"code": "SEC_FRAME_ROW_INVALID"}]}
+        if failure == "frames" else {"status": "PARTIAL", "empty_requests": 12, "errors": []}
+        if failure == "empty" else {"status": "OK", "errors": []}))
+    monkeypatch.setattr(m, "sec_submission", lambda *args: ({"filings": {"recent": {}}}, "FIXTURE"))
+    monkeypatch.setattr(m, "sec_companyfacts", lambda *args: pytest.fail("complete cache queried facts"))
+    m.main()
+    result = json.loads(out.read_text())
+    assert result["evidence_complete"] == 1 and result["errors"] == []
+    assert result["status"] == "PARTIAL" and result["refreshed_this_run"] == 0
+    assert result["companies"]["TEST"]["updated_at"] == stamp
+
+
+def test_sec_shared_budget_missing_corrupt_and_persisted_denial(tmp_path, monkeypatch):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "_sec_urlopen", lambda *args: pytest.fail("unexpected network"))
+    monkeypatch.delenv("SEC_TRANSPORT_STATE")
+    with pytest.raises(m.SECTransportError, match="SEC_SHARED_BUDGET_NOT_CONFIGURED"):
+        m.get("https://www.sec.gov/files/company_tickers.json")
+    path = tmp_path / "budget.sqlite3"
+    monkeypatch.setenv("SEC_TRANSPORT_STATE", str(path))
+    path.write_bytes(b"invalid sqlite")
+    with pytest.raises(m.SECTransportError, match="SEC_SHARED_BUDGET_UNAVAILABLE"):
+        m._sec_start("https://www.sec.gov/")
+    path.unlink()
+    clock = [10000.0]
+    monkeypatch.setattr(m.time, "time", lambda: clock[0])
+    m._sec_deny("https://www.sec.gov/")
+    restarted = _load_fundamentals_observer()
+    with pytest.raises(restarted.urllib.error.HTTPError) as denied:
+        restarted._sec_start("https://www.sec.gov/")
+    assert restarted.transport_error_details(denied.value)["request_sent"] is False
+    clock[0] += m.SEC_DENIAL_BACKOFF_SECONDS + 1
+    restarted._sec_start("https://www.sec.gov/")
+
+
+def test_sec_budget_is_shared_by_concurrent_processes_and_restart(tmp_path):
+    import os, subprocess, sys
+    path = tmp_path / "shared.sqlite3"
+    script = """
+import importlib.util, sys, time
+spec=importlib.util.spec_from_file_location("observer","research/stock_shadow/fundamentals_observer.py")
+m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.urllib.request.urlopen=lambda *a,**k: (_ for _ in ()).throw(AssertionError("network forbidden"))
+if sys.argv[1]=="deny":
+    m._sec_deny("https://www.sec.gov/")
+else:
+    try:
+        m._sec_start("https://www.sec.gov/")
+        print(time.time())
+    except m.urllib.error.HTTPError as error:
+        print("CACHED_DENIAL",m.transport_error_details(error)["request_sent"])
+"""
+    env = dict(os.environ, SEC_TRANSPORT_STATE=str(path))
+    processes = [subprocess.Popen([sys.executable, "-c", script, "start"], env=env,
+                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(3)]
+    times = []
+    for process in processes:
+        stdout, stderr = process.communicate(timeout=15)
+        assert process.returncode == 0, stderr
+        times.append(float(stdout.strip()))
+    times.sort()
+    assert all(b-a >= 0.15 for a,b in zip(times,times[1:]))
+    subprocess.run([sys.executable, "-c", script, "deny"], env=env, check=True, timeout=15)
+    result = subprocess.run([sys.executable, "-c", script, "start"], env=env,
+                            capture_output=True, text=True, check=True, timeout=15)
+    assert result.stdout.strip() == "CACHED_DENIAL False"
+
+
+@pytest.mark.parametrize("payload,code", [
+    (b'{"data":[null]}', "SEC_FRAME_ROW_INVALID"),
+    (b'{"error":"blocked","data":[]}', "SEC_JSON_SCHEMA_INVALID"),
+    (b'Error fetching: {"data":[]}', "SEC_JSON_INVALID"),
+    (b'x'*129, "SEC_WIRE_SIZE_LIMIT")])
+def test_sec_proxy_json_uses_same_bounds_and_schema(tmp_path, monkeypatch, payload, code):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "SEC_MAX_WIRE_BYTES", 128)
+    monkeypatch.setattr(m.urllib.request, "urlopen",
+                        lambda *a, **k: _sec_fixture_response(payload, media="text/plain"))
+    with pytest.raises(m.SECTransportError, match=code):
+        m.proxy_json("https://data.sec.gov/api/xbrl/frames/Test.json")
+
+
+@pytest.mark.parametrize("payload,code", [(b'x'*129, "SEC_WIRE_SIZE_LIMIT"),
+    (b'{"error":"blocked"}', "SEC_TEXT_PAYLOAD_INVALID"),
+    (b'Error: access denied', "SEC_TEXT_PAYLOAD_INVALID")])
+def test_sec_filing_fallback_is_bounded_and_rejects_error_payloads(tmp_path, monkeypatch, payload, code):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "SEC_MAX_WIRE_BYTES", 128)
+    def denied(*args):
+        raise m.urllib.error.HTTPError("https://www.sec.gov/", 403, "denied", {}, None)
+    monkeypatch.setattr(m, "_sec_response", denied)
+    monkeypatch.setattr(m.urllib.request, "urlopen",
+                        lambda *a, **k: _sec_fixture_response(payload, media="text/plain"))
+    with pytest.raises(m.SECTransportError, match=code):
+        m.sec_filing_text(123, "fixture", "filing.htm")
+
+
+@pytest.mark.parametrize("payload", [b"", b'{"error":"blocked"}', b'<html><title>Access Denied</title></html>'])
+def test_sec_direct_filing_does_not_verify_error_documents(tmp_path, monkeypatch, payload):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "_sec_response", lambda *a: (payload, "text/html"))
+    with pytest.raises(m.SECTransportError, match="SEC_TEXT_PAYLOAD_INVALID"):
+        m.sec_filing_text(123, "fixture", "filing.htm")
+
+
+@pytest.mark.parametrize("outcome", ["failure", "partial_success", "complete_success"])
+@pytest.mark.parametrize("prior_cache", [False, True])
+def test_sec_gap_budget_rotates_after_attempts_without_refreshing_failed_evidence(
+        tmp_path, monkeypatch, outcome, prior_cache):
+    from datetime import datetime as RealDatetime, timedelta, timezone
+    m = _load_fundamentals_observer()
+    clock = [RealDatetime(2026, 10, 10, 10, tzinfo=timezone.utc)]
+    class Clock(RealDatetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+    monkeypatch.setattr(m, "datetime", Clock)
+    state = tmp_path / "portfolio.json"
+    out = tmp_path / "observer.json"
+    symbols = list("ABCDE")
+    state.write_text(json.dumps({"positions": {s: {} for s in symbols}}))
+    original_state = state.read_bytes()
+    stamp = "2000-01-01T00:00:00+00:00"
+    prior = {"cash": {"values": [{"end": "1999-12-31", "val": 1}]}} if prior_cache else {}
+    companies = {s: {"financial_evidence": prior, "updated_at": stamp,
+                     "source_evidence_at": stamp, "gap_refresh_at": stamp} for s in symbols}
+    # E is newer than the oldest four but has never used a request slot.
+    companies["E"]["updated_at"] = companies["E"]["gap_refresh_at"] = "2000-01-02T00:00:00+00:00"
+    out.write_text(json.dumps({"market_batch_schema_version": m.MARKET_BATCH_SCHEMA_VERSION,
+        "market_batch_refreshed_at": stamp, "frames_refreshed_at": stamp, "companies": companies}))
+    monkeypatch.setattr(m, "STATE", state)
+    monkeypatch.setattr(m, "OUT", out)
+    monkeypatch.delenv("STOCKFIT_API_KEY", raising=False)
+    monkeypatch.setattr(m, "ticker_map", lambda: ({s: {"cik_str": i+1} for i,s in enumerate(symbols)}, []))
+    monkeypatch.setattr(m, "frame_evidence_by_cik", lambda *a: ({},
+        {"status": "PARTIAL", "empty_requests": 12, "successful_requests": 0, "errors": []}))
+    monkeypatch.setattr(m, "sec_submission", lambda *a: ({"filings": {"recent": {}}}, "FIXTURE"))
+    calls = []
+    def facts(cik):
+        calls.append(cik)
+        if outcome == "failure":
+            raise m.SECTransportError("SEC_JSON_INVALID")
+        concepts = ["CashAndCashEquivalentsAtCarryingValue"]
+        if outcome == "complete_success":
+            concepts += ["Revenues", "NetIncomeLoss"]
+        return {"facts": {"us-gaap": {name: {"units": {"USD": [
+            {"end": "2026-06-30", "val": 10, "form": "10-Q", "filed": "2026-08-01"}]}}
+            for name in concepts}}}, "FIXTURE"
+    monkeypatch.setattr(m, "sec_companyfacts", facts)
+    m.main()
+    first = json.loads(out.read_text())
+    assert set(calls) == {1, 2, 3, 4}
+    for s in "ABCD":
+        assert first["companies"][s]["gap_attempted_at"] == clock[0].isoformat()
+        if outcome == "failure" and prior_cache:
+            assert first["companies"][s]["gap_refresh_at"] == stamp
+            assert first["companies"][s]["source_evidence_at"] == stamp
+            assert first["companies"][s]["updated_at"] == stamp
+    assert first["companies"]["E"].get("gap_attempted_at") is None
+    assert first["refreshed_this_run"] == (0 if outcome == "failure" else 4)
+    saved = out.read_bytes()
+    calls.clear()
+    m.main()  # A cache hit consumes no request slot and changes no attempt ordering.
+    assert calls == [] and out.read_bytes() == saved
+    clock[0] += timedelta(hours=7)
+    m.main()
+    second = json.loads(out.read_text())
+    assert 5 in calls and len(calls) <= 4
+    assert second["companies"]["E"]["gap_attempted_at"] == clock[0].isoformat()
+    if outcome == "complete_success":
+        assert calls == [5]  # Complete prior successes no longer consume gap slots.
+    assert second["status"] == "PARTIAL"
+    assert state.read_bytes() == original_state

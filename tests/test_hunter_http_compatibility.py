@@ -1,6 +1,7 @@
 """Real PR88 collector/validator versus the diagnostic-only change; offline fixtures."""
 import contextlib
 import copy
+import datetime as dt
 import hashlib
 import io
 import json
@@ -12,6 +13,7 @@ from unittest.mock import patch
 
 from research import hunter_bybit_worker as current
 from research import hunter_http_evidence as evidence
+from research import hunter_bybit_signal_capture as signal_capture
 import test_hunter_bybit_worker as fixtures
 
 ROOT = pathlib.Path(__file__).resolve().parent / 'fixtures'
@@ -31,6 +33,9 @@ class CompatibilityTests(unittest.TestCase):
             self.addCleanup(guard.stop)
 
     def collect(self, module, mode='partial', old_worker=False, error=None, response_body=None):
+        class FixtureClock(dt.datetime):
+            @classmethod
+            def now(cls,tz=None):return fixtures.NOW
         def fetch(path, body=None):
             if path == '/bybit/tickers':
                 return fixtures.partial_fetch({})(path, body)
@@ -42,7 +47,10 @@ class CompatibilityTests(unittest.TestCase):
                 response['result'].pop('failure_diagnostics', None)
             return response
         log = io.StringIO()
-        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(log), patch.object(
+        # The retained PR88 collector calls today's shared signal producer. Its
+        # new provenance timestamp must use this fixture's clock, not wall time;
+        # keep the exact full-snapshot compatibility comparison below intact.
+        with patch.object(signal_capture.dt,'datetime',FixtureClock), tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(log), patch.object(
                 module, 'DEFAULT', pathlib.Path(directory) / 'snapshot.json'):
             module.collect({'BTC'}, fixtures.NOW, fetch, lambda: (['BTC', 'FLUID'], {'cache_hit': True}))
             snapshot = json.loads(module.DEFAULT.read_text())

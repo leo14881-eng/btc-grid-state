@@ -300,6 +300,11 @@ def build(scan,market,registry,now):
         if len(coin.get("venues") or [])>1:
             blockers.append("CROSS_VENUE_CONTRACT_MAPPING_UNVERIFIED")
         assets[sym]={"asset_class":typ,"identity_status":status,
+                     "contract_evidence":{
+                         "contract_verified":fact.get("contract_verified") is True,
+                         "official":dict(fact.get("identity") or {}),
+                         "independent":{k:(cg.get(sym) or {}).get(k) for k in
+                             ("id","platforms","asset_platform_id","contract_as_of_utc","source_url")}},
                      "coingecko_symbol_only_id":(cg.get(sym) or {}).get("id"),
                      "blockers":blockers,
                      "capital_identity_pass":status in ("THIRD_PARTY_CORROBORATED",
