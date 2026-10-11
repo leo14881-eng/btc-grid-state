@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stock Shadow fundamental observer. Observation-only; never changes BUY/ADD/SELL."""
 # FINAL_ACCEPTANCE_20261004
-import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading, re, zlib
+import json, urllib.request, urllib.error, urllib.parse, io, zipfile, tempfile, shutil, time, math, os, csv, threading, re, zlib, sqlite3
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +14,7 @@ SEC_HOSTS=frozenset(("www.sec.gov", "data.sec.gov", "efts.sec.gov"))
 SEC_MAX_WIRE_BYTES=8*1024*1024
 SEC_MAX_DECODED_BYTES=32*1024*1024
 SEC_REQUEST_INTERVAL=0.2
-_sec_request_lock=threading.Lock()
-_sec_next_start=0.0
-_sec_denied_hosts=set()
+SEC_DENIAL_BACKOFF_SECONDS=3600
 
 class SECTransportError(ValueError):
     def __init__(self, code):
@@ -38,17 +37,51 @@ def _sec_host(url):
         raise SECTransportError("SEC_URL_NOT_ALLOWED")
     return parsed.hostname
 
+@contextmanager
+def _sec_budget():
+    """One local-filesystem budget across stock processes, checkouts and restarts."""
+    value=os.getenv("SEC_TRANSPORT_STATE","")
+    if not value:
+        raise SECTransportError("SEC_SHARED_BUDGET_NOT_CONFIGURED")
+    path=Path(value)
+    if not path.is_absolute() or not path.parent.is_dir() or path.is_symlink():
+        raise SECTransportError("SEC_SHARED_BUDGET_PATH_INVALID")
+    db=None
+    try:
+        db=sqlite3.connect(str(path),timeout=5)
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("CREATE TABLE IF NOT EXISTS budget (key TEXT PRIMARY KEY, value REAL NOT NULL)")
+        yield db
+        db.commit()
+    except (sqlite3.Error,OSError):
+        raise SECTransportError("SEC_SHARED_BUDGET_UNAVAILABLE") from None
+    finally:
+        if db is not None: db.close()
+
 def _sec_start(url):
-    global _sec_next_start
     host=_sec_host(url)
-    with _sec_request_lock:
-        if host in _sec_denied_hosts:
+    with _sec_budget() as db:
+        current=time.time()
+        denied=db.execute("SELECT value FROM budget WHERE key=?",("denied:"+host,)).fetchone()
+        if denied and (not math.isfinite(denied[0]) or denied[0]<0):
+            raise SECTransportError("SEC_SHARED_BUDGET_INVALID")
+        if denied and denied[0]>current:
             error=urllib.error.HTTPError(url,403,"SEC_ACCESS_DENIED_CACHED",{},None)
             error.sec_cached_denial=True
             raise error
-        wait=max(0.0,_sec_next_start-time.monotonic())
+        row=db.execute("SELECT value FROM budget WHERE key='next_start'").fetchone()
+        next_start=row[0] if row else current
+        if not math.isfinite(next_start) or next_start>current+60:
+            raise SECTransportError("SEC_SHARED_BUDGET_CLOCK_INVALID")
+        wait=max(0.0,next_start-current)
         if wait: time.sleep(wait)
-        _sec_next_start=time.monotonic()+SEC_REQUEST_INTERVAL
+        db.execute("INSERT OR REPLACE INTO budget VALUES ('next_start',?)",
+                   (max(time.time(),next_start)+SEC_REQUEST_INTERVAL,))
+
+def _sec_deny(url):
+    with _sec_budget() as db:
+        db.execute("INSERT OR REPLACE INTO budget VALUES (?,?)",
+                   ("denied:"+_sec_host(url),time.time()+SEC_DENIAL_BACKOFF_SECONDS))
 
 class _SECRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -68,8 +101,7 @@ def _sec_open(url, accept, timeout=25, encoding="gzip, deflate"):
         return _sec_urlopen(req,timeout)
     except urllib.error.HTTPError as error:
         if error.code==403:
-            with _sec_request_lock:
-                _sec_denied_hosts.add(_sec_host(url))
+            _sec_deny(error.url or url)
         raise
 
 def _sec_decode(payload, encoding):
@@ -99,24 +131,28 @@ def _sec_decode(payload, encoding):
         raise SECTransportError("SEC_DECODED_SIZE_LIMIT")
     return decoded
 
+def _bounded_response(response):
+    if response.status!=200:
+        raise SECTransportError("SEC_HTTP_STATUS_UNEXPECTED")
+    size=response.headers.get("Content-Length")
+    if size is not None and (not size.isdigit() or int(size)>SEC_MAX_WIRE_BYTES):
+        raise SECTransportError("SEC_WIRE_SIZE_LIMIT")
+    chunks=[]; total=0
+    while True:
+        chunk=response.read(min(65536,SEC_MAX_WIRE_BYTES-total+1))
+        if not chunk: break
+        total+=len(chunk)
+        if total>SEC_MAX_WIRE_BYTES: raise SECTransportError("SEC_WIRE_SIZE_LIMIT")
+        chunks.append(chunk)
+    if size is not None and total!=int(size):
+        raise SECTransportError("SEC_WIRE_LENGTH_MISMATCH")
+    media=response.headers.get("Content-Type","").split(";",1)[0].strip().lower()
+    return _sec_decode(b"".join(chunks),response.headers.get("Content-Encoding","")),media
+
 def _sec_response(url, accept, timeout=25):
     with _sec_open(url,accept,timeout) as response:
-        if response.status!=200:
-            raise SECTransportError("SEC_HTTP_STATUS_UNEXPECTED")
-        size=response.headers.get("Content-Length")
-        if size is not None and (not size.isdigit() or int(size)>SEC_MAX_WIRE_BYTES):
-            raise SECTransportError("SEC_WIRE_SIZE_LIMIT")
-        chunks=[]; total=0
-        while True:
-            chunk=response.read(min(65536,SEC_MAX_WIRE_BYTES-total+1))
-            if not chunk: break
-            total+=len(chunk)
-            if total>SEC_MAX_WIRE_BYTES: raise SECTransportError("SEC_WIRE_SIZE_LIMIT")
-            chunks.append(chunk)
-        if size is not None and total!=int(size):
-            raise SECTransportError("SEC_WIRE_LENGTH_MISMATCH")
-        media=response.headers.get("Content-Type","").split(";",1)[0].strip().lower()
-        return _sec_decode(b"".join(chunks),response.headers.get("Content-Encoding","")),media
+        return _bounded_response(response)
+
 BULK_COMPANYFACTS="https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip"
 BULK_SUBMISSIONS="https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
 FALLBACK_MAX_REQUESTS=40
@@ -141,9 +177,15 @@ def get(url):
         raise SECTransportError("SEC_JSON_INVALID") from None
     if not isinstance(data,dict):
         raise SECTransportError("SEC_JSON_SCHEMA_INVALID")
+    return _validate_sec_json(data,url)
+
+def _validate_sec_json(data,url):
+    if not isinstance(data,dict) or any(key in data for key in ("error","errors","message")):
+        raise SECTransportError("SEC_JSON_SCHEMA_INVALID")
     path=urllib.parse.urlsplit(url).path
     valid=True
-    if "/frames/" in path: valid=isinstance(data.get("data"),list)
+    if "/frames/" in path:
+        _validated_frame_rows(data)
     elif "/companyfacts/" in path: valid=isinstance(data.get("facts"),dict)
     elif "/submissions/" in path: valid=isinstance(data.get("filings"),dict)
     elif "search-index" in path: valid=isinstance(data.get("hits"),dict) and isinstance(data["hits"].get("hits"),list)
@@ -190,7 +232,7 @@ _proxy_rate_lock=threading.Lock()
 _proxy_next_start=0.0
 
 def proxy_json(url):
-    # Global pacing controls request START rate while allowing network I/O to overlap.
+    # Process-local fallback pacing controls request START rate while allowing network I/O to overlap.
     global _proxy_next_start
     with _proxy_rate_lock:
         wait=max(0.0,_proxy_next_start-time.monotonic())
@@ -198,13 +240,20 @@ def proxy_json(url):
         _proxy_next_start=time.monotonic()+PROXY_START_INTERVAL_SECONDS
     proxy="https://r.jina.ai/"+url
     req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-fundamental-observer/1.0","Accept":"text/plain"})
-    with urllib.request.urlopen(req,timeout=35) as r: raw=r.read().decode("utf-8","replace").strip()
+    with urllib.request.urlopen(req,timeout=35) as r: body,media=_bounded_response(r)
+    if media not in ("text/plain","text/markdown","application/json"):
+        raise SECTransportError("SEC_JSON_CONTENT_TYPE_INVALID")
+    try: raw=body.decode("utf-8-sig").strip()
+    except UnicodeDecodeError: raise SECTransportError("SEC_JSON_INVALID") from None
+    if raw.startswith("<"): raise SECTransportError("SEC_JSON_HTML_RESPONSE")
     # Read-only transport fallback; payload remains SEC JSON.
     if raw.startswith("Markdown Content:"): raw=raw.split("Markdown Content:",1)[1].strip()
-    # Proxy may wrap JSON in prose/fences.
-    a=raw.find("{"); b=raw.rfind("}")
-    if a>=0 and b>a: raw=raw[a:b+1]
-    return json.loads(raw)
+    # Accept only the known wrapper and a complete JSON fence, never arbitrary error prose.
+    if raw.startswith("```json\n") and raw.endswith("\n```"): raw=raw[8:-4].strip()
+    elif raw.startswith("```\n") and raw.endswith("\n```"): raw=raw[4:-4].strip()
+    try: data=json.loads(raw)
+    except json.JSONDecodeError: raise SECTransportError("SEC_JSON_INVALID") from None
+    return _validate_sec_json(data,url)
 
 
 def download_bulk_zip(url):
@@ -257,6 +306,10 @@ def stockfit_get(path, api_key):
     req=urllib.request.Request(url,headers={"User-Agent":UA,"Accept":"application/json","Authorization":"Bearer "+api_key})
     with urllib.request.urlopen(req,timeout=20) as r:
         return json.load(r),{k.lower():v for k,v in r.headers.items()}
+
+def has_financial_values(ev):
+    return bool(ev) and any(((ev.get(k) or {}).get("values")) for k in
+                          ("revenue","net_income","operating_cash_flow","free_cash_flow","cash","total_debt","shares"))
 
 def missing_financial_fields(ev):
     ev=ev or {}
@@ -371,6 +424,22 @@ def frame_json(taxonomy, concept, unit, period):
             with _sec_direct_lock: _sec_direct_blocked=True
     return proxy_json(url),"SEC_FRAMES_VIA_READONLY_PROXY"
 
+def _validated_frame_rows(data):
+    if not isinstance(data,dict) or not isinstance(data.get("data"),list):
+        raise SECTransportError("SEC_JSON_SCHEMA_INVALID")
+    rows=data["data"]
+    for row in rows:
+        if (not isinstance(row,dict) or type(row.get("cik")) is not int or row["cik"]<=0
+                or type(row.get("val")) not in (int,float) or not math.isfinite(row["val"])
+                or not isinstance(row.get("end"),str)):
+            raise SECTransportError("SEC_FRAME_ROW_INVALID")
+        try:
+            if datetime.strptime(row["end"],"%Y-%m-%d").strftime("%Y-%m-%d")!=row["end"]:
+                raise ValueError()
+        except ValueError:
+            raise SECTransportError("SEC_FRAME_ROW_INVALID") from None
+    return rows
+
 def frame_evidence_by_cik(requested_batch_index=0):
     # Market-wide SEC XBRL Frames: one request returns one concept for all reporting entities.
     # Two completed quarters are enough for direction/trend evidence without per-company HTTP loops.
@@ -400,7 +469,7 @@ def frame_evidence_by_cik(requested_batch_index=0):
       ("cash","ifrs-full","CashAndCashEquivalents","USD",["CY2024I","CY2025I"]),
       ("total_debt","ifrs-full","Borrowings","USD",["CY2024I","CY2025I"]),
     ]
-    raw={}; transport=set(); request_errors=[]; successful_requests=0
+    raw={}; transport=set(); request_errors=[]; successful_requests=0; empty_requests=0
     all_tasks=[(key,tax,concept,unit,p) for key,tax,concept,unit,ps in specs for p in ps]
     # Each request is market-wide, but SEC still rate-limits concept/period endpoints.
     # Rotate a fixed request budget and merge persisted evidence across runs.
@@ -428,12 +497,17 @@ def frame_evidence_by_cik(requested_batch_index=0):
         futures={ex.submit(fetch_one,t): t for t in tasks}
         for fut in as_completed(futures):
             try:
-                (key,tax,concept,unit,p),d,t=fut.result(); transport.add(t); successful_requests+=1
-                for row in d.get("data") or []:
-                    cik=int(row.get("cik") or 0)
-                    if not cik: continue
+                (key,tax,concept,unit,p),d,t=fut.result()
+                rows=_validated_frame_rows(d)  # Validate the entire response before merging any row.
+                transport.add(t)
+                if not rows:
+                    empty_requests+=1
+                    continue
+                for row in rows:
+                    cik=row["cik"]
                     raw.setdefault(cik,{}).setdefault(key,[]).append(
                         {"end":row.get("end"),"val":row.get("val"),"form":row.get("form"),"filed":row.get("filed"),"period":p})
+                successful_requests+=1
             except Exception as e:
                 request_errors.append({**transport_error_details(e),
                     "task": dict(zip(("field", "taxonomy", "concept", "unit", "period"), futures[fut]))})
@@ -466,7 +540,8 @@ def frame_evidence_by_cik(requested_batch_index=0):
             dilution=(float(sh[-1]["val"])/float(sh[-2]["val"])-1)*100
         ev["share_dilution_pct_latest"]=round(dilution,4) if dilution is not None else None
         out[cik]=ev
-    return out,{"successful_requests":successful_requests,"requests":len(tasks),"request_budget":FRAME_REQUEST_BUDGET,"total_tasks":len(all_tasks),"batch_index":batch_index,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
+    return out,{"status":"PARTIAL" if request_errors or empty_requests else "OK",
+                "empty_requests":empty_requests,"successful_requests":successful_requests,"requests":len(tasks),"request_budget":FRAME_REQUEST_BUDGET,"total_tasks":len(all_tasks),"batch_index":batch_index,"transports":sorted(transport),"errors":request_errors,"matched_ciks":len(out)}
 
 def merge_financial_evidence(prior,current):
     """Accumulate bounded frame batches without erasing evidence learned in prior runs."""
@@ -554,7 +629,14 @@ def sec_filing_text(cik, accession, primary_document):
         if wait: time.sleep(wait)
         _proxy_next_start=time.monotonic()+1.0
     req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-filing-observer/1.0","Accept":"text/plain"})
-    with urllib.request.urlopen(req,timeout=35) as r: return r.read().decode("utf-8","replace"),"SEC_VIA_READONLY_PROXY"
+    with urllib.request.urlopen(req,timeout=35) as r: body,media=_bounded_response(r)
+    if media not in ("text/plain","text/markdown"):
+        raise SECTransportError("SEC_TEXT_CONTENT_TYPE_INVALID")
+    text=body.decode("utf-8","replace")
+    if (not text.strip() or text.lstrip().startswith(("<","{","["))
+            or any(marker in text[:500].lower() for marker in ("access denied","error fetching","forbidden","error:"))):
+        raise SECTransportError("SEC_TEXT_PAYLOAD_INVALID")
+    return text,"SEC_VIA_READONLY_PROXY"
 
 def semantic_risk_evidence(reviewed_docs):
     """Tri-state text evidence. VERIFIED_ABSENT means absent from the explicitly reviewed document scope only."""
@@ -824,17 +906,18 @@ def main():
             sub=sub_pair[0] if sub_pair else None; transport=sub_pair[1] if sub_pair else None
             facts=facts_pair[0] if facts_pair else None; facts_transport=facts_pair[1] if facts_pair else None
             frame_ev=frames_by_cik.get(cik); fmp_ev=fmp_by_symbol.get(s); stockfit_ev=stockfit_by_symbol.get(s)
-            prior_ev=(companies.get(s) or {}).get("financial_evidence")
+            previous=companies.get(s) or {}
+            prior_ev=previous.get("financial_evidence")
             # Filing metadata is optional here. Never turn frame-wide financial evidence
             # back into hundreds of per-company submissions requests.
             if facts is None and not prior_ev and not frame_ev and not fmp_ev:
                 prev=companies.get(s) or {}
                 if prev.get("financial_evidence"):
-                    prev["status"]="OBSERVED_STALE_FALLBACK"; prev["updated_at"]=now(); prev["strategy_effect"]=False
+                    prev["status"]="OBSERVED_STALE_FALLBACK"; prev["processed_at"]=now(); prev["strategy_effect"]=False
                     companies[s]=prev
                 else:
                     companies[s]={"symbol":s,"cik":cik,"company":meta.get("title"),"status":"SEC_REFRESH_PENDING",
-                        "transport":transport,"companyfacts_transport":facts_transport,"updated_at":now(),
+                        "transport":transport,"companyfacts_transport":facts_transport,"updated_at":None,"processed_at":now(),
                         "strategy_effect":False,"note":"SEC per-company refresh pending; prior evidence unavailable."}
                 continue
             recent=((sub or {}).get("filings") or {}).get("recent") or {}
@@ -864,14 +947,21 @@ def main():
                     semantic_refresh_at=now()
                 else:
                     risk_flags=prior_risk
+            new_financial=any(has_financial_values(x) for x in (sec_ev,frame_ev,fmp_ev,stockfit_ev))
+            new_semantic=semantic_refresh_at!=previous.get("semantic_refresh_at")
+            acquired=new_financial or new_semantic
             companies[s]={"symbol":s,"cik":cik,"company":(sub or {}).get("name") or meta.get("title"),
-                "status":"OBSERVED","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("FMP_BULK+SEC_XBRL_FRAMES" if fmp_ev and frame_ev else ("FMP_BULK" if fmp_ev else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")))),
+                "status":"OBSERVED" if acquired else "OBSERVED_STALE_FALLBACK","transport":transport,"companyfacts_transport":facts_transport,"fundamentals_provider":("SEC_GAP_BACKFILL" if facts is not None else ("FMP_BULK+SEC_XBRL_FRAMES" if fmp_ev and frame_ev else ("FMP_BULK" if fmp_ev else ("SEC_XBRL_FRAMES_MARKET_BATCH" if frame_ev else "CACHED_EVIDENCE")))),
                 "latest_material_filings":latest,"financial_evidence":evidence,"risk_evidence":risk_flags,
-                "recent_8k_count":len(risk_forms),"updated_at":now(),"gap_refresh_at":(now() if s in refresh_set else (companies.get(s) or {}).get("gap_refresh_at")),"semantic_refresh_at":semantic_refresh_at,
+                "recent_8k_count":len(risk_forms),"processed_at":now(),
+                "updated_at":now() if acquired else previous.get("updated_at"),
+                "source_evidence_at":now() if new_financial else previous.get("source_evidence_at",previous.get("updated_at")),
+                "gap_attempted_at":now() if s in refresh_set else previous.get("gap_attempted_at"),
+                "gap_refresh_at":(now() if has_financial_values(sec_ev) else previous.get("gap_refresh_at")),"semantic_refresh_at":semantic_refresh_at,
                 "stockfit_refresh_at":(now() if stockfit_ev else (companies.get(s) or {}).get("stockfit_refresh_at")),
                 "fundamental_state":classify_evidence(evidence,risk_flags),"strategy_effect":False,
                 "note":"Observation-only fundamentals evidence; no automatic BUY/ADD/SELL effect."}
-            refreshed+=1
+            refreshed+=int(acquired)
         except Exception as e:
             errors.append({"symbol":s,"stage":"EVIDENCE","type":type(e).__name__,"message":str(e)[:120]})
     complete=sum(1 for s in symbols if evidence_sufficient((companies.get(s) or {}).get("financial_evidence") or {}))
@@ -891,7 +981,8 @@ def main():
          "primary_transport":sec_transport,"stockfit_transport":stockfit_status,"fmp_transport":fmp_status,"bulk_transport":bulk,"frames_transport":frames_status,"fallback_requests":fallback_requests,"fallback_request_cap":FALLBACK_MAX_REQUESTS,
          "semantic_verified":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED"),
          "semantic_pending":sum(1 for s in symbols if ((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")!="TEXT_VERIFIED"),
-         "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and complete==len(symbols) and all(((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED" for s in symbols)) else "PARTIAL","companies":companies}
+         "errors":errors,"mapping_errors":map_errors,"status":"OK" if (not errors and not map_errors and not frames_status.get("errors")
+             and frames_status.get("status") not in ("PARTIAL","FAILED") and complete==len(symbols) and all(((companies.get(s) or {}).get("risk_evidence") or {}).get("semantic_review_status")=="TEXT_VERIFIED" for s in symbols)) else "PARTIAL","companies":companies}
     OUT.parent.mkdir(parents=True,exist_ok=True); OUT.write_text(json.dumps(out,indent=2,sort_keys=True)+"\n")
     print(json.dumps({k:v for k,v in out.items() if k!="companies"}))
 
