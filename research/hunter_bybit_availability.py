@@ -141,12 +141,27 @@ def alpha():
 
 def main():
     now=dt.datetime.now(dt.timezone.utc).isoformat()
+    try:
+        from research.hunter_bybit_public import selected
+    except ModuleNotFoundError as error:
+        if error.name!='research': raise
+        from hunter_bybit_public import selected
+    direct=selected()=='SERVER_DIRECT'
     out={"schema":"hunter_bybit_availability_v1","as_of_utc":now,"source":"BYBIT_OFFICIAL_V5","spot":{"status":"UNKNOWN","symbols":[],"error":None},"alpha":{"status":"UNKNOWN","symbols":[],"error":None}}
     # GitHub Hosted Runner US egress is known to receive CloudFront HTTP 403 from
     # api.bybit.com. Avoid a guaranteed failing direct request: Worker is primary
     # transport, with official Bybit V5 as its upstream.
     try:
-        xs,cache_meta=spot_proxy_universe()
+        if direct:
+            try:
+                from research.hunter_bybit_direct import Adapter
+            except ModuleNotFoundError as error:
+                if error.name!='research': raise
+                from hunter_bybit_direct import Adapter
+            adapter=Adapter(dt.datetime.fromisoformat(now))
+            xs,cache_meta=adapter.listings()
+        else:
+            xs,cache_meta=spot_proxy_universe()
         out["spot"].update({"status":"OK_FULL_UNIVERSE_BYBIT_VIA_CLOUDFLARE","business_status":"TRADING",
                             "symbols":xs,"count":len(xs),"symbol_failures":{},"scope":"FULL_USDT_SPOT_UNIVERSE",
                             "transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO",
@@ -155,6 +170,13 @@ def main():
         proxy_error=type(e).__name__+":"+str(e)[:160]
         out["spot"].update({"status":"UNKNOWN","business_status":"UNKNOWN","error":proxy_error,"error_reason":classify_error(e),"transport":"CLOUDFLARE_WORKER_PRIMARY_FOR_GITHUB","upstream":"BYBIT_OFFICIAL_V5_INSTRUMENTS_INFO"})
         out["spot"].update({"scope":"FULL_USDT_SPOT_UNIVERSE","complete":False,"network_requests":1})
+    if direct:
+        out['spot'].update(transport='SERVER_DIRECT_PUBLIC_SPOT',endpoint_template='/v5/market/instruments-info',
+                           source='OFFICIAL_BYBIT_V5_SPOT_DIRECT')
+        out['spot'].pop('proxy',None)
+        if out['spot'].get('status')=='OK_FULL_UNIVERSE_BYBIT_VIA_CLOUDFLARE':
+            out['spot']['status']='OK_FULL_UNIVERSE_BYBIT_DIRECT'
+            out['spot']['public_receipt']=adapter.receipts['listings']
     try:
         xs,why=alpha()
         if xs is None:out["alpha"]["error"]=why
