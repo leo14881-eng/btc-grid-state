@@ -36,11 +36,11 @@ jobs:
         run: python -m pip install -r deploy/hunter-fast-watch-requirements.txt
       - name: Verify exact integration ancestry and immutable history
         run: |
-          git merge-base --is-ancestor 30aad45082e8dd9e62405ab4fb37e5fd65abe3d4 HEAD
-          git merge-base --is-ancestor 16be9faaffd0163398e7e3c9bc32b92694d30859 HEAD
+          git merge-base --is-ancestor 668e9fa3ee9d64ee04d8d3d2849a5d2a3366ac1d HEAD
+          git merge-base --is-ancestor b65c33a2cf3a398883cd6be268f0af034fe7a070 HEAD
           git merge-base --is-ancestor 67f661287569b91cf7a01d9d5798af350c1f5276 HEAD
-          git diff --exit-code 30aad45082e8dd9e62405ab4fb37e5fd65abe3d4 HEAD -- research/results
-          git diff --exit-code 16be9faaffd0163398e7e3c9bc32b92694d30859 HEAD -- research/hunter_reentry.py research/hunter_signal_provenance.py research/hunter_strategy_release.py research/hunter_early_signals.py research/hunter_identity_audit.py research/hunter_tactical_capital_review.py tests/test_hunter_reentry.py
+          git diff --exit-code 668e9fa3ee9d64ee04d8d3d2849a5d2a3366ac1d HEAD -- research/results sentinel-state.json
+          git diff --exit-code b65c33a2cf3a398883cd6be268f0af034fe7a070 HEAD -- research/hunter_reentry.py research/hunter_signal_provenance.py research/hunter_strategy_release.py research/hunter_early_signals.py research/hunter_identity_audit.py research/hunter_tactical_capital_review.py research/hunter_bybit_signal_capture.py research/hunter_bybit_worker.py research/hunter_bybit_regional.py research/hunter_bybit_management.py tests/test_hunter_reentry.py tests/test_hunter_reentry_hourly.py
           git diff --exit-code 67f661287569b91cf7a01d9d5798af350c1f5276 HEAD -- research/hunter_loss_freeze.py research/hunter_position_monitor.py tests/test_hunter_loss_freeze.py
       - name: Complete offline Hunter regression and synthetic replays
         run: python -m unittest discover -s tests -p 'test_hunter*.py' -v
