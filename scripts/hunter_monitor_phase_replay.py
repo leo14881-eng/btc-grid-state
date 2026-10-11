@@ -30,10 +30,12 @@ def git(root, *args, binary=False):
         cwd=root, env=env, stderr=subprocess.PIPE, text=not binary)
 
 
-def export(source, ref, dest, paths=()):
+def export(source, ref, dest, paths=(), skip_results=False):
     raw = git(source, 'archive', '--format=tar', ref, *paths, binary=True)
     with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
         for member in archive.getmembers():
+            if skip_results and (member.name=='research/results' or member.name.startswith('research/results/')):
+                continue
             target = dest / member.name
             if not target.resolve().is_relative_to(dest.resolve()) or not (member.isfile() or member.isdir()):
                 raise RuntimeError('UNSAFE_REPLAY_ARCHIVE')
@@ -210,7 +212,9 @@ def main():
     before=git(source,'status','--porcelain')
     with tempfile.TemporaryDirectory(prefix='hunter-phase-replay-') as directory:
         root=Path(directory);seed=root/'seed';seed.mkdir()
-        export(source,args.code_ref,seed)
+        # The fixture owns the entire results tree, including file membership.
+        # A newer code revision must not contribute extra mutable result files.
+        export(source,args.code_ref,seed,skip_results=True)
         export(source,args.fixture_ref,seed,('research/results',))
         git(root,'init','--bare','--initial-branch=main',str(root/'origin.git'))
         git(seed,'init','--initial-branch=main')
