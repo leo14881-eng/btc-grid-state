@@ -1,4 +1,4 @@
-# Monitor latency: bounded snapshot-read candidate
+# Monitor latency: bounded readback and historical IO candidates
 
 This is a source/CI candidate, not a deployed speedup or a three-second SLA.
 Baseline main is `9e97739a3e52db0979d3100284e960f47db68984` (2026-10-11).
@@ -183,3 +183,140 @@ one observation in the upper one percent, with no robust tail confidence.
 
 Only anonymous technical documentation queries were sent to public search. No
 private source, ledger or credential was sent to Claude or another external model.
+
+## Seconds-level follow-up: synchronous historical pages
+
+The follow-up fixes input state at `390fca24a4bcd3537739f0a4caa48dba8e070aab`
+(the source/input revision for the 22:20 generation). It starts from newer main
+`69c369b75c1ec9c8a1d62fe8f7f510e8428986d6`, retaining the first candidate.
+No results/ledger file is edited by the candidate. `HUNTER_MONITOR_HISTORY_WORKERS`
+defaults to **1**; only explicit 2 or 4 selects parallel historical observation.
+No installed service environment or wrapper has been changed.
+
+The actual production receipts below use the same field names throughout; raw
+source revisions, receipt commits and counts are in
+`replays/hunter-monitor-production-timings.json`. They are eight observations,
+not a controlled production A/B.
+
+| Generation UTC | Scheduler span s | Monitor body s | Management evidence s | V1 lifecycle s | V2 lifecycle s | Open V1/V2 | Wanted assets |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 22:05 | 51.553 | 39.738 | 11.626 | 16.821 | 1.330 | 172/8 | 253 |
+| 22:10 | 50.776 | 38.967 | 11.649 | 15.341 | 2.018 | 172/8 | 253 |
+| 22:20 | 67.148 | 53.883 | 11.632 | 17.346 | 15.046 | 172/8 | 288 |
+| 22:25 | 66.711 | 55.194 | 11.769 | 17.821 | 15.721 | 172/8 | 286 |
+| 22:30 | 63.282 | 50.117 | 11.646 | 17.066 | 11.234 | 173/10 | 285 |
+| 22:35 | 60.486 | 48.381 | 11.485 | 16.815 | 10.211 | 173/10 | 279 |
+| 22:40 | 51.650 | 40.091 | 11.622 | 17.494 | 0.409 | 173/10 | 273 |
+| 22:45 | 50.822 | 39.181 | 11.600 | 16.977 | 0.397 | 173/10 | 272 |
+
+Every row attempted 80 management holdings and obtained 80 management books.
+Exit books were 15,14,14,14,16,16,16,16; reported failures were empty. Production
+receipts do **not** record actual historical HTTP counts or preparation/lock
+timings. The 22:10 to 22:20 body increase was 14.916s; V2 lifecycle alone increased
+13.028s. This identifies a mixed lifecycle stage, not a CPU regression. The later
+39.181s body is not a PR109 speedup: that candidate was not deployed. The parent
+also independently verified that all 20 then-due closed 72h observations reached
+continuous 863/863 coverage; seven younger records were not yet due. Completion
+of that backlog is consistent with the V2 stage falling to 0.397s, but these
+receipts alone cannot allocate every millisecond or establish causal speedup.
+
+### Same input, before and after PR107
+
+`scripts/hunter_monitor_phase_replay.py` exports versioned code into a disposable
+repository, overlays the exact same results tree, freezes the observation clock,
+and uses deterministic synthetic HTTP responses. Unknown endpoints, DNS and live
+sockets abort. Its only Git origin is a temporary local bare repository; it runs
+the real monitor, current-state validator, publisher and final primary-proof
+publication/readback. The observer-only host reconciliation is explicitly stubbed.
+It never dispatches a strategy workflow or accesses an exchange.
+
+With no injected HTTP delay, pre107 code `dcf39c9f5f95222d711981986b6fbabe0cb3e006`
+issued **8 historical requests, all V1**; post107 source `390fca2` issued **16,
+8 per lane**. Both issued 352 quote/evidence requests in this synthetic fixture.
+Decision/event hashes matched exactly:
+`ac3f1954f494f79aa5a4be5d345a9ebf1b35bb9869b85c53a7ce0a8cbe00bdc1`.
+Full observation outputs correctly differ: PR107 restores V2's independent budget
+and coverage reconstruction. Monitor bodies were 1.994s and 2.056s respectively;
+management decision functions totalled 15.819ms and 15.507ms. These one-shot
+Windows measurements and invented provider payloads do not establish live quote
+freshness, server CPU tails, or a three-second full-cycle SLA.
+
+This evidence prioritizes historical IO inside the 53s body over test caching:
+the six-module preparation tests execute outside this body's timer. The separate
+111.262s Windows preparation measurement still matters to end-to-end cold start;
+it is not evidence that the server spends that long in tests. The hermetic cache
+input-closure and poisoning requirements above remain unimplemented. No tests,
+mutable-state guards or preparation checks were skipped to obtain these results.
+
+### Bounded synchronous implementation and failure contract
+
+After ordinary closed-position marking, the candidate uses the unchanged selector
+and coverage logic on a disposable observation copy to plan the exact page list
+and cursor. It fetches only those pages with at most four threads, joins every
+response, then invokes ordinary coverage processing in original selection order.
+The page budget remains eight per lane, including failed requests. Open-position
+backfill consumes any remaining budget through its original serial path.
+Threads touch neither portfolio objects nor the shared page counter. No response
+survives a refresh, crosses a generation, or feeds real-time quote decisions.
+
+Each closed position is visited once; its response cannot influence a later
+distinct position's selection. Aliased positions are rejected. Any counter drift,
+request/key mismatch, excess page or unconsumed plan aborts before the caller's
+portfolio write/publication. HTTP timeout or malformed JSON retains the original
+pending coverage semantics and consumes its original budget unit. Gap, conflicting
+duplicate, incomplete horizon and restart logic all still comes from PR107.
+The pure transport split retains the original endpoint, parameters, headers,
+four-second per-operation timeout and at-most-1000 returned candles. CAS,
+generation checks, authoritative main readback and proof publication are untouched.
+
+This is synchronous overlap of already selected historical IO. Moving backfill
+to another persistent job would need separate generation ownership, checkpoint
+CAS, atomic observation merge and crash/replay acceptance; that migration is not
+part of this candidate. Bounded concurrency does raise instantaneous request
+pressure, despite an identical request count. Real provider throttling and host
+resource effects remain an enablement acceptance requirement.
+
+The implementation follows the standard bounded
+[Python executor and join model](https://docs.python.org/3/library/concurrent.futures.html)
+and retains the documented
+[Binance kline request contract](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints).
+
+### Reproduction and limits
+
+```
+python -m unittest tests.test_hunter_history_parallel tests.test_hunter_observation_history tests.test_hunter_monitor_boundaries tests.test_hunter_position_monitor -v
+python scripts/hunter_monitor_history_benchmark.py --code-ref HEAD --iterations 3 --history-delay 1 --output /tmp/hunter-history-ab.json
+```
+
+The benchmark alternates 1/4 then 4/1 worker order. Each pair requires identical
+input-manifest hashes, all seven normalized output documents (excluding timing),
+decision/event hashes, HTTP request parameters, response sizes/hashes, per-lane
+counts, verified state publication and verified final proof. Raw per-request files
+are emitted next to its aggregate report. Three pairs are deliberately labelled
+insufficient for p95/p99; the CI uses a shorter 0.2s injected request delay and
+uploads its own raw reports. No synthetic delay is represented as measured internet
+latency. Preparation, scheduler launch and lock wait are excluded from this replay.
+
+Remaining limits are material: batch quotes allow 25s operation timeout, history
+uses 4s operation timeout, other evidence has its own timeouts, and Git transport
+has no demonstrated successful wall-clock ceiling. Socket read timeouts do not
+create a hard overall DNS/TLS/streaming deadline. Parallel history cannot guarantee
+a full cycle below 3s. Fast CPU decisions after fresh evidence are plausible from
+this replay; actual quote-to-decision and crash-durable acknowledgement require
+timestamped host measurements. Local atomic replace is not an fsync durability
+measurement, and local file-only Git is not GitHub network latency.
+
+Windows/Python 3.10.11 paired results, three samples per arm, 1s injected per historical request:
+
+| Stage | Serial median s | Four-worker median s |
+| --- | ---: | ---: |
+| monitor_body | 18.552963 | 6.765417 |
+| closed_history | 16.257725 | 4.355458 |
+| decision_functions | 0.020724 | 0.019259 |
+| json_writes | 1.173147 | 1.097641 |
+| validation | 0.166727 | 0.202807 |
+| publication_and_proof | 6.648289 | 7.541373 |
+| proof | 2.430560 | 2.922543 |
+| body_validation_publication | 25.233980 | 14.299479 |
+
+Raw summary: `replays/hunter-monitor-history-ab-windows.json`. The complete body+validation+publication median falls 43.33% (10.935s) in this injected-wait fixture; the publication component itself is slower, so no publication improvement is claimed. All 16 historical requests and all seven output documents match. Local targeted regression: 45 tests passed.

@@ -95,7 +95,11 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  # Closed positions remain observation subjects through SELL+72h. Live marks may
  # extend the all-time opportunity peak; exact horizon peaks are reconstructed by
  # the bounded historical backfill, never inferred from a late current price.
- eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"))
+ history_workers=int(os.getenv('HUNTER_MONITOR_HISTORY_WORKERS','1'))
+ if history_workers==1:
+  eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"))
+ else:
+  eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"),historical_workers=history_workers)
  if len(state.get("decisions") or [])>eng.MAX_DECISION_HISTORY:
   n=len(state["decisions"])-eng.MAX_DECISION_HISTORY;state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+n;state["decisions"]=state["decisions"][-eng.MAX_DECISION_HISTORY:]
  if len(state.get("events") or [])>eng.MAX_EVENT_HISTORY:
