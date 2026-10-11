@@ -1892,20 +1892,26 @@ def test_sec_budget_is_shared_by_concurrent_processes_and_restart(tmp_path):
     import os, subprocess, sys
     path = tmp_path / "shared.sqlite3"
     script = """
-import importlib.util, sys, time
+import importlib.util, io, sys, time
 spec=importlib.util.spec_from_file_location("observer","research/stock_shadow/fundamentals_observer.py")
 m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 m.urllib.request.urlopen=lambda *a,**k: (_ for _ in ()).throw(AssertionError("network forbidden"))
+dispatch_times=[]
+def dispatch(req, timeout):
+    dispatch_times.append(time.monotonic())
+    return io.BytesIO(b'{}')
+m._sec_urlopen=dispatch
 if sys.argv[1]=="deny":
     m._sec_deny("https://www.sec.gov/")
 else:
     try:
-        m._sec_start("https://www.sec.gov/")
-        print(time.time())
+        m._sec_open("https://www.sec.gov/","application/json").close()
+        print(dispatch_times[0])
     except m.urllib.error.HTTPError as error:
         print("CACHED_DENIAL",m.transport_error_details(error)["request_sent"])
 """
-    env = dict(os.environ, SEC_TRANSPORT_STATE=str(path))
+    env = dict(os.environ, SEC_TRANSPORT_STATE=str(path),
+               SEC_USER_AGENT="Observer Fixture contact@example.invalid")
     processes = [subprocess.Popen([sys.executable, "-c", script, "start"], env=env,
                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(3)]
     times = []
@@ -1919,6 +1925,114 @@ else:
     result = subprocess.run([sys.executable, "-c", script, "start"], env=env,
                             capture_output=True, text=True, check=True, timeout=15)
     assert result.stdout.strip() == "CACHED_DENIAL False"
+
+
+@pytest.mark.parametrize("pause_at", ["before_dispatch", "after_dispatch"])
+def test_sec_dispatch_fences_paused_sender_and_process_death(tmp_path, pause_at):
+    import os, sqlite3, subprocess, sys, time
+    script = r'''
+import importlib.util, io, json, sys, time
+from pathlib import Path
+root, role, pause_at = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+spec=importlib.util.spec_from_file_location("observer","research/stock_shadow/fundamentals_observer.py")
+m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.urllib.request.urlopen=lambda *a,**k: (_ for _ in ()).throw(AssertionError("network forbidden"))
+def pause():
+    (root / "ready").touch()
+    deadline=time.monotonic()+15
+    while not (root / "release").exists():
+        if time.monotonic()>deadline: raise RuntimeError("FIXTURE_BARRIER_TIMEOUT")
+        time.sleep(.002)
+def dispatch(req, timeout):
+    if role=="A" and pause_at=="before_dispatch": pause()
+    (root / (role+".json")).write_text(json.dumps({"dispatch_ns":time.monotonic_ns()}))
+    if role=="A" and pause_at=="after_dispatch": pause()
+    return io.BytesIO(b'{}')
+m._sec_urlopen=dispatch
+(root / (role+"-started")).touch()
+m._sec_open("https://www.sec.gov/","application/json").close()
+'''
+    path = tmp_path / "budget.sqlite3"
+    env = dict(os.environ, SEC_TRANSPORT_STATE=str(path),
+               SEC_USER_AGENT="Observer Fixture contact@example.invalid")
+    children = []
+    def spawn(role):
+        process = subprocess.Popen([sys.executable, "-c", script, str(tmp_path), role, pause_at],
+                                   env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        children.append(process)
+        return process
+    def await_file(name):
+        deadline = time.monotonic() + 15
+        while not (tmp_path / name).exists():
+            assert time.monotonic() < deadline, name
+            time.sleep(.002)
+    def completed(process):
+        stdout, stderr = process.communicate(timeout=15)
+        assert process.returncode == 0, stdout + stderr
+    try:
+        a = spawn("A")
+        await_file("ready")
+        b = spawn("B")
+        await_file("B-started")
+        # Positive evidence that the transport still owns the shared boundary.
+        probe = sqlite3.connect(path, timeout=.05)
+        try:
+            with pytest.raises(sqlite3.OperationalError, match="locked"):
+                probe.execute("BEGIN IMMEDIATE")
+        finally:
+            probe.close()
+        assert not (tmp_path / "B.json").exists()
+        if pause_at == "after_dispatch":
+            # The durable reservation is rolled back by death. A new sender must
+            # still wait a full interval after acquiring the released lock.
+            a.kill(); a.communicate(timeout=15)
+        else:
+            (tmp_path / "release").touch()
+            completed(a)
+        completed(b)
+        completed(spawn("RESTART"))
+        stamps = [json.loads((tmp_path / (role + ".json")).read_text())["dispatch_ns"]
+                  for role in ("A", "B", "RESTART")]
+        assert all(second-first >= 200_000_000 for first, second in zip(stamps, stamps[1:]))
+    finally:
+        for process in children:
+            if process.poll() is None:
+                process.kill(); process.communicate(timeout=15)
+
+
+def test_sec_redirect_reuses_dispatch_boundary_and_keeps_interval(monkeypatch, tmp_path):
+    import time
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "SEC_REQUEST_INTERVAL", .2)
+    stamps = []
+    def dispatch(req, timeout):
+        stamps.append(time.monotonic_ns())
+        redirected = m._SECRedirectHandler().redirect_request(
+            req, None, 302, "Found", {}, "https://data.sec.gov/fixture.json")
+        assert redirected.full_url == "https://data.sec.gov/fixture.json"
+        stamps.append(time.monotonic_ns())
+        return _sec_fixture_response(b'{"data":[]}')
+    monkeypatch.setattr(m, "_sec_urlopen", dispatch)
+    m._sec_open("https://www.sec.gov/fixture.json", "application/json").close()
+    assert stamps[1] - stamps[0] >= 200_000_000
+    assert getattr(m._sec_dispatch_state, "db", None) is None
+
+
+def test_sec_dispatch_commit_failure_closes_response_and_fails_closed(monkeypatch, tmp_path):
+    import io
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    connect = m.sqlite3.connect
+    class CommitFailure:
+        def __init__(self, *args, **kwargs): self.connection = connect(*args, **kwargs)
+        def __getattr__(self, name): return getattr(self.connection, name)
+        def commit(self): raise m.sqlite3.OperationalError("offline simulated full disk")
+    response = io.BytesIO(b'{}')
+    monkeypatch.setattr(m.sqlite3, "connect", CommitFailure)
+    monkeypatch.setattr(m, "_sec_urlopen", lambda *args: response)
+    with pytest.raises(m.SECTransportError, match="SEC_SHARED_BUDGET_UNAVAILABLE"):
+        m._sec_open("https://www.sec.gov/fixture.json", "application/json")
+    assert response.closed
+    assert getattr(m._sec_dispatch_state, "db", None) is None
 
 
 @pytest.mark.parametrize("payload,code", [
