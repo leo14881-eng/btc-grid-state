@@ -215,7 +215,11 @@ class Store:
             changed = False
             for row, confirm in parsed:
                 changed |= self._put(db, name, row, received_ms, ts, confirm, 'OFFICIAL_BYBIT_V5_SPOT_WS', epoch)
-            if changed and ts > state['ws_ts']:
+            # A newly seen WS observation can be older than a just-completed
+            # REST snapshot. It proves topic liveness without overwriting that
+            # newer bar. True duplicate/out-of-order WS timestamps do neither.
+            observed = ts > state['ws_ts']
+            if observed:
                 db.execute('UPDATE topics SET ws_rx=?,ws_ts=? WHERE topic=?', (received_ms, ts, name))
             self._trim(db, name, ts)
             have = {r[0] for r in db.execute('SELECT start FROM bars WHERE topic=?', (name,))}
@@ -226,7 +230,7 @@ class Store:
             needed = {anchor-i*step for i in range(LIMITS[interval])}
             if not needed <= have:
                 db.execute("UPDATE topics SET gap=1,error='MISSING_WINDOW' WHERE topic=?", (name,))
-            if changed:
+            if observed:
                 self._record_readiness(db, name, received_ms)
         return changed
 

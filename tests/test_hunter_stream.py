@@ -70,6 +70,21 @@ class StreamTests(unittest.TestCase):
         self.store.ingest_ws(self.epoch, message(ts=NOW+1), NOW+50_000)
         self.assertEqual(self.store.states()[0]['ws_rx'], NOW+1)
 
+    def test_new_ws_observation_older_than_rest_preserves_bar_and_topic_liveness(self):
+        for interval in LIMITS:
+            name=topic('BTCUSDT',interval)
+            self.store.ingest_rest(self.epoch,name,rest(interval=interval,end=NOW+65000),NOW+65000,NOW+65000)
+            changed=self.store.ingest_ws(self.epoch,message(interval=interval,ts=NOW+60000),NOW+66000)
+            self.assertFalse(changed)
+        states=self.store.states()
+        self.assertTrue(all(s['ws_ts']==NOW+60000 and s['ws_rx']==NOW+66000 for s in states))
+        # At 91s since session start these WS observations are only 25s old.
+        with self.store.db() as db:
+            db.execute("UPDATE meta SET value=? WHERE key='scope_hash'",('a'*64,))
+        frozen=self.store.freeze(self.topics,NOW+91000,NOW+91000)
+        self.assertEqual(frozen['status'],'READY')
+        self.assertTrue(all(w['provenance'][-1]['source']=='OFFICIAL_BYBIT_V5_SPOT_REST' for w in frozen['windows'].values()))
+
     def test_delayed_update_cannot_unclose_or_replace_newer_bar(self):
         step=900_000; start=NOW//step*step; closed=start+step
         self.store.ingest_ws(self.epoch,message(ts=closed,start=start,confirm=True),closed)
@@ -274,7 +289,7 @@ class StreamTests(unittest.TestCase):
                 clock[0]+=20_000
                 return json.dumps({'op':'pong'})
         repairs=[]
-        def repairer(store,epoch,name,deadline):
+        def repairer(store,epoch,name,deadline,*,cancelled):
             repairs.append(name)
             symbol,interval=stream.split_topic(name)
             store.ingest_rest(epoch,name,rest(symbol,interval,clock[0]),clock[0],clock[0])

@@ -7,8 +7,12 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import hashlib
+import http.client
 import json
 from pathlib import Path
+import signal
+import sqlite3
+from threading import Event
 import time
 import urllib.error
 import urllib.parse
@@ -21,6 +25,19 @@ WS_URL = 'wss://stream.bybit.com/v5/public/spot'
 REST_URL = 'https://api.bybit.com/v5/market/kline'
 MAX_CONNECTION_ATTEMPTS = 5
 MAX_REST_ATTEMPTS = 3
+
+
+class DurableStopError(RuntimeError):
+    """A known denial could not be persisted; never reconnect automatically."""
+
+
+def record_failure(budget, status, text, now, retry_after=1):
+    try:
+        return budget.failure(status, text, now, retry_after)
+    except sqlite3.Error as error:
+        if status == 403:
+            raise DurableStopError('DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW') from error
+        raise
 
 
 def millis():
@@ -73,15 +90,24 @@ def direct_get(url):
         response = opener.open(request, timeout=10)
     except urllib.error.HTTPError as error:
         response = error
-    with response:
-        payload = response.read(1_048_577)
-        if len(payload) > 1_048_576:
-            raise ValueError('RESPONSE_TOO_LARGE')
-        retry = response.headers.get('Retry-After', '1')
-        return response.code, payload, float(retry) if retry.isdigit() else 1
+    status = response.code
+    try:
+        with response:
+            payload = response.read(1_048_577)
+            if len(payload) > 1_048_576:
+                if status == 403:
+                    return status, b'', 1  # Known denial, unreadable classification.
+                raise ValueError('RESPONSE_TOO_LARGE')
+            retry = response.headers.get('Retry-After', '1')
+            return status, payload, float(retry) if retry.isdigit() else 1
+    except (TimeoutError, OSError, http.client.HTTPException):
+        if status == 403:
+            return status, b'', 1  # Body failure must never erase the HTTP denial.
+        raise
 
 
-def repair(store, epoch, name, deadline, get=direct_get, clock=millis, sleep=time.sleep):
+def repair(store, epoch, name, deadline, get=direct_get, clock=millis, sleep=time.sleep,
+           cancelled=lambda:False):
     """Every initialization, retry and gap repair uses the same host budget.
 
 A full 25/5 rolling window bounds long-outage recovery. Never append thousands
@@ -89,9 +115,15 @@ of historical bars or retroactively serve the missed generations.
 """
     symbol, interval = split_topic(name)
     budget = Budget(store)
+    def active():
+        if cancelled():
+            raise RuntimeError('RECOVERY_CANCELLED')
+        with store.db(readonly=True) as db:
+            store.check_epoch(db, epoch)
     for attempt in range(MAX_REST_ATTEMPTS):
         token = None
         while token is None:
+            active()
             now = clock()
             if now >= deadline:
                 raise TimeoutError('RECOVERY_DEADLINE')
@@ -102,7 +134,10 @@ of historical bars or retroactively serve the missed generations.
             if token is None:
                 sleep(.05)
         try:
+            active()  # Cancellation after admission must still release its lease.
             end = clock()  # New observation time, never the end of a missed generation.
+            if end >= deadline:
+                raise TimeoutError('RECOVERY_DEADLINE')
             url = REST_URL+'?'+urllib.parse.urlencode(dict(category='spot', symbol=symbol,
                                       interval=interval, limit=LIMITS[interval], end=end))
             try:
@@ -113,8 +148,9 @@ of historical bars or retroactively serve the missed generations.
             # A denied response must persist the host-wide stop even when it
             # arrives too late for this recovery's data deadline.
             if status == 403:
-                decision = budget.failure(status, payload[:4096].decode('utf-8', 'replace'), now)
+                decision = record_failure(budget, status, payload[:4096].decode('utf-8', 'replace'), now)
                 raise RuntimeError(decision)
+            active()  # No late publish or second request after session teardown.
             if now >= deadline:
                 raise TimeoutError('RECOVERY_DEADLINE')
             if status == 200:
@@ -127,7 +163,7 @@ of historical bars or retroactively serve the missed generations.
                     status = 429 if body['retCode'] == 10006 else 503
                 else:
                     raise ValueError('BYBIT_RET_REJECTED')
-            decision = budget.failure(status, payload[:4096].decode('utf-8', 'replace'), now,
+            decision = record_failure(budget, status, payload[:4096].decode('utf-8', 'replace'), now,
                                       max(retry_after, 2**attempt))
             if decision != 'BOUNDED_RETRY':
                 raise RuntimeError(decision)
@@ -174,7 +210,10 @@ def open_ws():
 
 
 def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.sleep, repairer=repair):
+    if stop():
+        return
     protocol = Protocol(store, topics, scope_hash, clock())
+    cancelled = Event()
     jobs = {}
     completed = set()
     deadline = clock()+plan(topics)['deadline_seconds']*1000
@@ -182,6 +221,8 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
     with ThreadPoolExecutor(max_workers=4) as pool:
         try:
             for request in protocol.requests:
+                if stop():
+                    break
                 ws.send(json.dumps(request))
                 sleeper(.1)
             while not stop():
@@ -201,7 +242,8 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                         if name in completed:
                             # A second gap gets a new bounded reconnect recovery epoch.
                             raise RuntimeError('NEW_GAP_RECONNECT_REQUIRED')
-                        jobs[name] = pool.submit(repairer, store, protocol.epoch, name, deadline)
+                        jobs[name] = pool.submit(repairer, store, protocol.epoch, name, deadline,
+                                                 cancelled=lambda:cancelled.is_set() or stop())
                     if state['ack'] and now-protocol.started > FRESH_MS and now-state['ws_rx'] > FRESH_MS:
                         raise TimeoutError('TOPIC_STALE_DESPITE_HEARTBEAT')
                 ping = protocol.tick(now)
@@ -213,15 +255,20 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                     continue
                 protocol.receive(json.loads(message), clock())
         finally:
-            store.disconnect(protocol.epoch)
-            for job in jobs.values():
-                job.cancel()
+            cancelled.set()
+            try:
+                store.disconnect(protocol.epoch)
+            finally:
+                for job in jobs.values():
+                    job.cancel()
 
 
 def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False):
     """Bounded reconnects; a permanent deny survives process restart in SQLite."""
     last_error = 'NOT_STARTED'
     for attempt in range(MAX_CONNECTION_ATTEMPTS):
+        if stop():
+            return
         state = Budget(store).status()
         if state['halt'] or clock() < state['cooldown_ms']:
             raise RuntimeError(state['halt'] or 'GLOBAL_COOLDOWN_ACTIVE')
@@ -229,6 +276,12 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             with connect() as ws:
                 session(store, topics, scope_hash, ws, stop, clock, sleep)
             return
+        except DurableStopError:
+            raise
+        except sqlite3.Error as error:
+            # Storage failure cannot be repaired with another market connection.
+            # Preserve DB/lease evidence and require operator recovery.
+            raise RuntimeError('CACHE_STORAGE_UNAVAILABLE') from error
         except (OSError, TimeoutError, ValueError, RuntimeError) as error:
             last_error = type(error).__name__
             # Do not emit arbitrary exception text (may contain headers/body).
@@ -240,12 +293,15 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             response = getattr(error, 'response', None)
             status = getattr(response, 'status_code', 0)
             if status:
-                Budget(store).failure(status, bytes(getattr(response, 'body', b'')).decode('utf-8','replace'), clock())
+                record_failure(Budget(store), status, bytes(getattr(response, 'body', b'')).decode('utf-8','replace'), clock())
             last_error = type(error).__name__
         if stop():
             return
         if attempt+1 < MAX_CONNECTION_ATTEMPTS:
-            sleep(min(60, 5*2**attempt))
+            for _ in range(min(60, 5*2**attempt)*10):
+                if stop():
+                    return
+                sleep(.1)
     raise RuntimeError('CONNECTION_BUDGET_EXHAUSTED:'+last_error)
 
 
@@ -260,11 +316,14 @@ def main():
     if not args.collect:
         return
     import fcntl  # Deployment target Linux; fail explicitly elsewhere.
+    stopped = Event()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, lambda *_: stopped.set())
     # A single host-wide lock, independent of checkout and manifest paths. No
     # command-line/env override that accidentally creates an independent budget.
     with (STATE_PATH.parent/'collector.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        collect(Store(), topics, snapshot['snapshot_sha256'])
+        collect(Store(), topics, snapshot['snapshot_sha256'], stop=stopped.is_set)
 
 
 if __name__ == '__main__':

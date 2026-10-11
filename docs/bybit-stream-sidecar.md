@@ -109,7 +109,12 @@ an admission-only lower bound of 56.6 seconds at 5rps. Four in-flight requests
 with 10-second latency require at least 710 seconds even without retries, so a
 600-second recovery budget cannot guarantee a cold start under that latency.
 The sidecar is continuous, outside the scan's critical path; deadline failures
-leave UNKNOWN. Offline rate tests are not a French-server throughput measurement.
+leave UNKNOWN. The 600s limit gates request admission and data acceptance, not
+a hard wall-clock process timeout: urllib's 10s timeout is per blocking I/O and
+a slowly streaming response can take longer. An in-flight request must finish
+before its held lease is released; cancellation prevents further retries and
+late publication, but never pretends that a socket stopped before it did.
+Offline rate tests are not a French-server throughput measurement.
 A production switch requires observed cold/warm timings within the actual scan
 deadline; this PR makes no such claim.
 
@@ -190,6 +195,137 @@ Integrated main `305c2a412166fa9a7f38a66778e93f25830e97e1` before consumer work.
 Its new signal provenance/reentry contracts are preserved and extended only to
 validate explicit cache transport evidence. No strategy thresholds, capital
 rules, historical results, PR35 or paused Sentinel migration changes are included.
+
+## Independent release review, 2026-10-11 (no activation)
+
+### Exact inputs and price roles
+
+| Consumer quantity | Actual input | WS topic / REST initialization and repair |
+| --- | --- | --- |
+| Bybit 15m micro features / six-hour range | 25 x 15-minute bars, current bar included; existing formulas use their existing slices | `kline.15.SYMBOL`; `/v5/market/kline?category=spot&symbol=SYMBOL&interval=15&limit=25&end=MS` |
+| Bybit 1h return / volume | Last TWO of the five hourly bars: current close vs preceding hourly open, plus both turnovers | `kline.60.SYMBOL`; same REST path, `interval=60&limit=5` |
+| Bybit 4h return / volume | FIVE hourly bars: current close vs oldest hourly open, plus five turnovers | Same `kline.60.SYMBOL`; **no** `kline.240` or `interval=240` request |
+| BTC-relative comparisons | The same 15/60 windows for `BTCUSDT`, in the exact same frozen generation | Same topics/endpoints, no independent late benchmark fetch |
+| Discovery reference prices and 24h change/turnover | Existing bulk Worker ticker `lastPrice`, plus Worker official spot listing/cache | `/bybit/tickers` and existing listing routes, unchanged |
+| Existing held-position mark/depth/management evidence | Existing `hunter_bybit_management` direct spot ticker, orderbook, 60/15 REST path | **Outside this cache selector and cooperative budget**, unchanged |
+| Binance signals and reference prices | Existing Binance `1h`/`15m` REST paths and ticker | Outside this PR, unchanged |
+
+The 1h/4h labels preserve the current partial-hour formulas; they do not become
+strict trailing 60/240-minute interpolations. The cache close is a last-trade
+price for that candle, not a mark-price, orderbook execution price, or permission
+to trade. Discovery's ticker mark may be newer than the Kline generation cut;
+existing ticker freshness permits response time within +/-120s of the capture
+time. This PR does not assert ticker and WS observations are simultaneous.
+Kline source/receive freshness is <=90s at freeze; downstream snapshot validity
+remains the existing <=900s. Measure both lags on the actual server before use.
+
+“France direct” means a proposed direct request from the existing server's
+egress to fixed official Bybit endpoints. This review made no such market
+request. Prior user-reported single-symbol successes and country-related error
+text do not prove current egress geography, all-roster access or sustained
+availability. Worker remains the explicit listing/ticker provider, and the
+default Kline provider while the selector is unset/WORKER. It is never an
+automatic alternative after direct Kline denial.
+
+### Failure review and fixes
+
+- REST warmup must provide complete 25/5 windows; a fresh WS observation and ACK
+  are independently required. A newly seen WS timestamp older than a just-written
+  REST revision now updates WS liveness without replacing the newer bar. True WS
+  duplicates/out-of-order timestamps still do not refresh liveness.
+- Disconnect/stop sets a shared cancellation event. Repair checks cancellation,
+  current session and deadline while waiting for budget and again after leasing,
+  before sending. Running requests may finish, but cannot publish or retry into
+  a dead session. A late 403 is still classified/persisted before cancellation.
+  SIGTERM/SIGINT uses this stop path; backoff is interruptible.
+- A known HTTP403 remains a denial even if its body times out, is incomplete,
+  has an I/O error or exceeds the size bound. Unknown classification persists a
+  manual-review halt. No body failure downgrades it to an ordinary retry.
+- SQLite errors stop the collector instead of reconnecting. If a known denial
+  cannot be stored, `DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW` explicitly means its
+  durable stop was **not** written. External automatic restart must stay disabled
+  until an operator reviews/recoveries storage and the denial state.
+- Storage failure, hard kill or SIGKILL may prevent the disconnect record. The
+  last committed cache can remain readable only within the existing <=90s
+  freshness bound; there is no claim of instantaneous invalidation after an
+  unrecorded crash. Expired/missing/corrupt data becomes UNKNOWN. A readable but
+  permanently stale cache is not a recovery mechanism. Do not clear leases or
+  delete/recreate the DB as a shortcut.
+- Five connection attempts are bounded **per process invocation**, with
+  5/10/20/40s backoff. Repeated service restarts could bypass that invocation
+  bound; initial observation therefore requires `Restart=no`, one singleton
+  instance, and reviewed start-rate controls. No service was installed here.
+
+### What was actually read on the server
+
+At 2026-10-11 21:21 UTC the connected coin-server tools returned READ_ONLY and
+repository `/opt/shadow-runner/btc-grid-state`. Discovery and position-monitor
+units were loaded/activating; the existing `hunter-market-stream.service` was
+active/running. That existing stream is not evidence that this Bybit sidecar is
+installed. The tool exposes an approved service list, not a complete unit inventory.
+
+Base checkout SHA was `19b7c6bbe63a5f5741f051cf62a5d469290d2703`; its cached
+origin/main was `b661483e05ad7c3491a89715b47c88f44bc0fd36`, explicitly not a live
+fetch. Fresh job evidence reported Discovery/Monitor source `ddbfd5b6...`,
+Research/readback `7c891916...`; inclusion of this PR was UNKNOWN. Do not infer
+job code from the base checkout. Only untracked `research/__pycache__/` was
+listed locally; nothing was removed. The read-only status also reported existing
+fast-watch degradation, which is outside this PR and not evidence of a new
+cache fault. No SSH or denied launcher-path route was retried.
+
+### Production prerequisites and smallest staged release
+
+1. **Before any install:** agree the reviewed commit, operator execution channel,
+   actual runtime account and installed launcher path. Verify current job code
+   and runtime env by approved reads. Python/SQLite versions, time synchronization,
+   disk/inodes/headroom, `websockets==15.0.1`, shared-directory existence/ownership,
+   consumer read permissions, complete unit inventory and service restart policy
+   are **unverified** with current tools. Read-only status is not install authority.
+2. **Prepare an isolated release:** after separate authorization, stage the exact
+   code and pinned runtime dependency under a verified release path, outside job
+   temporary checkouts. Provision `/var/lib/hunter-bybit-stream` for the actual
+   collector writer and consumer reader only (including SQLite journal needs).
+   Review a singleton continuous-service unit, bounded stop behavior, `Restart=no`
+   and logs/storage alerts. The PR currently contains no installed unit, dependency
+   environment or automatic roster refresher. No API key is required.
+3. **Sidecar-only observation:** keep the consumer selector unset/WORKER. Capture
+   a checksum-valid, <=15-minute authoritative manifest, record its hash and stable
+   topic digest, then start only the sidecar through the approved operator route.
+   Do not invoke discovery/research manually. Require all topics to become ready;
+   measure cold bootstrap, warm reads, disk growth, queue/lock waits, source/receive
+   lag, complete 15m and hourly rollover, and one approved controlled reconnect.
+   Inventory simultaneous direct Bybit held-position traffic: its requests are
+   not counted by this sidecar DB. Offline six-process contention proves only the
+   cooperative local governor, **not Bybit online rate-limit acceptance**.
+4. **Separate consumer decision:** after natural-cycle evidence is reviewed, apply
+   `HUNTER_BYBIT_KLINE_SOURCE=SPOT_CACHE` only to the authorized discovery executor
+   at a generation boundary; retain `HUNTER_BYBIT_WORKER_MARKET_ENABLED=1` for
+   listings/tickers. Verify env propagation through the actual launcher. Current
+   runner code inherits environment and merges workflow step env, but installed
+   behavior is not yet verified. GitHub runners without the local DB must retain
+   WORKER. Keep all single-writer/executor/CAS gates; verify the normal published
+   snapshot source/schema, UNKNOWN handling and remote readback.
+
+Do not enable the consumer on any of: unresolved403, unrecorded durable halt,
+clock drift, missing topics, roster mismatch, cache corruption/permission errors,
+unbounded disk growth, excessive lock/read lag, repeated reconnects, or a natural
+cycle whose cache freeze cannot meet its freshness/window requirements. These
+are stop-and-review conditions, not invitations to broaden scope or lower checks.
+
+**Rollback conditions:** During observation, stop only the new sidecar if readiness,
+storage, rate or latency checks fail; production remains on the unchanged source.
+After any separately approved consumer activation, stop new cache-selected
+generations, preserve already published generation/CAS receipts and all ledger
+history, then review selection of WORKER for the next natural generation. Never
+mix a half-produced generation's sources, replay portfolios, reset main or use
+rollback as a country/unknown403 bypass. Preserve DB, cooldown/halt and stranded
+leases; establish that old sockets/processes ended before any reviewed repair.
+
+Real server natural-running evidence is still required for public access,
+aggregate same-IP budgets, sustained delay/completeness, actual resource use,
+service shutdown/restart behavior, manifest turnover, executor env propagation,
+and published CAS/readback. Offline fixtures validate failure logic; they do not
+fill a production disk or certify those operating conditions.
 
 ## Primary references
 
