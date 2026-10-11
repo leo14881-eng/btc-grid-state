@@ -1244,3 +1244,15 @@ def test_replay_runner_provider_failure_never_invokes_publisher(repo, monkeypatc
         runner.run('replay', False, tmp_path / 'runtime')
     assert git(remote, 'rev-parse', 'main').stdout == before
     assert json.loads((work / (RESULTS + 'replay-v1.json')).read_text())['results'] == []
+
+
+def test_sec_budget_path_is_stable_and_preflight_does_not_inherit_it(repo, monkeypatch, tmp_path):
+    _, _, work, _ = repo
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("SEC_TRANSPORT_STATE", "/untrusted/per-run-state.sqlite3")
+    commands = stub_engine(monkeypatch)
+    runtime_dir = tmp_path / "runtime"
+    runner.run("main", True, runtime_dir)
+    assert "SEC_TRANSPORT_STATE" not in commands[0][1]["env"]
+    assert all(kwargs["env"]["SEC_TRANSPORT_STATE"] == str(runtime_dir / "sec-transport.sqlite3")
+               for command, kwargs in commands[1:])

@@ -15,7 +15,7 @@ from .persist import ROOT, changed_paths, persist, snapshot, validate_outputs, P
 from .runtime import JOBS, admission, check_fence, environment, git, require
 
 PROVIDER_ENV_KEYS = ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY',
-                     'STOCKFIT_API_KEY', 'FMP_API_KEY')
+                     'STOCKFIT_API_KEY', 'FMP_API_KEY', 'SEC_USER_AGENT', 'SEC_TRANSPORT_STATE')
 
 COMMANDS = {
     'main': [('research/stock_shadow/fundamentals_observer.py', 480),
@@ -72,6 +72,8 @@ def run(job, preview, runtime_dir):
         require(os.environ.get('APCA_API_KEY_ID') and os.environ.get('APCA_API_SECRET_KEY'),
                 'STOCK_PROVIDER_CREDENTIALS_NOT_CONFIGURED')
     env = dict(os.environ, **environment(a), PYTHONDONTWRITEBYTECODE='1')
+    # Stable runtime state shared by preview/publish and fresh checkouts; never in Git.
+    env['SEC_TRANSPORT_STATE'] = str(runtime_dir / 'sec-transport.sqlite3')
     # No flag or environment inheritance is allowed to turn forced diagnostics
     # into a scheduler policy. The unchanged engine applies NY calendar gates.
     env.pop('STOCK_SHADOW_FORCE_MONITOR', None)
