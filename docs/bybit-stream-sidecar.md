@@ -7,6 +7,12 @@ service, alters no timer, and changes no capital/strategy rules, ledgers, Worker
 JavaScript or Sentinel files. No market requests were made to develop or test
 it. An approved code PR is not a deployment approval.
 
+**Partial completion:** this replaces only Kline transport when explicitly
+enabled. Discovery listings/tickers and the separate spot-availability task
+still use Worker. It does not fulfill complete server-direct public spot data
+collection. See [the remaining direct-plane implementation and acceptance
+proposal](bybit-direct-plane-review.md); that proposal is not implemented.
+
 ## Scope and protocol
 
 The local roster comes from the existing checksum-validated, fresh Worker
