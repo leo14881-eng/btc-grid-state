@@ -71,7 +71,10 @@ class ManualStopTests(unittest.TestCase):
     def test_cross_cycle_retry_and_archive(self):
         state, books = fixture()
         done, _ = self.run_stage(state, books)
-        for row in done['closed_positions'][1:]:row['observation_complete'] = True
+        from tests.test_hunter_observation_fixtures import certify_horizons
+        for row in done['closed_positions'][1:]:
+            certify_horizons(row)
+            row['observation_complete'] = True
         with patch.object(manual.eng, 'MAX_CLOSED_HOT', 1):
             manual.eng.compact_closed_history(done)
         self.assertEqual(len(done['closed_trade_archive']), 2)

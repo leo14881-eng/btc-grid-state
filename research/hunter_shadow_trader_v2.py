@@ -7,6 +7,7 @@ try:
  from research import hunter_loss_freeze as loss_freeze
  from research import hunter_lifecycle_state as lifecycle
  from research import hunter_reentry as reentry
+ from research import hunter_observation_history as observation_history
  from research.hunter_execution_identity import identity_fields
  from research.hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 except ModuleNotFoundError as exc:
@@ -16,6 +17,7 @@ except ModuleNotFoundError as exc:
  import hunter_loss_freeze as loss_freeze
  import hunter_lifecycle_state as lifecycle
  import hunter_reentry as reentry
+ import hunter_observation_history as observation_history
  from hunter_execution_identity import identity_fields
  from hunter_portfolio_integrity import PORTFOLIO_NAMES,load_portfolio,require_nonempty_history_transition
 ROOT=pathlib.Path("research/results")
@@ -359,23 +361,17 @@ def scenario_returns(pos,p):
  return out
 
 def binance_kline_bars(asset,start,end,interval="5m"):
- """Observation-only historical bars. Failure never changes trading decisions."""
+ """One HTTP page per budget unit. The position checkpoint owns continuation."""
  global _opportunity_backfill_requests
  if not asset or not start or not end or end<=start:return None
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:return None
  _opportunity_backfill_requests+=1
- symbol=str(asset).upper()+"USDT";cursor=int(start.timestamp()*1000);stop=int(end.timestamp()*1000);out=[]
+ symbol=str(asset).upper()+"USDT";cursor=int(start.timestamp()*1000);stop=int(end.timestamp()*1000)
  try:
-  while cursor<=stop:
-   q=urllib.parse.urlencode({"symbol":symbol,"interval":interval,"startTime":cursor,"endTime":stop,"limit":1000})
-   req=urllib.request.Request(BINANCE_DATA_API+"/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
-   with urllib.request.urlopen(req,timeout=4) as r:rows=json.loads(r.read().decode())
-   if not rows:break
-   out.extend((int(row[0]),int(row[6]),finite(row[2])) for row in rows if finite(row[2]) is not None)
-   nxt=int(rows[-1][0])+1
-   if nxt<=cursor or len(rows)<1000:break
-   cursor=nxt
-  return out or None
+  q=urllib.parse.urlencode({"symbol":symbol,"interval":interval,"startTime":cursor,"endTime":stop,"limit":1000})
+  req=urllib.request.Request(BINANCE_DATA_API+"/api/v3/klines?"+q,headers={"User-Agent":"hunter-opportunity-observer/1.0"})
+  with urllib.request.urlopen(req,timeout=4) as r:rows=json.loads(r.read().decode())
+  return [(int(row[0]),int(row[6]),finite(row[2])) for row in rows[:1000]] or None
  except Exception:return None
 
 def peak_from_bars(bars,end=None):
@@ -405,25 +401,33 @@ def backfill_opportunity_history(pos,now):
  last=pos.get("opportunity_backfill_at_utc")
  if last:
   try:
-   due_missing=bool(closed and any(now>=closed+dt.timedelta(hours=h) and f"{int(h)}h" not in (pos.get("post_exit_observation") or {}) for h in REVIEW_HOURS))
-   if (now-parse(last)).total_seconds()<3300 and not due_missing:return pos
+   pending=(pos.get('opportunity_history_progress') or {}).get('status')!='COMPLETE'
+   due_missing=bool(closed and any(now>=closed+dt.timedelta(hours=h) and not observation_history.verified((pos.get("post_exit_observation") or {}).get(f"{int(h)}h"),closed,closed+dt.timedelta(hours=h)) for h in REVIEW_HOURS))
+   if 0<=(now-parse(last)).total_seconds()<3300 and not due_missing and not pending:return pos
   except Exception:pass
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
   pos["data_provenance"]="BACKFILL_PENDING";return pos
- bars=binance_kline_bars(pos.get("asset"),opened,end);buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
- full=peak_from_bars(bars,end);hold=peak_from_bars(bars,closed or end)
- if not bars or not full or not hold or not buy:
-  if pos.get("data_provenance")!="HISTORICAL_BACKFILL":
-   pos["data_provenance"]="INSUFFICIENT_HISTORY"
-   # Legacy mfe_pct used the then-current weighted entry and cannot be relabeled as
-   # initial-BUY opportunity MFE without reliable historical bars.
-   if sample_cohort(pos)=="MIGRATION_SAMPLE":
-    pos["holding_mfe_pct"]=None;pos["holding_peak_price"]=None;pos["holding_peak_at_utc"]=None
-    pos["full_opportunity_mfe_pct"]=None;pos["full_opportunity_peak_price"]=None;pos["full_opportunity_peak_at_utc"]=None
-  pos["opportunity_backfill_at_utc"]=now.isoformat();return pos
- pos["holding_peak_price"]=hold["peak_price"];pos["holding_peak_at_utc"]=hold["peak_at_utc"];pos["holding_mfe_pct"]=round((hold["peak_price"]/buy-1)*100,4)
- pos["full_opportunity_peak_price"]=full["peak_price"];pos["full_opportunity_peak_at_utc"]=full["peak_at_utc"];pos["full_opportunity_mfe_pct"]=round((full["peak_price"]/buy-1)*100,4)
- pos["data_provenance"]="HISTORICAL_BACKFILL";pos["opportunity_backfill_source"]=full["source"];pos["opportunity_backfill_at_utc"]=now.isoformat()
+ progress=observation_history.checkpoint(pos,opened,closed)
+ if progress['next_open_ms']>observation_history.bounds(opened,end)[1]:
+  # An older evaluation clock must not reuse peaks learned after its cutoff.
+  pos.pop('opportunity_history_progress',None)
+  progress=observation_history.checkpoint(pos,opened,closed)
+ start=dt.datetime.fromtimestamp(progress['next_open_ms']/1000,dt.timezone.utc)
+ bars=binance_kline_bars(pos.get("asset"),start,end) if start<end else []
+ observation_history.advance(progress,bars,opened,closed,end,REVIEW_HOURS)
+ buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
+ pos['opportunity_history_coverage']=observation_history.coverage(progress,opened,end)
+ pos['opportunity_backfill_at_utc']=now.isoformat()
+ full=progress['peaks'].get('full');hold=progress['peaks'].get('holding')
+ # Partial evidence stays provisional; only a complete range replaces its metric.
+ for key,peak,cutoff in [('holding',hold,closed or end),('full_opportunity',full,end)]:
+  cov=observation_history.coverage(progress,opened,cutoff)
+  if buy and peak and cov['status']=='COMPLETE':
+   pos[key+'_peak_price']=peak['peak_price'];pos[key+'_peak_at_utc']=peak['peak_at_utc'];pos[key+'_mfe_pct']=round((peak['peak_price']/buy-1)*100,4)
+  elif sample_cohort(pos)=='MIGRATION_SAMPLE':
+   pos[key+'_mfe_pct']=None;pos[key+'_peak_price']=None;pos[key+'_peak_at_utc']=None
+ pos['data_provenance']='HISTORICAL_BACKFILL' if full and hold and buy and pos['opportunity_history_coverage']['status']=='COMPLETE' else 'INSUFFICIENT_HISTORY'
+ if full:pos['opportunity_backfill_source']=full['source']
  if not closed:
   pos["observation_complete"]=False
   return pos
@@ -431,29 +435,37 @@ def backfill_opportunity_history(pos,now):
  for target in REVIEW_HOURS:
   horizon_end=closed+dt.timedelta(hours=target)
   if now<horizon_end:continue
-  h=peak_from_bars([x for x in bars if x[0]>=int(closed.timestamp()*1000)],horizon_end)
-  if h:
+  h=progress['peaks'].get(f'{int(target)}h');cov=observation_history.coverage(progress,closed,horizon_end)
+  if h and buy and cov['status']=='COMPLETE':
    obs[f"{int(target)}h"]={"observed_at_utc":now.isoformat(),"max_price":h["peak_price"],
     "max_return_from_initial_buy_pct":round((h["peak_price"]/buy-1)*100,4),
     "max_return_from_sell_pct":round((h["peak_price"]/sell-1)*100,4) if sell else None,"peak_at_utc":h["peak_at_utc"],
-    "data_provenance":"HISTORICAL_BACKFILL","price_granularity":"5m_completed_candles"}
- pos["observation_complete"]=bool(now>=closed+dt.timedelta(hours=max(REVIEW_HOURS)) and obs.get("72h"))
+    "data_provenance":"HISTORICAL_BACKFILL","price_granularity":"5m_completed_candles","coverage":cov}
+ pos["observation_complete"]=observation_complete(pos,now)
  refresh_post_exit_status(pos,now)
  pos["holding_profit_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("holding_mfe_pct"))
  pos["full_opportunity_capture_ratio"]=capture_ratio(pos.get("net_return_pct"),pos.get("full_opportunity_mfe_pct"))
  pos["exit_evaluation"]=exit_evaluation(pos)
  return pos
 
+def observation_complete(pos,now=None):
+ """A legacy horizon/boolean alone is not evidence of continuous coverage."""
+ if not pos.get('closed_at_utc') or pos.get('execution_venue')=='BYBIT_SPOT':return False
+ closed=parse(pos['closed_at_utc']);end=closed+dt.timedelta(hours=max(REVIEW_HOURS))
+ obs=pos.get('post_exit_observation') or {}
+ return bool((now is None or now>=end) and all(finite((obs.get(f'{int(h)}h') or {}).get('max_return_from_sell_pct')) is not None and observation_history.verified(obs.get(f'{int(h)}h'),closed,closed+dt.timedelta(hours=h)) for h in REVIEW_HOURS))
+
 def refresh_post_exit_status(pos,now):
  """Expose only reconstructed post-sell peaks as evaluated results."""
  if not pos.get("closed_at_utc"):return
  closed=parse(pos["closed_at_utc"]);obs=pos.get("post_exit_observation") or {}
  due=[f"{int(h)}h" for h in REVIEW_HOURS if now>=closed+dt.timedelta(hours=h)]
- missing=[h for h in due if (obs.get(h) or {}).get("max_return_from_sell_pct") is None]
+ missing=[h for h in due if finite((obs.get(h) or {}).get("max_return_from_sell_pct")) is None or not observation_history.verified(obs.get(h),closed,closed+dt.timedelta(hours=int(h[:-1])))]
  completed=[h for h in due if h not in missing]
+ pos['observation_complete']=observation_complete(pos,now)
  pos["post_exit_evaluation"]={"status":"COMPLETE" if pos.get("observation_complete") else "BACKFILL_PENDING" if missing else "OBSERVING",
   "due_horizons":due,"completed_horizons":completed,"missing_horizons":missing,
-  "max_return_from_sell_pct":max((obs[h]["max_return_from_sell_pct"] for h in completed),default=None),
+  "max_return_from_sell_pct":max((finite(obs[h]["max_return_from_sell_pct"]) for h in completed),default=None),
   "source":"HISTORICAL_BACKFILL" if completed else None}
 
 def refresh_closed_observations(state,now,market_price=None):
@@ -461,9 +473,10 @@ def refresh_closed_observations(state,now,market_price=None):
  closed=state.get("closed_positions") or []
  if not closed:return
  for pos in closed:
-  if pos.get("observation_complete"):
+  if observation_complete(pos,now):
    refresh_post_exit_status(pos,now);continue
   p=market_price(pos.get("asset")) if market_price and pos.get('execution_venue')!='BYBIT_SPOT' else None
+  pos['observation_market_data']={'status':'AVAILABLE' if p else 'VENUE_HISTORY_UNAVAILABLE' if pos.get('execution_venue')=='BYBIT_SPOT' else 'MARKET_DATA_MISSING','observed_at_utc':now.isoformat()}
   if p:update_post_exit(pos,p,now)
   else:refresh_post_exit_status(pos,now)
  cursor=int(state.get("observation_backfill_cursor") or 0)%len(closed)
@@ -525,7 +538,7 @@ def ensure_opportunity_observation(pos,p=None,now=None,provenance="LIVE_OBSERVAT
  if pos.get("closed_at_utc"):
   # Time passing alone is not evidence that the full 72h opportunity was observed.
   # Completion requires a truthful 72h horizon record (normally historical backfill).
-  pos["observation_complete"]=bool((pos.get("post_exit_observation") or {}).get("72h"))
+  pos["observation_complete"]=observation_complete(pos,now)
  else:pos["observation_complete"]=False
  return pos
 
@@ -674,7 +687,7 @@ def compact_closed_history(state):
  if len(closed)<=MAX_CLOSED_HOT:return
  archive=state.setdefault("closed_trade_archive",[])
  # Never archive an unfinished observation: the compact archive is not backfilled.
- eligible=[x for x in closed if x.get("observation_complete")][:len(closed)-MAX_CLOSED_HOT]
+ eligible=[x for x in closed if observation_complete(x)][:len(closed)-MAX_CLOSED_HOT]
  if not eligible:return
  ids={id(x) for x in eligible}
  for x in eligible:
@@ -922,8 +935,8 @@ def opportunity_summary(rows,now=None):
  for h in REVIEW_HOURS:
   key=f"{int(h)}h"
   due=[x for x in rows if x.get("closed_at_utc") and now>=parse(x["closed_at_utc"])+dt.timedelta(hours=h)]
-  coverage[key]={"due":len(due),"backfilled":sum((x.get("post_exit_observation") or {}).get(key,{}).get("max_return_from_sell_pct") is not None for x in due)}
- completed=[x for x in rows if x.get("observation_complete") and (x.get("post_exit_observation") or {}).get("72h",{}).get("max_return_from_sell_pct") is not None]
+  coverage[key]={"due":len(due),"backfilled":sum(finite((x.get("post_exit_observation") or {}).get(key,{}).get("max_return_from_sell_pct")) is not None and observation_history.verified((x.get('post_exit_observation') or {}).get(key),parse(x['closed_at_utc']),parse(x['closed_at_utc'])+dt.timedelta(hours=h)) for x in due)}
+ completed=[x for x in rows if observation_complete(x,now)]
  dist={"lt_0":0,"0_3":0,"3_5":0,"5_10":0,"10_20":0,"gt_20":0}
  for v in full:
   if v<0:dist["lt_0"]+=1
@@ -933,7 +946,7 @@ def opportunity_summary(rows,now=None):
   elif v<=20:dist["10_20"]+=1
   else:dist["gt_20"]+=1
  return {"evaluated_positions":len(rows),"holding_mfe_available":len(holding),"full_opportunity_mfe_available":len(full),"completed_72h_observations":len(completed),
-  "post_exit_coverage":coverage,"avg_completed_72h_max_return_from_sell_pct":avg([x["post_exit_observation"]["72h"]["max_return_from_sell_pct"] for x in completed]),
+  "post_exit_coverage":coverage,"avg_completed_72h_max_return_from_sell_pct":avg([finite(x["post_exit_observation"]["72h"]["max_return_from_sell_pct"]) for x in completed]),
   "full_opportunity_metrics_provisional":len(completed)<len(rows),
   "avg_holding_mfe_pct":avg(holding),"median_holding_mfe_pct":med(holding),"avg_full_opportunity_mfe_pct":avg(full),"median_full_opportunity_mfe_pct":med(full),
   "avg_realized_net_return_pct":avg(vals("net_return_pct")),"avg_holding_profit_capture_ratio":avg(vals("holding_profit_capture_ratio")),
@@ -941,12 +954,12 @@ def opportunity_summary(rows,now=None):
   "potential_premature_exit_count":sum(x.get("exit_evaluation")=="POTENTIAL_PREMATURE_EXIT" for x in rows),
   "profit_giveback_count":sum(x.get("exit_evaluation")=="PROFIT_GIVEBACK" for x in rows),"full_opportunity_mfe_distribution":dist}
 
-def build_summary(state,now,guard_status="NORMAL",scan=None):
+def build_summary(state,now,guard_status="NORMAL",scan=None,backfill_open=True):
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
  for x in state.get("open_positions") or []:
   ensure_opportunity_observation(x,x.get("last_price"),now)
-  if x.get("sample_cohort")=="MIGRATION_SAMPLE" and x.get("data_provenance")!="HISTORICAL_BACKFILL":backfill_opportunity_history(x,now)
+  if backfill_open and x.get("sample_cohort")=="MIGRATION_SAMPLE" and x.get("data_provenance")!="HISTORICAL_BACKFILL":backfill_opportunity_history(x,now)
  for x in closed:ensure_opportunity_observation(x,None,now)
  cohorts={"all_samples":opportunity_summary(all_closed,now),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"],now),
   "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"],now)}
