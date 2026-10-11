@@ -57,6 +57,7 @@ class BudgetTests(unittest.TestCase):
         if not hasattr(os,'fork'):
             self.fail('This acceptance requires Linux fork, not a skip')
         children=[]
+        saturated=Path(self.temp.name)/'four-held'
         for index in range(6):
             cwd=Path(self.temp.name)/f'checkout-{index}';cwd.mkdir()
             pid=os.fork()
@@ -72,7 +73,16 @@ class BudgetTests(unittest.TestCase):
                     if token is None:os._exit(2)
                     with governor.store.db(readonly=True) as db:
                         acquired=db.execute('SELECT acquired_ms FROM leases WHERE token=?',(token,)).fetchone()[0]
-                    time.sleep(.85)
+                    # Force actual saturation before releases. A fixed .85s
+                    # sleep could yield only three overlaps on a busy CI host,
+                    # without testing the fourth slot or revealing a violation.
+                    while not saturated.exists() and time.monotonic()<deadline:
+                        with governor.store.db(readonly=True) as db:
+                            held=db.execute('SELECT COUNT(*) FROM leases').fetchone()[0]
+                        if held>=4:saturated.write_text('four requests are held')
+                        else:time.sleep(.005)
+                    if not saturated.exists():os._exit(4)
+                    time.sleep(.1)
                     released=time.time_ns()//1_000_000
                     governor.release(token)
                     (cwd/'receipt.json').write_text(json.dumps([acquired,released]))
