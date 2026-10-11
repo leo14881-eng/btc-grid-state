@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ci, service]
+        profile: [ci, service, noexec-control]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,22 +33,27 @@ jobs:
         run: |
           limits=()
           test_home=/tmp/preflight-home
+          test_tmp=/var/lib/stock-shadow/work/preflight/tmp
           state_dir=$(mktemp -d "$RUNNER_TEMP/stock-preflight.XXXXXX")
           mkdir -p "$state_dir/work/preflight/tmp"
-          if [[ "$PROFILE" == service ]]; then
+          if [[ "$PROFILE" != ci ]]; then
             limits=(--cpus=0.5 --memory=1g --pids-limit=64 --read-only
                     --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs /home:mode=000
                     --cap-drop=ALL --security-opt=no-new-privileges)
             test_home=/var/lib/stock-shadow
           fi
+          if [[ "$PROFILE" == noexec-control ]]; then
+            test_tmp=/tmp
+          fi
           docker run --rm -i --network=none "${limits[@]}" \
             --user "$(id -u):$(id -g)" -e PROFILE -e HOME="$test_home" \
             -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e TZ=UTC \
-            -e TMPDIR=/var/lib/stock-shadow/work/preflight/tmp \
+            -e TMPDIR="$test_tmp" \
             -v "$state_dir:/var/lib/stock-shadow" \
             -v "$PWD:/var/lib/stock-shadow/work/preflight/repo" \
             -w /var/lib/stock-shadow/work/preflight/repo stock-preflight python - <<'PY'
           import ast
+          import errno
           import json
           import os
           from pathlib import Path
@@ -57,7 +62,7 @@ jobs:
           import tempfile
           from research.stock_shadow.server import runner, runtime
 
-          if os.environ['PROFILE'] == 'service':
+          if os.environ['PROFILE'] != 'ci':
               os.umask(0o077)
           else:
               Path(os.environ['HOME']).mkdir()
@@ -90,8 +95,37 @@ jobs:
                                 python=sys.version, command=command, timeout=timeout)), flush=True)
           with tempfile.TemporaryDirectory(prefix='stock-preflight-') as temp:
               env['TMPDIR'] = temp
-              result = subprocess.run(command, env=env, timeout=timeout)
+              probe = Path(temp) / 'exec-probe'
+              probe.write_text('#!/bin/sh\nexit 0\n')
+              probe.chmod(0o700)
+              try:
+                  subprocess.run([str(probe)], check=True)
+                  executable = True
+              except PermissionError as error:
+                  assert error.errno == errno.EACCES
+                  executable = False
+              print(json.dumps(dict(temp_executable=executable, tmpdir=os.environ['TMPDIR'])), flush=True)
+              if os.environ['PROFILE'] == 'noexec-control':
+                  assert not executable, 'NEGATIVE_CONTROL_REQUIRES_NOEXEC'
+                  result = subprocess.run(command, env=env, timeout=timeout,
+                                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                  print(result.stdout, flush=True)
+              else:
+                  assert executable, 'DEPLOYMENT_TMPDIR_MUST_SUPPORT_GIT_TEST_HOOKS'
+                  result = subprocess.run(command, env=env, timeout=timeout)
           assert runner.canonical_inventory() == before, 'PREFLIGHT_MUTATED_CANONICAL_FILES'
           assert not runner.changed_paths(), 'PREFLIGHT_MUTATED_CHECKOUT'
+          if os.environ['PROFILE'] == 'noexec-control':
+              # Prove this environment is rejected; do not waive a production test.
+              expected = {
+                  'tests/test_stock_shadow.py::test_p0_push_race_retries_only_own_outputs',
+                  'tests/test_stock_server_migration.py::test_pause_between_final_fetch_and_push_fences_the_candidate',
+                  'tests/test_stock_server_migration.py::test_repeated_crypto_and_hunter_push_races_preserve_both_systems',
+              }
+              failed = {line.split()[1] for line in result.stdout.splitlines() if line.startswith('FAILED ')}
+              assert result.returncode == 1 and failed == expected, (result.returncode, failed)
+              assert '3 failed, 361 passed' in result.stdout
+              print('NOEXEC_CONTROL_REJECTED_BY_UNCHANGED_PREFLIGHT_TESTS', flush=True)
+              raise SystemExit(0)
           raise SystemExit(result.returncode)
           PY
