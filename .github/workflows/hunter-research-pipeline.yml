@@ -182,12 +182,16 @@ jobs:
           BYBIT_ALPHA_API_SECRET: ${{ secrets.BYBIT_ALPHA_API_SECRET }}
           HUNTER_PROXY_TOKEN: ${{ secrets.HUNTER_PROXY_TOKEN }}
         run: python research/hunter_bybit_availability.py
+      - name: Validate shadow engines
+        run: python -m unittest tests.test_hunter_shadow_trader tests.test_hunter_shadow_trader_v2 tests.test_hunter_shadow_optimizer -v
       - name: Bind latest authoritative monitor state before shadow execution
         env:
           EXPECTED: ${{ steps.generation.outputs.id }}
         run: python -m scripts.hunter_research_rebind --generation "$EXPECTED" --isolated-checkout
-      - name: Validate shadow engines
-        run: python -m unittest tests.test_hunter_shadow_trader tests.test_hunter_shadow_trader_v2 tests.test_hunter_shadow_optimizer -v
+      - name: Revalidate capital decisions against bound monitor state
+        run: |
+          python research/hunter_tactical_capital_review.py
+          python research/hunter_health_and_queue.py
       - name: Shadow optimizer frozen pending user acceptance
         run: echo "SHADOW_STRATEGY_FREEZE optimizer_writes=0"
       - name: Run V1 broad-net shadow orders
@@ -450,3 +454,4 @@ jobs:
 # capital-decision-v2 validation
 
 # validate left-first selective-continuation v2
+

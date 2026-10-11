@@ -12,7 +12,8 @@ RULES = "research/results/hunter-shadow-rules.json"
 
 
 def protected(path):
-    return (path.startswith("research/hunter") or
+    return (path in ("research/__init__.py", "scripts/__init__.py", "tests/__init__.py",
+                    ".github/hunter-runtime.json") or path.startswith("research/hunter") or
             path.startswith("research/results/hunter-") or
             path.startswith("scripts/hunter_") or
             path.startswith("tests/test_hunter") or
@@ -110,3 +111,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
