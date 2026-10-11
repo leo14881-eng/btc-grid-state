@@ -4,6 +4,9 @@ import pathlib
 import tempfile
 import unittest
 import time
+import signal
+import subprocess
+import sys
 from unittest.mock import patch
 from scripts import hunter_job_runner as runner
 from scripts import hunter_runtime_gate as gate
@@ -94,6 +97,26 @@ class CriticalTimeoutTests(unittest.TestCase):
    runner.run_shell("sleep 5",dict(os.environ),'.',0.05)
   self.assertLess(time.monotonic()-started,2)
 
+ def test_timeout_kills_term_resistant_grandchild_after_shell_exits(self):
+  with tempfile.TemporaryDirectory() as d:
+   child=pathlib.Path(d,'child.py');marker=pathlib.Path(d,'pid')
+   child.write_text('import os,signal,time,pathlib\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\n'
+                    'pathlib.Path('+repr(str(marker))+').write_text(str(os.getpid()))\ntime.sleep(30)\n')
+   # The shell waits for a grandchild that explicitly closes inherited FDs.
+   code='"'+sys.executable+'" -c '+__import__('shlex').quote(
+       'import subprocess,sys;subprocess.run([sys.executable,'+repr(str(child))+'],close_fds=True)')
+   with self.assertRaisesRegex(RuntimeError,'CRITICAL_PHASE_TIMEOUT'):
+    runner.run_shell(code,dict(os.environ),d,.5)
+   pid=int(marker.read_text())
+   # A terminated orphan may briefly be a zombie before init reaps it.
+   for _ in range(50):
+    stat=pathlib.Path('/proc',str(pid),'stat')
+    if not stat.exists() or stat.read_text().split()[2]=='Z':break
+    time.sleep(.01)
+   else:
+    os.kill(pid,signal.SIGKILL)
+    self.fail('TERM-resistant writer survived portfolio timeout')
+
 
 class PushDiagnosticTests(unittest.TestCase):
  def test_push_failure_categories(self):
@@ -118,3 +141,4 @@ class PushDiagnosticTests(unittest.TestCase):
   self.assertLessEqual(len(exc.stderr_tail),2048)
   self.assertNotIn('SECRET123',exc.stderr_tail)
   self.assertIn('JOB_HEALTH_PUSH_REJECTED_UNKNOWN',str(exc))
+
