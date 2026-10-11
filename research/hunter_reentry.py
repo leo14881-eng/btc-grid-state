@@ -182,7 +182,7 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
     cutoff = time(row.get('reentry_confirmation_after_utc'))
     # Duplicates/old packets are no-ops, including old malformed replays. A
     # genuinely newer observation with missing source data interrupts setup.
-    if (generation == context.get('generation') or generation in row.get('reentry_seen_generations', [])
+    if ((generation and generation == context.get('generation')) or generation in row.get('reentry_seen_generations', [])
             or (meta.get('evidence_id') and meta['evidence_id'] in row.get('reentry_seen_evidence_ids', []))
             or (watermark and times[0] and times[0] <= time(watermark['times'][0]))
             or (cutoff and times[0] and times[0] <= cutoff)):
@@ -194,7 +194,7 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
     if prior and any(not engine.fresh(at, now) for at in prior.get('validity_times', prior['times'])):
         prior = None
         row.pop('reentry_setup', None)
-    if (generation == context.get('generation') or meta.get('evidence_id') == context['signal_evidence'].get('evidence_id')
+    if ((generation and generation == context.get('generation')) or meta.get('evidence_id') == context['signal_evidence'].get('evidence_id')
             or generation in row.get('reentry_seen_generations', [])
             or meta['evidence_id'] in row.get('reentry_seen_evidence_ids', [])
             or (prior and (generation == prior['generation'] or any(t <= time(old) for t, old in zip(times, prior['times']))))):

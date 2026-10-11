@@ -376,6 +376,15 @@ class ReentryTests(unittest.TestCase):
         self.assertFalse(self.run_observation(4,100.4)[0])
         self.assertTrue(self.run_observation(5,100.5)[0])
 
+    def test_missing_generation_with_legacy_unknown_exit_generation_interrupts(self):
+        self.state['reentry_registry']['X']['reentry_context']['generation'] = None
+        self.run_observation(1,100.1)
+        data = self.inputs(2,100.2)
+        data[1].pop('generation_id')
+        self.assertFalse(self.run_observation(2,100.2,inputs=data)[0])
+        self.assertNotIn('reentry_setup',self.state['reentry_registry']['X'])
+        self.assertFalse(self.run_observation(3,100.3)[0])
+
     def test_old_source_refetch_or_score_change_is_not_new_market_evidence(self):
         first = self.inputs(1,100.1)
         self.run_observation(1,100.1,inputs=first)
