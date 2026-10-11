@@ -165,7 +165,16 @@ def worker(args):
         stack.enter_context(mock.patch.object(runtime,'publish_verified',side_effect=wrap('proof_publication_including_readback',runtime.publish_verified)))
         start=time.perf_counter(); publisher.persist(base,generation); phases['persistence_including_proof']=time.perf_counter()-start
     output = {n: json.loads(raw) for n,raw in expected.items()}
-    output['hunter-position-monitor.json'].pop('timing_seconds',None)
+    recorded_timings=output['hunter-position-monitor.json'].pop('timing_seconds',{})
+    recorded_pages={r['lane']:r['historical_backfill_http_page_attempts']
+        for r in output['hunter-position-monitor.json']['results'] if 'historical_backfill_http_page_attempts' in r}
+    if recorded_pages:
+        actual_pages=collections.Counter(c['lane'] for c in calls if c['category']=='historical')
+        if any(recorded_pages[lane]!=actual_pages[lane] for lane in recorded_pages):
+            raise AssertionError('RECORDED_HISTORY_PAGE_COUNT_MISMATCH')
+        for lane in ('v1','v2'):
+            for phase in ('management_decisions','closed_history','open_history','portfolio_write','summary','summary_write'):
+                if lane+'_'+phase not in recorded_timings:raise AssertionError('MISSING_RECORDED_PHASE')
     decisions = {n:{k:v for k,v in d.items() if k in ('decisions','events')}
                  for n,d in output.items() if n.endswith('-portfolio.json')}
     def union_seconds(category):
@@ -181,6 +190,7 @@ def worker(args):
         synthetic_responses=True,actual_network_measured=False,history_delay=args.history_delay,
         quote_delay=args.quote_delay,backfill_budget=engine.OPPORTUNITY_BACKFILL_BUDGET,
         positions_before=[len(s['open_positions']) for s in states],phases=phases,
+        recorded_monitor_timings=recorded_timings,recorded_history_page_attempts=recorded_pages,
         http_wall_union_seconds={kind:union_seconds(kind) for kind in ('quote','historical')},
         function_seconds={k:sum(v) for k,v in measurements.items()},
         function_calls={k:len(v) for k,v in measurements.items()},http_requests=calls,

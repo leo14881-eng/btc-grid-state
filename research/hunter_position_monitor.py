@@ -60,6 +60,7 @@ def configure_lane(v1_mode):
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"];eng.ENTRY_MODE=LANES["V2"]["entry_mode"];eng.DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"];eng.DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"];eng.STRATEGY_ID=LANES["V2"]["strategy"];eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
 def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None,risk_evidence=None):
  state=load(path);excluded=set(excluded or [])
+ phase='v1' if v1_mode else 'v2'
  # Both lanes get their own bounded observation budget in this shared process.
  eng._opportunity_backfill_requests=0
  quarantine=eng.quarantine_non_crypto_history(state,excluded)
@@ -85,7 +86,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
   pending_manual=[p for p in state['open_positions'] if p.get('shadow_id') in target_ids]
   position_order={p.get('shadow_id'):i for i,p in enumerate(state['open_positions'])}
   state['open_positions']=[p for p in state['open_positions'] if p.get('shadow_id') not in target_ids]
- eng.manage_existing_positions(state,scan,review,liq,supply,now,btc,capital_proposals)
+ timed(phase+'_management_decisions',eng.manage_existing_positions,state,scan,review,liq,supply,now,btc,capital_proposals)
  if pending_manual:
   state['open_positions']=sorted(state['open_positions']+pending_manual,key=lambda p:position_order[p.get('shadow_id')])
  # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit
@@ -97,9 +98,9 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  # the bounded historical backfill, never inferred from a late current price.
  history_workers=int(os.getenv('HUNTER_MONITOR_HISTORY_WORKERS','1'))
  if history_workers==1:
-  eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"))
+  timed(phase+'_closed_history',eng.refresh_closed_observations,state,now,lambda asset:(market.get(asset) or {}).get("reference_price"))
  else:
-  eng.refresh_closed_observations(state,now,lambda asset:(market.get(asset) or {}).get("reference_price"),historical_workers=history_workers)
+  timed(phase+'_closed_history',eng.refresh_closed_observations,state,now,lambda asset:(market.get(asset) or {}).get("reference_price"),historical_workers=history_workers)
  if len(state.get("decisions") or [])>eng.MAX_DECISION_HISTORY:
   n=len(state["decisions"])-eng.MAX_DECISION_HISTORY;state["decision_history_truncated"]=int(state.get("decision_history_truncated") or 0)+n;state["decisions"]=state["decisions"][-eng.MAX_DECISION_HISTORY:]
  if len(state.get("events") or [])>eng.MAX_EVENT_HISTORY:
@@ -108,14 +109,16 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  added=sorted(a for a,n in after.items() if n>before.get(a,0));closed=sorted(set(before)-set(after))
  # Persist bounded migration progress before writing the portfolio. Summary
  # construction must not add metadata to a blocked manual-exit holding.
- for pos in state.get('open_positions') or []:
-  if pos not in pending_manual and eng.sample_cohort(pos)=='MIGRATION_SAMPLE' and pos.get('data_provenance')!='HISTORICAL_BACKFILL':
-   eng.ensure_opportunity_observation(pos,pos.get('last_price'),now)
-   eng.backfill_opportunity_history(pos,now)
- state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
+ def open_history():
+  for pos in state.get('open_positions') or []:
+   if pos not in pending_manual and eng.sample_cohort(pos)=='MIGRATION_SAMPLE' and pos.get('data_provenance')!='HISTORICAL_BACKFILL':
+    eng.ensure_opportunity_observation(pos,pos.get('last_price'),now)
+    eng.backfill_opportunity_history(pos,now)
+ timed(phase+'_open_history',open_history)
+ state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();timed(phase+'_portfolio_write',eng.atomic_json_write,path,state)
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
- summary=eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan),backfill_open=False)
+ summary=timed(phase+'_summary',eng.build_summary,state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan),backfill_open=False)
  if not v1_mode and manual_stop.REQUEST_ID in state.get('manual_exit_requests',{}):
   all_closed=state.get('closed_positions',[])+state.get('closed_trade_archive',[])
   manual_rows=[p for p in all_closed if p.get('exit_reason')==manual_stop.REASON]
@@ -124,8 +127,9 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
    'scope':'SEPARATE_REVIEW_COHORTS_TOTAL_REALIZED_PNL_UNCHANGED',
    'user_manual':{'count':len(manual_rows),'net_pnl_usdt':round(sum(p.get('net_pnl_usdt',0) for p in manual_rows),2),'opportunity_evaluation':eng.opportunity_summary(manual_rows,now)},
    'automatic_strategy':{'count':len(automatic_rows),'net_pnl_usdt':round(sum(p.get('net_pnl_usdt',0) for p in automatic_rows),2),'opportunity_evaluation':eng.opportunity_summary(automatic_rows,now)}}
- eng.atomic_json_write(summary_path,summary)
- result={"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
+ timed(phase+'_summary_write',eng.atomic_json_write,summary_path,summary)
+ result={"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"},
+         "historical_backfill_http_page_attempts":eng._opportunity_backfill_requests}
  if manual_audit is not None:
   # Embedded in an existing member of the seven-file atomic publication set.
   # It remains NOT_PUBLISHED until the original publisher verifies main.

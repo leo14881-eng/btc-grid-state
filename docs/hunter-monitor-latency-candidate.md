@@ -193,6 +193,17 @@ No results/ledger file is edited by the candidate. `HUNTER_MONITOR_HISTORY_WORKE
 defaults to **1**; only explicit 2 or 4 selects parallel historical observation.
 No installed service environment or wrapper has been changed.
 
+The monitor now records observation-only `v1_`/`v2_` timings for
+`management_decisions`, `closed_history`, `open_history`, `portfolio_write`,
+`summary`, and `summary_write` in its existing `timing_seconds` receipt. The
+management timer covers `manage_existing_positions`; manual-stop staging and
+other setup remain inside the broader lifecycle timer. Each lane result adds
+`historical_backfill_http_page_attempts`: the existing budget counter, including
+failed pages, covering both closed and open history. The replay independently
+checks these receipt counts against intercepted actual page calls and requires
+all phase fields. These are source changes only; historical production receipts
+listed below did not contain these fields.
+
 The actual production receipts below use the same field names throughout; raw
 source revisions, receipt commits and counts are in
 `replays/hunter-monitor-production-timings.json`. They are eight observations,
