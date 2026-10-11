@@ -1,6 +1,6 @@
 # Investment Automations — Canonical Logic FINAL
 
-Version: 2026-09-19 v1.5
+Version: 2026-10-11 v1.6
 Timezone: Asia/Ho_Chi_Minh
 Status: FROZEN under “10-Year Wealth Compounding Architecture FINAL”
 
@@ -37,27 +37,11 @@ This section is the current authoritative capital/KPI override and supersedes co
 **Compatibility rule:** whenever any later section conflicts with this 0A override, 0A wins. Old A/B/C/D/E and historical portfolio-weight text remains only as history until fully retired and must not control new recommendations.
 
 
-## 0. Latest execution architecture override — 2026-09-28
+## 0. Retired execution architecture (historical)
 
-This section is the authoritative **execution-layer override** for the user-confirmed trading plan. It supersedes contradictory older language in this file about ordinary BTC swing trading, unconfirmed B funding-pool size, and old allocation percentage gates **only for these isolated sleeves**. Preserve the historical long-horizon portfolio policy as historical context, not as an automatic veto on separately authorized swing sleeves. Do not reinterpret any planned budget as verified exchange cash.
-
-**Confirmed planned sleeves (NOT verified available balances):**
-- A = 10,000 USDT BTC daily spot swing, structure-based staggered entries, up to five entries if separately justified. Net >90 USDT per completed trade is a target, not guaranteed.
-- B = 20,000 USDT independent larger BTC spot swing. Conditional 30% / 30% / 40% staging, with later stages requiring improved structure or independent evidence, not mere underwater P&L.
-- C = 20,000 USDT isolated altcoin pool. Per-asset sizing decided by current research and risk gates; realized exits release the actual committed C principal. No automatic trade from discovery.
-- D = 200,000 USDT planned long-term BTC allocation, isolated from A/B/C. Existing 0.5 BTC permanent-core accumulation protection remains; never treat D's planned amount as spendable cash.
-- E = existing independent BTC spot grid, last GitHub-confirmed planned/current reference 14,000 USDT; exact live exchange capital/configuration must be verified independently. Only state.json is the grid configuration SSOT. E is isolated from A/B/C/D; do not count the same grid funds twice. Any sleeve beyond A–E is UNSPECIFIED / NOT AUTHORIZED. The historical 50,000 USD crisis reserve remains separately protected and must not be implicitly merged into A/B/C/D.
-
-**A+B designated recovery unit:** A and B may independently enter on valid separate signals within their own limits. A's unrealized loss alone never triggers B. Only explicitly designated A and B positions can form one recovery unit. When the designated unit's combined **realizable net P&L after all fees and expected slippage is positive**, a full combined exit may be proposed for user execution; no fixed +200 USDT threshold. Keep individual A and B P&L visible, restore each sleeve's actually deployed principal without double counting, and separately record realized USDT profit. Unrelated B positions, C, D, grid and permanent core are excluded. Max A+B committed planned principal = 30,000 USDT, conditional on verified availability and no conflicting orders.
-
-**Risk and execution:** The user prefers no fixed BTC spot price stop-loss. This does not mean guaranteed recovery: enforce sleeve caps, no automatic dip-buying, cash preservation, adverse-structure purchase pause, drawdown and capital lock-up reporting. The user alone places trades and reports actual fills; never record suggested orders as executed. Never presume a task ran or a notification was delivered from enabled status alone.
-
-**Required per-run output and ledger fields:** live-source timestamp and confidence; A/B/C/D planned cap versus independently VERIFIED free balance and reserved/open orders; each sleeve's committed principal, current position, average cost, net realized/unrealized P&L, and locked days; designated A+B recovery unit membership, separately attributable A/B P&L and combined net exit proceeds; independent evidence for B staging; unresolved data explicitly UNKNOWN. Where balances or execution data are missing, continue research and provide conditional non-executable levels, but block any claim of a funded executable order or completed allocation check.
-
-**Implementation/compatibility:** Every task must read this override before applying older task-specific capital instructions. The 45/35/15 historical portfolio weight benchmarks and historical no-ordinary-BTC-short-term-trading wording do not override authorized A/B sleeves. Do not silently modify the live grid's state.json, trade journal, portfolio holdings or historical execution evidence. Preserve GitHub concurrency/retry/post-write verification contract. Task schedule, actual delivery and scheduled-run write permissions require separate empirical verification.
+The previous A/B/C/D/E execution architecture was retired on 2026-10-11. No legacy sleeve limits, recovery-unit rules, or fixed core/swing splits are executable. See section 0A for the only current capital definitions. Historical transactions must remain in their original ledgers and must not be rewritten.
 
 ---
-
 
 ## 1. State ownership
 
