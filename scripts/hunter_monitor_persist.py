@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Infrastructure-only, fail-closed publication of a monitor generation."""
 import argparse
+import io
 import json
+import locale
 import math
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -41,10 +44,10 @@ def timed(stage, fn, *args, **kwargs):
             stage=stage, seconds=round(time.monotonic()-start, 6))), flush=True)
 
 
-def git(*args, check=True):
+def git(*args, check=True, text=True, input=None):
     # Only the Git operation name is logged, never URLs or command arguments.
     return timed('git_' + args[0], subprocess.run, ['git', *args], check=check,
-                 capture_output=True, text=True)
+                 capture_output=True, text=text, input=input)
 
 
 def require(condition, message):
@@ -52,9 +55,43 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
+def parse_batch_snapshot(data):
+    """Decode Git's byte-counted batch framing, never split JSON on newlines."""
+    result, offset = {}, 0
+    for name in NAMES:
+        end = data.find(b'\n', offset, offset + 256)
+        require(end >= 0, 'INVALID_SNAPSHOT_BATCH_HEADER')
+        fields = data[offset:end].split(b' ')
+        require(len(fields) == 4 and fields[0] == name.encode('ascii') and
+                re.fullmatch(rb'(?:[0-9a-f]{40}|[0-9a-f]{64})', fields[1]) and
+                fields[2] == b'blob' and re.fullmatch(rb'[0-9]+', fields[3]),
+                'INVALID_SNAPSHOT_BATCH_OBJECT ' + name)
+        size = int(fields[3])
+        start, stop = end + 1, end + 1 + size
+        require(stop < len(data) and data[stop:stop + 1] == b'\n',
+                'TRUNCATED_SNAPSHOT_BATCH_OBJECT ' + name)
+        # Match subprocess text=True's encoding and universal-newline behavior.
+        # Framing is parsed before decoding, including for multibyte JSON text.
+        with io.TextIOWrapper(io.BytesIO(data[start:stop]),
+                              encoding=locale.getpreferredencoding(False)) as stream:
+            result[name] = stream.read()
+        offset = stop + 1
+    require(offset == len(data), 'EXTRA_SNAPSHOT_BATCH_OUTPUT')
+    return result
+
+
 def snapshot(ref=None):
-    return {name: (git('show', f'{ref}:{RESULTS}{name}').stdout if ref
-                   else pathlib.Path(RESULTS + name).read_text()) for name in NAMES}
+    if not ref:
+        return {name: pathlib.Path(RESULTS + name).read_text() for name in NAMES}
+    # Resolve the fetched ref once: every file belongs to one immutable commit.
+    # No cache survives this call, and readback still fetches/validates main.
+    commit = git('rev-parse', '--verify', '--end-of-options', ref + '^{commit}').stdout.strip()
+    require(re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', commit),
+            'INVALID_SNAPSHOT_COMMIT')
+    requests = ''.join(f'{commit}:{RESULTS}{name} {name}\n' for name in NAMES).encode('ascii')
+    output = git('cat-file', '--batch=%(rest) %(objectname) %(objecttype) %(objectsize)',
+                 text=False, input=requests).stdout
+    return parse_batch_snapshot(output)
 
 
 def validate(raw, generation):
