@@ -1,0 +1,31 @@
+name: Stock position collection offline
+
+on:
+  pull_request:
+    paths:
+      - 'research/stock_shadow/stock_position_monitor.py'
+      - 'research/stock_shadow/quote_window_store.py'
+      - 'research/stock_shadow/server/runner.py'
+      - 'tests/test_stock_position_collection.py'
+      - 'tests/test_stock_persistent_quotes.py'
+      - 'tests/fixtures/stock_monitor_legacy.py'
+      - 'tests/fixtures/stock_quote_process.py'
+      - 'deploy/stock-shadow/stock-shadow.env.example'
+      - '.github/workflows/stock-position-collection-offline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check pytest
+      - name: Stock collection differential replay and existing safety regressions
+        run: python -m pytest -q tests/test_stock_position_collection.py tests/test_stock_persistent_quotes.py tests/test_stock_quote_safety.py tests/test_stock_shadow.py tests/test_stock_server_migration.py

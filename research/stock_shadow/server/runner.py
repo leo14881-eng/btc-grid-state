@@ -13,6 +13,7 @@ import uuid
 
 from .persist import ROOT, changed_paths, persist, snapshot, validate_outputs, PublicationUnverified
 from .runtime import JOBS, admission, check_fence, environment, git, require
+from ..quote_window_store import ENV_KEYS as QUOTE_CACHE_ENV_KEYS
 
 PROVIDER_ENV_KEYS = ('APCA_API_KEY_ID', 'APCA_API_SECRET_KEY',
                      'STOCKFIT_API_KEY', 'FMP_API_KEY', 'SEC_USER_AGENT', 'SEC_TRANSPORT_STATE')
@@ -44,7 +45,17 @@ def canonical_inventory():
 
 def test_environment(env):
     """Unit tests must never inherit the live data-provider credentials."""
-    return {key: value for key, value in env.items() if key not in PROVIDER_ENV_KEYS}
+    return {key: value for key, value in env.items() if key not in PROVIDER_ENV_KEYS + QUOTE_CACHE_ENV_KEYS}
+
+
+def quote_cache_environment(env, job, preview, runtime_dir):
+    """Bind only the opted-in monitor to existing runtime storage, never Git data."""
+    result = {key: value for key, value in env.items() if key not in QUOTE_CACHE_ENV_KEYS}
+    if job == 'monitor' and env.get('STOCK_SHADOW_INCREMENTAL_QUOTES') == '1':
+        scope = 'preview' if preview else 'publish'
+        result.update(STOCK_SHADOW_INCREMENTAL_QUOTES='1', STOCK_SHADOW_QUOTE_CACHE_SCOPE=scope,
+                      STOCK_SHADOW_QUOTE_CACHE_PATH=str(Path(runtime_dir) / f'stock-quotes-{scope}-v1.sqlite3'))
+    return result
 
 
 def run(job, preview, runtime_dir):
@@ -78,6 +89,7 @@ def run(job, preview, runtime_dir):
     # into a scheduler policy. The unchanged engine applies NY calendar gates.
     env.pop('STOCK_SHADOW_FORCE_MONITOR', None)
     env.pop('STOCK_SHADOW_FORCE', None)
+    env = quote_cache_environment(env, job, preview, runtime_dir)
     record = {'schema': 'stock_server_run_v1', **a, 'preview': preview,
               'started_at': datetime.now(timezone.utc).isoformat(),
               'status': 'STARTED', 'verified': False}
