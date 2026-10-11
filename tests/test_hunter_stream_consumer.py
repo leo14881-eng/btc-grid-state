@@ -127,6 +127,12 @@ class ConsumerTests(unittest.TestCase):
                 (storage.topic('TAUSDT','15'),NOW//900000*900000)).fetchone()[0]
         self.assertLessEqual(count,storage.MAX_REVISIONS)
         self.assertEqual(self.freeze(now=NOW+300)['status'],'UNKNOWN')
+        later=NOW+storage.HISTORY_MS+1000
+        self.store.ingest_ws(self.epoch,message('TAUSDT','15',later),later)
+        with self.store.db(readonly=True) as db:
+            retained=db.execute('SELECT COUNT(*) FROM revisions WHERE topic=? AND observed<?',
+                (storage.topic('TAUSDT','15'),later-storage.HISTORY_MS)).fetchone()[0]
+        self.assertLessEqual(retained,storage.LIMITS['15'])
 
     def test_global_deny_and_cooldown_block_even_otherwise_ready_cache(self):
         for text in ('access too frequent','country','unknown forbidden'):

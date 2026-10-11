@@ -173,6 +173,12 @@ class Store:
                    (name, (end//step-LIMITS[interval]-2)*step))
         db.execute('DELETE FROM revisions WHERE topic=? AND start<?',
                    (name, (end//step-LIMITS[interval]-2)*step))
+        # Closed bars stop receiving _put calls. Compact their old revisions on
+        # subsequent topic traffic too, retaining the last pre-horizon baseline.
+        db.execute('''DELETE FROM revisions AS old WHERE old.topic=? AND old.observed<?
+            AND old.source_time < (SELECT MAX(prior.source_time) FROM revisions AS prior
+                WHERE prior.topic=old.topic AND prior.start=old.start AND prior.observed<?)''',
+            (name, end-HISTORY_MS, end-HISTORY_MS))
 
     def _record_readiness(self, db, name, observed):
         db.execute('''INSERT INTO readiness(topic,observed,epoch,ack,ws_rx,ws_ts,gap)
