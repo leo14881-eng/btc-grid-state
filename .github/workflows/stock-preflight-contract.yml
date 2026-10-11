@@ -33,15 +33,19 @@ jobs:
         run: |
           limits=()
           test_home=/tmp/preflight-home
+          state_dir=$(mktemp -d "$RUNNER_TEMP/stock-preflight.XXXXXX")
+          mkdir -p "$state_dir/work/preflight/tmp"
           if [[ "$PROFILE" == service ]]; then
             limits=(--cpus=0.5 --memory=1g --pids-limit=64 --read-only
                     --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs /home:mode=000
                     --cap-drop=ALL --security-opt=no-new-privileges)
-            test_home=/home/stock-shadow
+            test_home=/var/lib/stock-shadow
           fi
           docker run --rm -i --network=none "${limits[@]}" \
             --user "$(id -u):$(id -g)" -e PROFILE -e HOME="$test_home" \
             -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e TZ=UTC \
+            -e TMPDIR=/var/lib/stock-shadow/work/preflight/tmp \
+            -v "$state_dir:/var/lib/stock-shadow" \
             -v "$PWD:/var/lib/stock-shadow/work/preflight/repo" \
             -w /var/lib/stock-shadow/work/preflight/repo stock-preflight python - <<'PY'
           import ast
