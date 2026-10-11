@@ -1,0 +1,87 @@
+name: Stock production preflight contract
+on:
+  pull_request:
+    paths:
+      - 'research/stock_shadow/**'
+      - 'tests/test_stock*.py'
+      - '.github/workflows/stock-preflight-contract.yml'
+      - 'deploy/stock-shadow/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ci, service]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare isolated test dependencies
+        run: |
+          docker build -t stock-preflight - <<'DOCKERFILE'
+          FROM python:3.12-bookworm
+          RUN python -m pip install --disable-pip-version-check pytest
+          DOCKERFILE
+      - name: Exact production selectors and environment, no provider network
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          limits=()
+          if [[ "$PROFILE" == service ]]; then
+            limits=(--cpus=0.5 --memory=1g --pids-limit=64)
+          fi
+          docker run --rm -i --network=none "${limits[@]}" \
+            --user "$(id -u):$(id -g)" -e PROFILE -e HOME=/tmp/preflight-home \
+            -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e TZ=UTC \
+            -v "$PWD:/workspace" -w /workspace stock-preflight python - <<'PY'
+          import ast
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tempfile
+          from research.stock_shadow.server import runner, runtime
+
+          if os.environ['PROFILE'] == 'service':
+              os.umask(0o077)
+          Path(os.environ['HOME']).mkdir()
+          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          identity = dict(source_commit=source, owner='server', epoch=3, job='main',
+                          run_id='offline-preflight-contract', attempt=1)
+          identity['generation'] = runtime.generation(source, 'server', 3, 'main', identity['run_id'])
+          env = dict(os.environ, **runtime.environment(identity))
+          for key in ('PYTHONPATH', 'PYTHONHOME', 'STOCK_SHADOW_FORCE', 'STOCK_SHADOW_FORCE_MONITOR'):
+              env.pop(key, None)
+          env.update(APCA_API_KEY_ID='offline-dummy', APCA_API_SECRET_KEY='offline-dummy',
+                     SEC_USER_AGENT='offline@example.invalid', SEC_TRANSPORT_STATE='/tmp/unused.sqlite3',
+                     STOCK_SHADOW_INCREMENTAL_QUOTES='0')
+          env = runner.test_environment(runner.quote_cache_environment(env, 'main', False, '/tmp'))
+          command = [sys.executable, '-m', 'pytest', '-q', '--durations=10',
+                     'tests/test_stock_shadow.py', 'tests/test_stock_server_migration.py']
+          # The checked-in runner is the source of truth for selector order and timeout.
+          module = ast.parse(Path(runner.__file__).read_text())
+          call = next(node for node in ast.walk(module) if isinstance(node, ast.Call)
+                      and isinstance(node.func, ast.Attribute) and node.func.attr == 'run'
+                      and node.args and isinstance(node.args[0], ast.List)
+                      and any(isinstance(item, ast.Constant) and item.value == 'pytest'
+                              for item in node.args[0].elts))
+          assert [item.value for item in call.args[0].elts[1:]] == command[1:]
+          timeout = next(item.value.value for item in call.keywords if item.arg == 'timeout')
+          assert timeout == 180
+          assert not any(key in env for key in runner.PROVIDER_ENV_KEYS + runner.QUOTE_CACHE_ENV_KEYS)
+          before = runner.canonical_inventory()
+          print(json.dumps(dict(profile=os.environ['PROFILE'], source=source,
+                                python=sys.version, command=command, timeout=timeout)), flush=True)
+          with tempfile.TemporaryDirectory(prefix='stock-preflight-') as temp:
+              env['TMPDIR'] = temp
+              result = subprocess.run(command, env=env, timeout=timeout)
+          assert runner.canonical_inventory() == before, 'PREFLIGHT_MUTATED_CANONICAL_FILES'
+          assert not runner.changed_paths(), 'PREFLIGHT_MUTATED_CHECKOUT'
+          raise SystemExit(result.returncode)
+          PY
