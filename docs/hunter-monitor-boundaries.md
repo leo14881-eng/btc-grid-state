@@ -30,6 +30,10 @@ or persistence guard is changed. SHADOW only: `real_trading_enabled=false`,
    cannot fill a gap; contradictory duplicates, malformed timestamps, invalid
    highs and unfinished candles cannot certify coverage.
 
+Valid coverage also requires a finite horizon return. NaN/Infinity or malformed
+return metadata stays `BACKFILL_PENDING`, is excluded from completed horizons
+and aggregate coverage, and cannot leak into reported maxima or averages.
+
 ## Coverage and continuation
 
 Coverage is explicitly at **completed 5-minute candle** precision. Only candles
@@ -69,6 +73,11 @@ git diff --exit-code -- research/results research/hunter-capital-state.json
 The PR's Ubuntu workflow runs the complete Hunter suite, including the merged
 PR105 lock, CAS and generation tests. Some legacy filesystem tests encounter
 Windows sandbox atomic-replace restrictions; Linux CI is the integration gate.
+The empty-lane integration test executes the actual Monitor and scheduler-health
+write, then the unchanged `persist()` validation/CAS/commit/push/readback path
+against a temporary local bare Git repository. It checks byte-for-byte retained
+ledgers, retry idempotence and rejection of missing lanes or a wrong generation.
+Its `OFFLINE_TEST` trigger cannot publish a server primary proof.
 
 After a separately authorized merge/deployment, runtime acceptance still needs
 natural Monitor cycles showing: a closed-only quote gap alongside managed open

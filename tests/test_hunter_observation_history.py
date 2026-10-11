@@ -175,5 +175,42 @@ class HistoryCoverageTests(unittest.TestCase):
         self.assertEqual(summary['completed_72h_observations'],0)
         self.assertTrue(summary['full_opportunity_metrics_provisional'])
 
+    def test_nonfinite_horizon_returns_stay_pending_despite_valid_coverage(self):
+        from tests.test_hunter_observation_fixtures import certify_horizons
+        for value in (float('nan'),float('inf'),float('-inf'),'NaN','Infinity','invalid'):
+            with self.subTest(value=value):
+                pos=certify_horizons(closed_position())
+                pos['post_exit_observation']['72h']['max_return_from_sell_pct']=value
+                eng.refresh_post_exit_status(pos,NOW)
+                self.assertFalse(pos['observation_complete'])
+                evaluation=pos['post_exit_evaluation']
+                self.assertEqual(evaluation['status'],'BACKFILL_PENDING')
+                self.assertIn('72h',evaluation['missing_horizons'])
+                self.assertNotIn('72h',evaluation['completed_horizons'])
+                self.assertEqual(evaluation['max_return_from_sell_pct'],3.)
+                summary=eng.opportunity_summary([pos],NOW)
+                self.assertEqual(summary['post_exit_coverage']['72h'],{'due':1,'backfilled':0})
+                self.assertEqual(summary['completed_72h_observations'],0)
+                self.assertIsNone(summary['avg_completed_72h_max_return_from_sell_pct'])
+                # If every horizon is corrupt, there is no completed maximum.
+                for row in pos['post_exit_observation'].values():row['max_return_from_sell_pct']=value
+                eng.refresh_post_exit_status(pos,NOW)
+                self.assertEqual(pos['post_exit_evaluation']['completed_horizons'],[])
+                self.assertIsNone(pos['post_exit_evaluation']['max_return_from_sell_pct'])
+
+    def test_finite_horizon_values_use_same_normalization_for_status_and_summary(self):
+        from tests.test_hunter_observation_fixtures import certify_horizons
+        for value in (0.,-2.5,3.5,'3.5'):
+            with self.subTest(value=value):
+                pos=certify_horizons(closed_position())
+                pos['post_exit_observation']['72h']['max_return_from_sell_pct']=value
+                eng.refresh_post_exit_status(pos,NOW)
+                self.assertTrue(pos['observation_complete'])
+                self.assertEqual(pos['post_exit_evaluation']['status'],'COMPLETE')
+                self.assertEqual(pos['post_exit_evaluation']['max_return_from_sell_pct'],max(3.,float(value)))
+                summary=eng.opportunity_summary([pos],NOW)
+                self.assertEqual(summary['post_exit_coverage']['72h'],{'due':1,'backfilled':1})
+                self.assertEqual(summary['avg_completed_72h_max_return_from_sell_pct'],float(value))
+
 
 if __name__=='__main__':unittest.main()

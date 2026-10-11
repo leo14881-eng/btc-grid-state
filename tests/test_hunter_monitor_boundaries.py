@@ -2,6 +2,8 @@
 import copy
 import datetime as dt
 import json
+import os
+import subprocess
 import tempfile
 import unittest
 from contextlib import ExitStack, redirect_stdout
@@ -141,6 +143,80 @@ class MonitorBoundaryTests(unittest.TestCase):
         self.assertEqual(saved['open_positions'][0]['opportunity_history_progress']['bars_seen'],1000)
         self.main_cycle([empty,saved],market,real_lanes=True,history_rows=rows[1000:2000])
         self.assertEqual(self.writes[monitor.V2]['open_positions'][0]['opportunity_history_progress']['bars_seen'],2000)
+
+
+class EmptyLanePersistenceTests(unittest.TestCase):
+    def test_actual_empty_monitor_publishes_and_reads_back_without_rewriting_ledgers(self):
+        from research import hunter_scheduler_health as scheduler
+        from tests.test_hunter_monitor_persist import fixture
+        from tests.test_hunter_observation_fixtures import certify_horizons
+
+        with tempfile.TemporaryDirectory(prefix='hunter-empty-lanes-') as directory:
+            root=Path(directory).resolve(); remote=root/'remote.git'; checkout=root/'writer'
+            def git(*args,cwd=checkout):
+                return subprocess.run(['git',*args],cwd=cwd,check=True,capture_output=True,text=True).stdout.strip()
+            git('init','--bare','--initial-branch=main',str(remote),cwd=root)
+            git('clone',str(remote),str(checkout),cwd=root)
+            for key,value in (('user.name','offline-test'),('user.email','offline@test.invalid'),('commit.gpgsign','false')):
+                git('config',key,value)
+            # The real writer is allowed to fetch/push only this local bare repo.
+            self.assertEqual(Path(git('remote','get-url','origin')).resolve(),remote)
+            started=dt.datetime.now(dt.timezone.utc); previous=started-dt.timedelta(minutes=5)
+            docs={name:json.loads(raw) for name,raw in fixture().items()}
+            for prefix in ('hunter-shadow','hunter-shadow-v2'):
+                pos=certify_horizons(closed_position());pos['observation_complete']=True
+                docs[prefix+'-portfolio.json'].update(open_positions=[],closed_positions=[pos],
+                    events=[{'event_id':'retained-historical-sell'}],decisions=[],updated_at_utc=previous.isoformat())
+                docs[prefix+'-summary.json'].update(open_positions=0,closed_positions=1,as_of_utc=previous.isoformat())
+            docs['hunter-position-monitor.json']['results']=[{'lane':lane,'open':0} for lane in ('SHADOW_V1','SHADOW_V2')]
+            # OFFLINE_TEST deliberately cannot publish a VULTR primary proof.
+            docs['hunter-scheduler-health.json']=scheduler.build_success_health(previous,previous.isoformat(),{},'OFFLINE_TEST')
+            for name,doc in docs.items():
+                path=checkout/writer.RESULTS/name;path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_text(json.dumps(doc,sort_keys=True)+'\n')
+            git('add','.');git('commit','-m','synthetic empty-lane baseline');git('push','origin','main')
+            base=git('rev-parse','HEAD')
+            initial_ledgers={name:(checkout/writer.RESULTS/name).read_bytes() for name in writer.NAMES[:4]}
+            old_cwd=Path.cwd()
+            try:
+                os.chdir(checkout)
+                output=StringIO()
+                with redirect_stdout(output),patch.object(monitor,'batch_market',side_effect=AssertionError('empty cycle must not fetch market')):
+                    monitor.main()  # Real file loads and atomic output, no assembled Monitor result.
+                    generation,admitted=scheduler.should_process(started,docs['hunter-scheduler-health.json'])
+                    self.assertTrue(admitted)
+                    health=scheduler.build_success_health(dt.datetime.now(dt.timezone.utc),started.isoformat(),
+                        docs['hunter-scheduler-health.json'],'OFFLINE_TEST',base,admitted_generation=generation)
+                    scheduler.atomic_write(scheduler.HEALTH,health)
+                    expected=writer.snapshot()
+                    writer.persist(base,generation)  # Real validation, CAS, commit, push and authoritative readback.
+                self.assertIn('SERVER_POST_PUSH_READBACK_OK '+generation+' 0 0',output.getvalue())
+                self.assertIn('SHADOW_STATE_PUSH_VERIFIED',output.getvalue())
+                published=git('rev-parse','main',cwd=remote)
+                self.assertNotEqual(published,base)
+                self.assertEqual(writer.snapshot('origin/main'),expected)
+                self.assertEqual(writer.validate(expected,generation),[0,0])
+                self.assertEqual(json.loads(expected['hunter-position-monitor.json'])['status'],'NO_OPEN_POSITIONS')
+                self.assertEqual(json.loads(expected['hunter-scheduler-health.json'])['current_generation_id'],generation)
+                self.assertFalse(Path('research/results/hunter-runtime-monitor-health.json').exists())
+                for name,raw in initial_ledgers.items():self.assertEqual(Path(writer.RESULTS+name).read_bytes(),raw)
+                # Retry the actual publication: no extra commit, history, or trade.
+                with redirect_stdout(StringIO()):writer.persist(published,generation)
+                self.assertEqual(git('rev-parse','main',cwd=remote),published)
+                self.assertEqual(writer.snapshot('origin/main'),expected)
+                self.assertFalse(scheduler.should_process(started,health)[1])
+                # Empty lanes do not exempt malformed results or generations.
+                for name,key,value,error in (
+                    ('hunter-position-monitor.json','results',None,'MONITOR_LANES_MISSING'),
+                    ('hunter-scheduler-health.json','current_generation_id','wrong','GENERATION_MISMATCH')):
+                    for saved_name,raw in expected.items():Path(writer.RESULTS+saved_name).write_text(raw)
+                    corrupt=json.loads(expected[name]);corrupt[key]=value
+                    Path(writer.RESULTS+name).write_text(json.dumps(corrupt))
+                    with redirect_stdout(StringIO()),self.assertRaisesRegex(RuntimeError,error):
+                        writer.persist(published,generation)
+                    self.assertEqual(git('rev-parse','main',cwd=remote),published)
+            finally:
+                os.chdir(old_cwd)
 
 
 if __name__ == '__main__':

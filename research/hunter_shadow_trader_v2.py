@@ -460,12 +460,12 @@ def refresh_post_exit_status(pos,now):
  if not pos.get("closed_at_utc"):return
  closed=parse(pos["closed_at_utc"]);obs=pos.get("post_exit_observation") or {}
  due=[f"{int(h)}h" for h in REVIEW_HOURS if now>=closed+dt.timedelta(hours=h)]
- missing=[h for h in due if (obs.get(h) or {}).get("max_return_from_sell_pct") is None or not observation_history.verified(obs.get(h),closed,closed+dt.timedelta(hours=int(h[:-1])))]
+ missing=[h for h in due if finite((obs.get(h) or {}).get("max_return_from_sell_pct")) is None or not observation_history.verified(obs.get(h),closed,closed+dt.timedelta(hours=int(h[:-1])))]
  completed=[h for h in due if h not in missing]
  pos['observation_complete']=observation_complete(pos,now)
  pos["post_exit_evaluation"]={"status":"COMPLETE" if pos.get("observation_complete") else "BACKFILL_PENDING" if missing else "OBSERVING",
   "due_horizons":due,"completed_horizons":completed,"missing_horizons":missing,
-  "max_return_from_sell_pct":max((obs[h]["max_return_from_sell_pct"] for h in completed),default=None),
+  "max_return_from_sell_pct":max((finite(obs[h]["max_return_from_sell_pct"]) for h in completed),default=None),
   "source":"HISTORICAL_BACKFILL" if completed else None}
 
 def refresh_closed_observations(state,now,market_price=None):
@@ -935,7 +935,7 @@ def opportunity_summary(rows,now=None):
  for h in REVIEW_HOURS:
   key=f"{int(h)}h"
   due=[x for x in rows if x.get("closed_at_utc") and now>=parse(x["closed_at_utc"])+dt.timedelta(hours=h)]
-  coverage[key]={"due":len(due),"backfilled":sum((x.get("post_exit_observation") or {}).get(key,{}).get("max_return_from_sell_pct") is not None and observation_history.verified((x.get('post_exit_observation') or {}).get(key),parse(x['closed_at_utc']),parse(x['closed_at_utc'])+dt.timedelta(hours=h)) for x in due)}
+  coverage[key]={"due":len(due),"backfilled":sum(finite((x.get("post_exit_observation") or {}).get(key,{}).get("max_return_from_sell_pct")) is not None and observation_history.verified((x.get('post_exit_observation') or {}).get(key),parse(x['closed_at_utc']),parse(x['closed_at_utc'])+dt.timedelta(hours=h)) for x in due)}
  completed=[x for x in rows if observation_complete(x,now)]
  dist={"lt_0":0,"0_3":0,"3_5":0,"5_10":0,"10_20":0,"gt_20":0}
  for v in full:
@@ -946,7 +946,7 @@ def opportunity_summary(rows,now=None):
   elif v<=20:dist["10_20"]+=1
   else:dist["gt_20"]+=1
  return {"evaluated_positions":len(rows),"holding_mfe_available":len(holding),"full_opportunity_mfe_available":len(full),"completed_72h_observations":len(completed),
-  "post_exit_coverage":coverage,"avg_completed_72h_max_return_from_sell_pct":avg([x["post_exit_observation"]["72h"]["max_return_from_sell_pct"] for x in completed]),
+  "post_exit_coverage":coverage,"avg_completed_72h_max_return_from_sell_pct":avg([finite(x["post_exit_observation"]["72h"]["max_return_from_sell_pct"]) for x in completed]),
   "full_opportunity_metrics_provisional":len(completed)<len(rows),
   "avg_holding_mfe_pct":avg(holding),"median_holding_mfe_pct":med(holding),"avg_full_opportunity_mfe_pct":avg(full),"median_full_opportunity_mfe_pct":med(full),
   "avg_realized_net_return_pct":avg(vals("net_return_pct")),"avg_holding_profit_capture_ratio":avg(vals("holding_profit_capture_ratio")),
