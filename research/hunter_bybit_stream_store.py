@@ -15,7 +15,7 @@ LIMITS = {'15': 25, '60': 5}
 FRESH_MS = 90_000
 HISTORY_MS = 180_000
 MAX_REVISIONS = 256
-SYMBOL = re.compile(r'[A-Z0-9]{2,30}USDT\Z')
+SYMBOL = re.compile(r'[A-Z0-9]{1,30}USDT\Z')
 
 
 def content_hash(value):
@@ -430,9 +430,9 @@ database or another hostname. This governor cannot police unrelated programs.
                 return 'BOUNDED_RETRY'
             return 'NONRETRYABLE_RESPONSE'
 
-    def status(self, timeout=10):
+    def status(self, timeout=10, *, fixture_now=None):
         with self.store.db(readonly=True,timeout=timeout) as db:
-            value = budget_state(db)
+            value = budget_state(db, fixture_now=fixture_now)
             value['halt'] = value['halt'] or request_gate(self.store, db)
             return value
 
@@ -456,15 +456,21 @@ def budget_time(db, state, explicit=None):
     return time.monotonic_ns()//1_000_000
 
 
-def budget_state(db):
+def budget_state(db, *, fixture_now=None):
     value=dict(db.execute('SELECT * FROM budget WHERE id=1').fetchone())
     domain=db.execute('SELECT boot FROM budget_clock WHERE id=1').fetchone()
+    if fixture_now is not None:
+        if domain: raise RuntimeError('EXPLICIT_CLOCK_ON_MONOTONIC_BUDGET')
+        return value  # Injected legacy repair fixtures only; never real entrypoints.
     if domain:
         if domain[0]!=boot_id(): value['halt']=value['halt'] or 'BUDGET_BOOT_CHANGED_MANUAL_REVIEW'
         # Project remaining monotonic cooldown only for existing UTC consumers.
         # Actual admission never uses the wall clock or this projection.
         remain=max(0,value['cooldown_ms']-time.monotonic_ns()//1_000_000)
         value['cooldown_ms']=time.time_ns()//1_000_000+remain if remain else 0
+    elif (value['next_ms'] or value['last_ms'] or value['cooldown_ms']
+            or db.execute('SELECT 1 FROM leases LIMIT 1').fetchone()):
+        value['halt']=value['halt'] or 'BUDGET_CLOCK_MIGRATION_REQUIRES_REVIEW'
     return value
 
 
@@ -479,6 +485,9 @@ def request_gate(store, db):
         return None
     import fcntl
     for row in rows:
+        if (not isinstance(row['token'],str) or not re.fullmatch('[a-f0-9]{32}',row['token'])
+                or type(row['denied']) is not int or row['denied'] not in (0,1)):
+            return 'HTTP_REQUEST_MARKER_CORRUPT_MANUAL_REVIEW'
         if row['denied']:
             return 'HTTP_403_PENDING_MANUAL_REVIEW'
         try:

@@ -126,13 +126,17 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
     except BaseException as error:
         problem = error
     finally:
-        if process.poll() is None: process.kill()
+        if process.poll() is None:
+            try: process.kill()
+            except ProcessLookupError: pass  # Exit can race poll/kill.
         try:
             process.wait(timeout=1)
         except subprocess.TimeoutExpired as error:
+            process.stdout.close()
             raise UnreapedRequestError('PUBLIC_HTTP_PROCESS_NOT_REAPED') from error
         finally:
-            if not process.stdin.closed: process.stdin.close()
+            if not process.stdin.closed:
+                with contextlib.suppress(BrokenPipeError): process.stdin.close()
     try:
         # Socket has actually ended. Drain buffered status before deciding what
         # happened, including a denial delivered at the cancellation boundary.
@@ -161,7 +165,7 @@ def tracked(store, token, deadline):
     try:
         with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
             db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
-        yield
+        yield handle.close  # Immediate shared stop if denial persistence fails.
         with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
             db.execute('DELETE FROM requests WHERE token=?',(token,))
             db.execute('DELETE FROM leases WHERE token=?',(token,))
@@ -202,7 +206,7 @@ class Client:
             denied = False
             try:
                 check()
-                with tracked(self.store, token, deadline):
+                with tracked(self.store, token, deadline) as orphan:
                     release = False  # tracked commits marker+lease removal together.
                     def on_denial():
                         nonlocal denied
@@ -213,7 +217,9 @@ class Client:
                             with self.store.db(timeout=0) as db:
                                 db.execute('UPDATE requests SET denied=1 WHERE token=?',(token,))
                         except sqlite3.Error as error:
-                            raise DurableStopError('DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW') from error
+                            try: orphan()  # Block clients before kill/wait/drain.
+                            finally:
+                                raise DurableStopError('DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW') from error
                     def before_go():
                         state = self.budget.status(timeout=max(0,min(.25,deadline-time.monotonic())))
                         if state['halt'] or time.time_ns()//1_000_000 < state['cooldown_ms']:

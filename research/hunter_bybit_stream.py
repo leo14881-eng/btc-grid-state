@@ -137,7 +137,7 @@ of historical bars or retroactively serve the missed generations.
             now = clock()
             if now >= deadline:
                 raise TimeoutError('RECOVERY_DEADLINE')
-            state = budget.status()
+            state = budget.status(fixture_now=None if clock is millis else now)
             if state['halt'] or state['cooldown_ms']-now >= 590_000:
                 raise RuntimeError(state['halt'] or 'GLOBAL_COOLDOWN_10_MINUTES')
             token = budget.acquire() if clock is millis else budget.acquire(now)

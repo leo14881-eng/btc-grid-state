@@ -33,7 +33,7 @@ def allowed(url):
         raise ValueError('PUBLIC_REQUEST_SHAPE_INVALID')
     if value.path.endswith('/kline'):
         import re
-        if (not re.fullmatch(r'[A-Z0-9]{2,30}USDT', params['symbol'])
+        if (not re.fullmatch(r'[A-Z0-9]{1,30}USDT', params['symbol'])
                 or params['interval'] not in ('15','60')
                 or params['limit'] != {'15':'25','60':'5'}[params['interval']]
                 or not params['end'].isdigit()):

@@ -179,7 +179,8 @@ class FaultTests(unittest.TestCase):
             with self.assertRaisesRegex(stream.DurableStopError,'DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW'):
                 stream.collect(self.store,self.topics,'a'*64,connect,lambda:NOW,lambda seconds:None)
         self.assertEqual(len(opened),1)
-        self.assertIsNone(Budget(self.store).status()['halt'])
+        # Explicit fixture clock cannot become a production clock after restart.
+        self.assertIn('MIGRATION',Budget(self.store).status()['halt'])
         self.no_leases()
 
     def test_denial_and_lease_release_failure_preserves_durable_stop_diagnosis(self):
@@ -190,7 +191,7 @@ class FaultTests(unittest.TestCase):
                     lambda url:(403,b'country',1),lambda:NOW,lambda seconds:None)
         with self.store.db(readonly=True) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],1)
-        self.assertIsNone(Budget(self.store).status()['halt'])
+        self.assertIn('MIGRATION',Budget(self.store).status()['halt'])
 
     def test_stop_before_connect_and_during_backoff(self):
         calls=[];stopped=Event()

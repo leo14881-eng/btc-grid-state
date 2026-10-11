@@ -115,6 +115,36 @@ class PublicTests(unittest.TestCase):
         self.assertEqual(snapshot['early_signals'],{})
         self.assertEqual(stream.roster(snapshot,self.now),consumer.topics_for(['GRASS','TA']))
 
+    def test_single_character_listing_matches_roster_and_http_contract(self):
+        self.list_bases=self.tick_bases=['BTC','ETH','A']
+        _,_,snapshot=self.snapshot()
+        self.assertEqual(snapshot['cache_generation']['status'],'UNKNOWN')
+        self.assertEqual(stream.roster(snapshot,self.now),consumer.topics_for(['A']))
+        public.allowed('https://api.bybit.com/v5/market/kline?category=spot&symbol=AUSDT&interval=15&limit=25&end=1')
+
+    def test_legacy_clock_blocks_cached_list_freeze_and_ws_before_io(self):
+        names=self.ready()
+        direct.Adapter(self.now,self.client).listings();self.calls=[]
+        with self.store.db() as db:
+            db.execute('DELETE FROM budget_clock')
+        self.assertIn('MIGRATION',self.client.budget.status()['halt'])
+        with self.assertRaisesRegex(RuntimeError,'GLOBAL_STOP'):
+            direct.Adapter(self.now,self.client).listings()
+        self.assertEqual(self.store.freeze(names,NOW+1,NOW+1)['status'],'UNKNOWN')
+        with patch.object(stream,'open_ws',side_effect=AssertionError('WS forbidden')) as connect:
+            with self.assertRaisesRegex(RuntimeError,'MIGRATION'):
+                stream.collect(self.store,names,'a'*64,connect=connect)
+            connect.assert_not_called()
+        self.assertEqual(self.calls,[])
+
+    def test_corrupt_request_marker_stops_before_opening_owner_path(self):
+        with self.store.db() as db:
+            db.execute("INSERT INTO requests(token) VALUES('../outside')")
+        with patch.object(Path,'open',side_effect=AssertionError('owner path forbidden')):
+            self.assertIn('MARKER_CORRUPT',self.client.budget.status()['halt'])
+        with self.assertRaisesRegex(RuntimeError,'MARKER_CORRUPT'):
+            self.client.request(direct.TICK_PATH)
+
     def test_cached_list_contradiction_refreshes_full_list_and_bulk_ticker_once(self):
         direct.Adapter(self.now,self.client).listings();self.calls=[]
         self.list_bases=self.tick_bases=['BTC','ETH','GRASS']
@@ -213,7 +243,15 @@ class PublicTests(unittest.TestCase):
                     exists=db.execute('SELECT COUNT(*) FROM requests').fetchone()[0]
                 if exists:raise sqlite3.OperationalError('fixture disk full')
             with real(*args,**kwargs) as db:yield db
-        def denied(url,deadline,cancelled,on_denial,before_go):before_go();on_denial()
+        def denied(url,deadline,cancelled,on_denial,before_go):
+            before_go()
+            try:on_denial()
+            except public.DurableStopError:
+                # Observe before exchange unwinds or begins kill/wait/drain.
+                other=storage.Budget(storage.Store.reader(self.store.path))
+                self.assertIn('ORPHANED',other.status()['halt'])
+                with self.assertRaisesRegex(RuntimeError,'ORPHANED'):other.acquire()
+                raise
         with patch.object(self.store,'db',fail),self.assertRaises(public.DurableStopError):
             public.Client(self.store,denied).request(direct.TICK_PATH)
         self.assertIn('ORPHANED',self.client.budget.status()['halt'])
