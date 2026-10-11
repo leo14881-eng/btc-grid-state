@@ -29,10 +29,11 @@ jobs:
           bash --version | head -n 1
           bash -n validation/pr105-wrapper-deploy/pr105-wrapper-deploy.sh
           python validation/pr105-wrapper-deploy/test_deploy.py 2>&1 | tee /tmp/pr105-wrapper-deploy-validation.log
+          python validation/pr105-wrapper-deploy/test_bootstrap.py 2>&1 | tee /tmp/pr105-wrapper-bootstrap-validation.log
           git diff --exit-code
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pr105-wrapper-deploy-validation
-          path: /tmp/pr105-wrapper-deploy-validation.log
+          path: /tmp/pr105-wrapper-*-validation.log
           if-no-files-found: error
