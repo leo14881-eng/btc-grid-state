@@ -73,10 +73,10 @@ def collect(positions, review, generation, fetcher=request, clock=None):
         hourly = fetcher('/v5/market/kline', dict(category='spot',symbol=symbol,interval='60',limit=5))
         quarter = fetcher('/v5/market/kline', dict(category='spot',symbol=symbol,interval='15',limit=25))
         at = clock()
-        return features(candles(hourly,symbol,'60',5,at),candles(quarter,symbol,'15',25,at))
+        return features(candles(hourly,symbol,'60',5,at),candles(quarter,symbol,'15',25,at),symbol,at)
 
     try:
-        btc1,btc4,_ = signal('BTCUSDT')
+        btc1,btc4,btc_micro = signal('BTCUSDT')
     except Exception as exc:
         return {}, {p.get('market_symbol',p['asset']):'BYBIT_BTC_EVIDENCE_UNAVAILABLE:'+type(exc).__name__ for p in wanted}
 
@@ -95,7 +95,7 @@ def collect(positions, review, generation, fetcher=request, clock=None):
         if not math.isfinite(price) or price<=0 or not source_fresh(ticker.get('time'),clock()):
             raise ValueError('BYBIT_TICKER_STALE_OR_INVALID')
         r1,r4,micro = signal(symbol)
-        row = score_row(symbol,pos['asset'],{symbol:r1},{symbol:r4},btc1,btc4,{symbol:micro})
+        row = score_row(symbol,pos['asset'],{symbol:r1},{symbol:r4},btc1,btc4,{symbol:micro,'BTCUSDT':btc_micro})
         depth = fetcher('/v5/market/orderbook',dict(category='spot',symbol=symbol,limit=200))
         raw = depth.get('result') or {}; at = clock()
         if raw.get('s')!=symbol or not source_fresh(raw.get('ts'),at):

@@ -1,11 +1,27 @@
-# 4-Year Wealth Architecture — FINAL v1.0
+# 4-Year Wealth Architecture — FINAL v1.1
 
 Status: ACTIVE / FROZEN
-Effective date: 2026-09-20
+Effective date: 2026-10-11
 Horizon: 4 years
 Role: Highest-level capital architecture above BTC Sentinel, Grid, Hunter and Structural modules.
 Execution authority: USER ONLY.
 Automation budget: ZERO new scheduled tasks.
+
+
+## 0. CURRENT CAPITAL STRUCTURE — USER-APPROVED 2026-10-11
+
+This versioned amendment supersedes conflicting historical L1/L2/L3, A/B/C/D/E, 10K daily swing, 20K larger swing, fixed 120K core + 40K swing, historical 45/35/15 allocation, and old grid range references. Historical figures below are not executable allocation instructions.
+
+- Main investment budget: **200,000 USDT = 160,000 USDT BTC unified pool (core BTC + swing BTC + standby USDT; dynamic proportions) + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve**. Budgets are not verified current balances.
+- BTC Grid: **14,000 USDT separately**, outside the main 200K, hard cap 20,000 USDT. Only state.json is the current configuration source; 72K–86K below is a historical reference, not current settings.
+- Crisis/living reserve: **50,000 USD strictly isolated**, excluded from main-investment NAV and investable capital.
+- Core BTC: governed by valuation and historical drawdowns, with trend controlling pacing; do not casually sell core on ordinary short-term bearish predictions. Historical 0.5 BTC floor is not an automatic veto on independently justified swing actions.
+- Swing BTC: primary KPI is **realized net USDT P&L after fees and reasonable slippage**. BTC quantity, BTC Buy&Hold comparison and missed upside are diagnostics only, never a minimum-profit veto.
+- Extreme-crash reserve: only flash crashes, systemic liquidity shocks or severe mispricing, not ordinary 5–10% volatility.
+- Hunter: active acquisition cost plus actual pending-order reservations <= 20,000 USDT. Existing approximately 6,000U AXS belongs to Hunter; until it exits net profitable and Hunter demonstrates sufficient verifiable profit evidence, no new live altcoin buy/add and no mechanical averaging down. Missing position reconciliation blocks claims of available capital.
+- Management objective: from a 200,000 USDT starting budget toward approximately 600,000 USDT by 2028-03, not guaranteed. Report current verified main-investment NAV, realized net profit, module contribution, gap/progress and UNKNOWN for missing evidence.
+- Only the user executes real trades. No automated orders or unilateral cap changes. Capital proposals require allocation, drawdown, counterparty and freshness gates.
+- 33K BTC bottom is a scenario hypothesis, never a factual anchor.
 
 ## 1. Objective hierarchy
 

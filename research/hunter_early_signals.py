@@ -4,9 +4,11 @@ import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
 from concurrent.futures import ThreadPoolExecutor,as_completed
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
+ from research.hunter_signal_provenance import capture as capture_source
 except ModuleNotFoundError as exc:
  if exc.name != 'research':raise
  from hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
+ from hunter_signal_provenance import capture as capture_source
 ROOT=pathlib.Path("research/results")
 SCAN=ROOT/"hunter-cex-universe-run.json"
 OUT=ROOT/"hunter-early-signals.json"
@@ -31,6 +33,7 @@ def rolling(symbols,window):
         start=finite(rows[0][1]);last=finite(rows[-1][4])
         if not start or not last or start<=0:return None
         return sym,{"return_pct":(last/start-1)*100,
+                   "source_provenance":capture_source(rows,sym,interval,dt.datetime.now(dt.timezone.utc)),
                    "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
     out={}
     with ThreadPoolExecutor(max_workers=64) as ex:
@@ -65,6 +68,7 @@ def micro(symbols):
         hi24=max(highs[-24:]); lo24=min(lows[-24:])
         range_pos=(closes[-1]-lo24)/(hi24-lo24) if hi24>lo24 else .5
         return sym,{"volume_acceleration":vol_accel,"compression_ratio":compression,
+                    "source_provenance":capture_source(rows,sym,"15m",dt.datetime.now(dt.timezone.utc)),
                     "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos}
     out={}
     with ThreadPoolExecutor(max_workers=64) as ex:
@@ -89,7 +93,7 @@ def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
     score=max(0,rel1)*2+max(0,rel4)+max(0,accel)*1.5 + min(max(va-1,0),2)*.5 + min(max(comp-1,0),2)*.35
     independent=sum((rel1>=C["MIN_REL_1H"],rel4>=C["MIN_REL_4H"],accel>=C["MIN_ACCEL"],pre_volume,pre_compression,pre_turn))
     stage="EARLY" if independent>=C["DISCOVERY_MIN_INDEPENDENT"] else "WATCH"
-    return {"base":base,"pair":sym,"stage":stage,"score":round(score,4),
+    result={"base":base,"pair":sym,"stage":stage,"score":round(score,4),
       "btc_relative_1h_pct":round(rel1,4),"btc_relative_4h_pct":round(rel4,4),
       "relative_acceleration_pct":round(accel,4),
       "return_1h_pct":round(a["return_pct"],4),"return_4h_pct":round(b["return_pct"],4),
@@ -98,6 +102,12 @@ def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
       "return_15m_pct":round(m15,4),"range_position_6h":round(rp,4),
       "pre_move_components":{"volume":pre_volume,"compression":pre_compression,"relative_turn":pre_turn},
       "research_only":True}
+    sources={"asset_1h":a.get("source_provenance"),"asset_4h":b.get("source_provenance"),
+             "btc_1h":btc1.get("source_provenance"),"btc_4h":btc4.get("source_provenance"),"micro":m.get("source_provenance")}
+    btc_micro=((microdata or {}).get("BTCUSDT") or {}).get("source_provenance")
+    if btc_micro is not None:sources['btc_micro']=btc_micro
+    if any(sources.values()):result["source_provenance"]=sources
+    return result
 def build(scan,r1,r4,microdata,now,regional_signals=None):
     pairs={p["pair"]:base for base,c in (scan.get("coins") or {}).items()
            for p in c.get("pairs") or [] if p.get("venue")=="binance"}
