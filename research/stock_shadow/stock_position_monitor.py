@@ -7,6 +7,13 @@ from datetime import datetime, time as dtime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 try:
+    from .quote_window_store import QuoteWindowStore
+except ImportError:
+    try:
+        from quote_window_store import QuoteWindowStore
+    except ImportError:
+        from research.stock_shadow.quote_window_store import QuoteWindowStore
+try:
     from .market_session import session_allows_trade
 except ImportError:
     try:
@@ -128,7 +135,7 @@ def _parse_price(v):
     except Exception: return None
 
 class QuoteWindowCache:
-    """Experimental in-memory cursors. No file, state writer or production activation.
+    """Explicit in-memory cursors for replay and callers in the same process.
 
     A cursor is never a returned observation. Shared callers serialize fetch/update;
     separate instances are independent. Restarting always takes the cold path.
@@ -139,10 +146,16 @@ class QuoteWindowCache:
 
 
 def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
-    """Original delayed SIP collection; an explicit cache enables the offline prototype."""
+    """Delayed SIP collection; persistent incremental collection is opt-in only."""
     global QUOTE_USAGE
     endpoint="https://data.alpaca.markets/v2/stocks/bars"
     lookback=__import__("datetime").timedelta(days=3)
+    config={"endpoint":endpoint,"lookback_seconds":int(lookback.total_seconds()),
+            "delay_minutes":20,"timeframe":"5Min","feed":"sip","adjustment":"all",
+            "limit":10000,"target_chars":MAX_REQUEST_TARGET_CHARS,
+            "source":"ALPACA_SIP_5M_DELAYED","selection_version":2,
+            "enforce_delay_endpoint":window_cache is not None or os.getenv("STOCK_SHADOW_INCREMENTAL_QUOTES")=="1",
+            "scope":os.getenv("STOCK_SHADOW_QUOTE_CACHE_SCOPE","direct")}
     began=perf_counter()
     publish_usage=usage is None
     usage={} if usage is None else usage
@@ -152,10 +165,12 @@ def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
                  fallback_batches=0, incremental=window_cache is not None,
                  symbol_coverage="UNKNOWN", interval_coverage="UNKNOWN")
     try:
+        if window_cache is None and os.getenv("STOCK_SHADOW_INCREMENTAL_QUOTES")=="1":
+            return _persistent_alpaca_quotes(symbols,usage,config,lookback)
         if window_cache is None:
-            return _collect_alpaca_quotes(symbols,None,usage,endpoint,lookback)
+            return _collect_alpaca_quotes(symbols,None,usage,config,lookback)
         with window_cache.lock:
-            return _collect_alpaca_quotes(symbols,window_cache.cursors,usage,endpoint,lookback)
+            return _collect_alpaca_quotes(symbols,window_cache.cursors,usage,config,lookback)
     finally:
         usage["elapsed_seconds"]=perf_counter()-began
         if publish_usage:
@@ -164,7 +179,33 @@ def alpaca_snapshot_quotes(symbols, *, window_cache=None, usage=None):
             QUOTE_USAGE=dict(usage)
 
 
-def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
+def _persistent_alpaca_quotes(symbols, usage, config, lookback):
+    end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=config["delay_minutes"])
+    disk=usage["disk_cache"]={}
+    path=Path(os.getenv("STOCK_SHADOW_QUOTE_CACHE_PATH",""))
+    # Runner chooses an absolute path outside its isolated checkout. Direct
+    # invocations cannot turn repository data into a runtime cache by accident.
+    try:
+        resolved=path.resolve(); checkout=Path.cwd().resolve()
+        allowed=path.is_absolute() and checkout != resolved and checkout not in resolved.parents
+    except (OSError, ValueError, RuntimeError):
+        allowed=False
+    if not allowed:
+        disk["read_status"]="PATH_REJECTED"
+        return _collect_alpaca_quotes(symbols,None,usage,config,lookback,end)
+    store=QuoteWindowStore(path,config)
+    lease=store.read(symbols,end,lookback,disk)
+    cursors=lease.cursors if lease is not None else None
+    usage["incremental"]=lease is not None
+    result=_collect_alpaca_quotes(symbols,cursors,usage,config,lookback,end)
+    if lease is not None:
+        # An interrupted/failed batch cannot extend the useful life of prior
+        # cursors. Publish an empty snapshot and let the next process cold-start.
+        store.publish(lease,{} if result[1] else cursors,end,lookback,disk)
+    return result
+
+
+def _collect_alpaca_quotes(symbols, window_cache, usage, config, lookback, end=None):
     if not symbols:
         if window_cache is not None: window_cache.clear()
         usage["symbol_coverage"]="EMPTY"
@@ -175,7 +216,7 @@ def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
         return {},[{"reason":"MISSING_ALPACA_SECRETS"}],0,0
     headers={"APCA-API-KEY-ID":key,"APCA-API-SECRET-KEY":secret,"User-Agent":"stock-shadow-position-monitor/3.0"}
     prices={}; errors=[]; requests=0
-    end=datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=20)
+    end=end or datetime.now(timezone.utc)-__import__("datetime").timedelta(minutes=config["delay_minutes"])
     # Keep enough calendar lookback to cover weekends/holidays while still issuing one multi-symbol logical batch.
     start=end-lookback
     full_start=start
@@ -202,19 +243,19 @@ def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
         batch=[]
         for sym in group:
             candidate=batch+[sym]
-            probe={"symbols":",".join(s.replace("-",".") for s in candidate),"timeframe":"5Min",
+            probe={"symbols":",".join(s.replace("-",".") for s in candidate),"timeframe":config["timeframe"],
                    "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
-                   "limit":10000,"feed":"sip","adjustment":"all"}
+                   "limit":config["limit"],"feed":config["feed"],"adjustment":config["adjustment"]}
             target="/v2/stocks/bars?"+urllib.parse.urlencode(probe)
-            if batch and len(target)>MAX_REQUEST_TARGET_CHARS:
+            if batch and len(target)>config["target_chars"]:
                 batches.append((batch,start)); batch=[sym]
             else:
                 batch=candidate
         if batch: batches.append((batch,start))
     for batch_index,(batch,start) in enumerate(batches):
-        params={"symbols":",".join(s.replace("-",".") for s in batch),"timeframe":"5Min",
+        params={"symbols":",".join(s.replace("-",".") for s in batch),"timeframe":config["timeframe"],
                 "start":start.isoformat().replace("+00:00","Z"),"end":end.isoformat().replace("+00:00","Z"),
-                "limit":10000,"feed":"sip","adjustment":"all"}
+                "limit":config["limit"],"feed":config["feed"],"adjustment":config["adjustment"]}
         token=None
         try:
             latest={}
@@ -222,7 +263,7 @@ def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
             while True:
                 if token: params["page_token"]=token
                 else: params.pop("page_token",None)
-                req=urllib.request.Request(endpoint+"?"+urllib.parse.urlencode(params),headers=headers)
+                req=urllib.request.Request(config["endpoint"]+"?"+urllib.parse.urlencode(params),headers=headers)
                 http_began=perf_counter()
                 usage["http_requests"]+=1
                 try:
@@ -237,7 +278,14 @@ def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
                     if isinstance(rows,list): usage["bars"]+=len(rows)
                     if rows:
                         row=max(rows,key=lambda x:str(x.get("t") or ""))
-                        latest[raw.replace(".","-")]={"price":row.get("c"),"price_asof":row.get("t"),"source":"ALPACA_SIP_5M_DELAYED"}
+                        if config["enforce_delay_endpoint"]:
+                            try:
+                                stamp=datetime.fromisoformat(row.get("t","").replace("Z","+00:00"))
+                            except (ValueError, TypeError, AttributeError):
+                                stamp=None  # Existing quote validity rejects missing/invalid timestamps.
+                            if stamp is not None and stamp.tzinfo is not None and stamp > end:
+                                raise ValueError("BAR_AFTER_DELAY_ENDPOINT")
+                        latest[raw.replace(".","-")]={"price":row.get("c"),"price_asof":row.get("t"),"source":config["source"]}
                 token=body.get("next_page_token")
                 if not token:
                     if start > full_start and not fallback and any(s not in latest for s in batch):
@@ -257,8 +305,10 @@ def _collect_alpaca_quotes(symbols, window_cache, usage, endpoint, lookback):
         window_cache.clear()
         for symbol, observation in prices.items():
             # Invalid/stale observations cannot seed the next incremental request.
-            if symbol in symbols and quote_validity(symbol,observation,end+__import__("datetime").timedelta(minutes=20),"5Min")=="VALID":
-                window_cache[symbol]=observation["price_asof"]
+            if symbol in symbols and quote_validity(symbol,observation,end+__import__("datetime").timedelta(minutes=config["delay_minutes"]),config["timeframe"])=="VALID":
+                cursor=datetime.fromisoformat(observation["price_asof"].replace("Z","+00:00"))
+                if full_start <= cursor <= end:
+                    window_cache[symbol]=observation["price_asof"]
     usage["symbol_coverage"]="COMPLETE" if all(s in prices for s in symbols) else ("PARTIAL" if prices else "UNKNOWN")
     return prices,errors,requests,len(batches)
 

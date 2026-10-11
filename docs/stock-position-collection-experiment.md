@@ -1,4 +1,4 @@
-# Stock position collection: observation and offline incremental prototype
+# Stock position collection: default-off persistent candidate
 
 Baseline: `ddbfd5b6cd97cb825b3f674ffc512ec796d40836` (origin/main fetched on
 2026-10-11, after PR104). The original collector frozen in
@@ -7,16 +7,73 @@ this baseline. No AGENTS.md or .agents rules are tracked at this baseline.
 
 ## Activation and scope
 
-The production `main()` call still uses the original full three-day collector.
-There is **no environment toggle, persistent cache, service change or activation**.
-Only an explicit Python call with `window_cache=QuoteWindowCache()` uses the
-experimental path. A new cache instance or process starts cold. This is a staged
-review artifact, not a deployed performance fix.
+The deployment template sets `STOCK_SHADOW_INCREMENTAL_QUOTES=0`. With the flag
+absent or anything other than exact `1`, `main()` uses the original full three-day
+collector and never opens a cache. This PR contains the real runner/engine
+integration candidate, but **does not change a deployed environment, activate a
+service, merge, or deploy**. The explicit `QuoteWindowCache()` API remains useful
+for in-process differential replay; the opted-in runtime uses SQLite across fresh
+checkouts and Python processes.
 
 Normal runs gain additive collection counters and stock monitor stage timers in
 the existing health payload. Daily discovery, SEC/fundamentals, strategy, quote
 validity, exchange calendar, state mutations, ledger, writer/CAS/readback and
-scheduler authority are unchanged. Tests only simulate shadow decisions.
+scheduler authority are unchanged. Tests only simulate shadow decisions. The
+runner changes only cache environment binding and preflight environment scrubbing;
+its admission, commands, deadlines, portfolio publication and readback stay intact.
+
+## Storage and runner binding
+
+The existing launcher passes `$STOCK_SHADOW_STATE_ROOT/runtime` to the runner;
+the default is `/var/lib/stock-shadow/runtime`. Existing units already run as
+`stock-shadow`, have `UMask=0077`, and allow writes beneath `/var/lib/stock-shadow`.
+No service unit, permission, directory creation policy or launcher is changed.
+These facts are verified from repository deployment definitions; no live server
+inspection or write was performed.
+
+When and only when the monitor job is opted in, the runner replaces any inherited
+cache path/scope with `stock-quotes-preview-v1.sqlite3` or
+`stock-quotes-publish-v1.sqlite3` in its validated persistent runtime directory.
+The two modes cannot warm or overwrite each other's file. Main/replay jobs and
+preflight pytest receive none of the three cache environment variables. A direct
+engine invocation must supply an absolute cache path outside its current checkout;
+missing, relative or checkout paths fall back without creating files.
+
+`quote_window_store.py` persists one snapshot containing symbol-to-timestamp
+cursors, an opaque publication token, revision, delayed query endpoint, canonical
+configuration, and a checksum. No price, credential, trade, position, balance or
+ledger is stored. Configuration identity includes cache/schema and selection
+versions, endpoint/source, timeframe, SIP feed, `adjustment=all`, the 20-minute
+delay, three-day bound, request/page limits, delay-endpoint enforcement and scope.
+Changing any of these causes a cold query. Changes to selection semantics must
+bump the selection version; unrelated runtime Git commits do not invalidate it.
+
+Capacity is bounded to 2,048 symbols, 256 KiB of serialized cursors and a 1 MiB
+SQLite database. Above-capacity cohorts bypass the cache entirely. A successful
+snapshot contains only current held symbols with valid observations; exited or
+missing symbols disappear instead of accumulating. SQLite uses DELETE rollback
+journaling and FULL synchronous transactions, without accumulating a WAL. A
+transient rollback journal may take approximately another database-sized file
+plus SQLite headers; normally it is removed on commit. Two scope files are the
+only cache files created by this implementation.
+
+Reads and writes use a 250 ms SQLite lock timeout. Network work never holds a
+database transaction. Publication obtains a write transaction, compares the
+snapshot's opaque token, checks that query time does not move backward, then
+atomically replaces the snapshot and token. A competing process gets `CONFLICT`
+and keeps its freshly fetched quotes without overwriting the winner. A new token
+also fences old readers after a file is externally recreated. This transaction
+is solely for query cursors; the portfolio writer/CAS/readback is untouched.
+
+Checksum/data corruption, expired/future snapshots or configuration mismatch
+cause cold reads. Valid headers with corrupt payload can be repaired by replacing
+the snapshot after collection (or by publishing an empty snapshot after a failed
+batch). Corrupt SQLite files, unknown schema or foreign databases are not deleted,
+truncated or repurposed: collection stays on full queries until a separately
+approved operator repair. Permission, lock and disk-full failures do not suppress
+fresh response quotes. An interrupted transaction rolls back; a publication
+failure can retain an older cursor, but the next process always re-fetches from it
+within the same bounded horizon and can never return an older cached price.
 
 ## Incremental selection
 
@@ -36,8 +93,9 @@ narrowed result. This covers a deleted latest bar whose replacement is earlier.
 An older correction that cannot change the latest bar is not downloaded.
 
 All pages must finish before any observations from a logical batch are exposed.
-Failure discards that batch and its cached cursors; a later call cold-starts the
-affected symbols. No immediate network retry policy is added. Successful other
+Failure discards that batch and its cached cursors. The persistent path publishes
+an empty snapshot on a collection error, so a later process cold-starts. No
+immediate network retry policy is added. Successful other
 batches remain available, just as in the original multi-batch collector. Since
 the experimental warm/cold partition can change batch boundaries, failure
 coverage, error batch indexes and request counts need not equal the full-window
@@ -50,8 +108,13 @@ The provider contract used by the fixture is documented in
 inclusive interval endpoints, symbol-then-time ascending order by default,
 and pagination over the total number of bars across symbols. No provider probe
 was performed. The original per-page selection and cross-page overwrite are
-preserved; arbitrary provider ordering or a mutable multi-page snapshot remains
-outside the verified contract.
+preserved. Enabled incremental collection additionally discards a batch if its
+selected bar is later than the unchanged `now - 20 minutes` request endpoint;
+the diagnostic is `BAR_AFTER_DELAY_ENDPOINT`, never a new usable quote/cursor.
+The disabled legacy path is unchanged. This is a conservative difference for an
+out-of-contract provider response, not a change to the 20-minute delay. Arbitrary
+provider ordering or a mutable multi-page snapshot remains outside the verified
+equivalence contract.
 
 ## Measurement definitions
 
@@ -69,6 +132,9 @@ outside the verified contract.
   five-minute interval exists. It neither synthesizes missing bars nor certifies
   gap completeness. Existing health `invalid_quotes`/`valid_quotes` retain their
   freshness and action-admissibility meaning.
+- `disk_cache`: read/publish status, cursor counts and read/write seconds. It
+  distinguishes cold/config/corruption/capacity fallback, lock/write failures,
+  clock regression and concurrent-publication conflict without logging secrets.
 
 The existing top-level `requests` remains backward compatible, including its
 historical accounting on malformed responses; use `http_requests` for actual
@@ -86,7 +152,7 @@ names intentionally do not claim complete production job end-to-end timing.
 Run:
 
 ```sh
-python -m pytest -q tests/test_stock_position_collection.py tests/test_stock_quote_safety.py
+python -m pytest -q tests/test_stock_position_collection.py tests/test_stock_persistent_quotes.py tests/test_stock_quote_safety.py
 ```
 
 The test suite compares outputs against the frozen original collector and
@@ -116,20 +182,61 @@ pages/backfill, invalid prices, malformed payloads, weekend/holiday and both DST
 boundaries, independent/shared concurrent caches, default-off production entry,
 and identical portfolio/events/summary and shadow exit decisions in a frozen run.
 
+Persistent tests additionally cover configuration/schema/checksum invalidation,
+capacity limits, unwritable paths, disk-full simulation at update and commit,
+SQLite lock contention, competing processes, abrupt process exit during a write,
+old leases after file recreation, empty holdings, future/backward clocks and
+multi-cycle corrections/withdrawals/missing data/recovery over 536 symbols.
+Two independent Python processes verify cold 13 / warm 1 calls after restart.
+An integration test exercises `runner.run` with real child environments and actual
+monitor child processes (Git/provider/publication are isolated test fixtures).
+Across both cycles, all 536 quotes and complete portfolio/events/summary outputs
+match separate disabled-path child processes; preview creates only its own cache.
+
+The four-cycle 536-symbol persisted replay measures:
+
+| Cycle | Original calls | Candidate calls | Full-window fallbacks |
+| --- | ---: | ---: | ---: |
+| Cold start | 13 | 13 | 0 |
+| Warm cycle with corrected latest close | 13 | 1 | 0 |
+| Withdrawn latest bar and missing holding | 13 | 14 | 1 |
+| Recovery in next process/call | 13 | 2 | 0 |
+
+Every cycle compares each returned price/timestamp/source with the frozen
+collector, including the missing symbol. The 14-call case deliberately pays for
+bounded backfill rather than returning a withdrawn cached observation.
+
 The new `Stock position collection offline` CI runs these tests and existing
 stock safety/strategy/server regressions on Linux with read-only repository
 permissions and no provider secrets. Existing stock migration CI also applies.
 
+## Separate change review
+
+The full baseline-to-candidate diff was reviewed separately from implementation.
+An AST comparison confirms the nine existing ledger/calendar/P&L/profit-floor
+helpers and the complete per-position decision/mutation loop are unchanged; the
+frozen collector oracle matches the pinned baseline. Content comparison also
+confirms unchanged daily scanner, quote safety, calendar, SEC observer, portfolio
+publisher, runtime authority, launcher and monitor service unit. The review
+tightened rejection of unknown SQLite versions before applying database pragmas.
+No existing stock strategy/security test was changed. This execution review does
+not replace an external reviewer or authorize deployment.
+
 ## Remaining validation before activation
 
-No persisted cross-run cache lifecycle is implemented or approved by this PR.
-The memory lock handles shared callers within one process; separate processes
-have independent cold caches. Cross-process locking, cache ownership, atomic
-storage and invalidation require a later design without changing the portfolio
-writer. Production retirement/correction behavior across a moving provider
-snapshot, authorized recorded-response replay, actual stage latency and exit
-freshness at scale still require review and evidence. A gap can increase the
-window back to three days, and missing warmed symbols can cost an extra pass.
-There is no claim of universal request savings or exact network-failure
-granularity equivalence. Keep the production path on the full-window collector
-until those questions are resolved.
+The persistent lifecycle and actual runner binding are now implemented and
+tested as a default-off release candidate. No new service permission is indicated
+by the checked-in deployment definitions. Remaining release gates are external
+review, an approved check of the real runtime filesystem/SQLite locking/ownership,
+authorized recorded-provider replay across correction scenarios, and actual
+monitor latency/exit-freshness measurement. None was replaced with a live bulk
+probe or an assumed production speedup. SQLite is intended for the existing local
+filesystem, not a shared network filesystem or a distributed multi-host cache.
+
+Missing warmed symbols can add a full-horizon pass, and warm/cold grouping can
+change partial availability under network failure. Selected bars outside the
+requested delay endpoint are now rejected only in the enabled path. Those
+conservative/error-path differences need explicit review alongside the verified
+normal-response equivalence. Interval completeness remains UNKNOWN. Keep the
+deployment flag at 0 until review and separately authorized activation; reverting
+it to 0 uses the original collector without opening or needing to delete SQLite.

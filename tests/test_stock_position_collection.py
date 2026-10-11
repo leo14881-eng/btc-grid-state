@@ -83,6 +83,8 @@ class Provider:
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
+    for key in ('STOCK_SHADOW_INCREMENTAL_QUOTES', 'STOCK_SHADOW_QUOTE_CACHE_PATH', 'STOCK_SHADOW_QUOTE_CACHE_SCOPE'):
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv('APCA_API_KEY_ID', 'offline-fixture')
     monkeypatch.setenv('APCA_API_SECRET_KEY', 'offline-fixture')
     monkeypatch.setattr(monitor.urllib.request, 'urlopen',
@@ -394,8 +396,8 @@ def test_lifecycle_output_and_exit_decision_equal_original(monkeypatch):
 
 
 def test_production_entry_point_does_not_enable_incremental_cache(monkeypatch):
-    # Verify the actual main call stays default-off, even with a plausible env toggle.
-    monkeypatch.setenv('STOCK_SHADOW_INCREMENTAL_QUOTES', '1')
+    # The deployed/default template leaves collection on the original path.
+    monkeypatch.setenv('STOCK_SHADOW_INCREMENTAL_QUOTES', '0')
     monkeypatch.setattr(monitor, 'load', lambda p, d: copy.deepcopy(d))
     monkeypatch.setattr(monitor, 'save', lambda *args: None)
     monkeypatch.setattr(monitor, '_alpaca_exchange_session', lambda ts=None:
