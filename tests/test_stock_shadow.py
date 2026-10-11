@@ -1948,3 +1948,11 @@ def test_sec_filing_fallback_is_bounded_and_rejects_error_payloads(tmp_path, mon
                         lambda *a, **k: _sec_fixture_response(payload, media="text/plain"))
     with pytest.raises(m.SECTransportError, match=code):
         m.sec_filing_text(123, "fixture", "filing.htm")
+
+
+@pytest.mark.parametrize("payload", [b"", b'{"error":"blocked"}', b'<html><title>Access Denied</title></html>'])
+def test_sec_direct_filing_does_not_verify_error_documents(tmp_path, monkeypatch, payload):
+    m = _sec_fixture_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(m, "_sec_response", lambda *a: (payload, "text/html"))
+    with pytest.raises(m.SECTransportError, match="SEC_TEXT_PAYLOAD_INVALID"):
+        m.sec_filing_text(123, "fixture", "filing.htm")

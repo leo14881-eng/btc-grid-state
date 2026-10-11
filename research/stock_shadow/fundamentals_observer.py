@@ -612,15 +612,24 @@ def sec_submission(cik):
 def sec_companyfacts(cik):
     return _sec_json_with_readonly_fallback(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
 
+def _validated_filing_text(body,media,proxy=False):
+    allowed=("text/plain","text/markdown") if proxy else ("text/html","text/plain","application/xhtml+xml")
+    if media not in allowed:
+        raise SECTransportError("SEC_TEXT_CONTENT_TYPE_INVALID")
+    text=body.decode("utf-8","replace")
+    if (not text.strip() or text.lstrip().startswith(("{","["))
+            or (proxy and text.lstrip().startswith("<"))
+            or any(marker in text[:500].lower() for marker in ("access denied","error fetching","forbidden","error:"))):
+        raise SECTransportError("SEC_TEXT_PAYLOAD_INVALID")
+    return text
+
 def sec_filing_text(cik, accession, primary_document):
     if not accession or not primary_document: raise ValueError("filing_document_identity_missing")
     acc=str(accession).replace("-","")
     url=f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{primary_document}"
     try:
         raw,media=_sec_response(url,"text/html,text/plain")
-        if media not in ("text/html","text/plain","application/xhtml+xml"):
-            raise SECTransportError("SEC_TEXT_CONTENT_TYPE_INVALID")
-        return raw.decode("utf-8","replace"),"SEC_DIRECT"
+        return _validated_filing_text(raw,media),"SEC_DIRECT"
     except urllib.error.HTTPError as e:
         if e.code not in (403,429): raise
     # Read-only fallback for SEC edge blocks on GitHub-hosted runners.
@@ -632,13 +641,7 @@ def sec_filing_text(cik, accession, primary_document):
         _proxy_next_start=time.monotonic()+1.0
     req=urllib.request.Request(proxy,headers={"User-Agent":"stock-shadow-filing-observer/1.0","Accept":"text/plain"})
     with urllib.request.urlopen(req,timeout=35) as r: body,media=_bounded_response(r)
-    if media not in ("text/plain","text/markdown"):
-        raise SECTransportError("SEC_TEXT_CONTENT_TYPE_INVALID")
-    text=body.decode("utf-8","replace")
-    if (not text.strip() or text.lstrip().startswith(("<","{","["))
-            or any(marker in text[:500].lower() for marker in ("access denied","error fetching","forbidden","error:"))):
-        raise SECTransportError("SEC_TEXT_PAYLOAD_INVALID")
-    return text,"SEC_VIA_READONLY_PROXY"
+    return _validated_filing_text(body,media,proxy=True),"SEC_VIA_READONLY_PROXY"
 
 def semantic_risk_evidence(reviewed_docs):
     """Tri-state text evidence. VERIFIED_ABSENT means absent from the explicitly reviewed document scope only."""
