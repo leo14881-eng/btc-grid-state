@@ -268,6 +268,21 @@ class ConsumerTests(unittest.TestCase):
         self.assertEqual(set(signals),set(self.bases))
         self.assertEqual(failures,{})
 
+    def test_slow_read_or_clock_rollback_cannot_publish_admission_time_freshness(self):
+        real=storage.Store.reader(self.store.path)
+        for final_time in (self.end+90001,self.end-1):
+            clock=[self.end]
+            class SlowReader:
+                def freeze(inner,names,end,now):
+                    result=real.freeze(names,end,now)
+                    clock[0]=final_time
+                    return result
+            signals,failures,generation=consumer.collect(self.required,self.now,SlowReader(),lambda:clock[0])
+            self.assertEqual(signals,{})
+            self.assertEqual(len(failures),3)
+            self.assertEqual(generation['windows'],{})
+            self.assertEqual(generation['reason'],'CACHE_READ_FINISHED_STALE_OR_CLOCK_ROLLBACK')
+
 
 if __name__ == '__main__':
     unittest.main()

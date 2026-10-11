@@ -216,7 +216,9 @@ price for that candle, not a mark-price, orderbook execution price, or permissio
 to trade. Discovery's ticker mark may be newer than the Kline generation cut;
 existing ticker freshness permits response time within +/-120s of the capture
 time. This PR does not assert ticker and WS observations are simultaneous.
-Kline source/receive freshness is <=90s at freeze; downstream snapshot validity
+Kline source/receive freshness is <=90s at freeze; the consumer rechecks time at
+read completion, so lock waits/slow reads cannot reuse an earlier admission time.
+Downstream snapshot validity
 remains the existing <=900s. Measure both lags on the actual server before use.
 
 “France direct” means a proposed direct request from the existing server's

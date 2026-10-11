@@ -9,13 +9,13 @@ import datetime as dt
 import time
 
 try:
-    from research.hunter_bybit_stream_store import Store, LIMITS, content_hash, roster_hash, topic, valid_row
+    from research.hunter_bybit_stream_store import Store, LIMITS, FRESH_MS, content_hash, roster_hash, topic, valid_row
     from research.hunter_bybit_signal_capture import capture
     from research.hunter_signal_provenance import hash_value, capture as provenance, validate_cache_packet
 except ModuleNotFoundError as exc:
     if exc.name != 'research':
         raise
-    from hunter_bybit_stream_store import Store, LIMITS, content_hash, roster_hash, topic, valid_row
+    from hunter_bybit_stream_store import Store, LIMITS, FRESH_MS, content_hash, roster_hash, topic, valid_row
     from hunter_bybit_signal_capture import capture
     from hunter_signal_provenance import hash_value, capture as provenance, validate_cache_packet
 
@@ -57,8 +57,14 @@ def collect(required, now, reader=None, clock=None):
     end = int(now.timestamp()*1000)
     names = topics_for(sorted(r['base'] for r in required))
     reader = reader or Store.reader()
-    read_at = (clock or (lambda: time.time_ns()//1_000_000))()
+    clock = clock or (lambda: time.time_ns()//1_000_000)
+    read_at = clock()
     generation = reader.freeze(names, end, read_at)
+    # SQLite lock waits and a slow full-roster read consume the same freshness
+    # allowance. Admission before the limit is not proof of a timely read exit.
+    finished = clock()
+    if generation['status'] == 'READY' and (finished < read_at or not 0 <= finished-end <= FRESH_MS):
+        generation.update(status='UNKNOWN', windows={}, reason='CACHE_READ_FINISHED_STALE_OR_CLOCK_ROLLBACK')
     generation['generation_sha256'] = content_hash({k:v for k,v in generation.items() if k != 'generation_sha256'})
     if generation['status'] != 'READY':
         return {}, {s: 'CACHE_UNKNOWN:'+generation['reason']
