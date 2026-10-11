@@ -102,10 +102,16 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
   n=len(state["events"])-eng.MAX_EVENT_HISTORY;state["event_history_truncated"]=int(state.get("event_history_truncated") or 0)+n;state["events"]=state["events"][-eng.MAX_EVENT_HISTORY:]
  after={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  added=sorted(a for a,n in after.items() if n>before.get(a,0));closed=sorted(set(before)-set(after))
- state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat()
+ # Persist bounded migration progress before writing the portfolio. Summary
+ # construction must not add metadata to a blocked manual-exit holding.
+ for pos in state.get('open_positions') or []:
+  if pos not in pending_manual and eng.sample_cohort(pos)=='MIGRATION_SAMPLE' and pos.get('data_provenance')!='HISTORICAL_BACKFILL':
+   eng.ensure_opportunity_observation(pos,pos.get('last_price'),now)
+   eng.backfill_opportunity_history(pos,now)
+ state["policy_version"]=VERSION;state["updated_at_utc"]=now.isoformat();eng.atomic_json_write(path,state)
  summary_path=(V1_SUMMARY if path==V1 else V2_SUMMARY if path==V2 else path.with_name(path.stem+"-summary.json"))
  guard_path=V1_GUARD if v1_mode else V2_GUARD
- summary=eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan))
+ summary=eng.build_summary(state,now,guard_status=(load(guard_path).get("status") or "NORMAL"),scan=(regime_scan or scan),backfill_open=False)
  if not v1_mode and manual_stop.REQUEST_ID in state.get('manual_exit_requests',{}):
   all_closed=state.get('closed_positions',[])+state.get('closed_trade_archive',[])
   manual_rows=[p for p in all_closed if p.get('exit_reason')==manual_stop.REASON]
@@ -114,9 +120,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
    'scope':'SEPARATE_REVIEW_COHORTS_TOTAL_REALIZED_PNL_UNCHANGED',
    'user_manual':{'count':len(manual_rows),'net_pnl_usdt':round(sum(p.get('net_pnl_usdt',0) for p in manual_rows),2),'opportunity_evaluation':eng.opportunity_summary(manual_rows,now)},
    'automatic_strategy':{'count':len(automatic_rows),'net_pnl_usdt':round(sum(p.get('net_pnl_usdt',0) for p in automatic_rows),2),'opportunity_evaluation':eng.opportunity_summary(automatic_rows,now)}}
- # Summary construction can advance a migration position's bounded history
- # checkpoint. Publish that progress with its lane, so restart can continue.
- eng.atomic_json_write(path,state);eng.atomic_json_write(summary_path,summary)
+ eng.atomic_json_write(summary_path,summary)
  result={"lane":label,"open":len(after),"added":added,"deferred_adds":deferred_adds,"closed":closed,"quarantined_non_crypto":quarantine["assets"],"quarantine_counts":{k:v for k,v in quarantine.items() if k!="assets"}}
  if manual_audit is not None:
   # Embedded in an existing member of the seven-file atomic publication set.

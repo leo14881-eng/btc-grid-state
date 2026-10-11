@@ -168,7 +168,7 @@ class OpportunityObservationTests(unittest.TestCase):
   import datetime as dt
   pos={"closed_at_utc":"2026-10-05T00:00:00+00:00","post_exit_tracking":{"max_rebound_from_exit_pct":1.0},
    "post_exit_observation":{"1h":{"max_return_from_sell_pct":3.0}}}
-  from test_hunter_observation_fixtures import certify_horizons
+  from tests.test_hunter_observation_fixtures import certify_horizons
   certify_horizons(pos,[1])
   eng.refresh_post_exit_status(pos,dt.datetime(2026,10,5,7,tzinfo=dt.timezone.utc))
   self.assertEqual(pos["post_exit_evaluation"]["max_return_from_sell_pct"],3.0)
@@ -178,7 +178,7 @@ class OpportunityObservationTests(unittest.TestCase):
   from unittest.mock import patch
   state={"closed_positions":[{"shadow_id":"pending","observation_complete":False},
     {"shadow_id":"complete","observation_complete":True,"post_exit_observation":{"72h":{"max_return_from_sell_pct":3.}}}]}
-  from test_hunter_observation_fixtures import certify_horizons
+  from tests.test_hunter_observation_fixtures import certify_horizons
   certify_horizons(state['closed_positions'][1])
   with patch.object(eng,"MAX_CLOSED_HOT",1):eng.compact_closed_history(state)
   self.assertEqual([x["shadow_id"] for x in state["closed_positions"]],["pending"])
@@ -213,7 +213,7 @@ class OpportunityObservationTests(unittest.TestCase):
   import datetime as dt
   old=eng.binance_kline_bars
   def fake(asset,start,end,interval="5m"):
-   from test_hunter_observation_fixtures import bars_between
+   from tests.test_hunter_observation_fixtures import bars_between
    closed=int(dt.datetime(2026,10,5,2,tzinfo=dt.timezone.utc).timestamp()*1000)
    return [(t,c,1.08 if t<closed else 1.20) for t,c,_ in bars_between(start,end)]
   try:
@@ -228,7 +228,7 @@ class OpportunityObservationTests(unittest.TestCase):
  def test_opportunity_summary_separates_distribution(self):
   rows=[{"holding_mfe_pct":8.0,"full_opportunity_mfe_pct":20.0,"net_return_pct":3.0,"holding_profit_capture_ratio":.375,
          "full_opportunity_capture_ratio":.15,"observation_complete":True,"post_exit_observation":{"72h":{"max_return_from_sell_pct":8.}},"exit_evaluation":"POTENTIAL_PREMATURE_EXIT"}]
-  from test_hunter_observation_fixtures import certify_horizons
+  from tests.test_hunter_observation_fixtures import certify_horizons
   certify_horizons(rows[0])
   out=eng.opportunity_summary(rows)
   self.assertEqual(out["evaluated_positions"],1);self.assertEqual(out["completed_72h_observations"],1)
@@ -254,7 +254,7 @@ class OpportunityObservationTests(unittest.TestCase):
   import datetime as dt
   old=eng.binance_kline_bars
   try:
-   from test_hunter_observation_fixtures import bars_between
+   from tests.test_hunter_observation_fixtures import bars_between
    eng.binance_kline_bars=lambda asset,start,end,interval="5m":bars_between(start,end,1.25)
    pos={"asset":"ABC","opened_at_utc":"2026-10-04T00:00:00+00:00","tranches":[{"price":1.0,"notional_usdt":1000.0}]}
    eng.backfill_opportunity_history(pos,dt.datetime(2026,10,5,tzinfo=dt.timezone.utc))

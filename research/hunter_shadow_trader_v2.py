@@ -403,7 +403,7 @@ def backfill_opportunity_history(pos,now):
   try:
    pending=(pos.get('opportunity_history_progress') or {}).get('status')!='COMPLETE'
    due_missing=bool(closed and any(now>=closed+dt.timedelta(hours=h) and not observation_history.verified((pos.get("post_exit_observation") or {}).get(f"{int(h)}h"),closed,closed+dt.timedelta(hours=h)) for h in REVIEW_HOURS))
-   if (now-parse(last)).total_seconds()<3300 and not due_missing and not pending:return pos
+   if 0<=(now-parse(last)).total_seconds()<3300 and not due_missing and not pending:return pos
   except Exception:pass
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
   pos["data_provenance"]="BACKFILL_PENDING";return pos
@@ -450,7 +450,7 @@ def backfill_opportunity_history(pos,now):
 
 def observation_complete(pos,now=None):
  """A legacy horizon/boolean alone is not evidence of continuous coverage."""
- if not pos.get('closed_at_utc'):return False
+ if not pos.get('closed_at_utc') or pos.get('execution_venue')=='BYBIT_SPOT':return False
  closed=parse(pos['closed_at_utc']);end=closed+dt.timedelta(hours=max(REVIEW_HOURS))
  obs=pos.get('post_exit_observation') or {}
  return bool((now is None or now>=end) and all(finite((obs.get(f'{int(h)}h') or {}).get('max_return_from_sell_pct')) is not None and observation_history.verified(obs.get(f'{int(h)}h'),closed,closed+dt.timedelta(hours=h)) for h in REVIEW_HOURS))
@@ -954,12 +954,12 @@ def opportunity_summary(rows,now=None):
   "potential_premature_exit_count":sum(x.get("exit_evaluation")=="POTENTIAL_PREMATURE_EXIT" for x in rows),
   "profit_giveback_count":sum(x.get("exit_evaluation")=="PROFIT_GIVEBACK" for x in rows),"full_opportunity_mfe_distribution":dist}
 
-def build_summary(state,now,guard_status="NORMAL",scan=None):
+def build_summary(state,now,guard_status="NORMAL",scan=None,backfill_open=True):
  closed=state.get("closed_positions") or [];arch=state.get("closed_trade_archive") or [];all_closed=arch+closed
  gp=sum(max(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed);gl=-sum(min(0,float(x.get("net_pnl_usdt") or 0)) for x in all_closed)
  for x in state.get("open_positions") or []:
   ensure_opportunity_observation(x,x.get("last_price"),now)
-  if x.get("sample_cohort")=="MIGRATION_SAMPLE" and x.get("data_provenance")!="HISTORICAL_BACKFILL":backfill_opportunity_history(x,now)
+  if backfill_open and x.get("sample_cohort")=="MIGRATION_SAMPLE" and x.get("data_provenance")!="HISTORICAL_BACKFILL":backfill_opportunity_history(x,now)
  for x in closed:ensure_opportunity_observation(x,None,now)
  cohorts={"all_samples":opportunity_summary(all_closed,now),"migration_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="MIGRATION_SAMPLE"],now),
   "new_version_samples":opportunity_summary([x for x in all_closed if x.get("sample_cohort")=="NEW_VERSION_SAMPLE"],now)}

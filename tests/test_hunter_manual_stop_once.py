@@ -71,7 +71,7 @@ class ManualStopTests(unittest.TestCase):
     def test_cross_cycle_retry_and_archive(self):
         state, books = fixture()
         done, _ = self.run_stage(state, books)
-        from test_hunter_observation_fixtures import certify_horizons
+        from tests.test_hunter_observation_fixtures import certify_horizons
         for row in done['closed_positions'][1:]:
             certify_horizons(row)
             row['observation_complete'] = True

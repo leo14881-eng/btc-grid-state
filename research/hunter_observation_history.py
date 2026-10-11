@@ -38,7 +38,7 @@ def advance(progress, bars, opened, closed, end, hours):
     stop = bounds(opened, end)[1]
     rows = {}
     for row in bars or []:
-        if len(row) != 3:
+        if not isinstance(row, (list, tuple)) or len(row) != 3:
             continue  # Legacy timestamp/high pairs cannot prove time coverage.
         start, close, high = row
         if (type(start) is not int or type(close) is not int or

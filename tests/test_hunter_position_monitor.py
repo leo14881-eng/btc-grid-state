@@ -2,7 +2,7 @@ import datetime as dt,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from research import hunter_position_monitor as m
-from test_hunter_observation_fixtures import certify_horizons
+from tests.test_hunter_observation_fixtures import certify_horizons
 class PositionMonitorTests(unittest.TestCase):
  def test_v2_health_is_refreshed_every_bucket_without_v1_discovery_change(self):
   states=[{'open_positions':[{'asset':str(i)} for i in range(200)]},{'open_positions':[{'asset':'ENA'},{'asset':'PENDLE'}]}]

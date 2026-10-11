@@ -7,8 +7,8 @@ from unittest.mock import patch, MagicMock
 
 from research import hunter_shadow_trader_v2 as eng
 from research import hunter_observation_history as history
-from test_hunter_monitor_boundaries import NOW, closed_position
-from test_hunter_observation_fixtures import bars_between
+from tests.test_hunter_monitor_boundaries import NOW, closed_position
+from tests.test_hunter_observation_fixtures import bars_between
 
 
 class HistoryCoverageTests(unittest.TestCase):
@@ -106,6 +106,8 @@ class HistoryCoverageTests(unittest.TestCase):
 
     def test_bound_to_position_window_and_venue(self):
         pos=closed_position(); self.backfill(pos,self.complete_rows(pos))
+        bybit=copy.deepcopy(pos);bybit['execution_venue']='BYBIT_SPOT'
+        self.assertFalse(eng.observation_complete(bybit,NOW))
         pos['closed_at_utc']=(eng.parse(pos['closed_at_utc'])+dt.timedelta(hours=1)).isoformat()
         self.assertFalse(eng.observation_complete(pos,NOW))
         pos['execution_venue']='BYBIT_SPOT'
@@ -152,6 +154,26 @@ class HistoryCoverageTests(unittest.TestCase):
         self.assertFalse(pos['observation_complete'])
         self.backfill(pos,bars_between(now,sold+dt.timedelta(hours=72)))
         self.assertTrue(pos['observation_complete'])
+
+    def test_older_clock_does_not_reuse_future_peaks(self):
+        pos=closed_position(); self.backfill(pos,self.complete_rows(pos))
+        earlier=eng.parse(pos['closed_at_utc'])+dt.timedelta(hours=2)
+        self.backfill(pos,bars_between(eng.parse(pos['opened_at_utc']),earlier,101.),earlier)
+        self.assertFalse(pos['observation_complete'])
+        self.assertEqual(pos['full_opportunity_peak_price'],101.)
+
+    def test_unverified_history_is_neither_archived_nor_counted_complete(self):
+        pos=closed_position();pos['observation_complete']=True
+        pos['post_exit_observation']={'72h':{'max_return_from_sell_pct':50.}}
+        state={'closed_positions':[pos],'events':[{'id':'old-sell'}]}
+        before=copy.deepcopy(state)
+        with patch.object(eng,'MAX_CLOSED_HOT',0):eng.compact_closed_history(state)
+        self.assertEqual(state['closed_positions'],before['closed_positions'])
+        self.assertEqual(state['events'],before['events'])
+        self.assertFalse(state.get('closed_trade_archive'))
+        summary=eng.opportunity_summary([pos],NOW)
+        self.assertEqual(summary['completed_72h_observations'],0)
+        self.assertTrue(summary['full_opportunity_metrics_provisional'])
 
 
 if __name__=='__main__':unittest.main()

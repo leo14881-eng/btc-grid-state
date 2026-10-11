@@ -26,7 +26,7 @@ def closed_position():
 
 
 class MonitorBoundaryTests(unittest.TestCase):
-    def main_cycle(self, states, market, real_lanes=False):
+    def main_cycle(self, states, market, real_lanes=False, history_rows=None):
         docs = {monitor.V1: states[0], monitor.V2: states[1]}
         writes = {}
         def write(path, doc):
@@ -45,7 +45,7 @@ class MonitorBoundaryTests(unittest.TestCase):
             stack.enter_context(patch.object(eng.tail, 'tail_budget_snapshot', return_value={}))
             stack.enter_context(patch.object(monitor.books, 'live_fetch', side_effect=RuntimeError('offline book gap')))
             stack.enter_context(patch('research.hunter_fast_reconciliation.observe', return_value={}))
-            stack.enter_context(patch.object(eng, 'binance_kline_bars', return_value=None))
+            stack.enter_context(patch.object(eng, 'binance_kline_bars', return_value=history_rows))
             stack.enter_context(patch.object(eng, 'atomic_json_write', side_effect=write))
             lane_impl=monitor.run_lane if real_lanes else lambda path,label,*a: {'lane':label,'open':len(docs[path]['open_positions'])}
             lanes = stack.enter_context(patch.object(monitor, 'run_lane', side_effect=lane_impl))
@@ -64,7 +64,7 @@ class MonitorBoundaryTests(unittest.TestCase):
     def test_empty_lanes_satisfy_unchanged_publication_guard(self):
         empty = {'open_positions': [], 'closed_positions': []}
         result, _ = self.main_cycle([empty, empty], {})
-        from test_hunter_monitor_persist import fixture, GEN
+        from tests.test_hunter_monitor_persist import fixture, GEN
         raw = fixture()
         for prefix in ('hunter-shadow', 'hunter-shadow-v2'):
             for suffix in ('portfolio', 'summary'):
@@ -101,7 +101,7 @@ class MonitorBoundaryTests(unittest.TestCase):
         self.assertEqual(result['observation_market_data']['missing_assets'],[])
 
     def test_real_lane_marks_open_position_despite_closed_quote_gap(self):
-        from test_hunter_position_monitor import PositionMonitorTests
+        from tests.test_hunter_position_monitor import PositionMonitorTests
         state,market,_,_,_=PositionMonitorTests().fixture(price=95.)
         state.update(schema='hunter_shadow_v2_portfolio_v2',closed_positions=[closed_position()],events=[{'event_id':'historical'}])
         empty=dict(schema=state['schema'],mode=state['mode'],open_positions=[],closed_positions=[],events=[],decisions=[])
@@ -120,7 +120,7 @@ class MonitorBoundaryTests(unittest.TestCase):
         self.assertEqual(result['capital_authority'],'NONE_SHADOW_ONLY')
 
     def test_completed_closed_only_cycle_has_empty_lanes_and_does_not_rewrite_ledgers(self):
-        from test_hunter_observation_fixtures import certify_horizons
+        from tests.test_hunter_observation_fixtures import certify_horizons
         pos=certify_horizons(closed_position());pos['observation_complete']=True
         state={'open_positions':[],'closed_positions':[pos]}
         result,lanes=self.main_cycle([state,state],{})
@@ -128,6 +128,19 @@ class MonitorBoundaryTests(unittest.TestCase):
         self.assertEqual([r['open'] for r in result['results']],[0,0])
         self.assertEqual(lanes.call_count,0)
         self.assertEqual(list(self.writes),[monitor.OUT])
+
+    def test_migration_checkpoint_is_persisted_and_resumes_next_cycle(self):
+        from tests.test_hunter_position_monitor import PositionMonitorTests
+        from tests.test_hunter_observation_fixtures import bars_between
+        state,market,_,_,_=PositionMonitorTests().fixture(price=95.)
+        state.update(schema='hunter_shadow_v2_portfolio_v2')
+        empty=dict(schema=state['schema'],mode=state['mode'],open_positions=[],closed_positions=[],events=[],decisions=[])
+        rows=bars_between(eng.parse(state['open_positions'][0]['opened_at_utc']),NOW)
+        self.main_cycle([empty,state],market,real_lanes=True,history_rows=rows[:1000])
+        saved=self.writes[monitor.V2]
+        self.assertEqual(saved['open_positions'][0]['opportunity_history_progress']['bars_seen'],1000)
+        self.main_cycle([empty,saved],market,real_lanes=True,history_rows=rows[1000:2000])
+        self.assertEqual(self.writes[monitor.V2]['open_positions'][0]['opportunity_history_progress']['bars_seen'],2000)
 
 
 if __name__ == '__main__':
