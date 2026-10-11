@@ -14,7 +14,7 @@ except ModuleNotFoundError as exc:
     if exc.name != 'research':raise
     import hunter_signal_provenance as provenance
 
-VERSION = 'hunter-reentry-evidence-v2'
+VERSION = 'hunter-reentry-evidence-v3'
 STRATEGY_VERSION = 'hunter-2026-0-10-11-v1'
 STRATEGY_NOTE = '2026.0.10.11 新策略'
 
@@ -31,7 +31,7 @@ def buy_annotation(engine, state, context=None, now=None):
 def audit(state, asset):
     row = (state.get('reentry_registry') or {}).get(asset) or {}
     return copy.deepcopy({k: row[k] for k in ('last_exit_reason', 'risk_lock', 'state',
-        'reentry_path', 'last_reassessment', 'reentry_last_observation') if k in row})
+        'reentry_path', 'last_reassessment', 'reentry_last_observation', 'reentry_historical_trend') if k in row})
 
 
 def missing_candidates(state, review, scan, now, fresh):
@@ -200,8 +200,12 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
             or (prior and (generation == prior['generation'] or any(t <= time(old) for t, old in zip(times, prior['times']))))):
         return deny('REENTRY_NO_NEW_EVIDENCE', 'SAME_OR_REPLAYED_CYCLE', False)
     current_hash = signal_hash(candidate)
+    old_pos = context.get('position') or {}
+    if old_pos.get('execution_venue') not in (None, 'BINANCE_SPOT', 'BYBIT_SPOT'):
+        return deny('REENTRY_UNKNOWN', 'PRIMARY_VENUE_SIGNAL_SOURCE_CONTRACT_UNSUPPORTED')
+    expected = 'bybit' if old_pos.get('execution_venue') == 'BYBIT_SPOT' else 'binance'
     try:
-        sources = provenance.signal_sources(candidate.get('signal'), candidate['asset'], now, exited, engine.fresh)
+        sources = provenance.signal_sources(candidate.get('signal'), candidate['asset'], now, exited, engine.fresh, expected)
     except (TypeError, ValueError, KeyError, OverflowError):
         return deny('REENTRY_UNKNOWN', 'SOURCE_WINDOW_MISSING_INVALID_OR_OLD')
     baseline = (watermark or {}).get('signal_sources')
@@ -213,19 +217,15 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
             return deny('REENTRY_NO_NEW_EVIDENCE', 'SOURCE_WINDOW_UNCHANGED_SINCE_EXIT', False)
     if baseline:
         if any(sources[k]['window'][-1] < baseline[k]['window'][-1]
-               or time(sources[k]['observed_at_utc']) <= time(baseline[k]['observed_at_utc']) for k in sources):
+               or time(sources[k]['observed_at_utc']) <= time(baseline[k]['observed_at_utc']) for k in sources if k in baseline):
             return deny('REENTRY_NO_NEW_EVIDENCE', 'SOURCE_WINDOW_REPLAY_OR_REVERSE', False)
         if all(sources[k]['window'] == baseline[k]['window'] and sources[k]['hash'] == baseline[k]['hash'] for k in ('asset_1h', 'asset_4h', 'micro')):
             return deny('REENTRY_NO_NEW_EVIDENCE', 'SOURCE_WINDOW_CONTENT_NOT_NEW', False)
     # Original venue matching is common safety; V1 does not inherit V2's
     # quantity/depth/rr entry gates. PP clearance alone needs old-quantity net.
-    old_pos = context.get('position') or {}
-    if old_pos.get('execution_venue') not in (None, 'BINANCE_SPOT'):
-        return deny('REENTRY_UNKNOWN', 'PRIMARY_VENUE_SIGNAL_SOURCE_CONTRACT_UNSUPPORTED')
     if old_pos.get('asset') != candidate.get('asset'):
         return deny('REENTRY_UNKNOWN', 'EXIT_ASSET_IDENTITY_MISMATCH')
     execution = engine.lifecycle.liquidation(old_pos, book, now, old_pos.get('execution_fee_bps', engine.FEE_BPS))
-    expected = 'bybit' if old_pos.get('execution_venue') == 'BYBIT_SPOT' else 'binance'
     if (book.get('exchange') != expected or book.get('market') != 'spot'
             or book.get('symbol') != candidate['asset']+'USDT' or book.get('price_unit') != 'USDT'
             or book.get('quantity_unit') != 'BASE'):
@@ -252,7 +252,7 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
         return deny('REENTRY_NO_NEW_EVIDENCE', 'SOURCE_SEQUENCE_NOT_NEW', False)
     if market_hash == context.get('source_hash') or market_hash in row.get('reentry_seen_markets', []):
         # New source window is new evidence even with equal derived/book values.
-        if not baseline or all(sources[k]['window'] == baseline[k]['window'] for k in sources):
+        if not baseline or all(sources[k]['window'] == baseline[k]['window'] for k in sources if k in baseline):
             return deny('REENTRY_NO_NEW_EVIDENCE', 'MARKET_CONTENT_NOT_NEW', False)
     if number(price) is None or price <= 0:
         return deny('REENTRY_UNKNOWN', 'CURRENT_PRICE_INVALID')
@@ -322,6 +322,24 @@ def evaluate(engine, state, candidate, price, scan, liq, supply, now, identity=N
             return deny('REENTRY_REASON_UNRESOLVED', 'ORIGINAL_PROTECTION_STILL_BREACHED_AFTER_COSTS')
     elif reason not in ('HARD_INVALIDATION', 'PROFIT_STAGNATION', 'THESIS_INVALIDATED_PROFIT_EXIT', 'PROFIT_REVIEW_MOMENTUM_FADED'):
         return deny('REENTRY_REASON_UNRESOLVED', 'EXIT_REASON_CLEARANCE_UNKNOWN')
+    if prior is None:
+        try:
+            historical = provenance.reconstruct_trend(candidate['signal'], candidate['asset'], max(exited, cutoff or exited))
+        except (TypeError, ValueError, KeyError, IndexError, OverflowError) as exc:
+            row['reentry_historical_trend'] = {'status':'UNKNOWN','reason':str(exc)}
+            return deny('REENTRY_UNKNOWN', 'HISTORICAL_TREND_EVIDENCE_INCOMPLETE', False)
+        else:
+            hs = historical['signal']
+            # Same existing market-signal conditions as the live observation.
+            # This is NOT historical position_health: identity, supply, book,
+            # costs and the original exit cause were checked above at NOW only.
+            trend = (hs['score'] >= engine.DISCOVERY_MIN_SCORE
+                     and hs['independent_signal_count'] >= engine.DISCOVERY_MIN_INDEPENDENT
+                     and all(hs[k] > 0 for k in ('btc_relative_1h_pct','btc_relative_4h_pct','relative_acceleration_pct')))
+            historical['relative_trend_positive'] = trend
+            row['reentry_historical_trend'] = historical
+            prior = {'price':historical['price'], 'strong':trend}
+            row['post_exit_low'] = min(row['post_exit_low'], historical['price'])
     if not prior or not strong or price <= prior['price']:
         return deny('REENTRY_TREND_NOT_RESTORED', 'ORDERED_POST_EXIT_RECOVERY_REQUIRED', False)
     # No % reset or sell-price breakout prerequisite: actual dip then recovery,

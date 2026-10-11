@@ -258,7 +258,7 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
             raise ValueError("BYBIT_WORKER_KLINE_FAILURE:"+symbol+":"+interval+":"+detail["code"])
         return bundles[symbol][interval]
     try:
-        signals, failures=capture(required,get)
+        signals, failures=capture(required,get,observed_at=now)
     except RuntimeError as exc:
         signals={}; failures={s:str(exc) for s in symbols}
     signals={b:{**s,"source_observed_at_utc":now.isoformat()} for b,s in signals.items()}

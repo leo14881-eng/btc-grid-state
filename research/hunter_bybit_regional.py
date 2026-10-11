@@ -107,7 +107,7 @@ def collect(now=None,fetcher=None,country=None,signal_fetcher=None):
             from research.hunter_bybit_signal_capture import capture
         except ModuleNotFoundError:
             from hunter_bybit_signal_capture import capture
-        signal_fetcher=capture
+        signal_fetcher=lambda rows:capture(rows,observed_at=now)
     signals,failures=signal_fetcher(rows) if signal_fetcher else ({},{})
     signals={base:{**row,"source_observed_at_utc":now.isoformat()}
              for base,row in signals.items()}

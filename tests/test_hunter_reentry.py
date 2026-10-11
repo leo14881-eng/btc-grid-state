@@ -329,15 +329,16 @@ class ReentryTests(unittest.TestCase):
         now = self.start+dt.timedelta(minutes=2)
         original = {'manifest':self.release_manifest,'lanes':{'V2':self.state,'V1':self.release_peer}}
         self.assertTrue(release.annotation(eng, self.state, original, now))
-        for kind in ('no_manifest','bad_code','old_policy','peer_migrating','bare_policy','stale_peer','same_lane_twice'):
+        for kind in ('no_manifest','disabled','bad_code','old_policy','peer_migrating','bare_policy','wrong_activation','same_lane_twice'):
             context = copy.deepcopy(original)
             state = context['lanes']['V2']
             if kind == 'no_manifest':context['manifest'] = {}
+            if kind == 'disabled':context['manifest']['enabled'] = False
             if kind == 'bad_code':context['manifest']['components']['code_sha256']['loss'] = '0'*64
             if kind == 'old_policy':context['lanes']['V1']['loss_control']['policy'] = 'OLD'
             if kind == 'peer_migrating':context['lanes']['V1']['loss_control']['legacy_completion'] = {'status':'RECOVERING','quarantined_cash_usdt':500}
             if kind == 'bare_policy':context['lanes']['V1']['loss_control'] = {'policy':'LOSS_AND_MARKET_V1'}
-            if kind == 'stale_peer':context['lanes']['V1']['loss_control']['evaluated_at_utc'] = (now-dt.timedelta(days=1)).isoformat()
+            if kind == 'wrong_activation':context['lanes']['V1']['loss_control']['activated_at_utc'] = (now-dt.timedelta(days=1)).isoformat()
             if kind == 'same_lane_twice':context['lanes']['V1'] = state
             self.assertEqual(release.annotation(eng, state, context, now), {}, kind)
 

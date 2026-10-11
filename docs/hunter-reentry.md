@@ -104,8 +104,9 @@ are unchanged. Reentry validates all five packets, content hashes, continuity,
 source identity, freshness and post-exit coverage. Re-fetching an old completed
 window or changing only a score/timestamp is insufficient. New window identity
 with identical numbers is admitted as new evidence; normal trend conditions
-still apply. Bybit reentry without this validated source contract stays UNKNOWN;
-this change does not modify the separate Bybit collection work.
+still apply. Both Binance and Bybit retain their existing fetch counts and raw
+windows; Bybit Worker/regional/held-management producers now forward the same
+venue-matched provenance. Legacy packets without it remain UNKNOWN.
 
 A genuinely new missing/invalid observation interrupts confirmation and creates
 a restart watermark. Delayed packets before that watermark cannot restart it.
@@ -113,8 +114,39 @@ An omitted candidate in a new valid review also interrupts it. Duplicate/old
 packets do not advance or interrupt the setup. The previous observation must
 still satisfy the existing MAX_EVIDENCE_AGE_SECONDS contract at confirmation;
 otherwise it seeds a new setup. No trading cooldown or new time threshold was
-introduced. Consequently sparse hourly observations cannot bridge an expired
-setup; the code does not invent evidence between collections.
+introduced. An expired setup is not reused. The fresh-window reconstruction
+below makes the hourly production path reachable without bridging old evidence.
+
+## Hourly source-window reconstruction
+
+Discovery runs at :17 and triggers Research; Monitor remains existing-position
+management only. A 10:17 scan/10:22 Research setup is already stale at 11:22 even
+when Research runs exactly hourly. The fallback therefore uses the latest closed
+15m market point and the current live point from THIS fresh collection.
+
+The existing 25 quarters include one partial candle. At the preceding close,
+24 quarters remain. The original micro formula reads at most the last 24 (not
+the unused 25th): compression 8 vs 16, volume 2 vs 12, range 24, momentum 2/5.
+The asset AND BTC micro packets cover all five hourly starts needed for original
+rolling returns. Aggregate quarters into hourly buckets only up to the cutoff,
+then use the original 2/5-hourly-row first-open to last-close returns and
+rel1-rel4/4 acceleration. The existing feature and score functions are reused.
+Quarter-phase equivalence tests compare every signal field against synthetic
+producer calls at that historical instant. No request count, lookback parameter,
+retry policy, feature formula or threshold changes.
+
+This is labeled RECONSTRUCTED_MARKET_TREND_NOT_HISTORICAL_HEALTH, with the actual
+current collection timestamps, derived market time and source hashes. It never
+claims historical live sampling, identity, supply, orderbook, VWAP, RR, systemic
+breadth, capital or trades. Those gates, current STRONG and original cause
+clearance still execute using current evidence. Missing BTC micro, unaligned
+windows, incomplete required history or a point before exit/UNKNOWN interruption
+are UNKNOWN. No future partial data enters the historical calculation.
+
+The existing market score/count and positive-relative conditions classify the
+historical trend; the original increasing-price continuation/recovery logic is
+unchanged. No new high/low breakout or volume threshold is introduced. Legacy
+expired strong booleans cannot authorize entry; fresh raw history must prove it.
 
 ## Common release attestation (supersedes lane-local label activation above)
 
@@ -127,13 +159,25 @@ V1/V2 lane_activation_ids matching each loss_control.activated_at_utc.
 
 Receipt hashes bind the actual engine, reentry, provenance, release gate, loss
 module, source/identity/review producers and policy bytes. Both authoritative lane
-portfolios must contain fresh evaluated runtime state, the current loss policy
-and completed legacy migrations. A bare policy string, fake callable, stale
-peer, old policy, unfinished other-lane migration, or partial/mismatched code
+portfolios must contain the current loss policy and completed legacy migrations.
+Peer evaluated_at is not a release expiration clock: an empty Monitor run does
+not update it, and V1 runs before V2 each hour. BUY admission retains its own
+current risk-evidence checks. A bare policy string, fake callable, mismatched
+activation ID, old policy, unfinished other-lane migration, or partial/mismatched code
 cannot label a BUY. The manifest is consumed read-only and does not enable
 trading. Missing release evidence changes annotations only, never BUY/ADD gates.
 The exact note and stable strategy_version are unchanged. Historical/ADD events
 are never backfilled.
+
+Reviewed deployment procedure (not performed by this task): deploy the approved
+combined code, let the existing authoritative writer activate and finish BOTH
+lane migrations, inspect both persisted portfolios and their activation IDs,
+compute component_receipt from those exact deployed bytes, then explicitly
+publish the matching common manifest with a release ID and activation time.
+Disable/remove the manifest to revoke the release; code/policy hash changes,
+activation-ID changes or incomplete migration automatically invalidate it. Do
+not regenerate a manifest automatically to bless changed code. No production
+manifest or activation is synthesized by tests or this PR.
 
 Replay ID/hash arrays remain durable per exit. The unused growing derived-signal
 array is no longer appended; bounded compaction of the remaining replay sets is

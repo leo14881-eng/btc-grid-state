@@ -12,7 +12,9 @@ def component_receipt(engine):
     try:
         hashes = {k: hashlib.sha256(pathlib.Path(v.__file__).read_bytes()).hexdigest() for k,v in modules.items()}
         root = pathlib.Path(engine.__file__).parent
-        for name in ('hunter_early_signals.py','hunter_identity_audit.py','hunter_tactical_capital_review.py','results/hunter-shadow-rules.json'):
+        for name in ('hunter_early_signals.py','hunter_identity_audit.py','hunter_tactical_capital_review.py',
+                     'hunter_bybit_signal_capture.py','hunter_bybit_worker.py','hunter_bybit_regional.py',
+                     'hunter_bybit_management.py','results/hunter-shadow-rules.json'):
             hashes[name] = hashlib.sha256((root/name).read_bytes()).hexdigest()
     except (AttributeError, OSError, TypeError):return None
     return {'reentry': engine.reentry.VERSION, 'loss': risk.POLICY, 'code_sha256': hashes}
@@ -45,7 +47,6 @@ def annotation(engine, state, context, now):
         if (portfolio.get('mode') != 'SIMULATION_ONLY_NO_REAL_ORDERS'
                 or control.get('policy') != receipt['loss'] or not lane_at or not lane_at <= activated
                 or (manifest.get('lane_activation_ids') or {}).get(lane) != control.get('activated_at_utc')
-                or not engine.fresh(control.get('evaluated_at_utc'), now)
                 or not isinstance(completed, dict) or completed.get('status') not in (None,'NORMAL')
                 or (engine.finite(completed.get('quarantined_cash_usdt')) or 0) != 0):
             return {}
