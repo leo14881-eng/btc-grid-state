@@ -104,6 +104,8 @@ def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
       "research_only":True}
     sources={"asset_1h":a.get("source_provenance"),"asset_4h":b.get("source_provenance"),
              "btc_1h":btc1.get("source_provenance"),"btc_4h":btc4.get("source_provenance"),"micro":m.get("source_provenance")}
+    btc_micro=((microdata or {}).get("BTCUSDT") or {}).get("source_provenance")
+    if btc_micro is not None:sources['btc_micro']=btc_micro
     if any(sources.values()):result["source_provenance"]=sources
     return result
 def build(scan,r1,r4,microdata,now,regional_signals=None):
