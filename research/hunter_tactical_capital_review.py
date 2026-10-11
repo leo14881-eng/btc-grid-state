@@ -127,6 +127,7 @@ def main():
         first_tranche_allowed=(trade_action=="BUY")
         entry_stage={"BUY":"EXECUTABLE_BUY","WAIT":"WATCH","REJECT":"BLOCKED","SYSTEM_BLOCKED":"SYSTEM_BLOCKED"}[trade_action]
         rows.append({"asset":sym,"as_of_utc":now.isoformat(),
+          "identity_audit":ident,
           "reference_price":coin.get("reference_price"),"signal":sig,"first_discovery_price":anchor,
           "signal_evidence":stamp(sym,scan.get("generation_id"),early.get("as_of_utc")),
           "proposed_max_cost_usdt":proposal,"execution_scenario":execution,
