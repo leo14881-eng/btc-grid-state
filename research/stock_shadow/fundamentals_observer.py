@@ -53,6 +53,8 @@ def _sec_budget():
         db.execute("CREATE TABLE IF NOT EXISTS budget (key TEXT PRIMARY KEY, value REAL NOT NULL)")
         yield db
         db.commit()
+    except urllib.error.HTTPError:
+        raise  # HTTPError is also an OSError; retain the cached-denial classification.
     except (sqlite3.Error,OSError):
         raise SECTransportError("SEC_SHARED_BUDGET_UNAVAILABLE") from None
     finally:
