@@ -1,7 +1,6 @@
 """Run existing Hunter workflow steps in disposable Vultr checkouts."""
 import argparse
 import datetime as dt
-import fcntl
 import hashlib
 import json
 import os
@@ -11,6 +10,7 @@ import signal
 import subprocess
 import time
 import tempfile
+from scripts.hunter_portfolio_lock import PortfolioLock, deadline
 
 JOBS = {
  "discovery": ("hunter-cex-universe.yml", "discovery"),
@@ -279,21 +279,32 @@ def exception_details(exc):
  return result
 
 
-def run_shell(code, env, cwd, timeout=None):
+def run_shell(code, env, cwd, timeout=None, pass_fds=()):
  # Temporary file avoids pipe deadlock and unbounded in-memory stderr capture.
  # stdout retains its existing live journal stream.
  with tempfile.TemporaryFile() as errors:
   process = subprocess.Popen(["bash", "-euo", "pipefail", "-c", code],
-                             env=env, cwd=cwd, start_new_session=True, stderr=errors)
+                             env=env, cwd=cwd, start_new_session=True, stderr=errors,
+                             pass_fds=pass_fds)
   timed_out = False
+  def terminate_group():
+   try: os.killpg(process.pid, signal.SIGTERM)
+   except ProcessLookupError: pass
+   try: process.wait(timeout=5)
+   except subprocess.TimeoutExpired: pass
+   # The shell leader can exit before a TERM-resistant grandchild. Always
+   # kill the remaining group, including descendants that closed the lock FD.
+   try: os.killpg(process.pid, signal.SIGKILL)
+   except ProcessLookupError: pass
+   process.wait()
   try:
    process.wait(timeout=timeout)
   except subprocess.TimeoutExpired:
    timed_out = True
-   os.killpg(process.pid, signal.SIGTERM)
-   try: process.wait(timeout=5)
-   except subprocess.TimeoutExpired:
-    os.killpg(process.pid, signal.SIGKILL); process.wait()
+   terminate_group()
+  except BaseException:
+   terminate_group()
+   raise
   errors.seek(0, os.SEEK_END)
   errors.seek(max(0, errors.tell()-65536))
   tail = safe_diagnostic(errors.read().decode("utf-8", errors="replace"), env)
@@ -424,19 +435,19 @@ def run_job(job, preview=False, steps=None):
      row.update(status="SUCCESS", exit=0)
      continue
     if job == "research" and name.startswith("Bind latest"):
-     lock = open("/run/lock/hunter-position-monitor.lock", "a")
-     waiting = time.monotonic()
-     while True:
-      try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB); break
-      except BlockingIOError:
-       require(time.monotonic() - waiting < 120, "PORTFOLIO_LOCK_WAIT_TIMEOUT")
-       time.sleep(0.2)
-     lock_started = time.monotonic()
-     print("HUNTER_PORTFOLIO_LOCK_ACQUIRED", round(time.monotonic()-waiting,3), flush=True)
+     lock = PortfolioLock("research", generation, base)
+     lock.acquire()
+     lock_started = lock.acquired
+     row["lock_wait_seconds"] = round(lock.wait_seconds, 6)
+    if lock is not None and lock.acquired is not None:
+     lock.phase(name, generation=generation, base_sha=env.get("HUNTER_EXECUTION_BASE_SHA", base))
     local_env = {**env, **{k: resolve(v, env, generation, base) for k,v in step.get("env", {}).items()}}
     print("HUNTER_JOB_STEP_START", job, name, flush=True)
     remaining = None if lock_started is None else max(0.01, 90-(time.monotonic()-lock_started))
-    result = run_shell(step["run"], local_env, step.get("working-directory", "."), remaining)
+    # The child retains the flock if this supervisor is killed. Timeout handling
+    # terminates the entire child process group before releasing our descriptor.
+    lock_args = {"pass_fds": (lock.file.fileno(),)} if lock_started is not None else {}
+    result = run_shell(step["run"], local_env, step.get("working-directory", "."), remaining, **lock_args)
     row["exit"] = result.returncode
     stderr = getattr(result, "stderr", None)
     if isinstance(stderr, str) and stderr: row["stderr_tail"] = safe_diagnostic(stderr, local_env)
@@ -461,7 +472,14 @@ def run_job(job, preview=False, steps=None):
           "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat()}
    steps.append(row)
    try:
-    readback(job)
+    if lock_started is not None:
+     lock.phase("Authoritative main read-back")
+     remaining = 90-(time.monotonic()-lock_started)
+     require(remaining > 0, "PORTFOLIO_CRITICAL_PHASE_TIMEOUT")
+     with deadline(remaining, "PORTFOLIO_CRITICAL_PHASE_TIMEOUT"):
+      readback(job)
+    else:
+     readback(job)
     row.update(status="SUCCESS", exit=0)
    except Exception as exc:
     row.update(status="FAILURE", error_details=exception_details(exc))
@@ -471,7 +489,8 @@ def run_job(job, preview=False, steps=None):
     row["completed_at_utc"] = dt.datetime.now(dt.timezone.utc).isoformat()
   return steps
  finally:
-  if lock is not None: lock.close()
+  if lock is not None:
+   lock.close("failed" if any(r.get("status") == "FAILURE" for r in steps) else "complete")
 
 
 def main():
@@ -506,3 +525,4 @@ def main():
 
 
 if __name__ == "__main__": main()
+

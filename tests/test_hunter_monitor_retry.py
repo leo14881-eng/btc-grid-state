@@ -10,10 +10,22 @@ import shutil
 
 
 DRIVER = r'''
-import json,os,pathlib,sys,subprocess
+import json,os,pathlib,sys,subprocess,fcntl
 root=pathlib.Path(os.environ['FIXTURE_ROOT']);args=sys.argv[1:]
 name=pathlib.Path(sys.argv[0]).name
 with (root/'calls.jsonl').open('a') as f:f.write(json.dumps([name,args])+'\n')
+with (root/'lock').open('a') as lock:
+ try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);held=False
+ except BlockingIOError:held=True
+if (name=='git' and 'clone' in args) or args[:2]==['-m','unittest']:
+ assert not held,'PREPARATION_MUST_NOT_HOLD_PORTFOLIO_LOCK'
+if args[:2]==['-m','research.hunter_position_monitor'] or args[:2]==['scripts/hunter_monitor_persist.py','persist'] or args[:3]==['-m','research.hunter_scheduler_health','gate']:
+ assert held,'AUTHORITATIVE_EXECUTION_REQUIRES_PORTFOLIO_LOCK'
+if args[:2]==['-m','scripts.hunter_portfolio_lock']:
+ os.execv(sys.executable,[sys.executable,os.environ['LOCK_HELPER'],*args[2:]])
+if args[:2]==['-m','unittest'] and os.environ.get('PREPARE_FAIL'):sys.exit(7)
+if args[:2]==['scripts/hunter_monitor_persist.py','rebind'] and os.environ.get('REBIND_FAIL'):
+ print('RuntimeError: MONITOR_PREPARATION_INVALIDATED',file=sys.stderr);sys.exit(1)
 countpath=root/'clones'
 count=int(countpath.read_text()) if countpath.exists() else 0
 if name=='git':
@@ -61,7 +73,8 @@ class RetryTests(unittest.TestCase):
             runner=root/'runner.sh';runner.write_text(source);runner.chmod(0o755)
             for name in ('git','python3'):
                 tool=bindir/name;tool.write_text('#!'+sys.executable+'\n'+DRIVER);tool.chmod(0o755)
-            env=dict(os.environ,PATH=str(bindir)+os.pathsep+os.environ['PATH'],FIXTURE_ROOT=str(root),**settings)
+            env=dict(os.environ,PATH=str(bindir)+os.pathsep+os.environ['PATH'],FIXTURE_ROOT=str(root),
+                     LOCK_HELPER=str(Path('scripts/hunter_portfolio_lock.py').resolve()),**settings)
             env.pop('HUNTER_MONITOR_CAS_RETRY_COUNT',None)
             result=subprocess.run([str(runner)],env=env,capture_output=True,text=True,timeout=10)
             calls=[json.loads(x) for x in (root/'calls.jsonl').read_text().splitlines()]
@@ -75,7 +88,7 @@ class RetryTests(unittest.TestCase):
         self.assertEqual(sum(a[:2]==['-m','research.hunter_position_monitor'] for _,a in calls),2)
         self.assertEqual(sum('clone' in a for n,a in calls if n=='git'),2)
         self.assertEqual(sum(a[:2]==['-m','unittest'] for _,a in calls),2)
-        bases=[a[a.index('--base')+1] for _,a in calls if '--base' in a]
+        bases=[a[a.index('--base')+1] for _,a in calls if a[:2]==['scripts/hunter_monitor_persist.py','persist']]
         self.assertEqual(bases,['base-1','base-2'])
 
     def test_repeated_cas_is_bounded(self):
@@ -95,7 +108,7 @@ class RetryTests(unittest.TestCase):
     def test_validation_failure_is_not_retried(self):
         result,calls=self.run_fixture(VALIDATE_FAIL='1')
         self.assertEqual(result.returncode,1)
-        self.assertFalse(any('--base' in a for _,a in calls))
+        self.assertFalse(any(a[:2]==['scripts/hunter_monitor_persist.py','persist'] for _,a in calls))
 
     def test_reentry_respects_generation_already_processed(self):
         result,calls=self.run_fixture(GATE_DUPLICATE='1')
@@ -103,7 +116,19 @@ class RetryTests(unittest.TestCase):
         self.assertIn('ALREADY_PROCESSED generation=bucket',result.stdout)
         self.assertEqual(sum(a[:3]==['-m','research.hunter_scheduler_health','gate'] for _,a in calls),2)
         self.assertEqual(sum(a[:2]==['-m','research.hunter_position_monitor'] for _,a in calls),1)
-        self.assertEqual(sum('--base' in a for _,a in calls),1)
+        self.assertEqual(sum(a[:2]==['scripts/hunter_monitor_persist.py','persist'] for _,a in calls),1)
+
+    def test_preparation_failure_never_joins_shared_lock(self):
+        result,calls=self.run_fixture(PREPARE_FAIL='1')
+        self.assertNotEqual(result.returncode,0)
+        self.assertFalse(any(a[:3]==['-m','scripts.hunter_portfolio_lock','acquire'] for _,a in calls))
+
+    def test_changed_code_after_wait_aborts_before_decision_and_releases(self):
+        result,calls=self.run_fixture(REBIND_FAIL='1')
+        self.assertNotEqual(result.returncode,0)
+        self.assertNotIn('HUNTER_MONITOR_SUCCESS',result.stdout)
+        self.assertFalse(any(a[:2]==['-m','research.hunter_position_monitor'] for _,a in calls))
+        self.assertIn('"event": "released"',result.stdout)
 
     def test_real_clone_after_retry_has_existing_current_directory(self):
         result,calls=self.run_fixture(REAL_CLONE='1')
@@ -111,3 +136,4 @@ class RetryTests(unittest.TestCase):
         self.assertNotIn('getcwd',result.stderr)
         self.assertEqual(sum('clone' in a for n,a in calls if n=='git'),2)
         self.assertEqual(sum(a[:2]==['-m','research.hunter_position_monitor'] for _,a in calls),2)
+
