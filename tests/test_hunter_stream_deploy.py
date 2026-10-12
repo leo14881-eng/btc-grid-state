@@ -1,4 +1,5 @@
 import copy
+import contextlib
 import datetime as dt
 import io
 import json
@@ -206,6 +207,53 @@ class DeploymentTests(unittest.TestCase):
                      'ReadWritePaths=/var/lib/hunter-bybit-stream']:
             self.assertIn(line, unit.splitlines())
         self.assertNotIn('ExecStartPost=', unit)
+
+
+class RecoveryTests(unittest.TestCase):
+    def test_backoff_and_five_consecutive_failures(self):
+        budget = stream.RecoveryBudget()
+        self.assertEqual([budget.failed() for _ in range(5)], [5,10,20,40,80])
+        self.assertEqual(budget.failures, 5)
+
+    def test_only_five_minutes_continuous_full_health_restores_budget(self):
+        budget = stream.RecoveryBudget(); budget.failed(); budget.failed()
+        for stamp in range(0,300,30):
+            self.assertFalse(budget.observe(True, stamp))
+        self.assertEqual(budget.failures, 2)
+        self.assertTrue(budget.observe(True, 300))
+        self.assertEqual(budget.failures, 0)
+
+    def test_unknown_missing_samples_and_clock_rollback_break_health_window(self):
+        for stamp, ready in [(240,False),(301,True),(100,True)]:
+            budget = stream.RecoveryBudget(); budget.failed()
+            for tick in range(0,240,30): budget.observe(True,tick)
+            self.assertFalse(budget.observe(ready,stamp))
+            self.assertFalse(budget.observe(True,stamp+30))
+            self.assertEqual(budget.failures,1)
+
+    def test_recovered_session_survives_more_than_five_lifetime_connections(self):
+        from unittest.mock import Mock
+        for ready, expected in [(True,7),(False,5)]:
+            opened=[]; monotonic=[0]
+            fake = Mock()
+            fake.freeze.return_value = {'status':'READY' if ready else 'UNKNOWN'}
+            @contextlib.contextmanager
+            def connect():
+                opened.append(1)
+                yield object()
+            def session(store,topics,scope,ws,stop,clock,sleep,*,observer):
+                if len(opened)==3:
+                    for stamp in range(0,301,30):
+                        monotonic[0]=stamp
+                        observer(store,'fixture',NOW)
+                raise OSError('fixture disconnect')
+            with patch.object(stream.Budget,'status',return_value={'halt':None,'cooldown_ms':0}), \
+                    patch.object(stream,'session',session), patch('sys.stdout',new=io.StringIO()) as output:
+                with self.assertRaisesRegex(RuntimeError,'CONNECTION_BUDGET_EXHAUSTED'):
+                    stream.collect(fake,['fixture'],'a'*64,connect,lambda:NOW,lambda _:None,steady=lambda:monotonic[0])
+            self.assertEqual(len(opened),expected)
+            self.assertIn('BYBIT_SIDECAR_CIRCUIT_OPEN',output.getvalue())
+            self.assertEqual('BYBIT_RECOVERY_BUDGET_RESTORED' in output.getvalue(),ready)
 
 
 if __name__ == '__main__':

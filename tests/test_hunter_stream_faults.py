@@ -172,8 +172,8 @@ class FaultTests(unittest.TestCase):
             return 403,b'country',1
         def repairer(store,epoch,name,deadline,*,cancelled):
             return stream.repair(store,epoch,name,deadline,get,lambda:NOW,cancelled=cancelled)
-        def session(store,topics,scope,ws,stop,clock,sleep):
-            return real_session(store,topics,scope,ws,stop,clock,sleep,repairer)
+        def session(store,topics,scope,ws,stop,clock,sleep,**kwargs):
+            return real_session(store,topics,scope,ws,stop,clock,sleep,repairer,**kwargs)
         with patch.object(self.store,'disconnect',disconnect),patch.object(stream,'session',session), \
              patch.object(Budget,'failure',side_effect=sqlite3.OperationalError('disk is full')):
             with self.assertRaisesRegex(stream.DurableStopError,'DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW'):

@@ -30,6 +30,32 @@ MAX_CONNECTION_ATTEMPTS = 5
 MAX_REST_ATTEMPTS = 3
 
 
+class RecoveryBudget:
+    """Five consecutive failures; only sustained complete cache health resets it."""
+    def __init__(self):
+        self.failures = 0
+        self.healthy_since = self.last_sample = None
+
+    def observe(self, ready, monotonic_seconds):
+        previous = self.last_sample
+        self.last_sample = monotonic_seconds
+        if not ready:
+            self.healthy_since = None
+            return False
+        if (self.healthy_since is None or previous is None
+                or not 0 <= monotonic_seconds-previous <= 60):
+            self.healthy_since = monotonic_seconds
+        if monotonic_seconds-self.healthy_since >= 300 and self.failures:
+            self.failures = 0
+            return True
+        return False
+
+    def failed(self):
+        self.healthy_since = self.last_sample = None
+        self.failures += 1
+        return 5*2**(self.failures-1)
+
+
 def record_failure(budget, status, text, now, retry_after=1, real_clock=False):
     try:
         return budget.failure(status, text, None if real_clock else now, retry_after)
@@ -295,10 +321,19 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
 
 
 def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False,
-            observer=None):
+            observer=None, steady=time.monotonic):
     """Bounded reconnects; a permanent deny survives process restart in SQLite."""
     last_error = 'NOT_STARTED'
-    for attempt in range(MAX_CONNECTION_ATTEMPTS):
+    recovery = RecoveryBudget()
+    def observe(current_store, epoch, now):
+        generation = current_store.freeze(topics, now, now)
+        finished = clock()
+        ready = generation['status'] == 'READY' and 0 <= finished-now <= FRESH_MS
+        if recovery.observe(ready, steady()):
+            print(json.dumps(dict(event='BYBIT_RECOVERY_BUDGET_RESTORED', epoch=epoch,
+                reason='FULL_ROSTER_READY_FOR_300_SECONDS', status='OBSERVATION_ONLY')), flush=True)
+        if observer is not None: observer(current_store, epoch, finished)
+    while recovery.failures < MAX_CONNECTION_ATTEMPTS:
         if stop():
             return
         state = Budget(store).status()
@@ -306,8 +341,7 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             raise RuntimeError(state['halt'] or 'GLOBAL_COOLDOWN_ACTIVE')
         try:
             with connect() as ws:
-                options = {} if observer is None else dict(observer=observer)
-                session(store, topics, scope_hash, ws, stop, clock, sleep, **options)
+                session(store, topics, scope_hash, ws, stop, clock, sleep, observer=observe)
             return
         except DurableStopError:
             raise
@@ -317,9 +351,6 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             raise RuntimeError('CACHE_STORAGE_UNAVAILABLE') from error
         except (OSError, TimeoutError, ValueError, RuntimeError) as error:
             last_error = type(error).__name__
-            # Do not emit arbitrary exception text (may contain headers/body).
-            print(json.dumps(dict(event='BYBIT_SIDECAR_RECOVERY', attempt=attempt+1,
-                                  error_type=last_error, status='UNKNOWN')), flush=True)
         except Exception as error:
             # websockets exceptions aren't OSError. A denied HTTP handshake is
             # classified globally; protocol/closed errors share the bounded loop.
@@ -331,11 +362,16 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             last_error = type(error).__name__
         if stop():
             return
-        if attempt+1 < MAX_CONNECTION_ATTEMPTS:
-            for _ in range(min(60, 5*2**attempt)*10):
+        delay = recovery.failed()
+        print(json.dumps(dict(event='BYBIT_SIDECAR_RECOVERY', consecutive_failures=recovery.failures,
+            error_type=last_error, status='UNKNOWN')), flush=True)
+        if recovery.failures < MAX_CONNECTION_ATTEMPTS:
+            for _ in range(delay*10):
                 if stop():
                     return
                 sleep(.1)
+    print(json.dumps(dict(event='BYBIT_SIDECAR_CIRCUIT_OPEN', consecutive_failures=recovery.failures,
+                          status='MANUAL_REVIEW_REQUIRED')), flush=True)
     raise RuntimeError('CONNECTION_BUDGET_EXHAUSTED:'+last_error)
 
 

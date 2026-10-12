@@ -19,8 +19,10 @@ full roster receipt, source audit, frozen-read acceptance and workflow routing.
 
 Existing PR101 code already provides bounded REST initialization/repair (25 x
 15m, 5 x 60m), shared >=200ms / <=4 in-flight admission, cancellable Linux child
-processes, durable 403/orphan stops, ACK/ping/topic freshness and five reconnect
-attempts with 5/10/20/40s backoff. These are retained. The collector now opens
+processes, durable 403/orphan stops, ACK/ping/topic freshness and five consecutive
+failed connections with 5/10/20/40s backoff. Only full-roster frozen READY checks
+every <=60s for 300 continuous monotonic seconds restore the failure budget;
+connection/ACK/pong/partial health never does. The collector now opens
 existing state only; a missing DB cannot recreate a fresh budget. A missing
 historical candle-close confirmation fails frozen reads and packet validation;
 after 90s grace it is a repairable gap. The current forming candle is retained
@@ -78,6 +80,25 @@ reset of denial/budget/leases is permitted. Ensure NTP, disk/inodes, Python
 stops for explicit operator review; do not delete the DB to recover.
 
 ## Fresh installation only (for a later approved write session)
+
+Deployment was subsequently requested, but this task still has no authorized
+server maintenance tool. Independent review and actual account/access checks
+remain prerequisites. The short staging entrypoint deliberately cannot create
+accounts, change ownership/modes, install dependencies, initialize state or
+start a unit:
+
+```bash
+bash scripts/hunter_bybit_preflight.sh
+bash scripts/hunter_bybit_stage.sh /opt/shadow-runner/btc-grid-state EXACT_REVIEWED_SHA
+```
+
+Preflight is read-only. Stage stops if the named user/group, root-owned code
+prefix/venv, pinned dependency or state owner/group/mode 2770 is missing. It
+refuses an existing code release or unit. Host rights are currently UNKNOWN,
+not presumed missing or sufficient. If provisioning is needed, request explicit
+action-time approval for each account/group/directory or permission change.
+The longer provisioning example below is a review recipe, not an installer to
+run under the general deployment request. No automatic permission repair exists.
 
 Run from an authorized Linux admin session. Substitute the reviewed 40-character
 PR head; it must be available locally. These commands intentionally stop if a
@@ -152,8 +173,11 @@ sudo journalctl -u hunter-bybit-stream.service -n 30 --no-pager
 No timer or automatic restart is installed. systemd supervises the process
 group, sends SIGTERM and allows 45s before SIGKILL. Python cancels/reaps repair
 children and marks the session disconnected; interrupted requests retain their
-durable stop. An exhausted five-attempt connection budget leaves the service
-failed, rather than resetting the budget via Restart=always. Preserve state
+durable stop. Five consecutive failures open the circuit and emit
+BYBIT_SIDECAR_CIRCUIT_OPEN; systemd records a failed service for operator alerting.
+A verified healthy five-minute session emits BYBIT_RECOVERY_BUDGET_RESTORED and
+restores the failure budget, so intermittent recovered outages do not exhaust a
+lifetime counter. No external notification transport is installed. Preserve state
 and logs on failure. Do not automate `reset-failed`/restart or boot-gate resets.
 
 Refresh SNAPSHOT_FILE/SNAPSHOT_SHA using the previous readback commands whenever
