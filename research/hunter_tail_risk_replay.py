@@ -9,9 +9,11 @@ execution stress is reported separately under explicit assumptions.
 import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
 try:
     from research.hunter_policy import C
+    from research.hunter_replay_history_cache import load_json
 except ModuleNotFoundError as exc:
     if exc.name!="research":raise
     from hunter_policy import C
+    from hunter_replay_history_cache import load_json
 
 ROOT=pathlib.Path("research/results")
 OUT=ROOT/"hunter-tail-risk-replay.json"
@@ -22,7 +24,7 @@ END=dt.datetime(2025,10,11,12,0,tzinfo=dt.timezone.utc)
 
 def get(url):
     req=urllib.request.Request(url,headers={"User-Agent":"hunter-tail-risk-replay/1.0","Accept":"application/json"})
-    with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+    return load_json(req,urllib.request.urlopen,timeout=20)
 
 def bars(symbol,start=START,end=END):
     q=urllib.parse.urlencode({"symbol":symbol,"interval":"5m","startTime":int(start.timestamp()*1000),"endTime":int(end.timestamp()*1000),"limit":1000})
