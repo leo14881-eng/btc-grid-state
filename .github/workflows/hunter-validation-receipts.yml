@@ -1,0 +1,54 @@
+name: Hunter timing and receipt observation
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_validation*'
+      - 'scripts/hunter_job_runner.py'
+      - 'scripts/hunter_scheduled_job.sh'
+      - 'tests/test_hunter_validation_receipt.py'
+      - 'tests/test_hunter_aux_fresh_retry.py'
+      - '.github/workflows/hunter-validation-receipts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Existing regression dependencies and recorded environment
+        run: |
+          python -m pip install -r deploy/hunter-fast-watch-requirements.txt
+          python --version
+          python -m pip freeze
+          git rev-parse HEAD
+      - name: Launcher and receipt failure contracts
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          bash -n scripts/hunter_scheduled_job.sh
+          python -B -m unittest tests.test_hunter_validation_receipt tests.test_hunter_aux_fresh_retry tests.test_hunter_job_runner tests.test_hunter_job_runner_diagnostics -v
+      - name: Full Linux combination and identical-input latency samples
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -B -m scripts.hunter_validation_benchmark --output "$RUNNER_TEMP/hunter-receipt-benchmark.json"
+          node --test research/hunter_scheduler/worker.test.mjs
+          node tests/test_hunter_bybit_proxy.mjs
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hunter-receipt-offline-benchmark
+          path: ${{ runner.temp }}/hunter-receipt-benchmark.json
+          if-no-files-found: warn
