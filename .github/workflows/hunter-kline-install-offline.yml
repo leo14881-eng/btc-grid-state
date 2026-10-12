@@ -1,0 +1,30 @@
+name: Kline Install Plan Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_kline_install.py'
+      - 'scripts/check_kline_install_offline.py'
+      - 'tests/test_hunter_kline_install.py'
+      - 'deploy/hunter-kline-install-plan.md'
+      - '.github/workflows/hunter-kline-install-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Temp-only filesystem with fake account/service/network commands
+        run: python -I -B scripts/check_kline_install_offline.py
+      - name: Read-only default mode
+        run: python -I -B scripts/hunter_kline_install.py
