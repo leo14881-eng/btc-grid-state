@@ -39,9 +39,14 @@ class AdmissionRaceTests(unittest.TestCase):
                     child=popen(*args,**kwargs);children.append(child);return child
                 with patch.object(client.budget,'status',status_then_cancel),\
                      patch.object(public,'worker_command',command),patch.object(public.subprocess,'Popen',spawn):
-                    with self.assertRaises(public.NotSentError):
+                    failure=None
+                    try:
                         client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
                             timeout=3,cancelled=cancelled.is_set,drain_on_cancel=True)
+                    except (public.NotSentError,TimeoutError) as error:failure=error
+                print('ADMISSION_RACE',dict(boundary=boundary,http_received=server.ready.is_set(),
+                    error=type(failure).__name__,cancelled=cancelled.is_set()))
+                self.assertIsInstance(failure,public.NotSentError)
                 self.assertEqual(calls,['status']);self.assertTrue(cancelled.is_set())
                 self.assertFalse(server.ready.is_set(),'cancelled admission sent an HTTP request')
                 self.assertTrue(children);self.assertTrue(all(child.poll() is not None for child in children))
@@ -99,5 +104,6 @@ if os.getenv('BINANCE_REVIEWED_REPRO')=='1':
     for case in (AdmissionRaceTests,IngressRaceTests):
         for name in unittest.defaultTestLoader.getTestCaseNames(case):
             setattr(case,name,unittest.expectedFailure(getattr(case,name)))
+    del case,name  # Do not expose a duplicate TestCase alias to discovery.
 
 if __name__=='__main__':unittest.main()
