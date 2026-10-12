@@ -1,0 +1,9 @@
+# Review and install for hunter-discovery.service AND hunter-research.service
+# only after cache observation acceptance. Not installed by default.
+[Service]
+Environment=HUNTER_BYBIT_SERVER_ROUTE=SERVER_DIRECT
+Environment=HUNTER_BYBIT_SPOT_SOURCE=SERVER_DIRECT
+Environment=HUNTER_BYBIT_KLINE_SOURCE=SPOT_CACHE
+Environment=HUNTER_BYBIT_DIRECT_DISABLED=0
+SupplementaryGroups=hunter-bybit-data
+UMask=0007

@@ -18,6 +18,12 @@ on:
       - 'tests/fixtures/public_http_child.py'
       - 'scripts/check_bybit_public_transport.py'
       - 'scripts/check_bybit_stream_offline.py'
+      - 'scripts/hunter_bybit_server_route.py'
+      - 'scripts/hunter_bybit_stream_ops.py'
+      - 'scripts/hunter_bybit_preflight.sh'
+      - 'scripts/hunter_bybit_stage.sh'
+      - 'deploy/hunter-bybit-stream-requirements.txt'
+      - 'deploy/systemd/hunter-bybit*'
       - '.github/workflows/bybit-stream-offline.yml'
 permissions:
   contents: read
@@ -51,3 +57,5 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Guarded fixtures and real multiprocess budget tests (no market calls)
         run: python -I -B -X utf8 scripts/check_bybit_stream_offline.py
+      - name: Deployment shell syntax only (no installation)
+        run: bash -n scripts/hunter_bybit_preflight.sh scripts/hunter_bybit_stage.sh

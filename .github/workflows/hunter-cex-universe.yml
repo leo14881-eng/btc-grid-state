@@ -61,9 +61,8 @@ jobs:
       - name: Scan Binance and verified Bybit USDT spot universe
         env:
           HUNTER_SOURCE_HEAD_SHA: ${{ github.sha }}
-          HUNTER_BYBIT_DIRECT_DISABLED: '1'
           HUNTER_BYBIT_WORKER_MARKET_ENABLED: '1'
-        run: python research/hunter_cex_scan.py
+        run: python -m scripts.hunter_bybit_server_route discovery
       - name: Validate publishable discovery generation
         run: |
           python - <<'PY'

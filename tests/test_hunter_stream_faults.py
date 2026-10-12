@@ -97,7 +97,7 @@ class FaultTests(unittest.TestCase):
         self.no_leases()
 
     def test_session_disconnect_cancels_running_repair_before_retry(self):
-        started=Event();closed=Event();calls=[];sent=[];attempt=[0]
+        started=Event();closed=Event();calls=[];sent=[];attempt=[0];nonready=[]
         original=self.store.disconnect
         def disconnect(epoch):
             try:original(epoch)
@@ -119,8 +119,11 @@ class FaultTests(unittest.TestCase):
         with patch.object(self.store,'disconnect',disconnect):
             with self.assertRaisesRegex(OSError,'fixture disconnect'):
                 stream.session(self.store,self.topics,'a'*64,WS(),lambda:False,
-                    lambda:NOW,lambda seconds:None,repairer)
+                    lambda:NOW,lambda seconds:None,repairer,on_nonready=nonready.append)
         self.assertEqual(len(calls),1)
+        self.assertEqual(nonready[0],'SESSION_STARTED')
+        self.assertIn('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN',nonready)
+        self.assertEqual(nonready[-1],'SESSION_DISCONNECTED')
         self.no_leases()
 
     def test_storage_failure_stops_connections_without_reconnect(self):
@@ -172,8 +175,8 @@ class FaultTests(unittest.TestCase):
             return 403,b'country',1
         def repairer(store,epoch,name,deadline,*,cancelled):
             return stream.repair(store,epoch,name,deadline,get,lambda:NOW,cancelled=cancelled)
-        def session(store,topics,scope,ws,stop,clock,sleep):
-            return real_session(store,topics,scope,ws,stop,clock,sleep,repairer)
+        def session(store,topics,scope,ws,stop,clock,sleep,**kwargs):
+            return real_session(store,topics,scope,ws,stop,clock,sleep,repairer,**kwargs)
         with patch.object(self.store,'disconnect',disconnect),patch.object(stream,'session',session), \
              patch.object(Budget,'failure',side_effect=sqlite3.OperationalError('disk is full')):
             with self.assertRaisesRegex(stream.DurableStopError,'DENIAL_STOP_NOT_DURABLE_MANUAL_REVIEW'):
