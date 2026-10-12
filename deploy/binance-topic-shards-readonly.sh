@@ -18,7 +18,6 @@ from collections import Counter, defaultdict
 import hashlib
 import json
 from pathlib import Path
-import re
 import sqlite3
 import tempfile
 
@@ -37,8 +36,11 @@ def inspect(directory):
                     raise ValueError('MANIFEST_PAIR_MISMATCH')
                 symbols.append(pair['pair'])
     if (not symbols or len(symbols)!=len(set(symbols)) or 'BTCUSDT' not in symbols
-            or any(not re.fullmatch('[A-Z0-9]{1,30}USDT',s) for s in symbols)):
+            or any(not isinstance(s,str) or not s.endswith('USDT')
+                or not 1<=len(s[:-4])<=30 or not s.isalnum()
+                or s.upper()!=s or s.lower().upper()!=s for s in symbols)):
         raise ValueError('MANIFEST_SYMBOLS_INVALID')
+    # Match deployed topic()'s Unicode symbol domain, including CJK assets.
     # Exact deployed roster(): lexicographic topics, 500 per socket and 100
     # per SUBSCRIBE. Historical manifest age is evidence, not readiness.
     names=sorted([s.lower()+'@kline_'+i for s in symbols for i in ('15m','1h','1d')]+['btcusdt@kline_5m'])
