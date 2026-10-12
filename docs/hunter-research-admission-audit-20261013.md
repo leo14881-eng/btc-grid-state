@@ -1,5 +1,10 @@
 # Research primary/backup admission and timing audit
 
+This document preserves the initial investigation before file ownership was
+coordinated. The subsequent, undeployed code candidate is described in
+[Research generation ownership](hunter-research-ownership.md); statements below
+about no code changes refer to the initial audit, not that later candidate.
+
 Inspection main is fixed at `44327057a565e86faa6eb62465504e34c6fc0b6d`.
 The checkout is a depth-one fetch in a separate task directory and branch;
 no AGENTS.md, .agents instructions, repository skills, or dedicated test guide
