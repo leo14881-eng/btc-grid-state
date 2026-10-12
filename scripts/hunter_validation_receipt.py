@@ -9,7 +9,6 @@ import hashlib
 import hmac
 import io
 import json
-import math
 import os
 from pathlib import Path
 import platform
@@ -28,6 +27,9 @@ TTL_NS = 24 * 3600 * 1_000_000_000
 LIMIT = 4096
 SLOTS = 16
 CHILD_ENV = {"TZ": "UTC", "LC_ALL": "C.UTF-8"}
+REVIEWED_FILES = {"tests/test_hunter_execution_cost.py", "research/hunter_execution_cost.py",
+                  "tests/test_hunter_v1_coverage.py", "research/hunter_v1_coverage.py"}
+MODULES = ["tests.test_hunter_execution_cost", "tests.test_hunter_v1_coverage"]
 
 
 class Unavailable(Exception):
@@ -79,8 +81,12 @@ def runtime_identity():
 
 
 def fingerprint(root=ROOT):
+    file_digest(root / MANIFEST)  # Reject missing, symlink or nonregular manifest.
     manifest = json.loads((root / MANIFEST).read_text())
-    if manifest["schema"] != "hunter_reviewed_pure_tests_v1" or manifest["third_party_dependencies"] != []:
+    if (not isinstance(manifest, dict) or manifest.get("schema") != "hunter_reviewed_pure_tests_v1" or
+            manifest.get("third_party_dependencies") != [] or manifest.get("modules") != MODULES or
+            manifest.get("test_count") != 7 or not isinstance(manifest.get("reviewed_files"), dict) or
+            set(manifest["reviewed_files"]) != REVIEWED_FILES):
         raise Unavailable("INCOMPLETE_DEPENDENCIES")
     reviewed = manifest["reviewed_files"]
     files = {}
@@ -277,8 +283,7 @@ def child():
     # No site initialization, environment-based imports, package initializers or
     # editable third-party dependencies. The reviewed files are the full closure.
     sys.path.insert(0, str(ROOT))
-    manifest = json.loads((ROOT / MANIFEST).read_text())
-    suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(name) for name in manifest["modules"])
+    suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(name) for name in MODULES)
     result = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
     if result.wasSuccessful() and result.testsRun == 7 and not result.skipped:
         print("HUNTER_PURE_TESTS_OK 7")

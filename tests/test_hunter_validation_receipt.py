@@ -82,6 +82,14 @@ class FingerprintTests(unittest.TestCase):
             self.assertEqual(row['status'], 'FALLBACK_FULL_VALIDATION')
             self.assertFalse(row['hit'])
 
+    def test_incomplete_or_malformed_manifest_cannot_certify_new_dependencies(self):
+        path = self.root / receipt.MANIFEST
+        original = json.loads(path.read_text())
+        for doc in ([], {}, dict(original, reviewed_files={}), dict(original, reviewed_files=[]),
+                    dict(original, modules=['tests.unreviewed']), dict(original, test_count=0)):
+            path.write_text(json.dumps(doc))
+            with self.assertRaises(receipt.Unavailable): receipt.fingerprint(self.root)
+
 
 @unittest.skipUnless(sys.platform == 'linux', 'Linux permission/descriptor contract')
 class StoreTests(unittest.TestCase):
@@ -188,9 +196,37 @@ class StoreTests(unittest.TestCase):
         self.env['HUNTER_VALIDATION_RECEIPTS'] = 'read-only'
         self.assertFalse(self.observe()[0]['hit'])
 
+    def test_candidate_timeout_and_failed_tombstone_write_still_fail(self):
+        self.seed()
+        with mock.patch.object(receipt, 'fingerprint', return_value=self.fp), mock.patch.object(receipt, 'run_candidate', side_effect=subprocess.TimeoutExpired('candidate', 30)):
+            with self.assertRaisesRegex(RuntimeError, 'COMPARISON_FAILED'): receipt.observe(self.env)
+        # Failed publication must not turn an actual test failure into success.
+        with mock.patch.object(receipt, 'fingerprint', return_value=self.fp), mock.patch.object(receipt.Store, 'owned', return_value=True), mock.patch.object(receipt, 'run_candidate', return_value=False), mock.patch.object(receipt.Store, 'atomic_write', side_effect=OSError('disk full')):
+            with self.assertRaisesRegex(RuntimeError, 'COMPARISON_FAILED'): receipt.observe(self.env)
+
+    def test_same_input_decisions_and_real_generation_guard_match_all_modes(self):
+        import copy
+        from research.hunter_shadow_trader_v2 import decision
+        from research.hunter_v1_coverage import partition
+        from tests.test_hunter_shadow_trader_v2 import V2CapitalDecisionTests
+        inputs = V2CapitalDecisionTests().base()
+        def decisions():
+            c, s, l, u = copy.deepcopy(inputs)
+            return [decision(c,s,l,u,'ENTRY'), decision(c,s,{},u,'ENTRY'),
+                    partition({'scan_generation_id':'g','early_count':0},
+                              {'generation_id':'g','venue_status':{'binance':{'excluded_bstocks':['STOCK']}}})]
+        baseline = decisions()
+        for mode in ('off', 'compare', 'compare', 'read-only'):
+            self.env['HUNTER_VALIDATION_RECEIPTS'] = mode
+            self.observe()
+            self.assertEqual(decisions(), baseline)
+            with self.assertRaisesRegex(AssertionError, 'GENERATION_MISMATCH'):
+                partition({'scan_generation_id':'new','early_count':0},
+                          {'generation_id':'old','venue_status':{'binance':{'excluded_bstocks':['STOCK']}}})
+
     def test_concurrent_process_cannot_read_or_publish_under_active_lock(self):
         self.seed()
-        script = 'from scripts.hunter_validation_receipt import observe; import os,json; print(json.dumps(observe(os.environ)))'
+        script = "from scripts import hunter_validation_receipt as r; import os,json; r.fingerprint=lambda *a:'a'*64; print(json.dumps(r.observe(os.environ)))"
         with self.store():
             run = subprocess.run([sys.executable, '-B', '-c', script], cwd=receipt.ROOT,
                                  env=dict(os.environ, **self.env), text=True, capture_output=True, timeout=30)
