@@ -105,7 +105,7 @@ def inspect(directory):
     # source with SQLite: capture bytes, then query an isolated temporary copy.
     def capture():
         result={}
-        for name in ('state.sqlite3','state.sqlite3-wal','state.sqlite3-shm','manifest.json'):
+        for name in ('state.sqlite3','state.sqlite3-wal','state.sqlite3-shm','state.sqlite3-journal','manifest.json'):
             path=directory/name
             if not path.exists():
                 if name in ('state.sqlite3','manifest.json'):raise ValueError('SOURCE_FILE_MISSING')
@@ -117,6 +117,11 @@ def inspect(directory):
     source=capture()
     if source.get('manifest.json')!=raw or capture()!=source:
         raise ValueError('SOURCE_CHANGED_DURING_CAPTURE')
+    # A rollback journal may be needed to interpret the DB pages. Do not omit
+    # it and silently treat uncommitted pages as a consistent committed view.
+    # Even an apparently cold nonempty journal is retained for manual review.
+    if source.get('state.sqlite3-journal'):
+        raise ValueError('ROLLBACK_JOURNAL_PRESENT_NO_CACHE_QUERY')
     with tempfile.TemporaryDirectory(prefix='binance-readonly-snapshot-') as scratch:
         snapshot=Path(scratch)
         for name in ('state.sqlite3','state.sqlite3-wal'):

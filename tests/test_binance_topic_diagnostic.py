@@ -101,6 +101,11 @@ class DiagnosticTests(unittest.TestCase):
             self.assertEqual(states[names[0]]['current_epoch_bars_by_origin'][0]['rows'],1)
             self.assertEqual(states[names[1]]['current_epoch_bars_by_origin'],[])
             self.assertEqual({r['session']:r['rows'] for r in report['cache_counts_by_session']['bars']},{'current':1,'other':1})
+            (root/'state.sqlite3-journal').write_bytes(b'fixture retained journal')
+            with patch.object(diagnostic.sqlite3,'connect') as connect:
+                with self.assertRaisesRegex(ValueError,'ROLLBACK_JOURNAL_PRESENT_NO_CACHE_QUERY'):diagnostic.inspect(root)
+                connect.assert_not_called()
+            self.assertEqual((root/'state.sqlite3-journal').read_bytes(),b'fixture retained journal')
 
     def test_wal_snapshot_maps_topics_without_changing_source_or_owners(self):
         stamp=dt.datetime(2026,10,12,tzinfo=dt.timezone.utc)
