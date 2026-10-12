@@ -27,6 +27,19 @@ It fetches a fresh complete scan to a private Git ref without checking out or
 overwriting main. The scan must be at most 20 minutes old; it is never refreshed
 by changing its timestamp or triggering a trading workflow.
 
+Each invocation receives a new UUID and its own exclusive report path. Reports
+from old preflight failures, including the former fixed-path report, are never
+deleted, replaced or reused. Before fetching a new scan, admission checks the
+incident attempt marker, deployed package/stopped state and original source
+bytes. An unchanged incident that failed only scan freshness can pass these
+checks again. The same marker and byte checks repeat under maintenance locks.
+
+The durable incident marker is now written before backups or any live SQLite
+open, including a read-only open that could create WAL/SHM files. Once that
+marker exists, even an interrupted partial attempt is refused before another
+fetch, public GET or service start. Only a separately reviewed recovery could
+proceed; deleting a report never resets the incident marker.
+
 Private raw and consistent SQLite backups, code rollback material and intent
 receipts are saved before disposition. A durable exclusive incident-attempt
 receipt prevents another probe on rerun. The one BTCUSDT 5m public GET uses the
@@ -63,14 +76,18 @@ It does not retry, clear new unknown owners, reset start limits or roll back sta
 A stop timeout still triggers independent stopped-state verification and report
 saving. If stopping cannot be verified it reports `STOP_UNCONFIRMED_MANUAL_REVIEW`.
 
-The single result is saved to:
+The invocation's result is saved to the unique path printed at entry:
 
-`/tmp/hunter-binance-recovery-51c723c224194317a49329ba8751d77f.report.json`
+`/tmp/hunter-binance-recovery-51c723c224194317a49329ba8751d77f-<invocation_uuid>.report.json`
 
 Its path and SHA256 are printed. Detailed private backups remain in the printed
 `/opt/hunter-binance-stream/upgrade-*` evidence directory. Never upload its raw
 owner-token files; the result report uses anonymous request sequence numbers.
-Do not rerun after any partial attempt. Code rollback is a separately reviewed
+If report creation, writing or fsync fails after start, the unit is stopped and
+independently checked. The console says `report_persisted=false`; a separate
+private failure report preserves the stop result when its directory remains
+writable. A partial report is evidence, never acceptance by itself.
+Do not rerun after the incident marker has been created. Code rollback is a separately reviewed
 use of the existing revision adapter and its evidence directory; it must not
 restore retired active rows or reset denial/cooldown.
 

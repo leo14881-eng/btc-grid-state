@@ -21,6 +21,7 @@ REPO = Path('/opt/shadow-runner/btc-grid-state')
 PREFIX = Path('/opt/hunter-binance-stream')
 STATE = Path('/var/lib/hunter-binance-stream')
 SERVICE = 'hunter-binance-stream.service'
+REPORT_ROOT = Path('/tmp')
 EPOCH = '51c723c224194317a49329ba8751d77f'
 OLD = '99836e5362340725f806d5df6df1ca9835065bdd'
 NEW = '8cb92bd7e39251e1997e1b363a5e9500c8344268'
@@ -222,6 +223,23 @@ def save(upgrade, work, name, value):
     upgrade.sync_dir(work)
 
 
+def report_path(invocation_id):
+    return REPORT_ROOT/('hunter-binance-recovery-'+EPOCH+'-'+invocation_id+'.report.json')
+
+
+def write_report(path,value):
+    """One immutable private report per invocation; never reuse the legacy path."""
+    data=json.dumps(value,sort_keys=True).encode()
+    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+    with os.fdopen(fd,'wb') as handle:
+        handle.write(data);handle.flush();os.fsync(handle.fileno())
+    if os.name=='posix':
+        fd=os.open(path.parent,os.O_RDONLY|os.O_DIRECTORY)
+        try:os.fsync(fd)
+        finally:os.close(fd)
+    return hashlib.sha256(data).hexdigest()
+
+
 def fresh_scan(upgrade):
     reference='refs/hunter-recovery/'+uuid.uuid4().hex+'/main'
     command(['git','-C',REPO,'fetch','--no-tags','--no-write-fetch-head','--refmap=',
@@ -240,25 +258,33 @@ def fresh_scan(upgrade):
     return dict(source_head=head,snapshot=json.loads(data))
 
 
-def apply():
+def apply(invocation_id):
     upgrade=helper()
     require(sys.platform=='linux' and os.geteuid()==0,'EXISTING_ROOT_LINUX_ENTRY_REQUIRED')
-    old,new=upgrade.releases(REPO)
-    upgrade.check_host(old)
-    source=fresh_scan(upgrade)  # Fail stale scope before changing code or using market HTTP.
     attempt=PREFIX/('recovery-once-'+EPOCH+'.json')
     require(not os.path.lexists(attempt),'INCIDENT_ALREADY_ATTEMPTED_MANUAL_REVIEW_REQUIRED')
+    old,new=upgrade.releases(REPO)
+    upgrade.check_host(old)
+    verify_report_source(upgrade)  # Recheck unchanged incident bytes before another admission.
+    source=fresh_scan(upgrade)  # Fail stale scope before changing code or using market HTTP.
     with upgrade.maintenance():
+        require(not os.path.lexists(attempt),'INCIDENT_ALREADY_ATTEMPTED_MANUAL_REVIEW_REQUIRED')
         verify_report_source(upgrade)  # Byte-bound to the uploaded report before opening live SQLite.
+        work=PREFIX/('upgrade-'+uuid.uuid4().hex)
+        # Mark the boundary before backups or any live SQLite open (even mode=ro
+        # can create WAL/SHM). Any partial attempt after this point needs review.
+        save(upgrade,PREFIX,attempt.name,dict(epoch=EPOCH,invocation_id=invocation_id,
+            evidence=str(work),report=str(report_path(invocation_id)),phase='BEFORE_LIVE_STATE_ACCESS',
+            authorization='USER_APPROVED_THREE_UNKNOWN_ARCHIVE_ONE_PROBE_ONE_START',historical_outcome='UNKNOWN'))
+        work.mkdir(mode=0o700)
+        print(json.dumps(dict(stage='EVIDENCE',directory=str(work))),flush=True)
+        hashes=upgrade.state_evidence(work)
+        upgrade.write_new(work/'incident-report.json',INCIDENT_REPORT.read_bytes())
         # Even read-only SQLite handles can create WAL/SHM side files. Keep all
         # live SQLite access under the existing collector UID, never root.
         before=json.loads(child(read_state).stdout)
         boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
         validate_incident(before,boot,time.monotonic_ns()//1000000)
-        work=PREFIX/('upgrade-'+uuid.uuid4().hex); work.mkdir(mode=0o700)
-        print(json.dumps(dict(stage='EVIDENCE',directory=str(work))),flush=True)
-        hashes=upgrade.state_evidence(work)
-        upgrade.write_new(work/'incident-report.json',INCIDENT_REPORT.read_bytes())
         # A consistent SQLite backup supplements the untouched raw DB/WAL/SHM copies.
         backup=json.loads(child(consistent_backup).stdout)
         source_backup=Path(backup['path'])
@@ -272,9 +298,6 @@ def apply():
         _,staged,_=upgrade.code_paths(PREFIX,work)
         upgrade.stage(staged,new); upgrade.write_new(work/'new-release-head',(upgrade.NEW+'\n').encode(),0o444)
         upgrade.quiet(); upgrade.switch(PREFIX,work,old,new)
-        # Durable, exclusive attempt receipt: rerunning cannot issue a second probe.
-        save(upgrade,PREFIX,attempt.name,dict(epoch=EPOCH,evidence=str(work),
-            authorization='USER_APPROVED_THREE_UNKNOWN_ARCHIVE_ONE_PROBE_ONE_START',historical_outcome='UNKNOWN'))
         upgrade.quiet()
         print(json.dumps(dict(stage='ONE_PUBLIC_GET',code_release=upgrade.NEW)),flush=True)
         result=child(probe_once,check=False)
@@ -298,7 +321,7 @@ def apply():
         upgrade.quiet()
     # Only now release maintenance locks. The wrapper admits exactly one start.
     prepared=json.loads(prepared.stdout)['receipt']
-    return supervise(upgrade,work,prepared)
+    return supervise(upgrade,work,prepared,invocation_id)
 
 
 def acceptance_sample():
@@ -402,14 +425,15 @@ def stop_and_verify(upgrade,report):
                       stop_verification_error_type=type(error).__name__)
 
 
-def supervise(upgrade,work,prepared):
+def supervise(upgrade,work,prepared,invocation_id=None):
+    invocation_id=invocation_id or uuid.uuid4().hex
     began=time.monotonic();since=dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     started_ms=time.time_ns()//1000000
     def remaining(cap):
         left=1200-(time.monotonic()-began)
         require(left>0,'ACCEPTANCE_WINDOW_EXPIRED')
         return min(cap,left)
-    report=dict(schema='binance_three_recovery_v1',old=OLD,new=NEW,incident_epoch=EPOCH,
+    report=dict(schema='binance_three_recovery_v1',old=OLD,new=NEW,incident_epoch=EPOCH,invocation_id=invocation_id,
                 historical_outcome='UNKNOWN',archived_records=3,publication_verified=False,samples=[])
     healthy=None;epoch=None;accepted=False;started=False;persisted=False
     try:
@@ -448,11 +472,10 @@ def supervise(upgrade,work,prepared):
             stop_and_verify(upgrade,report)
         try:report['journal']=journal_evidence(since)
         except Exception as error:report['journal_error_type']=type(error).__name__
-        destination=Path('/tmp/hunter-binance-recovery-'+EPOCH+'.report.json')
+        destination=report_path(invocation_id)
         try:
             save(upgrade,work,'recovery-report.json',report)
-            upgrade.write_new(destination,json.dumps(report,sort_keys=True).encode());upgrade.sync_dir(destination.parent)
-            digest=hashlib.sha256(destination.read_bytes()).hexdigest();persisted=True
+            digest=write_report(destination,report);persisted=True
         except BaseException as error:
             report.update(status='REPORT_PERSISTENCE_FAILED_STOPPED',report_error_type=type(error).__name__)
             if started and accepted:
@@ -478,18 +501,22 @@ def main():
             'scripts.hunter_binance_stream_ops','check','--snapshot',STATE/'manifest.json'],cwd=PREFIX/'code',check=False)
         sys.stdout.buffer.write(result.stdout); return result.returncode
     if args.run:
-        try:return apply()
+        invocation_id=uuid.uuid4().hex;destination=report_path(invocation_id)
+        print(json.dumps(dict(stage='RECOVERY_INVOCATION',invocation_id=invocation_id,report=str(destination))),flush=True)
+        try:return apply(invocation_id)
         except BaseException as error:
             import re
             code=str(error)
             report=dict(status='RECOVERY_ABORTED_MANUAL_REVIEW',incident_epoch=EPOCH,
+                invocation_id=invocation_id,
                 error_type=type(error).__name__,error_code=code if re.fullmatch('[A-Z][A-Z0-9_]{0,127}',code) else 'UNCLASSIFIED',
-                historical_outcome='UNKNOWN',automatic_retry=False)
-            destination=Path('/tmp/hunter-binance-recovery-'+EPOCH+'.report.json')
-            if not os.path.lexists(destination):
-                with destination.open('xb') as handle:
-                    handle.write(json.dumps(report,sort_keys=True).encode());handle.flush();os.fsync(handle.fileno())
-                destination.chmod(0o600)
+                historical_outcome='UNKNOWN',automatic_retry=False,
+                mutation_guard_present=os.path.lexists(PREFIX/('recovery-once-'+EPOCH+'.json')))
+            try:
+                digest=write_report(destination,report)
+                report.update(report_persisted=True,report_sha256=digest)
+            except BaseException as write_error:
+                report.update(report_persisted=False,report_error_type=type(write_error).__name__)
             print(json.dumps(dict(**report,report=str(destination))),flush=True)
             return 1
     print(json.dumps(dict(status='PLAN_ONLY',incident_epoch=EPOCH,upgrade_entry=UPGRADER,

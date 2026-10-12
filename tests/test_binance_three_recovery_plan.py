@@ -50,7 +50,8 @@ class SupervisionTests(unittest.TestCase):
              patch.object(recovery,'service_state',return_value=dict(ActiveState='active',SubState='running',MainPID='9')),\
              patch.object(recovery,'command',side_effect=command),patch.object(recovery,'child',side_effect=sample),\
              patch.object(recovery,'journal_evidence',side_effect=journal),\
-             patch.object(Path,'read_bytes',return_value=b'{}'),contextlib.redirect_stdout(output):
+             patch.object(recovery,'write_report',side_effect=lambda path,value:hashlib.sha256(json.dumps(value).encode()).hexdigest()),\
+             contextlib.redirect_stdout(output):
             result=recovery.supervise(upgrade,Path('fixture'),prepared)
         saved['_quiet_calls']=upgrade.quiet.call_count
         saved['_console']=output.getvalue()

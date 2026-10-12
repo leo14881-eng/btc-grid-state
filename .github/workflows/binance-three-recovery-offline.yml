@@ -5,6 +5,7 @@ on:
       - 'scripts/hunter_binance_recover_three_once.py'
       - 'tests/test_binance_three_recovery_package.py'
       - 'tests/test_binance_three_recovery_plan.py'
+      - 'tests/test_binance_three_recovery_reentry.py'
       - '.github/workflows/binance-three-recovery-offline.yml'
 permissions:
   contents: read
@@ -70,6 +71,20 @@ jobs:
           PY
       - name: One-start deadline and report-durability supervision
         run: python -B -m unittest discover -s tests -p test_binance_three_recovery_plan.py -v
+      - name: Repeated preflight failures then one recovery with real exclusive report files
+        run: |
+          python -B - <<'PY'
+          import sys,unittest
+          blocked=[]
+          def guard(event,args):
+              if event.startswith('socket.') or event in ('subprocess.Popen','os.system','os.posix_spawn','os.fork','os.forkpty') or event.startswith(('os.exec','os.spawn')):
+                  blocked.append(event);raise RuntimeError('NETWORK_OR_PROCESS_FORBIDDEN')
+          sys.addaudithook(guard)
+          result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_binance_three_recovery_reentry.py'))
+          good=result.wasSuccessful() and result.testsRun==11 and not result.skipped and not blocked
+          print('RECOVERY_REENTRY_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
+          if not good:raise SystemExit(1)
+          PY
       - name: Reproduce fresh-scan child in the actual old-release layout
         run: |
           python -B - <<'PY'
