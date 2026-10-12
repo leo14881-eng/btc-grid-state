@@ -21,7 +21,10 @@ Existing PR101 code already provides bounded REST initialization/repair (25 x
 15m, 5 x 60m), shared >=200ms / <=4 in-flight admission, cancellable Linux child
 processes, durable 403/orphan stops, ACK/ping/topic freshness and five consecutive
 failed connections with 5/10/20/40s backoff. Only full-roster frozen READY checks
-every <=60s for 300 continuous monotonic seconds restore the failure budget;
+spanning 300 monotonic seconds with no observed interruption restore the failure budget;
+each observed unacked/gapped/stale topic, cooldown/global stop, session start or
+disconnect resets this window immediately. Checks run every 30 seconds (a >60s
+sample gap also resets it); this is sampled health, not proof of absolute continuity.
 connection/ACK/pong/partial health never does. The collector now opens
 existing state only; a missing DB cannot recreate a fresh budget. A missing
 historical candle-close confirmation fails frozen reads and packet validation;

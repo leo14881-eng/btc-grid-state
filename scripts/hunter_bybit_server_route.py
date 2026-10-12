@@ -18,6 +18,10 @@ def configure(job, env, platform=sys.platform):
     if route == 'DEFAULT':
         if env.get('HUNTER_BYBIT_SPOT_SOURCE', 'WORKER') != 'WORKER':
             raise ValueError('DEFAULT_ROUTE_REJECTS_DIRECT_OR_UNKNOWN_SPOT_SELECTOR')
+        if env.get('HUNTER_BYBIT_KLINE_SOURCE', 'WORKER') != 'WORKER':
+            raise ValueError('DEFAULT_ROUTE_REJECTS_CACHE_OR_UNKNOWN_KLINE_SELECTOR')
+        if env.get('HUNTER_BYBIT_DIRECT_DISABLED', '1') != '1':
+            raise ValueError('DEFAULT_ROUTE_REQUIRES_DIRECT_VETO')
         if job == 'discovery':
             # Preserve the original hosted-runner direct veto.
             env['HUNTER_BYBIT_DIRECT_DISABLED'] = '1'

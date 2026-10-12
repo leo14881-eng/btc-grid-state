@@ -28,7 +28,7 @@ class RouteTests(unittest.TestCase):
                     HUNTER_BYBIT_KLINE_SOURCE='SPOT_CACHE', HUNTER_BYBIT_DIRECT_DISABLED='0')
 
     def test_default_discovery_retains_direct_veto(self):
-        env = dict(HUNTER_BYBIT_DIRECT_DISABLED='0')
+        env = {}
         self.assertEqual(route.configure('discovery', env), 'DEFAULT')
         self.assertEqual(env['HUNTER_BYBIT_DIRECT_DISABLED'], '1')
         self.assertNotIn('HUNTER_BYBIT_SPOT_SOURCE', env)
@@ -65,6 +65,27 @@ class RouteTests(unittest.TestCase):
                 env = self.environment(); env.pop(missing)
                 with self.subTest(job=job, missing=missing), patch.dict(os.environ, env, clear=True):
                     with self.assertRaises(ValueError): route.configure(job, os.environ, 'linux')
+
+    def test_default_both_entrypoints_reject_all_residual_server_selectors(self):
+        # Exercise actual wrapper entrypoint; no module can start IO on rejection.
+        for job in route.MODULES:
+            for key,values in [('HUNTER_BYBIT_KLINE_SOURCE',('SPOT_CACHE','SPOT_REST','SERVER_DIRECT','typo','')),
+                               ('HUNTER_BYBIT_SPOT_SOURCE',('SERVER_DIRECT','SPOT_CACHE','typo','')),
+                               ('HUNTER_BYBIT_DIRECT_DISABLED',('0','typo',''))]:
+                for value in values:
+                    env={key:value}
+                    with self.subTest(job=job,key=key,value=value), patch.dict(os.environ,env,clear=True), \
+                            patch('sys.argv',['route',job]), patch.object(route.runpy,'run_module') as run:
+                        with self.assertRaises(ValueError):route.main()
+                        run.assert_not_called()
+
+    def test_default_both_entrypoints_keep_explicit_worker_route(self):
+        for job,module in route.MODULES.items():
+            env=dict(HUNTER_BYBIT_SPOT_SOURCE='WORKER',HUNTER_BYBIT_KLINE_SOURCE='WORKER',HUNTER_BYBIT_DIRECT_DISABLED='1')
+            with patch.dict(os.environ,env,clear=True), patch('sys.argv',['route',job]), \
+                    patch.object(route.runpy,'run_module') as run, patch('sys.stdout',new=io.StringIO()):
+                route.main()
+                run.assert_called_once_with(module,run_name='__main__')
 
     def test_explicit_server_route_preserves_selectors(self):
         env = self.environment()
@@ -215,7 +236,7 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual([budget.failed() for _ in range(5)], [5,10,20,40,80])
         self.assertEqual(budget.failures, 5)
 
-    def test_only_five_minutes_continuous_full_health_restores_budget(self):
+    def test_five_minutes_sampled_full_health_restores_budget(self):
         budget = stream.RecoveryBudget(); budget.failed(); budget.failed()
         for stamp in range(0,300,30):
             self.assertFalse(budget.observe(True, stamp))
@@ -241,7 +262,7 @@ class RecoveryTests(unittest.TestCase):
             def connect():
                 opened.append(1)
                 yield object()
-            def session(store,topics,scope,ws,stop,clock,sleep,*,observer):
+            def session(store,topics,scope,ws,stop,clock,sleep,*,observer,on_nonready):
                 if len(opened)==3:
                     for stamp in range(0,301,30):
                         monotonic[0]=stamp
@@ -254,6 +275,30 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(len(opened),expected)
             self.assertIn('BYBIT_SIDECAR_CIRCUIT_OPEN',output.getvalue())
             self.assertEqual('BYBIT_RECOVERY_BUDGET_RESTORED' in output.getvalue(),ready)
+
+    def test_inter_sample_observed_gap_prevents_early_budget_restore(self):
+        from unittest.mock import Mock
+        opened=[];monotonic=[0];fake=Mock();fake.freeze.return_value={'status':'READY'}
+        @contextlib.contextmanager
+        def connect():
+            opened.append(1);yield object()
+        def session(store,topics,scope,ws,stop,clock,sleep,*,observer,on_nonready):
+            on_nonready('SESSION_STARTED')
+            if len(opened)==3:
+                for stamp in range(0,301,30):
+                    monotonic[0]=stamp
+                    if stamp==270:
+                        monotonic[0]=255;on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN');monotonic[0]=stamp
+                    observer(store,'fixture',NOW)
+            on_nonready('SESSION_DISCONNECTED')
+            raise OSError('fixture disconnect')
+        with patch.object(stream.Budget,'status',return_value={'halt':None,'cooldown_ms':0}), \
+                patch.object(stream,'session',session),patch('sys.stdout',new=io.StringIO()) as output:
+            with self.assertRaisesRegex(RuntimeError,'CONNECTION_BUDGET_EXHAUSTED'):
+                stream.collect(fake,['fixture'],'a'*64,connect,lambda:NOW,lambda _:None,steady=lambda:monotonic[0])
+        self.assertEqual(len(opened),5)
+        self.assertIn('BYBIT_RECOVERY_HEALTH_WINDOW_RESET',output.getvalue())
+        self.assertNotIn('BYBIT_RECOVERY_BUDGET_RESTORED',output.getvalue())
 
 
 if __name__ == '__main__':
