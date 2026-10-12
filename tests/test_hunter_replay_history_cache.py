@@ -497,9 +497,23 @@ class PosixCacheTests(CacheCase):
         self.assertEqual(results[0]["report"], results[1]["report"])
         self.assertLessEqual(sum(len(x["requests"]) for x in results), 16)
         self.assertGreaterEqual(sum(len(x["requests"]) for x in results), 8)
-        self.assertEqual(len(self.files()), 8)
-        self.load()
-        self.assertEqual(self.transport.call_count, 0)
+        # Nonblocking namespace locks may lose publications even for different
+        # keys. Require an exact match to successful publisher receipts instead
+        # of assuming that an opportunistic cache necessarily fills all 8 slots.
+        published = {r["request_id"]: r for result in results for r in result["source_receipts"]
+                     if r["snapshot_published"]}
+        self.assertEqual({p.stem for p in self.files()}, set(published))
+        for path in self.files():
+            doc = json.loads(path.read_bytes())
+            self.assertEqual(doc["body_sha256"], published[path.stem]["raw_sha256"])
+            self.assertEqual(path.stat().st_nlink, 1)
+            checksum = doc.pop("record_sha256")
+            self.assertEqual(checksum, cache._hash(cache._encoded(doc)))
+        expected_calls = int(cache._hash(cache._encoded(self.identity())) not in published)
+        self.assertEqual(self.load(), json.loads(fixture.body_for(URL)))
+        self.assertEqual(self.transport.call_count, expected_calls)
+        self.assertEqual(self.load(), json.loads(fixture.body_for(URL)))
+        self.assertEqual(self.transport.call_count, expected_calls)
 
 
 class FixedInputExperimentTests(unittest.TestCase):
