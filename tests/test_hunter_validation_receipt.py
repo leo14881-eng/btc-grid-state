@@ -96,11 +96,113 @@ class FingerprintTests(unittest.TestCase):
             self.assertEqual(command[1:5], ['-I','-S','-B','-X'])
             cache = Path(command[5].split('=',1)[1]); seen.append(cache)
             self.assertTrue(cache.is_dir()); self.assertEqual(list(cache.iterdir()), [])
+            stage = Path(kwargs['cwd'])
+            self.assertNotEqual(stage, self.root)
+            self.assertEqual({p.relative_to(stage).as_posix() for p in stage.rglob('*') if p.is_file()}, receipt.REVIEWED_FILES)
+            self.assertEqual(command[6], '-c')
             self.assertEqual(kwargs['env'], {'TZ':'UTC','LC_ALL':'C.UTF-8'})
             return subprocess.CompletedProcess(command, 0, b'HUNTER_PURE_TESTS_OK 7\n')
         with mock.patch.object(receipt.subprocess, 'run', side_effect=run):
-            self.assertTrue(receipt.run_candidate())
+            self.assertTrue(receipt.run_candidate(self.root))
         self.assertFalse(seen[0].exists())
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'real isolated Linux child and extension imports')
+class ImportIsolationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        manifest = json.loads((receipt.ROOT / receipt.MANIFEST).read_text())
+        for name in [*manifest['reviewed_files'], receipt.MANIFEST, 'scripts/hunter_validation_receipt.py']:
+            target = self.root / name; target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(receipt.ROOT / name, target)
+        self.marker = self.root / 'UNREVIEWED_CODE_EXECUTED'
+        self.payload = 'from pathlib import Path\nPath(%r).write_text("unreviewed")\n' % str(self.marker)
+
+    def check_attack(self, install, dirty_count=None):
+        # Fingerprint can legitimately ignore these inert extras ONLY because
+        # the real child has no access to that checkout through import search.
+        with mock.patch.object(receipt, 'runtime_identity', return_value={'runtime':'fixed'}):
+            before = receipt.fingerprint(self.root)
+            install()
+            self.assertEqual(receipt.fingerprint(self.root), before)
+        # Positive control reproduces the former checkout import environment.
+        code = "import sys,unittest,io; sys.path.insert(0,%r); r=unittest.TextTestRunner(stream=io.StringIO()).run(unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(n) for n in %r)); print(r.testsRun)" % (str(self.root), receipt.MODULES)
+        dirty = subprocess.run([sys.executable,'-I','-S','-B','-c',code], cwd=self.root,
+                               env=receipt.CHILD_ENV, capture_output=True, text=True, timeout=30)
+        self.assertEqual(dirty.returncode, 0, dirty.stderr)
+        self.assertTrue(self.marker.exists(), 'positive control must execute attacker code')
+        if dirty_count is not None: self.assertEqual(dirty.stdout.strip(), str(dirty_count))
+        self.marker.unlink()
+        # The production verifier uses a REAL subprocess, never a run() mock.
+        self.assertTrue(receipt.run_candidate(self.root))
+        self.assertFalse(self.marker.exists())
+
+    def test_sourceless_package_initializer_is_excluded(self):
+        import py_compile
+        def install():
+            source = self.root / 'payload.py'; source.write_text(self.payload)
+            py_compile.compile(str(source), cfile=str(self.root/'tests/__init__.pyc'), doraise=True)
+            source.unlink()
+        self.check_attack(install, dirty_count=7)
+
+    def test_same_named_test_package_cannot_replace_reviewed_tests(self):
+        def install():
+            package = self.root/'tests/test_hunter_execution_cost'; package.mkdir()
+            reviewed = self.root/'tests/test_hunter_execution_cost.py'
+            (package/'__init__.py').write_text(self.payload + 'exec(compile(Path(%r).read_bytes(), %r, "exec"), globals())\n' % (str(reviewed),str(reviewed)))
+        self.check_attack(install, dirty_count=7)
+
+    def test_same_named_research_package_cannot_replace_reviewed_function(self):
+        def install():
+            package = self.root/'research/hunter_v1_coverage'; package.mkdir()
+            reviewed = self.root/'research/hunter_v1_coverage.py'
+            (package/'__init__.py').write_text(self.payload + 'exec(compile(Path(%r).read_bytes(), %r, "exec"), globals())\n' % (str(reviewed),str(reviewed)))
+        self.check_attack(install, dirty_count=7)
+
+    def test_real_extension_module_cannot_shadow_reviewed_test(self):
+        import sysconfig
+        def install():
+            compiler = shutil.which('cc'); self.assertIsNotNone(compiler, 'Linux contract requires C compiler')
+            source = self.root/'extension.c'
+            source.write_text('#include <Python.h>\n#include <stdio.h>\n'
+                             'static struct PyModuleDef m = {PyModuleDef_HEAD_INIT,"test_hunter_execution_cost",NULL,-1,NULL};\n'
+                             'PyMODINIT_FUNC PyInit_test_hunter_execution_cost(void) {FILE *f=fopen('+json.dumps(str(self.marker))+',"w"); if(f){fputs("unreviewed",f);fclose(f);}return PyModule_Create(&m);}\n')
+            target = self.root/'tests'/('test_hunter_execution_cost'+sysconfig.get_config_var('EXT_SUFFIX'))
+            result = subprocess.run([compiler,'-shared','-fPIC','-I'+sysconfig.get_path('include'),str(source),'-o',str(target)], capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode,0,result.stderr)
+        self.check_attack(install, dirty_count=4)
+
+
+class BenchmarkCountTests(unittest.TestCase):
+    def test_count_parser_rejects_missing_summary_and_keeps_failures(self):
+        from scripts.hunter_validation_benchmark import unittest_counts
+        counts = unittest_counts('Ran 5 tests in 0.001s\n\nFAILED (failures=1, errors=1, skipped=1, expected failures=1)\n')
+        self.assertEqual(counts, dict(tests=5, failures=1, errors=1, skipped=1,
+                                     expected_failures=1, unexpected_successes=0))
+        with self.assertRaises(ValueError): unittest_counts('incomplete log')
+
+    @unittest.skipUnless(sys.platform == 'linux', 'real GNU time and unittest subprocess')
+    def test_real_full_sample_retains_tests_skips_and_failures(self):
+        from scripts.hunter_validation_benchmark import measure
+        code = '''import unittest
+class Example(unittest.TestCase):
+ def test_pass(self): pass
+ @unittest.skip('fixture')
+ def test_skip(self): pass
+ def test_fail(self): self.fail('fixture')
+ def test_error(self): raise ValueError('fixture')
+ @unittest.expectedFailure
+ def test_expected(self): self.fail('fixture')
+unittest.main()
+'''
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            row = measure([sys.executable,'-I','-B','-c',code], Path(directory), full=True)
+        self.assertEqual(row['returncode'], 1)
+        self.assertEqual(row['test_counts'], dict(tests=5, failures=1, errors=1, skipped=1,
+                                                expected_failures=1, unexpected_successes=0))
+        self.assertGreater(row['peak_rss_kib'],0)
 
 
 @unittest.skipUnless(sys.platform == 'linux', 'Linux permission/descriptor contract')

@@ -31,6 +31,32 @@ CHILD_ENV = {"TZ": "UTC", "LC_ALL": "C.UTF-8"}
 REVIEWED_FILES = {"tests/test_hunter_execution_cost.py", "research/hunter_execution_cost.py",
                   "tests/test_hunter_v1_coverage.py", "research/hunter_v1_coverage.py"}
 MODULES = ["tests.test_hunter_execution_cost", "tests.test_hunter_v1_coverage"]
+# This bootstrap runs in a fresh directory containing ONLY verified source
+# bytes. The original checkout is never on the child's import path or cwd.
+CANDIDATE_BOOTSTRAP = """
+import importlib.util, io, pathlib, sys, types, unittest
+root = pathlib.Path.cwd()
+# Pin package namespaces to the sealed tree; do not expose any checkout on
+# sys.path, and do not let another runtime path resolve these package names.
+for name in ('research', 'tests'):
+    package = types.ModuleType(name)
+    package.__path__ = [str(root / name)]
+    package.__package__ = name
+    sys.modules[name] = package
+suite = unittest.TestSuite()
+for name in %r:
+    path = root / (name.replace('.', '/') + '.py')
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(module))
+result = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
+if result.wasSuccessful() and result.testsRun == 7 and not result.skipped:
+    print('HUNTER_PURE_TESTS_OK 7')
+    raise SystemExit(0)
+raise SystemExit(1)
+""" % MODULES
 
 
 class Unavailable(Exception):
@@ -78,10 +104,12 @@ def runtime_identity():
     return dict(python=sys.version, implementation=sys.implementation.cache_tag,
                 machine=platform.machine(), kernel=platform.release(), libc=platform.libc_ver(),
                 files={str(p): file_digest(p) for p in sorted(paths)},
-                command_flags=["-I", "-S", "-B", "-X", "pycache_prefix=empty_ephemeral_directory"], environment=CHILD_ENV)
+                command_flags=["-I", "-S", "-B", "-X", "pycache_prefix=empty_ephemeral_directory"],
+                import_scope="verified_source_only_temporary_checkout_v1", environment=CHILD_ENV)
 
 
-def fingerprint(root=ROOT):
+def reviewed_sources(root):
+    """Read once, then hash the exact bytes that will be staged for execution."""
     file_digest(root / MANIFEST)  # Reject missing, symlink or nonregular manifest.
     manifest = json.loads((root / MANIFEST).read_text())
     if (not isinstance(manifest, dict) or manifest.get("schema") != "hunter_reviewed_pure_tests_v1" or
@@ -90,20 +118,26 @@ def fingerprint(root=ROOT):
             set(manifest["reviewed_files"]) != REVIEWED_FILES):
         raise Unavailable("INCOMPLETE_DEPENDENCIES")
     reviewed = manifest["reviewed_files"]
-    files = {}
+    sources = {}
     for name, expected in reviewed.items():
         if Path(name).is_absolute() or ".." in Path(name).parts:
             raise Unavailable("INVALID_INPUT_PATH")
         p = root / name
         if any(parent.is_symlink() for parent in [p, *p.parents]):
             raise Unavailable("INPUT_SYMLINK")
-        actual = file_digest(p)
-        if actual != expected: raise Unavailable("REQUIRES_DEPENDENCY_REVIEW")
-        files[name] = actual
+        if not p.is_file(): raise Unavailable("INPUT_NOT_REGULAR")
+        raw = p.read_bytes()
+        if digest(raw) != expected: raise Unavailable("REQUIRES_DEPENDENCY_REVIEW")
+        sources[name] = raw
     # A package initializer added later could introduce unreviewed imports.
     for package in ("research", "tests", "scripts"):
         if (root / package / "__init__.py").exists():
             raise Unavailable("UNREVIEWED_PACKAGE_INITIALIZER")
+    return sources
+
+
+def fingerprint(root=ROOT):
+    files = {name: digest(raw) for name, raw in reviewed_sources(root).items()}
     # Fixtures are inline today. Hash the fixture tree conservatively so even a
     # newly introduced fixture invalidates old receipts; never hash live ledgers.
     for base, dirs, names in os.walk(root / "tests/fixtures", followlinks=False):
@@ -240,13 +274,20 @@ def open_store(directory, key_path, writable=False):
 
 
 def run_candidate(root=ROOT):
-    # -B prevents writes, but by itself still READS existing .pyc files. Direct
-    # every cache lookup to a new empty directory so only fingerprinted sources
-    # and native extensions can supply candidate code.
-    with tempfile.TemporaryDirectory(prefix="hunter-validation-bytecode-") as cache:
-        result = subprocess.run([sys.executable, "-I", "-S", "-B", "-X", "pycache_prefix=" + cache,
-                                 str(root / "scripts/hunter_validation_receipt.py"), "--child"],
-                                cwd=root, env=CHILD_ENV, capture_output=True, timeout=30)
+    # A bytecode prefix alone does NOT exclude sourceless .pyc, extension
+    # modules or same-named packages. Never import from the original checkout.
+    sources = reviewed_sources(root)
+    with tempfile.TemporaryDirectory(prefix="hunter-validation-source-") as temporary:
+        stage = Path(temporary)
+        for name, raw in sources.items():
+            target = stage / name
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            with target.open("xb") as stream: stream.write(raw)
+        cache = stage / ".bytecode"
+        cache.mkdir(mode=0o700)
+        result = subprocess.run([sys.executable, "-I", "-S", "-B", "-X", "pycache_prefix=" + str(cache),
+                                 "-c", CANDIDATE_BOOTSTRAP],
+                                cwd=stage, env=CHILD_ENV, capture_output=True, timeout=30)
     # Do not log subprocess text, which could include input data or paths.
     return result.returncode == 0 and result.stdout.strip() == b'HUNTER_PURE_TESTS_OK 7'
 
@@ -285,18 +326,7 @@ def observe(env, root=ROOT):
     return row
 
 
-def child():
-    # No site initialization, environment-based imports, package initializers or
-    # editable third-party dependencies. The reviewed files are the full closure.
-    sys.path.insert(0, str(ROOT))
-    suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(name) for name in MODULES)
-    result = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
-    if result.wasSuccessful() and result.testsRun == 7 and not result.skipped:
-        print("HUNTER_PURE_TESTS_OK 7")
-        return 0
-    return 1
-
-
 if __name__ == "__main__":
     if sys.argv[1:] != ["--child"]: raise SystemExit("OBSERVATION_ONLY_NO_SKIP_MODE")
-    raise SystemExit(child())
+    if not run_candidate(): raise SystemExit(1)
+    print("HUNTER_PURE_TESTS_OK 7")

@@ -94,8 +94,23 @@ manifest, receipt implementation, fixture tree (conservatively), actual interpre
 stdlib and extension contents, loaded native libraries, Python build/ABI, kernel,
 architecture, libc version, isolated command flags and the complete child environment.
 The child runs `-I -S -B`, with only `TZ=UTC` and `LC_ALL=C.UTF-8`, no site packages or
-inherited credentials. A fresh empty `-X pycache_prefix` also prevents reading
-pre-existing untracked bytecode (`-B` alone only prevents writes).
+inherited credentials. Independent review reproduced two holes in the initial
+checkout-based child: a sourceless `tests/__init__.pyc` and a same-named test
+package could execute unreviewed code with the old fingerprint unchanged. A
+bytecode prefix is insufficient because it does not block sourceless bytecode,
+competing packages or native extension modules.
+
+The repaired child runs in a fresh private directory containing only the four
+reviewed source files. The parent hashes the exact source bytes it stages, rather
+than hashing and then reopening a file for copying. The bootstrap pins synthetic
+`research`/`tests` package paths to that directory and loads the test modules from
+their exact staged `.py` paths. The original checkout is absent from both cwd and
+the child's import search path. Untracked packages, extensions and bytecode are
+never copied. A fresh empty `-X pycache_prefix` additionally prevents reading
+pre-existing standard-library bytecode (`-B` alone only prevents writes).
+Real Linux subprocess regressions include positive controls that execute the
+malicious initializer/package/native extension in the former import environment,
+then prove the production child runs the seven reviewed tests without that code.
 Added package initializers, missing inputs and symlinks
 invalidate eligibility. Editable/pip dependencies are excluded by isolation, not
 assumed locked; existing full-suite aiohttp requirements remain range-pinned and
@@ -156,3 +171,18 @@ sample tails, especially n=3, mostly describe observed maxima; they cannot estab
 production P95/P99. Cold/hot means receipt absence/presence, not flushed OS caches.
 No local simulation is a production performance result. CI results and links are
 recorded in the PR after execution.
+
+Every full sample retains the original unittest CLI's final tests/skipped/failures/
+errors/expected-failures/unexpected-successes counts and command return code.
+Missing or interrupted summaries are recorded as unknown, never as zero tests.
+Failed samples and partial reports are retained and fail CI; they are excluded
+from successful-sample latency summaries. A real failing/skipped subprocess checks
+this reporting path. These observations still do not reduce the 110-second
+production regression gate.
+
+The timing change can be reviewed and landed separately: launcher phase events,
+runner health-publication/total timing, email redaction and their focused tests.
+That split must exclude the optional `observe()` hook, all receipt files and the
+receipt benchmark workflow. It requires its own review/CI and no clone architecture
+change. The shared clone's initial checkout may be a later measurement candidate;
+this PR neither changes it nor attributes the 182-second gap to it.
