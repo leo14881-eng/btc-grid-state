@@ -100,5 +100,21 @@ class EvidenceTests(unittest.TestCase):
             finally:stream.emit(dict(event='FINAL'))
         self.assertEqual(stream.AUDIT_FAILURES,previous+1)
 
+    def test_ready_window_uses_runtime_nonready_resets_between_audits(self):
+        tick=[0];events=[]
+        def session(*args,**kwargs):
+            for stamp in range(0,121,30):tick[0]=stamp;kwargs['observer'](NOW)
+            tick[0]=150;kwargs['on_nonready']('FIXTURE_GAP')
+            for stamp in range(180,481,30):tick[0]=stamp;kwargs['observer'](NOW)
+        with patch.object(stream,'session',side_effect=session),patch.object(stream,'Budget') as budget,\
+             patch.object(self.store,'freeze',return_value=dict(status='READY',epoch='b'*32)),\
+             patch.object(stream,'emit',side_effect=events.append):
+            budget.return_value.status.return_value=dict(halt=None,cooldown_ms=0)
+            stream.collect(self.store,self.names,'a'*64,'c'*40,clock=lambda:NOW,steady=lambda:tick[0])
+        audits=[x for x in events if x['event']=='BINANCE_CACHE_AUDIT']
+        self.assertEqual([x['ready_window_seconds'] for x in audits[:6]],[0,30,60,90,120,0])
+        self.assertEqual(audits[-1]['ready_window_seconds'],300)
+        self.assertTrue(all(x['observed_at_ms']==NOW for x in audits))
+
 
 if __name__=='__main__':unittest.main()

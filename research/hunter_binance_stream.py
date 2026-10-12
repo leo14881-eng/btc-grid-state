@@ -388,8 +388,10 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
     def audit(now):
         frozen=store.freeze(names,now,now); finished=clock()
         ready=frozen['status']=='READY' and 0<=finished-now<=FRESH_MS
-        restored=budget.observe(ready,steady())
+        observed=steady();restored=budget.observe(ready,observed)
+        ready_seconds=max(0,int(observed-budget.healthy_since)) if ready and budget.healthy_since is not None else 0
         emit(dict(event='BINANCE_CACHE_AUDIT',source_head=source_head,
+            observed_at_ms=finished,ready_window_seconds=ready_seconds,
             status='READY' if ready else 'UNKNOWN',topics=len(names),
             roster_hash=roster_hash(names),manifest_sha256=manifest,
             epoch=frozen.get('epoch'),generation_sha256=frozen.get('generation_sha256'),
