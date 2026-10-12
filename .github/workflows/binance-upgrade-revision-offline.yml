@@ -1,0 +1,70 @@
+name: Binance Revision Upgrade Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_binance_upgrade_revision.py'
+      - 'tests/test_binance_upgrade_revision.py'
+      - '.github/workflows/binance-upgrade-revision-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Adapter argument and hash boundaries
+        run: python -B -m unittest discover -s tests -p test_binance_upgrade_revision.py -v
+      - name: Exact current package upgrade and rollback with immutable sibling directories
+        run: |
+          python -B - <<'PY'
+          import os,subprocess,sys,tempfile
+          from pathlib import Path
+          from unittest.mock import patch
+          from scripts.hunter_binance_upgrade_revision import load,PAIR
+          upgrade=load(Path.cwd(),*PAIR);old,new=upgrade.releases(Path.cwd())
+          assert len(old)==len(new)==110
+          assert upgrade.CHANGED=={p for p in old if old[p]!=new[p]}
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder).resolve();prefix=root/'opt/hunter-binance-stream';prefix.mkdir(parents=True)
+              state=root/'var/lib/hunter-binance-stream';state.mkdir(parents=True)
+              bybit=root/'opt/hunter-bybit-stream';bybit.mkdir();(bybit/'untouched').write_bytes(b'unchanged')
+              work=prefix/'upgrade-0123456789abcdef0123456789abcdef';work.mkdir(mode=0o700)
+              saved,staged,rolled=upgrade.code_paths(prefix,work);owner=os.getuid()
+              try:
+                  upgrade.stage(prefix/'code',old);upgrade.write_new(prefix/'release-head',(PAIR[0]+'\n').encode(),0o444)
+                  for name,value in {'state.sqlite3':b'opaque existing database','state.sqlite3-wal':b'WAL',
+                      'state.sqlite3-shm':b'SHM','manifest.json':b'{}','collector.lock':b'',
+                      'request-'+('a'*32)+'.lock':b'held evidence'}.items():
+                      (state/name).write_bytes(value)
+                  with patch.object(upgrade,'STATE',state):hashes=upgrade.state_evidence(work)
+                  upgrade.stage(staged,new);upgrade.write_new(work/'new-release-head',(PAIR[1]+'\n').encode(),0o444)
+                  subprocess.run([sys.executable,'-E','-s','-B','-c',
+                      'from research import hunter_binance_stream, hunter_binance_public; from research.hunter_policy import C'],cwd=staged,check=True)
+                  upgrade.switch(prefix,work,old,new,owner)
+                  upgrade.verify_tree(prefix/'code',new,owner)
+                  with patch.object(upgrade,'STATE',state):upgrade.state_unchanged(hashes)
+                  assert (prefix/'release-head').read_text().strip()==PAIR[1]
+                  assert (bybit/'untouched').read_bytes()==b'unchanged'
+                  upgrade.restore(prefix,work,old,new,owner)
+                  upgrade.verify_tree(prefix/'code',old,owner)
+                  with patch.object(upgrade,'STATE',state):upgrade.state_unchanged(hashes)
+                  assert (prefix/'release-head').read_text().strip()==PAIR[0]
+                  assert (bybit/'untouched').read_bytes()==b'unchanged'
+                  print('CURRENT_LAYOUT_UPGRADE_ROLLBACK_OK',PAIR,len(old),sorted(upgrade.CHANGED))
+              finally:
+                  # Only the newly allocated test tree: allow removal of immutable fixture directories.
+                  for path in [root,*root.rglob('*')]:
+                      assert path.resolve()==root or root in path.resolve().parents
+                      path.chmod(0o700 if path.is_dir() else 0o600)
+          PY
