@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Ten SQLite and one-attempt fixtures without network or subprocesses
+      - name: Eleven SQLite and one-attempt fixtures without network or subprocesses
         run: |
           python -B - <<'PY'
           import os,sys,tempfile,unittest
@@ -49,7 +49,7 @@ jobs:
                   if event=='os.rename':inside(args[0]);inside(args[1])
               sys.addaudithook(guard)
               result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_hunter_binance_recovery_once.py'))
-              good=result.wasSuccessful() and result.testsRun==10 and not result.skipped and not blocked
+              good=result.wasSuccessful() and result.testsRun==11 and not result.skipped and not blocked
               print('SINGLE_RECOVERY_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
               if not good:raise SystemExit(1)
           PY

@@ -45,14 +45,35 @@ def helper():
     return module
 
 
-def read_state(path):
-    with sqlite3.connect(path.as_uri()+'?mode=ro',uri=True) as db:
+def read_state(path=None):
+    import contextlib,json,sqlite3
+    from pathlib import Path
+    source=Path('/var/lib/hunter-binance-stream/state.sqlite3') if path is None else path
+    with contextlib.closing(sqlite3.connect(source.as_uri()+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row; db.execute('BEGIN')
-        return dict(meta=dict(db.execute('SELECT key,value FROM meta')),
+        value=dict(meta=dict(db.execute('SELECT key,value FROM meta')),
             budget=dict(db.execute('SELECT * FROM budget WHERE id=1').fetchone()),
             clock=[dict(x) for x in db.execute('SELECT * FROM budget_clock')],
             requests=[dict(x) for x in db.execute('SELECT * FROM requests ORDER BY token')],
             leases=[dict(x) for x in db.execute('SELECT * FROM leases ORDER BY token')])
+    if path is not None:return value
+    print(json.dumps(value,sort_keys=True)); return 0
+
+
+def consistent_backup(path=None):
+    import contextlib,json,os,sqlite3,tempfile
+    from pathlib import Path
+    source=Path('/var/lib/hunter-binance-stream/state.sqlite3') if path is None else path
+    fd,name=tempfile.mkstemp(prefix='recovery-evidence-',suffix='.sqlite3',dir=source.parent)
+    os.close(fd)
+    with contextlib.closing(sqlite3.connect(source.as_uri()+'?mode=ro',uri=True)) as original:
+        with contextlib.closing(sqlite3.connect(name)) as target:
+            original.backup(target)
+            if target.execute('PRAGMA integrity_check').fetchone()[0]!='ok':
+                raise RuntimeError('BACKUP_INTEGRITY_FAILED')
+    report=dict(path=name,integrity='ok')
+    if path is not None:return report
+    print(json.dumps(report)); return 0
 
 
 def validate_incident(value, boot, monotonic_ms):
@@ -173,18 +194,20 @@ def apply():
     attempt=PREFIX/('recovery-once-'+EPOCH+'.json')
     require(not os.path.lexists(attempt),'INCIDENT_ALREADY_ATTEMPTED_MANUAL_REVIEW_REQUIRED')
     with upgrade.maintenance():
-        before=read_state(STATE/'state.sqlite3')
+        # Even read-only SQLite handles can create WAL/SHM side files. Keep all
+        # live SQLite access under the existing collector UID, never root.
+        before=json.loads(child(read_state).stdout)
         boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
         validate_incident(before,boot,time.monotonic_ns()//1000000)
         work=PREFIX/('upgrade-'+uuid.uuid4().hex); work.mkdir(mode=0o700)
         print(json.dumps(dict(stage='EVIDENCE',directory=str(work))),flush=True)
         hashes=upgrade.state_evidence(work)
         # A consistent SQLite backup supplements the untouched raw DB/WAL/SHM copies.
-        backup=work/'state-consistent.sqlite3'; upgrade.write_new(backup,b'')
-        with sqlite3.connect((STATE/'state.sqlite3').as_uri()+'?mode=ro',uri=True) as original:
-            with sqlite3.connect(backup) as target:
-                original.backup(target)
-                require(target.execute('PRAGMA integrity_check').fetchone()[0]=='ok','BACKUP_INTEGRITY_FAILED')
+        backup=json.loads(child(consistent_backup).stdout)
+        source_backup=Path(backup['path'])
+        require(source_backup.parent==STATE and source_backup.name.startswith('recovery-evidence-')
+                and source_backup.suffix=='.sqlite3' and backup['integrity']=='ok','BACKUP_PATH_INVALID')
+        upgrade.regular(source_backup); upgrade.move(source_backup,work/'state-consistent.sqlite3')
         save(upgrade,work,'incident-before.json',before)
         save(upgrade,work,'source.json',source)
         save(upgrade,work,'receipt.json',dict(old=upgrade.OLD,new=upgrade.NEW,state_hashes=hashes,
@@ -200,10 +223,11 @@ def apply():
         result=child(probe_once,check=False)
         upgrade.write_new(work/'probe.stdout',result.stdout); upgrade.write_new(work/'probe.stderr',result.stderr)
         receipt=json.loads(result.stdout)
+        print(json.dumps(dict(stage='PROBE_RESULT',receipt=receipt)),flush=True)
         require(result.returncode==0 and receipt.get('success') is True and receipt.get('http_status')==200
                 and receipt.get('http_attempts')==1 and receipt.get('process_reaped') is True,'PROBE_FAILED_OR_UNKNOWN_STOPPED')
         upgrade.quiet()
-        after=read_state(STATE/'state.sqlite3')
+        after=json.loads(child(read_state).stdout)
         validate_incident(after,boot,time.monotonic_ns()//1000000)
         require(all(after[k]==before[k] for k in ('meta','clock','requests','leases')),'INCIDENT_CHANGED_AFTER_PROBE')
         prepared=child(prepare_manifest,json.dumps(source).encode())

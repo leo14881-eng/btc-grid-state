@@ -52,6 +52,12 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(recovery.main(),0)
         helper.assert_not_called(); command.assert_not_called()
 
+    def test_consistent_backup_preserves_source_rows(self):
+        receipt=recovery.consistent_backup(self.path)
+        self.assertEqual(receipt['integrity'],'ok')
+        self.assertEqual(recovery.read_state(Path(receipt['path'])),self.before)
+        self.assertEqual(recovery.read_state(self.path),self.before)
+
     def test_incident_changes_are_rejected(self):
         for field in ('denial','halt','cooldown','epoch','clock','extra'):
             value=copy.deepcopy(self.before)
