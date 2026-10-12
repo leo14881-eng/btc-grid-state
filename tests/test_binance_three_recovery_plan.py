@@ -90,6 +90,7 @@ class SupervisionTests(unittest.TestCase):
         self.assertEqual(saved['_quiet_calls'],1)
         self.assertIn('REPORT_PERSISTENCE_FAILED_STOPPED',saved['_console'])
         self.assertIn('"report_persisted": false',saved['_console'])
+        self.assertIsNone(json.loads(saved['_console'].splitlines()[-1])['report'])
 
     def test_stop_timeout_still_verifies_quiet_and_saves_report(self):
         result,_,saved,_=self.run_case(halt='halt',stop_failed=True)

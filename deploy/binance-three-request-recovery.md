@@ -76,7 +76,7 @@ It does not retry, clear new unknown owners, reset start limits or roll back sta
 A stop timeout still triggers independent stopped-state verification and report
 saving. If stopping cannot be verified it reports `STOP_UNCONFIRMED_MANUAL_REVIEW`.
 
-The invocation's result is saved to the unique path printed at entry:
+The invocation's intended result path is unique and printed as `planned_report` at entry:
 
 `/tmp/hunter-binance-recovery-51c723c224194317a49329ba8751d77f-<invocation_uuid>.report.json`
 
@@ -84,9 +84,12 @@ Its path and SHA256 are printed. Detailed private backups remain in the printed
 `/opt/hunter-binance-stream/upgrade-*` evidence directory. Never upload its raw
 owner-token files; the result report uses anonymous request sequence numbers.
 If report creation, writing or fsync fails after start, the unit is stopped and
-independently checked. The console says `report_persisted=false`; a separate
-private failure report preserves the stop result when its directory remains
-writable. A partial report is evidence, never acceptance by itself.
+independently checked. The console says `acceptance_report_persisted=false`;
+a separately persisted private failure report becomes the final `report` when
+its directory remains writable. Otherwise final `report` is null and
+`report_persisted=false`. Any surviving original file is labeled `partial_report`
+and retained. Only the final delivered report and checksum identify the outcome;
+a partial READY file is evidence, never acceptance by itself.
 Do not rerun after the incident marker has been created. Code rollback is a separately reviewed
 use of the existing revision adapter and its evidence directory; it must not
 restore retired active rows or reset denial/cooldown.

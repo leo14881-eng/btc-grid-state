@@ -436,6 +436,7 @@ def supervise(upgrade,work,prepared,invocation_id=None):
     report=dict(schema='binance_three_recovery_v1',old=OLD,new=NEW,incident_epoch=EPOCH,invocation_id=invocation_id,
                 historical_outcome='UNKNOWN',archived_records=3,publication_verified=False,samples=[])
     healthy=None;epoch=None;accepted=False;started=False;persisted=False
+    delivered=None;delivered_digest=None;partial=None
     try:
         started=True  # Even an ambiguous start result must be followed by stop, never another start.
         command(['systemctl','start',SERVICE],timeout=remaining(60));remaining(60)
@@ -476,17 +477,24 @@ def supervise(upgrade,work,prepared,invocation_id=None):
         try:
             save(upgrade,work,'recovery-report.json',report)
             digest=write_report(destination,report);persisted=True
+            delivered=destination;delivered_digest=digest
         except BaseException as error:
             report.update(status='REPORT_PERSISTENCE_FAILED_STOPPED',report_error_type=type(error).__name__)
             if started and accepted:
                 stop_and_verify(upgrade,report)
             accepted=False
             if report.get('stopped_verified') is False:report['status']='STOP_UNCONFIRMED_MANUAL_REVIEW'
-            try:save(upgrade,work,'recovery-report-persistence-failure.json',report)
+            partial=str(destination) if os.path.lexists(destination) else None
+            try:
+                fallback=work/'recovery-report-persistence-failure.json'
+                save(upgrade,work,fallback.name,report)
+                fallback_digest=hashlib.sha256(fallback.read_bytes()).hexdigest()
+                delivered=fallback;delivered_digest=fallback_digest
             except BaseException:pass  # The complete sanitized fallback still goes to the root console.
             print(json.dumps(dict(stage='REPORT_PERSISTENCE_FAILURE',report=report)),flush=True)
-        print(json.dumps(dict(status=report['status'],report=str(destination),report_persisted=persisted,
-            report_sha256=digest if persisted else None,evidence=str(work),
+        print(json.dumps(dict(status=report['status'],report=str(delivered) if delivered else None,
+            report_persisted=delivered is not None,report_sha256=delivered_digest,
+            acceptance_report_persisted=persisted,partial_report=partial,evidence=str(work),
             historical_outcome='UNKNOWN',publication_verified=False)),flush=True)
     return 0 if accepted and persisted else 1
 
@@ -502,7 +510,7 @@ def main():
         sys.stdout.buffer.write(result.stdout); return result.returncode
     if args.run:
         invocation_id=uuid.uuid4().hex;destination=report_path(invocation_id)
-        print(json.dumps(dict(stage='RECOVERY_INVOCATION',invocation_id=invocation_id,report=str(destination))),flush=True)
+        print(json.dumps(dict(stage='RECOVERY_INVOCATION',invocation_id=invocation_id,planned_report=str(destination))),flush=True)
         try:return apply(invocation_id)
         except BaseException as error:
             import re
@@ -512,12 +520,14 @@ def main():
                 error_type=type(error).__name__,error_code=code if re.fullmatch('[A-Z][A-Z0-9_]{0,127}',code) else 'UNCLASSIFIED',
                 historical_outcome='UNKNOWN',automatic_retry=False,
                 mutation_guard_present=os.path.lexists(PREFIX/('recovery-once-'+EPOCH+'.json')))
+            delivered=None
             try:
                 digest=write_report(destination,report)
-                report.update(report_persisted=True,report_sha256=digest)
+                delivered=str(destination);report.update(report_persisted=True,report_sha256=digest)
             except BaseException as write_error:
-                report.update(report_persisted=False,report_error_type=type(write_error).__name__)
-            print(json.dumps(dict(**report,report=str(destination))),flush=True)
+                report.update(report_persisted=False,report_error_type=type(write_error).__name__,
+                              partial_report=str(destination) if os.path.lexists(destination) else None)
+            print(json.dumps(dict(**report,report=delivered)),flush=True)
             return 1
     print(json.dumps(dict(status='PLAN_ONLY',incident_epoch=EPOCH,upgrade_entry=UPGRADER,
         records=3,old=OLD,new=NEW,http_attempts=1,service_starts=1,automatic_retry=False,

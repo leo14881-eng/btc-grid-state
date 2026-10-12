@@ -211,7 +211,14 @@ class ReentryTests(unittest.TestCase):
         fallback=list(self.prefix.glob('upgrade-*/recovery-report-persistence-failure.json'))
         self.assertEqual(len(fallback),1)
         self.assertTrue(json.loads(fallback[0].read_text())['stopped_verified'])
-        self.assertIn('"report_persisted": false',self.output.getvalue())
+        final=json.loads(self.output.getvalue().splitlines()[-1])
+        self.assertFalse(final['acceptance_report_persisted']);self.assertTrue(final['report_persisted'])
+        self.assertEqual(final['report'],str(fallback[0]))
+        delivered=Path(final['report']);partial=Path(final['partial_report'])
+        self.assertEqual(json.loads(delivered.read_text())['status'],'REPORT_PERSISTENCE_FAILED_STOPPED')
+        self.assertEqual(hashlib.sha256(delivered.read_bytes()).hexdigest(),final['report_sha256'])
+        self.assertEqual(json.loads(partial.read_text())['status'],'READY_300S_CONSUMER_PUBLICATION_PENDING')
+        self.assertNotEqual(delivered,partial)
         self.assertTrue(self.marker.exists())
 
     def test_failed_preflight_report_permission_error_never_starts(self):
