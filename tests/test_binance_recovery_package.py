@@ -1,4 +1,8 @@
-"""Small real-SQLite/flock checks; exchange transport is injected, no market IO."""
+"""Fixed deployment package tests, run by binance-recovery-once-offline.yml.
+
+This incident entry targets PR116's exact runtime, not the current main runtime.
+The dedicated workflow assembles that package before disabling all process IO.
+"""
 import contextlib
 import copy
 import io

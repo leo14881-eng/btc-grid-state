@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/hunter_binance_recover_once.py'
-      - 'tests/test_hunter_binance_recovery_once.py'
+      - 'tests/test_binance_recovery_package.py'
       - '.github/workflows/binance-recovery-once-offline.yml'
 permissions:
   contents: read
@@ -26,10 +26,23 @@ jobs:
       - name: Eleven SQLite and one-attempt fixtures without network or subprocesses
         run: |
           python -B - <<'PY'
-          import os,sys,tempfile,unittest
+          import io,os,shutil,subprocess,sys,tarfile,tempfile,unittest
           from pathlib import Path
           with tempfile.TemporaryDirectory() as folder:
               root=Path(folder).resolve(); tempfile.tempdir=str(root); blocked=[]
+              # Assemble the actual deployment runtime before installing the
+              # no-process guard. Never test this wrapper against main's old client.
+              sha='99836e5362340725f806d5df6df1ca9835065bdd'
+              names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+              names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+              archive=subprocess.check_output(['git','archive',sha,'--',*names])
+              runtime=root/'runtime'; runtime.mkdir()
+              with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:bundle.extractall(runtime)
+              shutil.copyfile('scripts/hunter_binance_recover_once.py',runtime/'scripts/hunter_binance_recover_once.py')
+              (runtime/'tests').mkdir()
+              shutil.copyfile('tests/test_binance_recovery_package.py',runtime/'tests/test_binance_recovery_package.py')
+              sys.path.insert(0,str(runtime))
+              print('FIXED_RUNTIME_UNDER_TEST',sha)
               def inside(path,fd=None):
                   if isinstance(path,int): return
                   target=Path(os.fsdecode(path).removeprefix('file:').split('?')[0])
@@ -48,7 +61,7 @@ jobs:
                       i={'os.mkdir':2,'os.remove':1,'os.rmdir':1,'os.chmod':2,'os.utime':3}[event];inside(args[0],args[i] if len(args)>i else None)
                   if event=='os.rename':inside(args[0]);inside(args[1])
               sys.addaudithook(guard)
-              result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_hunter_binance_recovery_once.py'))
+              result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover(str(runtime/'tests'),pattern='test_binance_recovery_package.py'))
               good=result.wasSuccessful() and result.testsRun==11 and not result.skipped and not blocked
               print('SINGLE_RECOVERY_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
               if not good:raise SystemExit(1)
