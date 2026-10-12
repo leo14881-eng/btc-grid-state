@@ -5,6 +5,9 @@ on:
       - 'scripts/hunter_kline_install.py'
       - 'scripts/check_kline_install_offline.py'
       - 'scripts/check_kline_stage_offline.py'
+      - 'scripts/hunter_kline_start.py'
+      - 'scripts/check_kline_start_offline.py'
+      - 'tests/test_hunter_kline_start.py'
       - 'tests/test_hunter_kline_install.py'
       - 'deploy/hunter-kline-install-plan.md'
       - '.github/workflows/hunter-kline-install-offline.yml'
@@ -33,3 +36,5 @@ jobs:
         run: timeout 60s git fetch --depth=1 --no-tags origin 99f75edcf2c2f95d59e5cf797051442639dc64ce
       - name: Real isolated staged prepare, including original missing-config reproduction
         run: python -I -B scripts/check_kline_stage_offline.py
+      - name: Local Git integration for bounded startup and exact origin main guard
+        run: python -I -B scripts/check_kline_start_offline.py

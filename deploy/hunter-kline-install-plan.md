@@ -154,6 +154,52 @@ five-minute Monitor and dedup. No Sentinel or PR35/98 change is included.
 
 ## Offline evidence and its limits
 
+### Bounded natural-snapshot startup
+
+After the runtime-config repair has been confirmed, use the separately reviewed
+`scripts/hunter_kline_start.py`. Its default is a read-only plan; `--run` uses the
+existing authorized root terminal. It verifies the already downloaded
+`/root/hunter-kline-repair-3da03c9.py` against SHA256
+`00e8c0e9f2ff48c27d7421af5c2120f760bc528afd44c530b3220bfbd760bdf3`.
+It never downloads a replacement installer or changes the installed code.
+
+The script waits up to 75 minutes, probing no more often than every 120 seconds.
+Each probe reads only the remote main ref and the first 4096 bytes of each public
+snapshot at that immutable ref. Each probe command has a 20-second bound. It
+distinguishes future, stale and insufficient-headroom timestamps. Admission
+requires five minutes of remaining validity; original 900/1800-second validation
+is not relaxed. Prefix timestamps are only a cheap admission hint: the complete
+snapshot is still validated by the original installer before manifests are written.
+
+Only after admission, it performs **one** non-forced fetch from named `main` to
+`refs/remotes/origin/main` (60-second bound), fixes the fetched tracking-ref SHA,
+and reads both complete snapshots from that same SHA. It does not fetch an old
+probe SHA or rely on FETCH_HEAD. The original installer's exact-origin/main guard
+remains active; additional comparisons before/after the 180-second prepare prevent
+starting if another process moves the local ref. Changed/stale data, a failed
+prepare, non-fast-forward ref, mixed service state, network error or timeout stops
+with all existing state preserved. There is no fetch/prepare retry loop.
+
+After successful preparation, start only the two collectors (60-second bound),
+then read their state once. Discovery, Research, Monitor, timers and consumers
+are never started/reconfigured by this script. `STARTED_CACHE_ACCEPTANCE_PENDING`
+means running processes, not complete caches or a verified Worker migration.
+The next task is cache/source acceptance and natural consumer publication proof.
+No Worker, exchange or trading request is made by the waiting script itself;
+the explicitly started collectors use their already approved market transports.
+
+Each run retains a private evidence directory, phase log, snapshot readbacks and
+child stdout/stderr. SIGINT/SIGTERM or a child deadline first interrupts the
+installer so it can reap its own subprocess group; forced cleanup follows if
+needed. Do not clear caches, repeat a failed prepare blindly, or force-update refs.
+
+`check_kline_start_offline.py` runs synthetic local-Git fixtures with real fetch
+and the original installer's real origin/main guard. It reproduces SHA-only fetch
+leaving origin/main stale, then verifies named-main fetch, remote advance, ref
+movement before/after prepare, non-fast-forward preservation, stale snapshots and
+failure-before-start. Real systemctl, network, accounts, cache and ledger IO are
+blocked; service actions and successful provisioning are simulated.
+
 ### Missing runtime config repair (2026-10-12)
 
 The initial Python-only package omitted the import-time dependency
