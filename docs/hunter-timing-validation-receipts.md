@@ -111,6 +111,10 @@ pre-existing standard-library bytecode (`-B` alone only prevents writes).
 Real Linux subprocess regressions include positive controls that execute the
 malicious initializer/package/native extension in the former import environment,
 then prove the production child runs the seven reviewed tests without that code.
+The native-extension fixture requires the compiler already present in GitHub's
+Linux image and fails CI if it is missing. Outside GitHub CI, compiler absence is
+an explicit counted skip of this new fixture; production hosts are not required
+to install a compiler just to keep the original regression gate working.
 Added package initializers, missing inputs and symlinks
 invalidate eligibility. Editable/pip dependencies are excluded by isolation, not
 assumed locked; existing full-suite aiohttp requirements remain range-pinned and

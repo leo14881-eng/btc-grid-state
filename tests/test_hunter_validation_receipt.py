@@ -164,7 +164,10 @@ class ImportIsolationTests(unittest.TestCase):
     def test_real_extension_module_cannot_shadow_reviewed_test(self):
         import sysconfig
         def install():
-            compiler = shutil.which('cc'); self.assertIsNotNone(compiler, 'Linux contract requires C compiler')
+            compiler = shutil.which('cc')
+            if compiler is None and os.environ.get('GITHUB_ACTIONS') != 'true':
+                self.skipTest('C compiler unavailable; native-extension proof is mandatory in GitHub CI')
+            self.assertIsNotNone(compiler, 'GitHub Linux contract requires C compiler')
             source = self.root/'extension.c'
             source.write_text('#include <Python.h>\n#include <stdio.h>\n'
                              'static struct PyModuleDef m = {PyModuleDef_HEAD_INIT,"test_hunter_execution_cost",NULL,-1,NULL};\n'
