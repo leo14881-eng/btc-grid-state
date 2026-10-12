@@ -28,8 +28,10 @@ Before any mutation, require Binance inactive/failed with MainPID zero, no proce
 under its dedicated UID, and an empty service cgroup. Hold its existing collector
 lock and every existing request lock. Unknown/live owners stop the operation.
 The private `upgrade-<uuid>` evidence directory retains raw cache/WAL/SHM,
-manifest and request-lock copies, hashes, a runtime file manifest, old code and
-release-head, and a fsynced phase journal. Raw copies are evidence, not a claim of
+manifest and request-lock copies, hashes, a runtime file manifest, old
+release-head, and a fsynced phase journal. Old, staged and rolled-back code trees
+are recorded immutable siblings of `code`; same-parent renames preserve their
+directory modes. Raw copies are evidence, not a claim of
 SQLite snapshot consistency. Cache files must remain byte-identical during the
 code upgrade. Existing markers, leases, halt and cooldown are never changed.
 

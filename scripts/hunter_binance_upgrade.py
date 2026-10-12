@@ -152,20 +152,26 @@ def quiet():
 
 
 @contextlib.contextmanager
-def maintenance():
-    require(sys.platform == 'linux' and os.geteuid() == 0, 'EXISTING_ROOT_LINUX_ENTRY_REQUIRED')
+def locked_state():
     import fcntl
-    for path in (PREFIX, PREFIX/'venv', STATE):
-        require(path.is_dir() and path.resolve() == path, 'EXISTING_DIRECTORY_REQUIRED')
-    require(PREFIX.stat().st_uid == 0 and not PREFIX.stat().st_mode & 0o022, 'PREFIX_OWNER_OR_MODE_INVALID')
-    require((PREFIX/'venv').stat().st_uid == 0 and not (PREFIX/'venv').stat().st_mode & 0o022, 'VENV_OWNER_OR_MODE_INVALID')
-    quiet()
     with contextlib.ExitStack() as stack:
         for path in [STATE/'collector.lock', *sorted(STATE.glob('request-*.lock'))]:
             regular(path)
             if path.name != 'collector.lock': require(re.fullmatch(r'request-[a-f0-9]{32}\.lock', path.name), 'INVALID_REQUEST_LOCK')
             handle = stack.enter_context(path.open('rb'))
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+@contextlib.contextmanager
+def maintenance():
+    require(sys.platform == 'linux' and os.geteuid() == 0, 'EXISTING_ROOT_LINUX_ENTRY_REQUIRED')
+    for path in (PREFIX, PREFIX/'venv', STATE):
+        require(path.is_dir() and path.resolve() == path, 'EXISTING_DIRECTORY_REQUIRED')
+    require(PREFIX.stat().st_uid == 0 and not PREFIX.stat().st_mode & 0o022, 'PREFIX_OWNER_OR_MODE_INVALID')
+    require((PREFIX/'venv').stat().st_uid == 0 and not (PREFIX/'venv').stat().st_mode & 0o022, 'VENV_OWNER_OR_MODE_INVALID')
+    quiet()
+    with locked_state():
         quiet()
         yield
 
@@ -195,10 +201,16 @@ def state_unchanged(hashes):
     require(current == hashes, 'STATE_CHANGED_DURING_CODE_UPGRADE')
 
 
+def code_paths(prefix, work):
+    # Sibling renames preserve immutable directory modes without rewriting '..'.
+    return tuple(prefix/(label+work.name) for label in ('code-before-', 'code-stage-', 'code-after-'))
+
+
 def restore(prefix, work, old, new, owner=0):
     # Also handles an interrupted swap. Unknown content is never overwritten.
     code, head = prefix/'code', prefix/'release-head'
-    old_code, old_head = work/'old-code', work/'old-release-head'
+    old_code, _, rolled_code = code_paths(prefix, work)
+    old_head = work/'old-release-head'
     # Validate both halves before moving either. A mismatched head or backup
     # leaves the entire current installation untouched for manual review.
     if old_code.exists():
@@ -212,7 +224,7 @@ def restore(prefix, work, old, new, owner=0):
     else:
         regular(head); require(head.read_bytes() == (OLD+'\n').encode(), 'ACTIVE_HEAD_UNKNOWN')
     if old_code.exists():
-        if code.exists(): move(code, work/'rolled-back-new-code')
+        if code.exists(): move(code, rolled_code)
         move(old_code, code)
     if old_head.exists():
         if head.exists():
@@ -223,12 +235,13 @@ def restore(prefix, work, old, new, owner=0):
 
 
 def switch(prefix, work, old, new, owner=0):
-    verify_tree(prefix/'code', old, owner); verify_tree(work/'new-code', new, owner)
+    old_code, staged_code, _ = code_paths(prefix, work)
+    verify_tree(prefix/'code', old, owner); verify_tree(staged_code, new, owner)
     require((prefix/'release-head').read_bytes() == (OLD+'\n').encode(), 'INSTALLED_RELEASE_MISMATCH')
     try:
         for name, source, target in (
-            ('SAVE_OLD_CODE', prefix/'code', work/'old-code'),
-            ('INSTALL_NEW_CODE', work/'new-code', prefix/'code'),
+            ('SAVE_OLD_CODE', prefix/'code', old_code),
+            ('INSTALL_NEW_CODE', staged_code, prefix/'code'),
             ('SAVE_OLD_HEAD', prefix/'release-head', work/'old-release-head'),
             ('INSTALL_NEW_HEAD', work/'new-release-head', prefix/'release-head')):
             record(work, name); move(source, target)
@@ -288,10 +301,12 @@ def main():
         print(json.dumps(dict(status='PREPARING_NOT_STARTED',evidence=str(work))),flush=True)
         hashes = state_evidence(work)
         write_new(work/'receipt.json', json.dumps(dict(old=OLD,new=NEW,state_hashes=hashes,
-            old_files=tree_manifest(old),new_files=tree_manifest(new)),sort_keys=True).encode())
-        stage(work/'new-code', new); write_new(work/'new-release-head', (NEW+'\n').encode(), 0o444)
+            old_files=tree_manifest(old),new_files=tree_manifest(new),
+            code_paths=[str(p) for p in code_paths(PREFIX,work)]),sort_keys=True).encode())
+        _, staged_code, _ = code_paths(PREFIX,work)
+        stage(staged_code, new); write_new(work/'new-release-head', (NEW+'\n').encode(), 0o444)
         run([PREFIX/'venv/bin/python', '-E', '-s', '-B', '-c',
-            'from research import hunter_binance_stream, hunter_binance_public; from research.hunter_policy import C'], cwd=work/'new-code')
+            'from research import hunter_binance_stream, hunter_binance_public; from research.hunter_policy import C'], cwd=staged_code)
         quiet(); state_unchanged(hashes)
         switch(PREFIX, work, old, new)
         quiet(); state_unchanged(hashes)
