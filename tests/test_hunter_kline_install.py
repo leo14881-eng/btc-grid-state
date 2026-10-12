@@ -32,12 +32,6 @@ class InstallTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         root = Path(self.stack.enter_context(tempfile.TemporaryDirectory()))
         self.root = root
-        # Keep cleanup absolute-path-only. Linux tempfile's readonly-directory
-        # fallback uses relative open(dir_fd), whose audit event omits dir_fd.
-        def unlock_fixture_directories():
-            for directory in [root, *[p for p in root.rglob('*') if p.is_dir()]]:
-                directory.chmod(0o755)
-        self.stack.callback(unlock_fixture_directories)
         for field, name in [('PREFIX_ROOT', 'opt'), ('STATE_ROOT', 'state'), ('UNIT_ROOT', 'units')]:
             directory = root / name
             directory.mkdir()

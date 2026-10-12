@@ -1,5 +1,6 @@
 """Run installer fixtures with network/process denial and scratch-only writes."""
 import os
+from contextvars import ContextVar
 from pathlib import Path
 import sys
 import tempfile
@@ -15,6 +16,19 @@ def main():
         scratch = Path(directory).resolve()
         tempfile.tempdir = str(scratch)
         blocked = []
+        open_dir_fd = ContextVar('open_dir_fd', default=None)
+        original_open = os.open
+
+        # The native open audit event omits dir_fd. Carry it only for audit path
+        # resolution, retaining the original fd-relative operation and checks.
+        def audited_open(value, flags, mode=0o777, *, dir_fd=None):
+            token = open_dir_fd.set(dir_fd)
+            try:
+                return original_open(value, flags, mode, dir_fd=dir_fd)
+            finally:
+                open_dir_fd.reset(token)
+
+        os.open = audited_open
 
         def reject(reason):
             blocked.append(reason)
@@ -39,7 +53,7 @@ def main():
                 reject('REAL_NETWORK_PROCESS_OR_ACCOUNT_MUTATION')
             if event == 'open':
                 value, mode, flags = args
-                target = path(value)
+                target = path(value, open_dir_fd.get())
                 if target is not None:
                     parts = {p.lower() for p in target.parts}
                     if parts & {'.aws', '.ssh', '.gnupg', 'credentials', 'shadow', 'gshadow'}:
@@ -49,7 +63,7 @@ def main():
                         reject('EXISTING_LEDGER_OR_RESULT_READ_FORBIDDEN')
                 if ((isinstance(mode, str) and any(c in mode for c in 'wax+')) or
                         isinstance(flags, int) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)):
-                    inside(value)
+                    inside(value, open_dir_fd.get())
             if event in ('os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod', 'os.utime'):
                 index = {'os.mkdir': 2, 'os.remove': 1, 'os.rmdir': 1, 'os.chmod': 2, 'os.utime': 3}[event]
                 inside(args[0], args[index] if len(args) > index else None)
