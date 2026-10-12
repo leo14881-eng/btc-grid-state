@@ -68,6 +68,8 @@ class InstallTests(unittest.TestCase):
                 file.write(b'initialized fixture; preserve me')
         if args[0] == 'systemctl':
             return 'inactive' if 'ActiveState' in args else 'not-found'
+        if '-c' in args and 'STAGED_IMPORT_OK' in args[args.index('-c') + 1]:
+            return 'STAGED_IMPORT_OK'
         return ''
 
     def applying(self):
@@ -235,8 +237,13 @@ class InstallTests(unittest.TestCase):
         process = Mock(returncode=1)
         process.communicate.return_value = (b'', secret)
         with patch('subprocess.Popen', return_value=process):
-            with self.assertRaisesRegex(RuntimeError, '^COMMAND_FAILED fixture exit=1$'):
+            with self.assertRaisesRegex(RuntimeError, '^COMMAND_FAILED fixture exit=1 stderr_file=') as raised:
                 install.command(['fixture'])
+        diagnostic = Path(str(raised.exception).split('stderr_file=', 1)[1])
+        self.assertEqual(diagnostic.read_bytes(), secret)
+        if os.name == 'posix':
+            self.assertFalse(diagnostic.stat().st_mode & 0o077)
+        self.assertNotIn(secret.decode(), str(raised.exception))
         self.assertEqual(install.ENV['PIP_CONFIG_FILE'], os.devnull)
         self.assertEqual(install.ENV['GIT_CONFIG_GLOBAL'], os.devnull)
         self.assertNotIn('HOME', install.ENV)
@@ -254,19 +261,77 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(process.communicate.call_count, 2)
 
     def test_source_archive_uses_only_pinned_code_and_units(self):
+        config = next(iter(install.RUNTIME_CONFIG))
+        data = b'fixture config'
+        self.entries.append((config, data, False))
         names = ['research/example.py', 'research/results/ledger.json', 'hunter-candidate-ledger.jsonl']
+        names.append(config)
         names += [n for n, _, _ in self.entries if n.startswith('deploy/')]
         out = io.BytesIO()
         with tarfile.open(fileobj=out, mode='w') as tar:
             for name, data, _ in self.entries:
                 info = tarfile.TarInfo(name); info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
-        with patch.object(install, 'command', side_effect=[install.RELEASE, '\n'.join(names), out.getvalue()]) as run:
+        with patch.object(install, 'RUNTIME_CONFIG', {config: hashlib.sha256(data).hexdigest()}), \
+             patch.object(install, 'command', side_effect=[install.RELEASE, '\n'.join(names), out.getvalue()]) as run:
             entries = install.code_entries(self.root)
         self.assertEqual(entries, self.entries)
         request = run.call_args.args[0]
         self.assertIn(install.RELEASE, request)
-        self.assertFalse(any('ledger' in str(a) or 'results' in str(a) for a in request))
+        self.assertFalse(any('ledger' in str(a) or ('results' in str(a) and a != config) for a in request))
+
+    def repair_fixture(self):
+        self.preparing()
+        config = next(iter(install.RUNTIME_CONFIG))
+        data = b'fixed release fixture'
+        self.entries.append((config, data, False))
+        self.stack.enter_context(patch.object(install, 'RUNTIME_CONFIG', {config: hashlib.sha256(data).hexdigest()}))
+        real_lstat = Path.lstat
+        self.stack.enter_context(patch.object(Path, 'lstat', lambda p: SimpleNamespace(st_uid=0,
+            st_mode=real_lstat(p).st_mode & (~0o022 if os.name == 'nt' else -1))))
+        for venue in install.VENUES:
+            (install.target(venue)[2]/'code/research').chmod(0o755)
+            # CI is unprivileged: pre-existing owner-writable directories model
+            # root's write capability without changing any production modes.
+            (install.target(venue)[2]/'code/research/results').mkdir(mode=0o755)
+        return config, data
+
+    def test_repair_only_adds_pinned_configs_and_repeat_is_noop(self):
+        config, data = self.repair_fixture()
+        before = {p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            install.repair_runtime_config(self.root)
+            install.repair_runtime_config(self.root)
+        self.assertIn('added=2', output.getvalue())
+        self.assertIn('added=0', output.getvalue())
+        self.assertTrue(all(p.read_bytes() == contents for p, contents in before.items()))
+        for venue in install.VENUES:
+            path = install.target(venue)[2]/'code'/config
+            self.assertEqual(path.read_bytes(), data)
+            self.assertFalse(path.stat().st_mode & 0o222)
+        self.assertTrue(all((args[0] == 'systemctl' and 'show' in args) or '-c' in args for args, _ in self.calls))
+
+    def test_repair_conflict_in_second_venue_writes_neither(self):
+        config, _ = self.repair_fixture()
+        path = install.target('binance')[2]/'code'/config
+        path.parent.mkdir(exist_ok=True)
+        install.write_new(path, b'do not overwrite', 0o444)
+        with self.assertRaisesRegex(RuntimeError, 'INSTALLED_CODE_MISMATCH'):
+            install.repair_runtime_config(self.root)
+        self.assertFalse((install.target('bybit')[2]/'code'/config).exists())
+        self.assertEqual(path.read_bytes(), b'do not overwrite')
+
+    def test_repair_active_service_stops_before_write(self):
+        config, _ = self.repair_fixture()
+        with patch.object(install, 'command', return_value='active'), self.assertRaisesRegex(RuntimeError, 'MUST_BE_INACTIVE'):
+            install.repair_runtime_config(self.root)
+        self.assertFalse((install.target('bybit')[2]/'code'/config).exists())
+
+    def test_archive_cannot_omit_required_runtime_config(self):
+        names = ['research/example.py']
+        with patch.object(install, 'command', side_effect=[install.RELEASE, '\n'.join(names), archive()]):
+            with self.assertRaisesRegex(RuntimeError, 'RUNTIME_CONFIG_SHA256_MISMATCH'):
+                install.code_entries(self.root)
 
     def test_archive_omission_cannot_silently_stage_partial_code(self):
         with patch.object(install, 'command', side_effect=[install.RELEASE, 'research/expected.py', archive()]):

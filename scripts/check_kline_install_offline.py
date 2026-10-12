@@ -61,7 +61,7 @@ def main():
         sys.addaudithook(guard)
         suite = unittest.defaultTestLoader.discover(str(ROOT / 'tests'), pattern='test_hunter_kline_install.py')
         result = unittest.TextTestRunner(verbosity=2).run(suite)
-        good = result.wasSuccessful() and result.testsRun == 22 and not result.skipped and not blocked
+        good = result.wasSuccessful() and result.testsRun == 26 and not result.skipped and not blocked
         print('KLINE_INSTALL_OFFLINE_ACCEPTANCE', dict(tests=result.testsRun, skips=len(result.skipped),
               blocked_effects=len(blocked), passed=good))
         return 0 if good else 1

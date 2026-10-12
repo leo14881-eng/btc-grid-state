@@ -19,6 +19,8 @@ import tempfile
 import urllib.request
 
 RELEASE = '99f75edcf2c2f95d59e5cf797051442639dc64ce'
+RUNTIME_CONFIG = {'research/results/hunter-shadow-rules.json':
+                  '05c28042d99511771a856c6099fdd7afcdd56faf74c9ee9970e701dbea3e16d3'}
 VENUES = ('bybit', 'binance')
 PREFIX_ROOT = Path('/opt')
 STATE_ROOT = Path('/var/lib')
@@ -47,7 +49,7 @@ def command(args, *, cwd=None, binary=False, input_data=None):
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                stdin=subprocess.PIPE, start_new_session=True)
     try:
-        output, _ = process.communicate(input=input_data, timeout=180)
+        output, errors = process.communicate(input=input_data, timeout=180)
     except BaseException:
         # venv/ensurepip can create descendants. Reap the whole process group on
         # deadline or interruption before leaving a preserved partial install.
@@ -58,8 +60,16 @@ def command(args, *, cwd=None, binary=False, input_data=None):
             process.kill()
         process.communicate(timeout=10)
         raise RuntimeError('COMMAND_INTERRUPTED_GROUP_REAPED ' + str(args[0])) from None
-    # Never print command stderr, inherited environments or source file contents.
-    require(process.returncode == 0, 'COMMAND_FAILED ' + str(args[0]) + ' exit=' + str(process.returncode))
+    if process.returncode:
+        # Retain diagnostics privately instead of losing the actual exception.
+        # Never echo arbitrary subprocess output, argv, or environment to logs.
+        fd, diagnostic = tempfile.mkstemp(prefix='hunter-kline-command-', suffix='.stderr')
+        with os.fdopen(fd, 'wb') as handle:
+            handle.write(errors)
+            handle.flush()
+            os.fsync(handle.fileno())
+        raise RuntimeError('COMMAND_FAILED ' + str(args[0]) + ' exit=' + str(process.returncode)
+                           + ' stderr_file=' + diagnostic)
     return output if binary else output.decode('utf-8').strip()
 
 
@@ -88,11 +98,16 @@ def code_entries(repo):
     require(command(['git', '-C', repo, 'rev-parse', RELEASE + '^{commit}']) == RELEASE,
             'APPROVED_RELEASE_OBJECT_REQUIRED')
     names = command(['git', '-C', repo, 'ls-tree', '-r', '--name-only', RELEASE]).splitlines()
-    # Copy code only. No result, portfolio or historical ledger copies/writes.
+    # Explicit runtime config is immutable release content, not a generated result.
+    # No other result, portfolio or historical ledger is copied.
     names = [n for n in names if (n.endswith('.py') and n.startswith(('research/', 'scripts/')))
-             or n in {f'deploy/systemd/hunter-{v}-stream.service' for v in VENUES}]
+             or n in RUNTIME_CONFIG or n in {f'deploy/systemd/hunter-{v}-stream.service' for v in VENUES}]
     entries = archive_entries(command(['git', '-C', repo, 'archive', RELEASE, '--', *names], binary=True))
     require({name for name, _, _ in entries} == set(names), 'ARCHIVE_FILE_SET_MISMATCH')
+    for name, digest in RUNTIME_CONFIG.items():
+        data = next((data for n, data, _ in entries if n == name), None)
+        require(data is not None and hashlib.sha256(data).hexdigest() == digest,
+                'RUNTIME_CONFIG_SHA256_MISMATCH ' + name)
     for venue in VENUES:
         require(any(n == f'deploy/systemd/hunter-{venue}-stream.service' for n, _, _ in entries),
                 'RELEASE_UNIT_REQUIRED')
@@ -172,6 +187,53 @@ def check_immutable_tree(prefix):
     for path in [prefix, *prefix.rglob('*')]:
         st = path.stat()  # Venv interpreter links must also resolve to trusted root-owned files.
         require(st.st_uid == 0 and not st.st_mode & 0o022, 'WRITABLE_INSTALL_TREE ' + str(path))
+
+
+def repair_runtime_config(repo):
+    """Add only missing, hash-pinned config to an otherwise exact inactive install."""
+    require(sys.platform == 'linux' and os.geteuid() == 0, 'AUTHORIZED_LINUX_ROOT_ENTRY_REQUIRED')
+    entries = code_entries(repo)
+    pending = []
+    for venue in VENUES:
+        user, _, prefix, _, unit = target(venue)
+        require((prefix / 'release-head').read_text().strip() == RELEASE, 'INSTALLED_RELEASE_MISMATCH')
+        check_immutable_tree(prefix)
+        require(command(['systemctl', '--no-pager', 'show', user + '.service', '-p', 'ActiveState', '--value']) == 'inactive',
+                'COLLECTOR_MUST_BE_INACTIVE')
+        for name, data, _ in entries:
+            path = prefix / 'code' / name
+            if name in RUNTIME_CONFIG:
+                # Validate all ancestors and existing targets before either venue is written.
+                for parent in (prefix, prefix/'code', prefix/'code/research', path.parent):
+                    if os.path.lexists(parent):
+                        st = parent.lstat()
+                        require(parent.is_dir() and not parent.is_symlink() and st.st_uid == 0
+                                and not st.st_mode & 0o022, 'UNTRUSTED_CONFIG_PARENT ' + str(parent))
+                if not os.path.lexists(path):
+                    pending.append((path, data))
+                    continue
+                st = path.lstat()
+                require(path.is_file() and not path.is_symlink() and st.st_uid == 0
+                        and st.st_mode & 0o777 == 0o444, 'EXISTING_CONFIG_PRESERVED ' + str(path))
+            require(path.read_bytes() == data, 'INSTALLED_CODE_MISMATCH ' + name)
+        require(unit.read_bytes() == (prefix/'code/deploy/systemd'/unit.name).read_bytes(), 'INSTALLED_UNIT_MISMATCH')
+    for path, data in pending:
+        if not path.parent.exists():
+            path.parent.mkdir(mode=0o555)
+            path.parent.chmod(0o555)
+        write_new(path, data, 0o444)  # Exclusive creation; no overwrite or permission repair.
+        require(hashlib.sha256(path.read_bytes()).hexdigest() == RUNTIME_CONFIG['research/results/hunter-shadow-rules.json'],
+                'WRITTEN_CONFIG_SHA256_MISMATCH')
+        print('RUNTIME_CONFIG_ADDED ' + str(path), flush=True)
+    for venue in VENUES:
+        prefix = target(venue)[2]
+        probe = ('from scripts.hunter_' + venue + '_stream_ops import prepare; '
+                 + ('from research.hunter_bybit_worker import validate; ' if venue == 'bybit' else '')
+                 + 'print("STAGED_IMPORT_OK")')
+        require(command([prefix/'venv/bin/python', '-E', '-s', '-B', '-c', probe], cwd=prefix/'code')
+                == 'STAGED_IMPORT_OK', 'STAGED_IMPORT_PROBE_FAILED ' + venue)
+        print('STAGED_IMPORT_OK ' + venue, flush=True)
+    print('RUNTIME_CONFIG_VERIFIED_NOT_STARTED release=' + RELEASE + ' added=' + str(len(pending)))
 
 
 def apply(repo):
@@ -272,8 +334,9 @@ def main():
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument('--apply', action='store_true', help='Only after explicit action-time approval; creates accounts/paths/units/state')
     actions.add_argument('--prepare-readback', help='After installation: validate/capture both fresh natural-cycle snapshots; never starts services')
+    actions.add_argument('--repair-runtime-config', action='store_true', help='Add only missing hash-pinned runtime config; preserve accounts, venvs, units and caches')
     args = parser.parse_args()
-    if not args.apply and not args.prepare_readback:
+    if not args.apply and not args.prepare_readback and not args.repair_runtime_config:
         print(json.dumps(dict(status='PLAN_ONLY_NO_MUTATIONS', release=RELEASE,
             venues=VENUES, wheel_url=WHEEL_URL, wheel_sha256=WHEEL_SHA256,
             new_accounts=[dict(user=target(v)[0], group=target(v)[1], shell='/usr/sbin/nologin',
@@ -283,10 +346,13 @@ def main():
             units='root:root 0644; original reviewed sandbox; Restart=no',
             daemon_reload=True, initializes_empty_caches=True, apt_or_global_pip=False,
             repeat_policy='stop and preserve every existing account/path/state',
+            runtime_config_sha256=RUNTIME_CONFIG,
             starts_services=False, changes_consumers=False, writes_ledgers=False), indent=2))
         return 0
     require(args.repo is not None, 'SOURCE_REPO_REQUIRED')
-    if args.prepare_readback:
+    if args.repair_runtime_config:
+        repair_runtime_config(args.repo.resolve())
+    elif args.prepare_readback:
         prepare_readback(args.repo.resolve(), args.prepare_readback)
     else:
         apply(args.repo.resolve())

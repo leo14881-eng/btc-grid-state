@@ -1,10 +1,11 @@
-# Two-venue Kline fresh installation — approved scope, execution pending CI
+# Two-venue Kline installation and missing runtime config repair
 
 The user explicitly approved the account/directory/dependency/unit/empty-cache/
 daemon-reload scope at 2026-10-12 12:39 UTC. No repeat permission request is needed
-for that scope. Execution still requires passing Linux CI and the existing
-authorized maintenance entry; no remote write entry is available to this task.
-This is a prepared installation plan, not evidence that anything is installed.
+for that scope. The user's 12:54 terminal readback confirmed
+`INSTALLED_NOT_STARTED` at release `99f75ed`; the later pure prepare failed on
+the missing runtime config described below. Both services were read back as
+inactive/dead. No remote write entry is available to this task.
 The 2026-10-12 12:17 UTC inventory reported both dedicated users/groups, prefixes,
 venvs, state directories and units absent. Do not ask for the same inventory
 again. The installer checks those conditions immediately before its first write.
@@ -19,7 +20,7 @@ new access route, security-policy bypass, live trading or strategy job is allowe
 | --- | --- |
 | `hunter-{venue}-stream` user, `hunter-{venue}-data` group | New system identities; locked password; `/usr/sbin/nologin`; `/nonexistent` home path, no home creation; no sudo or extra memberships |
 | `/opt/hunter-{venue}-stream` | New, root:root, 0755 |
-| `code` below that prefix | Approved Python code and the two unit files only; root:root directories 0555; ordinary files 0444, executable files 0555; no results, portfolio or ledger files copied |
+| `code` below that prefix | Approved Python code, two unit files, and explicitly hash-pinned `hunter-shadow-rules.json` runtime config; root:root directories 0555; ordinary files 0444, executable files 0555; no generated results, portfolio or ledger files copied |
 | `release-head` | root:root 0444; fixed collector release `99f75edcf2c2f95d59e5cf797051442639dc64ce` |
 | `venv` | New, root-owned, no group/other write; system Python >=3.10 plus its existing venv/ensurepip support; no apt or global Python/pip upgrade |
 | `/var/lib/hunter-{venue}-stream` | New, dedicated user:group, 2770; empty SQLite/lock initialized as that user with umask 0007 |
@@ -152,6 +153,45 @@ V2 20000/17000/3000, existing strategy/limits/ledger/SingleWriter/CAS/generation
 five-minute Monitor and dedup. No Sentinel or PR35/98 change is included.
 
 ## Offline evidence and its limits
+
+### Missing runtime config repair (2026-10-12)
+
+The initial Python-only package omitted the import-time dependency
+`research/results/hunter-shadow-rules.json`. Bybit's pure prepare imports
+`hunter_bybit_worker -> hunter_bybit_signal_capture -> hunter_early_signals ->
+hunter_policy`; no network or cache operation caused this failure. Binance's
+roster prepare has no additional config dependency. Both stages now include the
+same exact release config (no strategy content changes):
+
+- Source release: `99f75edcf2c2f95d59e5cf797051442639dc64ce`
+- Config SHA256: `05c28042d99511771a856c6099fdd7afcdd56faf74c9ee9970e701dbea3e16d3`
+
+For the already installed, inactive services, use the reviewed, SHA256-verified
+installer with `--repo /opt/shadow-runner/btc-grid-state --repair-runtime-config`.
+This performs no fetch. It checks both installed trees/units/release heads and
+inactive states before writing, then exclusively creates only the missing config
+in each code tree: new results directory root-owned 0555, file root-owned 0444.
+An existing identical readonly file is a no-op; any conflict stops without
+overwriting. No accounts, venvs, units, manifests, databases, ledgers, permissions
+on existing paths, or consumer selections change. It does not start a service.
+It then imports the actual staged dependency chains in the installed venvs with
+`-E -s -B`, without validating an old snapshot or opening a cache. Success is
+`STAGED_IMPORT_OK` for both venues and `RUNTIME_CONFIG_VERIFIED_NOT_STARTED`.
+
+Do not rerun `--apply`. Keep the existing `/tmp/hunter-kline-live.ce6ROY` evidence.
+Subprocess failures now preserve full stderr in a newly created private 0600
+`hunter-kline-command-*.stderr` file and print its exact path. Inspect that file
+in the authorized root terminal; raw subprocess text is not echoed into shared
+logs. A repair success does not make old snapshots fresh: subsequent preparation
+still requires fresh natural-cycle readback and the existing age/checksum gates.
+
+`check_kline_stage_offline.py` constructs the actual package from release git
+objects and starts new `-I -B` interpreters with only the staged directory on the
+application import path. A deliberately poisoned full-repo PYTHONPATH is ignored.
+The old package must reproduce FileNotFoundError; both fixed venue prepare calls
+must succeed. Stale/checksum/incomplete negative checks must still fail. All child
+writes, database, network and subprocess operations are forbidden; staged file
+contents must remain unchanged. No historical snapshot or ledger is used.
 
 `scripts/check_kline_install_offline.py` confines writes to one fresh temporary
 tree, denies real network/process/account operations, credential paths and
