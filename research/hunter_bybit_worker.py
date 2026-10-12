@@ -139,9 +139,16 @@ def candles(body, symbol, interval, limit, end):
     return rows
 
 def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
-            listing_refresher=None):
+            listing_refresher=None, *, kline_source='WORKER', cache_reader=None, cache_clock=None, public_adapter=None):
+    if kline_source not in ('WORKER', 'SPOT_CACHE'):
+        raise ValueError('BYBIT_KLINE_SOURCE_UNKNOWN')
     now = now or dt.datetime.now(dt.timezone.utc)
     end = int(now.timestamp() * 1000)
+    if public_adapter is not None:
+        if kline_source!='SPOT_CACHE': raise ValueError('DIRECT_REQUIRES_CACHE_KLINES')
+        fetcher=public_adapter.fetch
+        listing_fetcher=public_adapter.listings
+        listing_refresher=lambda:public_adapter.listings(force_refresh=True)
     listing_fetcher = listing_fetcher or availability.spot_proxy_universe
     listing_refresher = listing_refresher or (lambda: availability.spot_proxy_universe(now, force_refresh=True))
     bases, cache = listing_fetcher()
@@ -197,6 +204,30 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
         raise ValueError("BYBIT_WORKER_TICKERS_INCOMPLETE:"+",".join(missing[:10]))
     required=[r for r in rows if r["base"] not in set(binance_bases) and r["base"]!="BTC"]
     symbols=sorted({r["pair"] for r in required}|{"BTCUSDT"})
+    if kline_source == 'SPOT_CACHE':
+        try:
+            from research import hunter_bybit_stream_consumer as consumer
+        except ModuleNotFoundError as exc:
+            if exc.name != 'research':
+                raise
+            import hunter_bybit_stream_consumer as consumer
+        signals, failures, generation = consumer.collect(required, now, cache_reader, cache_clock)
+        source=consumer.DIRECT_SOURCE if public_adapter is not None else consumer.SOURCE
+        metadata_source=public_adapter.receipts['tickers']['source'] if public_adapter is not None else SOURCE
+        status=dict(active_pairs=len(bases),valid_pairs=len(rows),missing_or_invalid=[],
+            source=source,captured_at_utc=now.isoformat(),signal_pairs=len(signals),
+            signal_failures=len(failures),signal_complete=not failures and len(signals)==len(required),
+            signal_expected_bases=sorted(r['base'] for r in required),listing_cache=cache,
+            ticker_requests=ticker_attempt+1,kline_batch_requests=0,
+            ticker_source=metadata_source,listing_source=metadata_source,kline_source=consumer.SOURCE,
+            cache_generation_sha256=generation['generation_sha256'])
+        if refresh_evidence is not None:
+            status['listing_refresh']=refresh_evidence
+        extra={'public_metadata':public_adapter.receipts} if public_adapter is not None else {}
+        return persist(dict(schema=consumer.DIRECT_SCHEMA if public_adapter is not None else consumer.SCHEMA,
+            source=source,captured_at_utc=now.isoformat(),
+            rows=rows,venue_status=status,early_signals=signals,signal_failures=failures,
+            cache_generation=generation,**extra),now)
     batches=[symbols[i:i+20] for i in range(0,len(symbols),20)]
     bundles={}; failure_details={}
     def fetch_batch(index, batch):
@@ -273,17 +304,36 @@ def collect(binance_bases=(), now=None, fetcher=request, listing_fetcher=None,
                  rows=rows,venue_status=status,early_signals=signals,signal_failures=failures)
     if failure_details:
         payload["signal_failure_details"] = failure_details
+    return persist(payload,now)
+
+
+def persist(payload,now):
+    """Same discovery artifact, existing runner output list/CAS/readback path."""
     payload["snapshot_sha256"]=digest(payload)
     validate(payload,now)
     DEFAULT.parent.mkdir(parents=True,exist_ok=True)
     temp=DEFAULT.with_suffix(".tmp")
     temp.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+"\n")
     temp.replace(DEFAULT)
-    return rows,{**status,"snapshot_sha256":payload["snapshot_sha256"]}
+    return payload['rows'],{**payload['venue_status'],"snapshot_sha256":payload["snapshot_sha256"]}
 
 def validate(snapshot,now):
-    if snapshot.get("schema")!="hunter_bybit_worker_v1" or snapshot.get("source")!=SOURCE:
+    cache_source = snapshot.get('source') in ('OFFICIAL_BYBIT_V5_SPOT_CACHE','OFFICIAL_BYBIT_V5_SPOT_DIRECT_CACHE')
+    if cache_source:
+        try:
+            from research.hunter_bybit_stream_consumer import validate as validate_cache
+        except ModuleNotFoundError as exc:
+            if exc.name != 'research':
+                raise
+            from hunter_bybit_stream_consumer import validate as validate_cache
+        validate_cache(snapshot)
+    elif snapshot.get("schema")!="hunter_bybit_worker_v1" or snapshot.get("source")!=SOURCE:
         raise ValueError("BYBIT_WORKER_SNAPSHOT_SOURCE_INVALID")
+    elif ('cache_generation' in snapshot or
+          any(isinstance(packet,dict) and packet.get('source') == 'OFFICIAL_BYBIT_V5_SPOT_CACHE'
+              for signal in snapshot.get('early_signals',{}).values()
+              for packet in (signal.get('source_provenance') or {}).values())):
+        raise ValueError('BYBIT_WORKER_SNAPSHOT_CACHE_SOURCE_CONFLICT')
     age=(now-dt.datetime.fromisoformat(snapshot["captured_at_utc"])).total_seconds()
     if not 0<=age<=900:raise ValueError("BYBIT_WORKER_SNAPSHOT_STALE_OR_FUTURE")
     if snapshot.get("snapshot_sha256")!=digest({k:v for k,v in snapshot.items() if k!="snapshot_sha256"}):

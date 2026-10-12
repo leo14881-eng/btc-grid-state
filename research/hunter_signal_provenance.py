@@ -1,10 +1,16 @@
-"""Audit original REST kline windows without changing any feature calculation."""
+"""Audit original market windows without changing any feature calculation."""
 import datetime as dt
 import hashlib
 import json
 import math
+import re
 
 SCHEMA = 'hunter_signal_sources_v1'
+CACHE_SOURCE = 'OFFICIAL_BYBIT_V5_SPOT_CACHE'
+CACHE_FIELDS = {'schema', 'generation_end_ms', 'roster_hash', 'manifest_sha256',
+                'epoch', 'generation_sha256'}
+TRANSPORT_FIELDS = {'source', 'received_at_ms', 'source_time_ms', 'confirm',
+                    'confirmation', 'session'}
 
 
 def hash_value(value):
@@ -34,12 +40,101 @@ def capture(rows, symbol, interval, observed, venue='binance'):
         return {'schema': SCHEMA, 'status': 'UNKNOWN'}
 
 
+def validate_cache(packet, observed, period):
+    """Keep the frozen generation and actual transport observations distinct."""
+    cache = packet.get('cache')
+    if (not isinstance(cache, dict) or set(cache) != CACHE_FIELDS
+            or cache.get('schema') != 'bybit_stream_generation_v1'
+            or type(cache.get('generation_end_ms')) is not int
+            or observed.tzinfo is None
+            or cache['generation_end_ms'] != int(observed.timestamp()*1000)
+            or any(not isinstance(cache.get(key), str)
+                   or re.fullmatch('[0-9a-f]{64}', cache[key]) is None
+                   for key in ('roster_hash', 'manifest_sha256', 'generation_sha256'))
+            or not isinstance(cache.get('epoch'), str)
+            or re.fullmatch('[0-9a-f]{32}', cache['epoch']) is None):
+        raise ValueError('SOURCE_CACHE_GENERATION_INVALID')
+    generation = cache['generation_end_ms']
+    bars, transport = packet.get('bars'), packet.get('transport')
+    if (not isinstance(bars, list) or not bars or not isinstance(transport, list)
+            or len(transport) != len(bars)):
+        raise ValueError('SOURCE_CACHE_TRANSPORT_INCOMPLETE')
+    for bar, item in zip(bars, transport):
+        if (not isinstance(bar, dict) or not isinstance(item, dict)
+                or set(item) != TRANSPORT_FIELDS
+                or item.get('source') not in ('OFFICIAL_BYBIT_V5_SPOT_WS', 'OFFICIAL_BYBIT_V5_SPOT_REST')
+                or type(item.get('received_at_ms')) is not int
+                or type(item.get('source_time_ms')) is not int
+                or not 0 <= item['source_time_ms'] <= item['received_at_ms'] <= generation
+                or type(item.get('confirm')) is not bool
+                or type(bar.get('confirmed')) is not bool
+                or item['confirm'] != bar['confirmed']
+                or not isinstance(item.get('session'), str)
+                or re.fullmatch('[0-9a-f]{32}', item['session']) is None):
+            raise ValueError('SOURCE_CACHE_TRANSPORT_INVALID')
+        start, end = bar.get('open_ms'), bar.get('close_ms')
+        if (type(start) is not int or type(end) is not int
+                or start > item['source_time_ms']):
+            raise ValueError('SOURCE_CACHE_TRANSPORT_TIME_INVALID')
+        rest = item['source'] == 'OFFICIAL_BYBIT_V5_SPOT_REST'
+        if (item['confirmation'] != ('REST_INFERRED' if rest else 'WS_EXPLICIT')
+                or (rest and item['confirm'] != (end < item['source_time_ms']))
+                or (not rest and item['confirm'] and end > item['source_time_ms'])):
+            raise ValueError('SOURCE_CACHE_CONFIRMATION_INVALID')
+    current = transport[-1]
+    if (bars[-1]['open_ms'] != generation//period*period
+            or current['session'] != cache['epoch']
+            or not 0 <= generation-current['source_time_ms'] <= 90000
+            or not 0 <= generation-current['received_at_ms'] <= 90000):
+        raise ValueError('SOURCE_CACHE_CURRENT_WINDOW_NOT_FRESH')
+    return cache
+
+
+def validate_cache_packet(packet, symbol, interval, count):
+    """Validate cache evidence internally, without an entry or wall-clock gate."""
+    if (not isinstance(packet, dict)
+            or interval not in ('1h', '15m')
+            or count not in ((2, 5) if interval == '1h' else (25,))
+            or any(packet.get(key) != value for key, value in {
+                'schema': SCHEMA, 'venue': 'bybit', 'market': 'spot',
+                'symbol': symbol, 'interval': interval, 'source': CACHE_SOURCE}.items())):
+        raise ValueError('SOURCE_WINDOW_IDENTITY_UNKNOWN')
+    try:
+        observed = dt.datetime.fromisoformat(str(packet.get('observed_at_utc')).replace('Z', '+00:00'))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError('SOURCE_CACHE_GENERATION_INVALID') from exc
+    period = {'1h': 3600000, '15m': 900000}[interval]
+    bars = packet.get('bars')
+    if not isinstance(bars, list) or len(bars) != count:
+        raise ValueError('SOURCE_WINDOW_INCOMPLETE')
+    previous = None
+    for bar in bars:
+        if not isinstance(bar, dict):raise ValueError('SOURCE_WINDOW_CONTENT_INVALID')
+        start, end = bar.get('open_ms'), bar.get('close_ms')
+        if (type(start) is not int or type(end) is not int or start % period
+                or end != start+period-1 or (previous is not None and start != previous+period)):
+            raise ValueError('SOURCE_WINDOW_BOUNDARY_INVALID')
+        values = bar.get('ohlcv_quote')
+        if (not isinstance(values, list) or len(values) != 6
+                or any(type(value) not in (float, int) or not math.isfinite(value) for value in values)):
+            raise ValueError('SOURCE_WINDOW_CONTENT_INVALID')
+        opening, high, low, close, volume, quote = values
+        if min(opening, high, low, close) <= 0 or not low <= min(opening, close) <= max(opening, close) <= high or min(volume, quote) < 0:
+            raise ValueError('SOURCE_WINDOW_CONTENT_INVALID')
+        previous = start
+    validate_cache(packet, observed, period)
+    if packet.get('content_hash') != hash_value(bars):raise ValueError('SOURCE_WINDOW_HASH_MISMATCH')
+
+
 def validate(packet, symbol, interval, count, now, exited, fresh, venue='binance'):
     """Return canonical window/content identity and source time, or raise."""
     if not isinstance(packet, dict):raise ValueError('SOURCE_WINDOW_MISSING')
+    cached = packet.get('source') == CACHE_SOURCE
+    if cached:validate_cache_packet(packet, symbol, interval, count)
+    source = CACHE_SOURCE if cached and venue == 'bybit' else '/v5/market/kline' if venue == 'bybit' else '/api/v3/klines'
     if any(packet.get(k) != v for k, v in {
         'schema': SCHEMA, 'venue': venue, 'market': 'spot', 'symbol': symbol,
-        'interval': interval, 'source': '/v5/market/kline' if venue == 'bybit' else '/api/v3/klines'}.items()):
+        'interval': interval, 'source': source}.items()):
         raise ValueError('SOURCE_WINDOW_IDENTITY_UNKNOWN')
     observed = dt.datetime.fromisoformat(str(packet.get('observed_at_utc')).replace('Z', '+00:00'))
     if not fresh(packet.get('observed_at_utc'), now) or not exited < observed <= now:
@@ -60,7 +155,7 @@ def validate(packet, symbol, interval, count, now, exited, fresh, venue='binance
         o, h, l, c, volume, quote = values
         if min(o, h, l, c) <= 0 or not l <= min(o, c) <= max(o, c) <= h or min(volume, quote) < 0:
             raise ValueError('SOURCE_WINDOW_CONTENT_INVALID')
-        if type(b.get('confirmed')) is not bool or b['confirmed'] != (end < observed.timestamp()*1000):
+        if type(b.get('confirmed')) is not bool or (not cached and b['confirmed'] != (end < observed.timestamp()*1000)):
             raise ValueError('SOURCE_WINDOW_CONFIRMATION_INVALID')
         previous = start
     # A current partial bar is allowed, but never relabel an old completed
@@ -73,6 +168,26 @@ def validate(packet, symbol, interval, count, now, exited, fresh, venue='binance
             'hash': hash_value(bars), 'observed_at_utc': observed.isoformat()}
 
 
+def cache_consistency(packets, keys):
+    """An asset, its benchmark and both lookbacks must share one frozen read."""
+    cached = any(isinstance(packets.get(key), dict)
+                 and packets[key].get('source') == CACHE_SOURCE for key in keys)
+    if not cached:return
+    if not isinstance(packets.get('btc_micro'), dict):
+        raise ValueError('SOURCE_CACHE_BTC_MICRO_MISSING')
+    selected = [packets.get(key) for key in keys]
+    if any(not isinstance(packet, dict) or packet.get('source') != CACHE_SOURCE for packet in selected):
+        raise ValueError('SOURCE_CACHE_MIXED_SOURCE')
+    binding = selected[0].get('cache')
+    if any(packet.get('cache') != binding for packet in selected):
+        raise ValueError('SOURCE_CACHE_GENERATION_MISMATCH')
+    for short, long in (('asset_1h', 'asset_4h'), ('btc_1h', 'btc_4h')):
+        if short in keys and long in keys:
+            for field in ('bars', 'transport'):
+                if packets[short].get(field) != (packets[long].get(field) or [])[-2:]:
+                    raise ValueError('SOURCE_CACHE_LOOKBACK_MISMATCH')
+
+
 def signal_sources(signal, asset, now, exited, fresh, venue='binance'):
     packets = (signal or {}).get('source_provenance') or {}
     expected = {'asset_1h': (asset+'USDT', '1h', 2), 'asset_4h': (asset+'USDT', '1h', 5),
@@ -81,6 +196,7 @@ def signal_sources(signal, asset, now, exited, fresh, venue='binance'):
     # Old live-observation records can still be read. Reconstruction requires
     # btc_micro explicitly and never substitutes the current hourly BTC close.
     if packets.get('btc_micro') is not None:expected['btc_micro'] = ('BTCUSDT', '15m', 25)
+    cache_consistency(packets, expected)
     return {key: validate(packets.get(key), *args, now, exited, fresh, venue) for key, args in expected.items()}
 
 
@@ -94,11 +210,14 @@ def reconstruct_trend(signal, asset, after):
     """
     packets = signal.get('source_provenance') or {}
     if not packets.get('btc_micro'):raise ValueError('HISTORICAL_BTC_MICRO_MISSING')
+    cache_consistency(packets, ('micro', 'btc_micro'))
     closed = {}
     for key in ('micro', 'btc_micro'):
         packet = packets[key]
-        bars = [b for b in packet['bars'] if b['confirmed']]
         observed = dt.datetime.fromisoformat(packet['observed_at_utc'])
+        if packet.get('source') == CACHE_SOURCE:
+            validate_cache_packet(packet, asset+'USDT' if key == 'micro' else 'BTCUSDT', '15m', 25)
+        bars = [b for b in packet['bars'] if b['confirmed']]
         expected_close = int(observed.timestamp()*1000)//900000*900000-1
         if len(bars) < 24 or bars[-1]['close_ms'] != expected_close:
             raise ValueError('LATEST_CLOSED_HISTORY_INCOMPLETE')

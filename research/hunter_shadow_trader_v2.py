@@ -366,6 +366,10 @@ def binance_kline_bars(asset,start,end,interval="5m"):
  if not asset or not start or not end or end<=start:return None
  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:return None
  _opportunity_backfill_requests+=1
+ return _fetch_binance_kline_page(asset,start,end,interval)
+
+def _fetch_binance_kline_page(asset,start,end,interval="5m"):
+ """Transport only; the synchronous caller owns the page budget."""
  symbol=str(asset).upper()+"USDT";cursor=int(start.timestamp()*1000);stop=int(end.timestamp()*1000)
  try:
   q=urllib.parse.urlencode({"symbol":symbol,"interval":interval,"startTime":cursor,"endTime":stop,"limit":1000})
@@ -389,7 +393,7 @@ def peak_from_bars(bars,end=None):
  ts,p=max(eligible,key=lambda x:x[1])
  return {"peak_price":p,"peak_at_utc":dt.datetime.fromtimestamp(ts/1000,dt.timezone.utc).isoformat(),"source":"BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"}
 
-def backfill_opportunity_history(pos,now):
+def backfill_opportunity_history(pos,now,*,fetch_bars=None,budget_used=None):
  """Bounded historical reconstruction of initial-BUY opportunity peaks; observation only."""
  if pos.get('execution_venue')=='BYBIT_SPOT':
   pos['historical_opportunity_execution_status']='UNKNOWN_VENUE_MATCHED_HISTORY_NOT_INTEGRATED'
@@ -405,7 +409,7 @@ def backfill_opportunity_history(pos,now):
    due_missing=bool(closed and any(now>=closed+dt.timedelta(hours=h) and not observation_history.verified((pos.get("post_exit_observation") or {}).get(f"{int(h)}h"),closed,closed+dt.timedelta(hours=h)) for h in REVIEW_HOURS))
    if 0<=(now-parse(last)).total_seconds()<3300 and not due_missing and not pending:return pos
   except Exception:pass
- if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:
+ if (budget_used() if budget_used else _opportunity_backfill_requests)>=OPPORTUNITY_BACKFILL_BUDGET:
   pos["data_provenance"]="BACKFILL_PENDING";return pos
  progress=observation_history.checkpoint(pos,opened,closed)
  if progress['next_open_ms']>observation_history.bounds(opened,end)[1]:
@@ -413,7 +417,7 @@ def backfill_opportunity_history(pos,now):
   pos.pop('opportunity_history_progress',None)
   progress=observation_history.checkpoint(pos,opened,closed)
  start=dt.datetime.fromtimestamp(progress['next_open_ms']/1000,dt.timezone.utc)
- bars=binance_kline_bars(pos.get("asset"),start,end) if start<end else []
+ bars=(fetch_bars or binance_kline_bars)(pos.get("asset"),start,end) if start<end else []
  observation_history.advance(progress,bars,opened,closed,end,REVIEW_HOURS)
  buy=initial_buy_price(pos);sell=finite(pos.get("exit_reference_price"))
  pos['opportunity_history_coverage']=observation_history.coverage(progress,opened,end)
@@ -468,9 +472,10 @@ def refresh_post_exit_status(pos,now):
   "max_return_from_sell_pct":max((finite(obs[h]["max_return_from_sell_pct"]) for h in completed),default=None),
   "source":"HISTORICAL_BACKFILL" if completed else None}
 
-def refresh_closed_observations(state,now,market_price=None):
+def refresh_closed_observations(state,now,market_price=None,*,historical_workers=1):
  """Fair, bounded backfill across closed trades; never creates trade events."""
  closed=state.get("closed_positions") or []
+ if historical_workers not in (1,2,4):raise ValueError('INVALID_HISTORY_WORKERS')
  if not closed:return
  for pos in closed:
   if observation_complete(pos,now):
@@ -479,16 +484,59 @@ def refresh_closed_observations(state,now,market_price=None):
   pos['observation_market_data']={'status':'AVAILABLE' if p else 'VENUE_HISTORY_UNAVAILABLE' if pos.get('execution_venue')=='BYBIT_SPOT' else 'MARKET_DATA_MISSING','observed_at_utc':now.isoformat()}
   if p:update_post_exit(pos,p,now)
   else:refresh_post_exit_status(pos,now)
+ if historical_workers==1:_refresh_closed_backfill(state,now)
+ else:_parallel_closed_backfill(state,now,historical_workers)
+
+def _refresh_closed_backfill(state,now,backfill=None,budget_used=None):
+ closed=state.get('closed_positions') or []
  cursor=int(state.get("observation_backfill_cursor") or 0)%len(closed)
  visited=0
- while visited<len(closed) and _opportunity_backfill_requests<OPPORTUNITY_BACKFILL_BUDGET:
+ while visited<len(closed) and (budget_used() if budget_used else _opportunity_backfill_requests)<OPPORTUNITY_BACKFILL_BUDGET:
   pos=closed[(cursor+visited)%len(closed)];visited+=1
   if not pos.get("closed_at_utc") or pos.get("observation_complete"):continue
   due=(pos.get("post_exit_evaluation") or {}).get("missing_horizons") or []
   last=pos.get("opportunity_backfill_at_utc")
   periodic=not pos.get("observation_complete") and (not last or (now-parse(last)).total_seconds()>=3300)
-  if due or periodic:backfill_opportunity_history(pos,now)
+  if due or periodic:(backfill or backfill_opportunity_history)(pos,now)
  state["observation_backfill_cursor"]=(cursor+visited)%len(closed)
+
+def _parallel_closed_backfill(state,now,workers):
+ """Plan exact pages on disposable observations; join IO, then apply in order.
+
+ No thread touches portfolio data or the global budget. Every selected position
+ is visited once, so its page response cannot change a later position's request.
+ The ordinary selector and coverage logic run again to consume the exact plan.
+ A mismatch raises before the caller writes or publishes any state.
+ """
+ import copy
+ from concurrent.futures import ThreadPoolExecutor
+ global _opportunity_backfill_requests
+ closed=state['closed_positions']
+ if len({id(p) for p in closed})!=len(closed):raise ValueError('ALIASED_HISTORY_POSITION')
+ initial=_opportunity_backfill_requests;used=[initial];requests=[]
+ def plan(asset,start,end,interval='5m'):
+  if not asset or not start or not end or end<=start:return None
+  if used[0]>=OPPORTUNITY_BACKFILL_BUDGET:return None
+  used[0]+=1;requests.append((asset,start,end,interval));return None
+ planned=copy.deepcopy({'closed_positions':closed,'observation_backfill_cursor':state.get('observation_backfill_cursor')})
+ _refresh_closed_backfill(planned,now,
+  lambda pos,clock:backfill_opportunity_history(pos,clock,fetch_bars=plan,budget_used=lambda:used[0]),lambda:used[0])
+ with ThreadPoolExecutor(max_workers=workers) as executor:
+  futures=[executor.submit(_fetch_binance_kline_page,*request) for request in requests]
+  responses=[future.result() for future in futures]
+ if _opportunity_backfill_requests!=initial:raise RuntimeError('HISTORY_BUDGET_CHANGED_DURING_IO')
+ consumed=[0]
+ def consume(asset,start,end,interval='5m'):
+  global _opportunity_backfill_requests
+  if not asset or not start or not end or end<=start:return None
+  i=consumed[0]
+  if i>=len(requests) or requests[i]!=(asset,start,end,interval):raise RuntimeError('HISTORY_REQUEST_PLAN_MISMATCH')
+  if _opportunity_backfill_requests>=OPPORTUNITY_BACKFILL_BUDGET:raise RuntimeError('HISTORY_BUDGET_EXCEEDED')
+  consumed[0]+=1;_opportunity_backfill_requests+=1
+  return responses[i]
+ _refresh_closed_backfill(state,now,lambda pos,clock:backfill_opportunity_history(pos,clock,fetch_bars=consume))
+ if consumed[0]!=len(requests) or state['observation_backfill_cursor']!=planned['observation_backfill_cursor']:
+  raise RuntimeError('HISTORY_PLAN_NOT_FULLY_CONSUMED')
 
 def sample_cohort(pos):
  try:return "NEW_VERSION_SAMPLE" if parse(pos.get("opened_at_utc"))>=NEW_VERSION_CUTOFF_UTC else "MIGRATION_SAMPLE"
