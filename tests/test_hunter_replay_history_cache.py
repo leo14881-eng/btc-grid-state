@@ -69,6 +69,34 @@ class CacheCase(unittest.TestCase):
 
 
 class EligibilityTests(CacheCase):
+    def test_real_opener_adds_only_exact_origin_host_to_post_http_identity(self):
+        req = request()
+        original = cache._identity(req, cache._clock())
+        requests = []
+        with fixture.stdlib_transport(requests):
+            with urllib.request.urlopen(req, timeout=20) as response:
+                self.assertEqual(json.load(response), json.loads(fixture.body_for(URL)))
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(req.unredirected_hdrs["Host"], "data-api.binance.vision")
+        self.assertEqual(cache._identity(req, cache._clock(), transport_processed=True), original)
+        with self.assertRaises(ValueError):  # Caller-supplied Host is still denied.
+            cache._identity(req, cache._clock())
+
+    def test_post_transport_host_exception_does_not_relax_material_headers(self):
+        for host in ("other.example", "api.binance.com", "data-api.binance.vision:443",
+                     "DATA-API.BINANCE.VISION", "data-api.binance.vision "):
+            with self.subTest(host=host):
+                req = request()
+                req.add_unredirected_header("Host", host)
+                with self.assertRaises(ValueError):
+                    cache._identity(req, cache._clock(), transport_processed=True)
+        for headers in ({"Host": "data-api.binance.vision"}, {"Authorization": "secret"},
+                        {"Cookie": "secret"}, {"X-Test": "extra"}):
+            req = request(**headers)
+            req.add_unredirected_header("Host", "data-api.binance.vision")
+            with self.assertRaises(ValueError):
+                cache._identity(req, cache._clock(), transport_processed=True)
+
     def test_default_off_does_not_touch_cache_or_change_request(self):
         os.environ.pop("HUNTER_REPLAY_CACHE")
         with mock.patch.object(cache, "_directory", side_effect=AssertionError("disabled")) as disk:
@@ -143,6 +171,69 @@ class EligibilityTests(CacheCase):
 
 @unittest.skipUnless(os.name == "posix", "secure dirfd cache intentionally disabled on Windows")
 class PosixCacheTests(CacheCase):
+    def test_two_clock_failures_never_attach_cached_metadata_to_http_revision(self):
+        original = fixture.body_for(URL)
+        rows = json.loads(original)
+        for row in rows:
+            for column in (1, 2, 3, 4):
+                row[column] = f"{float(row[column]) + 7:.4f}"
+        revised = fixture.encoded(rows)
+        self.assertTrue(cache._rows_valid(revised, self.identity(), NOW))
+        requests = []
+        with fixture.stdlib_transport(requests):
+            self.assertEqual(tail.get(URL), json.loads(original))
+            before = self.files()[0].read_bytes()
+            self.journal.seek(0); self.journal.truncate()
+            # Read A succeeds. Its return-time clock fails, forcing HTTP B; the
+            # second failure prevents B acquiring its own complete provenance.
+            with (mock.patch.object(cache, "_clock", side_effect=[
+                    (NOW, fixture.MONO, fixture.BOOT), OSError("hit clock unavailable"),
+                    OSError("HTTP clock unavailable")]) as clock,
+                  mock.patch.object(fixture, "body_for", return_value=revised)):
+                self.assertEqual(leading.get(URL), rows)
+            self.assertEqual(clock.call_count, 3)
+            self.assertEqual(len(requests), 2)
+            self.assertEqual(requests[-1]["raw_sha256"], cache._hash(revised))
+            self.assertNotEqual(requests[0]["raw_sha256"], requests[-1]["raw_sha256"])
+            self.assertEqual(fixture.receipts_from(self.journal.getvalue()), [])
+            self.assertEqual(self.files()[0].read_bytes(), before)
+            self.assertEqual(leading.get(URL), json.loads(original))
+        self.assertEqual(len(requests), 2)
+        receipt = fixture.receipts_from(self.journal.getvalue())[0]
+        self.assertEqual(receipt["selection"], "snapshot_hit")
+        self.assertEqual(receipt["raw_sha256"], cache._hash(original))
+
+    def test_real_opener_tail_then_leading_fetches_once_and_publishes_snapshot(self):
+        requests = []
+        with fixture.stdlib_transport(requests):
+            first = tail.get(URL)
+            second = leading.get(URL)
+        self.assertEqual(first, second)
+        self.assertEqual(first, json.loads(fixture.body_for(URL)))
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(len(self.files()), 1)
+        receipts = fixture.receipts_from(self.journal.getvalue())
+        self.assertEqual([r["selection"] for r in receipts], ["original_http", "snapshot_hit"])
+        self.assertEqual([r["consumer"] for r in receipts], ["tail", "leading"])
+        self.assertTrue(receipts[0]["snapshot_published"])
+        self.assertEqual(receipts[0]["original_fetched_at"], receipts[1]["original_fetched_at"])
+        self.assertEqual(receipts[0]["raw_sha256"], receipts[1]["raw_sha256"])
+
+    def test_real_opener_extra_material_header_never_publishes_or_hits(self):
+        for header, value in (("Authorization", "secret"), ("Cookie", "secret"),
+                              ("Host", "api.binance.com"), ("X-Unknown", "extra")):
+            with self.subTest(header=header):
+                class ExtraHeader(urllib.request.BaseHandler):
+                    def https_request(self, req):
+                        req.add_unredirected_header(header, value)
+                        return req
+                requests = []
+                with fixture.stdlib_transport(requests, ExtraHeader()):
+                    self.assertEqual(tail.get(URL), leading.get(URL))
+                self.assertEqual(len(requests), 2)
+                self.assertFalse(self.files())
+        self.assertTrue(all(not r["snapshot_published"] for r in fixture.receipts_from(self.journal.getvalue())))
+
     def test_real_same_boot_clock_and_context_are_shared_across_processes(self):
         before = REAL_CLOCK()
         child = subprocess.run([sys.executable, "-B", "-c",

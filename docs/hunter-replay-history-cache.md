@@ -43,6 +43,12 @@ It records invocation UUID, generation, canonical request/request ID, consumer
 (`tail` or `leading`), original HTTP versus snapshot selection, publication result,
 raw-byte SHA-256, original UTC/monotonic fetch times and boot ID. An invocation
 that cannot establish valid clock/context has no cache receipt or cache hit.
+Cached-source and new-HTTP-source metadata are separate. If hit revalidation
+fails and the fallback HTTP response then cannot acquire its own fetch clock,
+the original response still reaches the parser, without a complete source
+receipt. It never inherits the rejected snapshot's hash or fetch time. A real
+opener regression covers this with valid source revisions A/B and two consecutive
+clock failures, and verifies no extra HTTP attempt or cache rewrite.
 Records contain no payload, credential, arbitrary URL or environment dump. They
 are diagnostic provenance, not an authenticated trading/validation receipt.
 The fixed experiment retains these records as `source_receipts` in its output
@@ -150,7 +156,16 @@ read each original source using `git show <commit>:research/hunter_{tail,leading
 execute it as a module and call the fixture's `run_stage(module, temporary_dir)`.
 
 The experiment runs tail and leading as separate subprocesses for each mode,
-blocks real sockets, compares every report field and consumed source hash to the
+uses the real `urlopen` / opener / HTTPS handler / HTTP request and response
+processing chain, and replaces only `HTTPSConnection.connect` with an in-memory
+wire response. DNS and real socket connections are blocked. This exercises
+stdlib request mutations: `do_request_` adds an unredirected `Host`. Initial
+cache eligibility still forbids caller-supplied Host; after transport, only the
+exact allowlisted origin Host in `unredirected_hdrs` is accepted, with no Host in
+regular headers. Unknown headers, auth, cookies and changed Host still reject
+publication. A direct tail-to-leading regression requires one network-terminal
+call, one cache file and original/hit receipts. The experiment compares every
+report field and consumed source hash to the
 original fixture, and verifies 32 requests when disabled versus 24 on POSIX when
 enabled for fixed source bytes. Full report equality in this fixture covers all risk decisions and monetary/slippage
 proxies. These two replay modules have no executed orders or fee calculation;

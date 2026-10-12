@@ -81,16 +81,26 @@ def _live(identity, clock, fetched=None):
             raise ValueError("invalid original fetch time")
 
 
-def _identity(request, clock):
+def _identity(request, clock, *, transport_processed=False):
     now, _, boot = clock
     if request.get_method() != "GET" or request.data is not None:
         raise ValueError("not public GET")
     headers = {k.lower(): v for k, v in request.header_items()}
+    query = _query(request.full_url)
+    # urllib adds Host via add_unredirected_header during do_request_. Accept
+    # only that exact derived value AFTER transport; initial requests still
+    # reject any Host. Do not relax auth/cookies/other material header checks.
+    if transport_processed and "host" in headers:
+        direct = {k.lower() for k in request.headers}
+        added = {k.lower(): v for k, v in request.unredirected_hdrs.items()}
+        expected = urllib.parse.urlsplit(query["origin"]).netloc
+        if "host" in direct or added.get("host") != expected or headers["host"] != expected:
+            raise ValueError("transport Host differs from approved source")
+        headers.pop("host")
     # These two fixed User-Agent labels identify callers; they do not select data.
     # Every other header/parameter is matched or rejected, including auth/cookies.
     if set(headers) != {"user-agent", "accept"} or headers["user-agent"] not in AGENTS or headers["accept"] != "application/json":
         raise ValueError("unsupported headers")
-    query = _query(request.full_url)
     if int(query["query"]["endTime"]) + STEP_MS > now * 1000:
         raise ValueError("window is not completely closed")
     generation = os.environ.get("HUNTER_REPLAY_CACHE_GENERATION", "")
@@ -287,16 +297,16 @@ def load_json(request, opener, timeout=20):
             key = _hash(_encoded(identity)) + ".json"
             receipt_id = None
             try:
-                result, source = _read(fd, key, identity, clock)
+                result, cached_source = _read(fd, key, identity, clock)
                 os.close(fd)
                 fd = None
                 # Disk read, hashing, decoding and row validation can take time.
-                _return_valid(request, identity, source)
+                _return_valid(request, identity, cached_source)
                 receipt_id = uuid.uuid4().hex
-                _receipt(request, identity, source, "snapshot_hit", receipt_id=receipt_id)
+                _receipt(request, identity, cached_source, "snapshot_hit", receipt_id=receipt_id)
                 # Even a slow journal sink may cross expiry. An invalidated
                 # selection is explicitly cancelled, never claimed as consumed.
-                _return_valid(request, identity, source)
+                _return_valid(request, identity, cached_source)
             except Exception:
                 if receipt_id is not None:
                     try:
@@ -314,21 +324,24 @@ def load_json(request, opener, timeout=20):
             body = response.read()
             result = json.loads(body)  # Original parse/errors still reach caller.
             published = False
+            http_source = None  # Never inherit metadata from a rejected hit.
             try:
                 clock = _clock()
-                source = {"fetched_at": clock[0], "fetched_monotonic_ns": clock[1],
-                          "body_sha256": _hash(body)}
+                _live(identity, clock)
+                http_source = {"fetched_at": clock[0], "fetched_monotonic_ns": clock[1],
+                               "body_sha256": _hash(body)}
                 if (fd is not None and response.status == 200 and _query(response.geturl()) == identity["request"]
                         and response.headers.get_content_type() == "application/json"
                         and not response.headers.get("Set-Cookie")
-                        and _identity(request, clock) == identity
+                        and _identity(request, clock, transport_processed=True) == identity
                         and _rows_valid(body, identity, clock[0])):
-                    fetched = {k: source[k] for k in ("fetched_at", "fetched_monotonic_ns")}
+                    fetched = {k: http_source[k] for k in ("fetched_at", "fetched_monotonic_ns")}
                     published = _write(fd, key, identity, fetched, body)
             except Exception:
                 pass
             try:
-                _receipt(request, identity, source, "original_http", published)
+                if http_source is not None:
+                    _receipt(request, identity, http_source, "original_http", published)
             except Exception:
                 pass  # Provenance I/O must not add an HTTP attempt/retry.
             return result

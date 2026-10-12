@@ -7,6 +7,7 @@ import contextlib
 import datetime as dt
 from email.message import Message
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.parse
+import urllib.request
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -68,6 +70,48 @@ class Response(io.BytesIO):
         return self.url
 
 
+@contextlib.contextmanager
+def stdlib_transport(requests, *handlers):
+    """Real urllib + HTTP preprocessing; replace only the HTTPS connection.
+
+    No DNS, socket or TLS traffic: HTTPResponse parses an in-memory wire response.
+    Keep this below urlopen so automatic Request mutations are exercised.
+    """
+    class MemorySocket:
+        def __init__(self, host):
+            self.host, self.sent = host, bytearray()
+
+        def sendall(self, data):
+            self.sent.extend(data)
+
+        def makefile(self, mode):
+            assert mode == "rb"
+            method, target, version = bytes(self.sent).split(b"\r\n", 1)[0].decode("ascii").split()
+            assert method == "GET" and version == "HTTP/1.1"
+            url = "https://" + self.host + target
+            raw = body_for(url)
+            requests.append({"url": url, "raw_sha256": hashlib.sha256(raw).hexdigest()})
+            return io.BytesIO(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
+                              + str(len(raw)).encode() + b"\r\nConnection: close\r\n\r\n" + raw)
+
+        def close(self):
+            pass
+
+    def connect(connection):
+        assert connection.timeout == 20
+        connection.sock = MemorySocket(connection.host)
+
+    def network_forbidden(*args, **kwargs):
+        raise AssertionError("offline experiment attempted network")
+
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), *handlers)
+    with (mock.patch("urllib.request._opener", opener),
+          mock.patch.object(http.client.HTTPSConnection, "connect", connect),
+          mock.patch("socket.socket.connect", network_forbidden),
+          mock.patch("socket.getaddrinfo", network_forbidden)):
+        yield opener
+
+
 class FixedDateTime(dt.datetime):
     @classmethod
     def now(cls, tz=None):
@@ -80,24 +124,13 @@ def run_stage(module, directory):
     journal = io.StringIO()
     original_get = module.get
 
-    def fetch(request, timeout):
-        assert timeout == 20
-        raw = body_for(request.full_url)
-        requests.append({"url": request.full_url, "raw_sha256": hashlib.sha256(raw).hexdigest()})
-        return Response(raw, request.full_url)
-
     def get(url):
         rows = original_get(url)
         consumed.append({"url": url, "rows_sha256": digest(rows)})
         return rows
 
-    def network_forbidden(*args, **kwargs):
-        raise AssertionError("offline experiment attempted network")
-
     output = Path(directory) / "report.json"
-    with (mock.patch("urllib.request.urlopen", side_effect=fetch),
-          mock.patch("socket.socket.connect", network_forbidden),
-          mock.patch("socket.getaddrinfo", network_forbidden),
+    with (stdlib_transport(requests),
           mock.patch("time.time", return_value=NOW),
           mock.patch.object(history_cache, "_clock", return_value=(NOW, MONO, BOOT)),
           mock.patch.object(module.dt, "datetime", FixedDateTime),
