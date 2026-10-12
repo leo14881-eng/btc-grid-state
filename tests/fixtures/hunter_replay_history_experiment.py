@@ -20,6 +20,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 NOW = 1791763200.0  # 2026-10-12 00:00 UTC, fixed for both implementations.
+MONO = 1000000000000
+BOOT = "11111111-2222-4333-8444-555555555555"
 STEP = 300000
 
 
@@ -29,6 +31,14 @@ def encoded(value):
 
 def digest(value):
     return hashlib.sha256(encoded(value)).hexdigest()
+
+
+def receipts_from(journal):
+    invalid = {line.split(" ", 1)[1] for line in journal.splitlines()
+               if line.startswith("HUNTER_REPLAY_SELECTION_INVALIDATED ")}
+    receipts = [json.loads(line.split(" ", 1)[1]) for line in journal.splitlines()
+                if line.startswith("HUNTER_REPLAY_CONSUMPTION ")]
+    return [row for row in receipts if row["receipt_id"] not in invalid]
 
 
 def body_for(url):
@@ -65,7 +75,9 @@ class FixedDateTime(dt.datetime):
 
 
 def run_stage(module, directory):
+    from research import hunter_replay_history_cache as history_cache
     requests, consumed = [], []
+    journal = io.StringIO()
     original_get = module.get
 
     def fetch(request, timeout):
@@ -87,9 +99,10 @@ def run_stage(module, directory):
           mock.patch("socket.socket.connect", network_forbidden),
           mock.patch("socket.getaddrinfo", network_forbidden),
           mock.patch("time.time", return_value=NOW),
+          mock.patch.object(history_cache, "_clock", return_value=(NOW, MONO, BOOT)),
           mock.patch.object(module.dt, "datetime", FixedDateTime),
           mock.patch.object(module, "get", side_effect=get),
-          mock.patch.object(module, "OUT", output), contextlib.redirect_stdout(io.StringIO())):
+          mock.patch.object(module, "OUT", output), contextlib.redirect_stdout(journal)):
         report = module.run()
     # These are the existing workflow replay contract guards, left in place.
     assert report["capital_authority"] == "NONE_SHADOW_ONLY"
@@ -97,7 +110,11 @@ def run_stage(module, directory):
     assert report["scope"] in {"TAIL_RISK_PATH_REPLAY_NOT_STRATEGY_BACKTEST", "LEADING_RISK_PARTIAL_PATH_REPLAY_NOT_STRATEGY_BACKTEST"}
     if report["schema"] == "hunter_tail_risk_replay_v1":
         assert any("cannot prove" in x for x in report["limitations"])
-    return {"report": report, "consumed": consumed, "requests": requests}
+    result = {"report": report, "consumed": consumed, "requests": requests}
+    receipts = receipts_from(journal.getvalue())
+    if receipts:
+        result["source_receipts"] = receipts
+    return result
 
 
 def experiment():
@@ -109,6 +126,8 @@ def experiment():
                    HUNTER_REPLAY_CACHE_GENERATION="offline-scan-generation",
                    HUNTER_REPLAY_CACHE_CYCLE="c" * 32,
                    HUNTER_REPLAY_CACHE_STARTED_AT=str(NOW - 1),
+                   HUNTER_REPLAY_CACHE_STARTED_MONOTONIC_NS=str(MONO - 10**9),
+                   HUNTER_REPLAY_CACHE_BOOT_ID=BOOT,
                    HUNTER_BINANCE_API="https://data-api.binance.vision",
                    PYTHONDONTWRITEBYTECODE="1")
         data = {}
