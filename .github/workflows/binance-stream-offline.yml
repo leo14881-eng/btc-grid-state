@@ -1,0 +1,38 @@
+name: Binance Stream Sidecar Offline
+on:
+  pull_request:
+    paths:
+      - 'research/hunter_binance*.py'
+      - 'research/hunter_early_signals.py'
+      - 'research/hunter_forward_research.py'
+      - 'research/hunter_tail_risk.py'
+      - 'research/hunter_signal_provenance.py'
+      - 'tests/test_hunter_binance*.py'
+      - 'tests/fixtures/binance_http_child.py'
+      - 'scripts/*binance*'
+      - 'deploy/*binance*'
+      - 'deploy/systemd/*binance*'
+      - '.github/workflows/binance-stream-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Guarded cache and consumer regressions
+        run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
+      - name: Real loopback cancellation and denial regressions
+        run: python -I -B -X utf8 scripts/check_binance_public_transport.py
+      - name: Deployment shell syntax only
+        run: bash -n scripts/hunter_binance_preflight.sh scripts/hunter_binance_stage.sh

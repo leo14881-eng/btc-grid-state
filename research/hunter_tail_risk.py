@@ -31,7 +31,13 @@ def _get_json(url,timeout=8):
 
 def _btc_short_returns(now,base_url,fetch_json):
     q=urllib.parse.urlencode({"symbol":"BTCUSDT","interval":"5m","limit":16})
-    rows=fetch_json(base_url+"/api/v3/klines?"+q)
+    try:
+        from research.hunter_binance_stream_consumer import window
+    except ModuleNotFoundError as exc:
+        if exc.name!='research': raise
+        from hunter_binance_stream_consumer import window
+    cached=window('BTCUSDT','5m',now)
+    rows=cached.rows('BTCUSDT','5m') if cached else fetch_json(base_url+"/api/v3/klines?"+q)
     completed=[]
     now_ms=int(now.timestamp()*1000)
     for row in rows if isinstance(rows,list) else []:
@@ -42,8 +48,10 @@ def _btc_short_returns(now,base_url,fetch_json):
     if len(completed)<13:return {"return_5m_pct":None,"return_15m_pct":None,"return_1h_pct":None,"last_completed_close_utc":None}
     z=completed[-13:];last=z[-1][1]
     pct=lambda old:round((last/old-1)*100,4)
-    return {"return_5m_pct":pct(z[-2][1]),"return_15m_pct":pct(z[-4][1]),"return_1h_pct":pct(z[0][1]),
+    result={"return_5m_pct":pct(z[-2][1]),"return_15m_pct":pct(z[-4][1]),"return_1h_pct":pct(z[0][1]),
             "last_completed_close_utc":dt.datetime.fromtimestamp(z[-1][0]/1000,dt.timezone.utc).isoformat()}
+    if cached: result['source_provenance']=cached.packet('BTCUSDT','5m')
+    return result
 
 def _stablecoin_prices(base_url,fetch_json):
     out={}
@@ -99,7 +107,11 @@ def collect_systemic_evidence(scan,liq,now,cfg,base_url="https://data-api.binanc
     if len(books)<int(cfg["SYSTEMIC_MIN_BOOK_SAMPLE"]):missing.append("CROSS_ASSET_LIQUIDITY_SAMPLE_INSUFFICIENT")
     if len(stable)<int(cfg["SYSTEMIC_MIN_STABLECOIN_SAMPLE"]):missing.append("STABLECOIN_EVIDENCE_INSUFFICIENT")
     material={"scan_generation_id":(scan or {}).get("generation_id"),"scan_as_of_utc":(scan or {}).get("as_of_utc"),
-              "btc_close":btc_short.get("last_completed_close_utc"),"btc":btc_short,"negative":negative,"loss5":loss5,"loss10":loss10,
+              "btc_close":btc_short.get("last_completed_close_utc"),
+              # Transport audit must not turn the same completed-price evidence
+              # into a new recovery observation solely because its cache cut moved.
+              "btc":{k:v for k,v in btc_short.items() if k!='source_provenance'},
+              "negative":negative,"loss5":loss5,"loss10":loss10,
               "book_times":sorted(str(x.get("as_of_utc")) for x in ((liq or {}).get("snapshots") or {}).values() if isinstance(x,dict))[-10:],
               "stable":stable}
     oid=hashlib.sha256(json.dumps(material,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

@@ -23,17 +23,17 @@ def finite(v):
     try:
         x=float(v);return x if math.isfinite(x) else None
     except (TypeError,ValueError,OverflowError):return None
-def rolling(symbols,window):
+def rolling(symbols,window,cache=None):
     """Derive 1h/4h return from Binance spot klines with bounded concurrency."""
     interval="1h";bars=2 if window=="1h" else 5
     def one(sym):
         q=urllib.parse.urlencode({"symbol":sym,"interval":interval,"limit":bars})
-        rows=get(BN+"/api/v3/klines?"+q,8)
+        rows=cache.rows(sym,interval,bars) if cache else get(BN+"/api/v3/klines?"+q,8)
         if not isinstance(rows,list) or len(rows)<bars:return None
         start=finite(rows[0][1]);last=finite(rows[-1][4])
         if not start or not last or start<=0:return None
         return sym,{"return_pct":(last/start-1)*100,
-                   "source_provenance":capture_source(rows,sym,interval,dt.datetime.now(dt.timezone.utc)),
+                   "source_provenance":cache.packet(sym,interval,bars) if cache else capture_source(rows,sym,interval,dt.datetime.now(dt.timezone.utc)),
                    "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
     out={}
     with ThreadPoolExecutor(max_workers=64) as ex:
@@ -47,11 +47,11 @@ def rolling(symbols,window):
     if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
     return out
 
-def micro(symbols):
+def micro(symbols,cache=None):
     """15m PRE_MOVE features: volume acceleration, compression, range position and short momentum."""
     def one(sym):
         q=urllib.parse.urlencode({"symbol":sym,"interval":"15m","limit":25})
-        rows=get(BN+"/api/v3/klines?"+q,8)
+        rows=cache.rows(sym,"15m",25) if cache else get(BN+"/api/v3/klines?"+q,8)
         if not isinstance(rows,list) or len(rows)<25:return None
         closes=[finite(x[4]) for x in rows]; highs=[finite(x[2]) for x in rows]; lows=[finite(x[3]) for x in rows]
         vols=[finite(x[7]) or 0 for x in rows]
@@ -68,7 +68,7 @@ def micro(symbols):
         hi24=max(highs[-24:]); lo24=min(lows[-24:])
         range_pos=(closes[-1]-lo24)/(hi24-lo24) if hi24>lo24 else .5
         return sym,{"volume_acceleration":vol_accel,"compression_ratio":compression,
-                    "source_provenance":capture_source(rows,sym,"15m",dt.datetime.now(dt.timezone.utc)),
+                    "source_provenance":cache.packet(sym,"15m",25) if cache else capture_source(rows,sym,"15m",dt.datetime.now(dt.timezone.utc)),
                     "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos}
     out={}
     with ThreadPoolExecutor(max_workers=64) as ex:
@@ -151,7 +151,16 @@ def main():
     pairs=[p["pair"] for c in (scan.get("coins") or {}).values()
            for p in c.get("pairs") or [] if p.get("venue")=="binance"]
     symbols=sorted(set(pairs+["BTCUSDT"]))
-    r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
+    try:
+        from research.hunter_binance_stream_consumer import signal_inputs
+    except ModuleNotFoundError as exc:
+        if exc.name!='research': raise
+        from hunter_binance_stream_consumer import signal_inputs
+    cached=signal_inputs(scan,symbols)
+    if cached is None:
+        r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
+    else:
+        r1=rolling(symbols,"1h",cached);r4=rolling(symbols,"4h",cached);microdata=micro(symbols,cached)
     regional_signals={}
     if scan.get("bybit_complete"):
         expected_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")
