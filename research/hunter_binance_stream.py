@@ -244,7 +244,8 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                         jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
                     if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
                         ingress=protocol.market_arrival(name)
-                        if ingress and 0<=now-ingress<=FRESH_MS:
+                        ingress_now=clock()  # Receipt can occur after the scan's now.
+                        if ingress and 0<=ingress_now-ingress<=FRESH_MS:
                             on_nonready('CACHE_WRITER_LAG')  # freeze still rejects stale stored data.
                         else:
                             print(json.dumps(dict(event='BINANCE_TOPIC_STALE_DETAIL',epoch=protocol.epoch,

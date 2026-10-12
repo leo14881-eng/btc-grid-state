@@ -34,7 +34,7 @@ def worker_command(url):
     return [sys.executable, '-B', str(Path(__file__).with_name('hunter_binance_http_child.py')), url, str(os.getpid())]
 
 
-def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
+def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drain_on_cancel=False):
     """Monotonic deadline includes start/DNS/TLS/headers/body; cleanup is awaited.
 
     kill+wait is a required closure acknowledgement, not a Future timeout.
@@ -92,7 +92,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
                 if chunk == b'': eof = True
                 if chunk:
                     consume(chunk, True)
-                if cancelled() or time.monotonic() >= deadline:
+                if (cancelled() and not (sent and drain_on_cancel)) or time.monotonic() >= deadline:
                     break
                 if not chunk and not eof:
                     poll.select(min(.02,max(0,deadline-time.monotonic())))
@@ -209,16 +209,17 @@ class Client:
                     def before_go():
                         state = coordinate(lambda:self.budget.status(
                             timeout=max(0,min(.25,deadline-time.monotonic()))),deadline,cancelled)
+                        check()  # Cancellation may occur during the SQLite read.
                         if state['halt'] or time.time_ns()//1_000_000 < state['cooldown_ms']:
                             raise RuntimeError('PUBLIC_ADMISSION_REVOKED')
                     not_sent = None
                     try:
                         # A collector session stops admission immediately but lets an
                         # already-sent request finish within its ORIGINAL deadline.
-                        # before_go still checks the real cancellation predicate;
-                        # no new HTTP attempt can start after cancellation.
-                        transport_cancelled=(lambda:False) if drain_on_cancel else cancelled
-                        status,payload,retry = self.transport(url,deadline,transport_cancelled,on_denial,before_go)
+                        # The transport keeps the real predicate through GO;
+                        # draining applies only after admission was sent.
+                        options={'drain_on_cancel':True} if drain_on_cancel else {}
+                        status,payload,retry = self.transport(url,deadline,cancelled,on_denial,before_go,**options)
                     except NotSentError as error:
                         not_sent = error
                     if status in (403,418) or denied:
