@@ -26,10 +26,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Reproduce stale cancellation against the prior deployed code
+        run: |
+          python -B - <<'PY'
+          import io,os,shutil,subprocess,sys,tarfile,tempfile
+          from pathlib import Path
+          sha='99836e5362340725f806d5df6df1ca9835065bdd'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+          names+=['tests/test_hunter_binance_transport_ack.py','tests/fixtures/binance_http_child.py']
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder)
+              with tarfile.open(fileobj=io.BytesIO(data)) as archive:archive.extractall(root)
+              for name in ('scripts/check_binance_public_transport.py','tests/test_hunter_binance_transport_session.py'):
+                  shutil.copyfile(name,root/name)
+              env=dict(os.environ,BINANCE_DEPLOYED_REPRO='1',PYTHONDONTWRITEBYTECODE='1')
+              subprocess.run([sys.executable,'-B','-c',
+                  "from scripts.check_binance_public_transport import main; raise SystemExit(main(pattern='test_hunter_binance_transport_session.py',expected=3))"],
+                  cwd=root,env=env,check=True)
+              print('PRIOR_DEPLOYED_STALE_CANCEL_REPRODUCED',sha)
+          PY
       - name: Guarded cache and consumer regressions
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
       - name: Real loopback cancellation and denial regressions

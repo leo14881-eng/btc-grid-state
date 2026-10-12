@@ -26,7 +26,7 @@ except ModuleNotFoundError as error:
     from hunter_binance_http_child import allowed, MAX_BODY
 
 # Deliberately shares the proven coordinator and error types, never a DB path.
-from research.hunter_bybit_public import (coordinate, tracked, DurableStopError,
+from research.hunter_bybit_public import (coordinate, DurableStopError,
     UnreapedRequestError, UncertainRequestError, NotSentError)
 
 
@@ -128,6 +128,40 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
     return result
 
 
+@contextlib.contextmanager
+def tracked(store, token, deadline, cancelled=lambda:False, *, cleanup_timeout=None):
+    import fcntl
+    path = store.path.parent/('request-'+token+'.lock')
+    handle = path.open('xb')
+    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    remove = False
+    try:
+        def begin():
+            with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
+                db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
+        coordinate(begin,deadline,cancelled)
+        yield handle.close  # Immediate shared stop if denial persistence fails.
+        # Normal exit means the caller proved completion (or no GO). Cleanup
+        # may need its own bounded deadline after the data deadline expired.
+        # Exceptions from the body still retain the marker and lease unchanged.
+        finish_deadline = deadline if cleanup_timeout is None else time.monotonic()+cleanup_timeout
+        def finish():
+            with store.db(timeout=max(0,min(.25,finish_deadline-time.monotonic()))) as db:
+                db.execute('DELETE FROM requests WHERE token=?',(token,))
+                db.execute('DELETE FROM leases WHERE token=?',(token,))
+        try:
+            coordinate(finish,finish_deadline)
+        except TimeoutError as error:
+            if cleanup_timeout is None: raise
+            raise DurableStopError('PUBLIC_REQUEST_CLEANUP_TIMEOUT_MANUAL_REVIEW') from error
+        remove = True
+        if time.monotonic()>=deadline:
+            raise TimeoutError('PUBLIC_RESPONSE_FINISHED_AFTER_DEADLINE')
+    finally:
+        handle.close()
+        if remove: path.unlink()
+
+
 class Client:
     def __init__(self, store=None, transport=exchange, clock=None):
         # Existing-only: no auto directory/schema/budget provisioning in jobs.
@@ -136,7 +170,7 @@ class Client:
         self.transport = transport
         self.now = clock or (lambda:dt.datetime.now(dt.timezone.utc))
 
-    def request(self, path, params=None, *, timeout=30, cancelled=lambda:False):
+    def request(self, path, params=None, *, timeout=30, cancelled=lambda:False, drain_on_cancel=False):
         params = params or {}
         url = 'https://data-api.binance.vision'+path+'?'+urllib.parse.urlencode(params)
         allowed(url)
@@ -158,7 +192,7 @@ class Client:
             denied = False
             try:
                 check()
-                with tracked(self.store, token, deadline, cancelled) as orphan:
+                with tracked(self.store, token, deadline, cancelled, cleanup_timeout=1) as orphan:
                     release = False  # tracked commits marker+lease removal together.
                     def on_denial():
                         nonlocal denied
@@ -179,7 +213,12 @@ class Client:
                             raise RuntimeError('PUBLIC_ADMISSION_REVOKED')
                     not_sent = None
                     try:
-                        status,payload,retry = self.transport(url,deadline,cancelled,on_denial,before_go)
+                        # A collector session stops admission immediately but lets an
+                        # already-sent request finish within its ORIGINAL deadline.
+                        # before_go still checks the real cancellation predicate;
+                        # no new HTTP attempt can start after cancellation.
+                        transport_cancelled=(lambda:False) if drain_on_cancel else cancelled
+                        status,payload,retry = self.transport(url,deadline,transport_cancelled,on_denial,before_go)
                     except NotSentError as error:
                         not_sent = error
                     if status in (403,418) or denied:
@@ -190,15 +229,18 @@ class Client:
                         # Marker can be removed only after denial is durable.
                         status = 403
                     elif not_sent is None:
-                        check()
                         if status == 200:
                             body = json.loads(payload)
                             if not isinstance(body,list):
                                 raise ValueError('BINANCE_PUBLIC_RESPONSE_SHAPE_INVALID')
-                            check()
-                            return body
-                        decision = self.budget.failure(status,'',retry_after=max(retry,2**attempt),timeout=0)
+                        else:
+                            decision = self.budget.failure(status,'',retry_after=max(retry,2**attempt),timeout=0)
                 if not_sent is not None: raise not_sent
+                if status == 200:
+                    # The child has been reaped and its complete response
+                    # validated. Retire ownership before rejecting late data.
+                    check()
+                    return body
             except (UnreapedRequestError,UncertainRequestError,DurableStopError,sqlite3.Error,ValueError):
                 release = False  # Persistent orphan marker is a global stop.
                 raise

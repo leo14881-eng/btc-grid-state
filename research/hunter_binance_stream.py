@@ -13,7 +13,7 @@ from threading import Event, Lock, Thread
 import time
 
 from research.hunter_binance_stream_store import Store, Budget, STATE_PATH, LIMITS, FRESH_MS, roster, roster_hash, split_topic, content_hash
-from research.hunter_binance_public import Client, DurableStopError
+from research.hunter_binance_public import Client, DurableStopError, UncertainRequestError, UnreapedRequestError
 
 WS_URL = 'wss://data-stream.binance.vision/ws'
 SHARD_SIZE = 500
@@ -60,6 +60,7 @@ class Protocol:
         self.store=store; self.epoch=store.begin_session(names,manifest)
         self.started=now; self.pending={}; self.requests=[]
         self.sent={}; self.arrivals={}; self.lock=Lock()
+        self.market_arrivals={}; self.topic_shards={}
         serial=0
         for offset in range(0,len(names),SHARD_SIZE):
             batch=[]
@@ -67,9 +68,20 @@ class Protocol:
                 serial+=1
                 request_id=self.epoch+f'{serial:03d}'
                 args=names[start:min(start+100,offset+SHARD_SIZE,len(names))]
+                self.topic_shards.update((name,offset//SHARD_SIZE) for name in args)
                 self.pending[request_id]=(offset//SHARD_SIZE,args)
                 batch.append(dict(method='SUBSCRIBE',params=args,id=request_id))
             self.requests.append(batch)
+
+    def note_market_arrival(self, shard, message, received):
+        # Receipt only, not validation/readiness. A queued frame must not be
+        # mistaken for an idle connection while the SQLite writer catches up.
+        name=split_message_topic(message)
+        if self.topic_shards.get(name)!=shard: raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
+        with self.lock:self.market_arrivals[name]=max(received,self.market_arrivals.get(name,0))
+
+    def market_arrival(self, name):
+        with self.lock:return self.market_arrivals.get(name,0)
 
     def mark_sent(self, shard, request_id, now):
         # The pump records the start of this send, not the first shard's dial.
@@ -110,7 +122,7 @@ class Protocol:
         else:
             from research.hunter_binance_stream_store import topic
             name=topic(message['s'],message['k']['i'])
-            if name not in {n for request in self.requests[shard] for n in request['params']}:
+            if self.topic_shards.get(name)!=shard:
                 raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
             self.store.ingest_ws(self.epoch,message,now)
 
@@ -132,10 +144,15 @@ class Protocol:
                 flush();self.receive(shard,message,received)
             else:
                 name=topic(message['s'],message['k']['i'])
-                if name not in {n for request in self.requests[shard] for n in request['params']}:
+                if self.topic_shards.get(name)!=shard:
                     raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
                 batch.append((message,received))
         flush()
+
+
+def split_message_topic(message):
+    from research.hunter_binance_stream_store import topic
+    return topic(message['s'],message['k']['i'])
 
 
 def open_ws():
@@ -155,7 +172,7 @@ def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, c
     if requested>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
     rows=(client or Client(store)).request('/api/v3/klines',dict(symbol=symbol,
         interval=interval,limit=LIMITS[interval],endTime=requested),
-        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled)
+        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled,drain_on_cancel=True)
     active(); received=clock()
     if received>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
     store.ingest_rest(epoch,name,rows,requested,received)
@@ -179,6 +196,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 except TimeoutError: continue
                 received=clock();message=json.loads(raw)
                 if 'id' in message:protocol.note_arrival(index,message,received)
+                else:protocol.note_market_arrival(index,message,received)
                 messages.put((index,message,received),timeout=.5)
         except BaseException as error:
             if not stopping():
@@ -225,7 +243,15 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                         if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
                         jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
                     if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
-                        raise TimeoutError('BINANCE_TOPIC_STALE')
+                        ingress=protocol.market_arrival(name)
+                        if ingress and 0<=now-ingress<=FRESH_MS:
+                            on_nonready('CACHE_WRITER_LAG')  # freeze still rejects stale stored data.
+                        else:
+                            print(json.dumps(dict(event='BINANCE_TOPIC_STALE_DETAIL',epoch=protocol.epoch,
+                                topic=name,shard=protocol.topic_shards[name],session_age_ms=now-protocol.started,
+                                ws_rx=state['ws_rx'],ws_ts=state['ws_ts'],ingress_rx=ingress,
+                                ack=state['ack'],gap=state['gap'],queued=messages.qsize(),active_repairs=len(jobs))),flush=True)
+                            raise TimeoutError('BINANCE_TOPIC_STALE')
                 if observer and now-last_audit>=30_000:
                     observer(now); last_audit=now
             try: pending=[messages.get(timeout=.1)]
@@ -247,7 +273,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 for thread in threads: thread.join(timeout=7)
                 if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
                 for job in jobs.values():
-                    if not job.cancelled() and isinstance(job.exception(),(DurableStopError,sqlite3.Error)):
+                    if not job.cancelled() and isinstance(job.exception(),(DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error)):
                         raise job.exception()
 
 
@@ -275,15 +301,17 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
         try:
             session(store,names,manifest,stop,connect,clock,sleep,observer=audit,on_nonready=nonready)
             return
-        except (DurableStopError,sqlite3.Error): raise
+        except (DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error): raise
         except Exception as error:
             response=getattr(error,'response',None)
             status=getattr(response,'status_code',0)
             if status in (403,418): Budget(store).failure(403,'Binance websocket denial')
             elif status: Budget(store).failure(status,'')
             delay=budget.failed()
+            reason=str(error)
+            if not re.fullmatch(r'[A-Z][A-Z0-9_]{0,127}',reason): reason='UNCLASSIFIED'
             print(json.dumps(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
-                error_type=type(error).__name__,status='UNKNOWN')),flush=True)
+                error_type=type(error).__name__,error_code=reason,status='UNKNOWN')),flush=True)
         if budget.failures<5:
             for _ in range(delay*10):
                 if stop(): return
