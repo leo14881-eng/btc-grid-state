@@ -58,7 +58,7 @@ def configure_lane(v1_mode):
  if v1_mode:
   v1.configure_v1();return
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"];eng.ENTRY_MODE=LANES["V2"]["entry_mode"];eng.DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"];eng.DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"];eng.STRATEGY_ID=LANES["V2"]["strategy"];eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
-def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None,risk_evidence=None):
+def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None,risk_evidence=None,evaluation_clock=None):
  state=load(path);excluded=set(excluded or [])
  phase='v1' if v1_mode else 'v2'
  # Both lanes get their own bounded observation budget in this shared process.
@@ -66,6 +66,7 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  quarantine=eng.quarantine_non_crypto_history(state,excluded)
  before={p.get("asset"):len(p.get("tranches") or []) for p in state.get("open_positions") or []}
  configure_lane(v1_mode)
+ if evaluation_clock is not None:now=evaluation_clock()
  if risk_evidence is not None:eng.update_risk_controls(state,risk_evidence,now)
  scan={"coins":market,"as_of_utc":(regime_scan or {}).get('as_of_utc') or now.isoformat(),"generation_id":(regime_scan or {}).get("generation_id") or "MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")};btc=(market.get("BTC") or {}).get("reference_price")
  if not v1_mode:scan['venue_management']=(regime_scan or {}).get('venue_management') or {}
@@ -77,16 +78,19 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
  # slow V1 work cannot make an old exit book appear fresh to the manual stop.
  target_ids={row[0] for row in manual_stop.TARGETS.values()}
  if not v1_mode and any(p.get('shadow_id') in target_ids for p in state['open_positions']):
-  evaluated_at=dt.datetime.now(dt.timezone.utc)
+  source_sha=eng._execution_source_sha()
+  evaluated_at=evaluation_clock() if evaluation_clock is not None else dt.datetime.now(dt.timezone.utc)
   raw_books={a:(liq.get('snapshots',{}).get(a) or {}).get('raw_book_evidence',{}) for a in manual_stop.TARGETS}
-  state,manual_audit=manual_stop.stage(state,manual_stop.request(),raw_books,evaluated_at,eng._execution_source_sha())
+  state,manual_audit=manual_stop.stage(state,manual_stop.request(),raw_books,evaluated_at,source_sha)
   now=evaluated_at
   # A blocked user exit must not fall through to a reference-price automatic
   # SELL or ADD in the same cycle. Other holdings retain ordinary management.
   pending_manual=[p for p in state['open_positions'] if p.get('shadow_id') in target_ids]
   position_order={p.get('shadow_id'):i for i,p in enumerate(state['open_positions'])}
   state['open_positions']=[p for p in state['open_positions'] if p.get('shadow_id') not in target_ids]
- timed(phase+'_management_decisions',eng.manage_existing_positions,state,scan,review,liq,supply,now,btc,capital_proposals)
+ clock_args={} if evaluation_clock is None else {'evaluation_clock':evaluation_clock}
+ timed(phase+'_management_decisions',eng.manage_existing_positions,state,scan,review,liq,supply,now,btc,capital_proposals,**clock_args)
+ if evaluation_clock is not None:now=evaluation_clock()
  if pending_manual:
   state['open_positions']=sorted(state['open_positions']+pending_manual,key=lambda p:position_order[p.get('shadow_id')])
  # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit
@@ -193,9 +197,10 @@ def refresh_management_evidence(states,market,review,liq,now):
                    "observed_raw_books":raw_books,
                    "evidence_refresh_cursor":next_cursor,"policy_version":VERSION}
 
-def main():
+def main(evaluation_clock=None):
+ evaluation_clock=evaluation_clock or (lambda:dt.datetime.now(dt.timezone.utc))
  TIMINGS.clear();monitor_started=time.perf_counter()
- states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
+ states=[load(V1),load(V2)];wanted=assets(states);now=evaluation_clock()
  if not wanted:
   results=[{"lane":label,"open":0,"added":[],"deferred_adds":[],"closed":[],"quarantined_non_crypto":[],"quarantine_counts":{}} for label in ('SHADOW_V1','SHADOW_V2')]
   eng.atomic_json_write(OUT,{"as_of_utc":now.isoformat(),"assets":[],"status":"NO_OPEN_POSITIONS","scope":"EXISTING_POSITIONS_ONLY","new_entry_enabled":False,"results":results,"policy_version":VERSION,"real_trading_enabled":False,"capital_authority":"NONE_SHADOW_ONLY"})
@@ -257,8 +262,8 @@ def main():
  # freshness guards see the elapsed time rather than V1's earlier clock.
  results=[]
  for phase,path,label,v1_mode in (("v1_lifecycle",V1,"SHADOW_V1",True),("v2_lifecycle",V2,"SHADOW_V2",False)):
-  evaluated_at=dt.datetime.now(dt.timezone.utc)
-  results.append(timed(phase,run_lane,path,label,market,review,liq,supply,evaluated_at,v1_mode,excluded,regime_scan,risk_evidence))
+  evaluated_at=evaluation_clock()
+  results.append(timed(phase,run_lane,path,label,market,review,liq,supply,evaluated_at,v1_mode,excluded,regime_scan,risk_evidence,evaluation_clock))
  TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
  # Observe subscription drift after authoritative lifecycle updates. The resident
  # stream owns its 30-second subscription self-healing; this never writes its state.

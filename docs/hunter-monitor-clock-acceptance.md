@@ -1,4 +1,4 @@
-# Monitor lane clock reliability audit
+# Monitor decision clock reliability audit
 
 Baseline: `44327057a565e86faa6eb62465504e34c6fc0b6d`, read from GitHub main
 on 2026-10-12. Independent shallow checkout and branch
@@ -17,8 +17,21 @@ receives V1's clock; after the fix the existing 600-second validator returns
 UNKNOWN for the now 610-second-old book. This is synthetic boundary evidence,
 not a claim of a historical incorrect SELL.
 
-The caller now samples UTC separately immediately before each lane. Original
-market/source timestamps, generation, evidence and all thresholds remain intact.
+Lane-start sampling alone was insufficient: a 20-second portfolio-load or
+manager delay could still turn a 590-second source into a stale SELL; V1 ADD
+could likewise consume evidence aged 3610 seconds against its existing
+3600-second limit. The real Monitor/manager deterministic fixtures reproduce
+those outcomes with a frozen clock and reject them with the injected live clock.
+
+Monitor now injects a current UTC clock after loading and into the shared
+`hunter_shadow_trader_v2.manage_existing_positions` manager. It samples per
+holding, after decision/capacity/identity work, and revalidates evidence for the
+selected SELL path after protection/recovery work. The default manager clock
+remains the supplied fixed `now` for existing callers; offline Monitor replay
+can explicitly inject a frozen clock. Venue revalidation uses pre-consumption
+metadata so the accepted generation does not reject itself as a duplicate.
+Original market/source timestamps, generation, evidence and all thresholds
+remain intact.
 No shared writer, lock, Research, notification or WebSocket code changes.
 No policy, historical result, capital or permissions changes. SHADOW ONLY,
 real_trading_enabled=false, NONE_SHADOW_ONLY and V2's 20000 total remain intact.
@@ -58,12 +71,18 @@ absence of intervening failed attempts, or complete runtime acceptance.
 ## Verification commands and deployment acceptance
 
 ```sh
+python -m unittest discover -s tests -p 'test_hunter_monitor_decision_clock.py' -v
 python -m unittest tests.test_hunter_monitor_boundaries tests.test_hunter_position_monitor tests.test_hunter_lifecycle_state tests.test_hunter_scheduler_health tests.test_hunter_monitor_runtime tests.test_hunter_monitor_persist tests.test_hunter_monitor_snapshot -v
 python -m unittest discover -s tests -p 'test_hunter*.py' -v
 git diff --exit-code -- research/results research/hunter-capital-state.json
 ```
 
-The first command uses offline fixtures and temporary local Git origins. The
+The decision-clock module contains nine deterministic tests covering source
+acquisition, inter-lane work, portfolio load, manager decision/identity/protection,
+ADD capacity delays, per-holding expiry, unchanged generation, normal no-delay
+SELL/ADD, V2 deferred proposals, fixed-clock replay and default-caller parity.
+Network and ledger IO are mocked. Other targeted suites use offline fixtures
+and temporary local Git origins. The
 complete Hunter suite is an existing PR-triggered Ubuntu gate; do not dispatch
 the trading or deployment workflows. Record the final PR head SHA and each CI
 run separately from runtime evidence.
