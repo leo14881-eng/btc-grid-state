@@ -94,7 +94,9 @@ manifest, receipt implementation, fixture tree (conservatively), actual interpre
 stdlib and extension contents, loaded native libraries, Python build/ABI, kernel,
 architecture, libc version, isolated command flags and the complete child environment.
 The child runs `-I -S -B`, with only `TZ=UTC` and `LC_ALL=C.UTF-8`, no site packages or
-inherited credentials. Added package initializers, missing inputs and symlinks
+inherited credentials. A fresh empty `-X pycache_prefix` also prevents reading
+pre-existing untracked bytecode (`-B` alone only prevents writes).
+Added package initializers, missing inputs and symlinks
 invalidate eligibility. Editable/pip dependencies are excluded by isolation, not
 assumed locked; existing full-suite aiohttp requirements remain range-pinned and
 are one reason the full suite is not eligible. No `main` SHA is used as a substitute

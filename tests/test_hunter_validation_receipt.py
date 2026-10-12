@@ -90,6 +90,18 @@ class FingerprintTests(unittest.TestCase):
             path.write_text(json.dumps(doc))
             with self.assertRaises(receipt.Unavailable): receipt.fingerprint(self.root)
 
+    def test_candidate_ignores_inherited_environment_and_existing_bytecode(self):
+        seen = []
+        def run(command, **kwargs):
+            self.assertEqual(command[1:5], ['-I','-S','-B','-X'])
+            cache = Path(command[5].split('=',1)[1]); seen.append(cache)
+            self.assertTrue(cache.is_dir()); self.assertEqual(list(cache.iterdir()), [])
+            self.assertEqual(kwargs['env'], {'TZ':'UTC','LC_ALL':'C.UTF-8'})
+            return subprocess.CompletedProcess(command, 0, b'HUNTER_PURE_TESTS_OK 7\n')
+        with mock.patch.object(receipt.subprocess, 'run', side_effect=run):
+            self.assertTrue(receipt.run_candidate())
+        self.assertFalse(seen[0].exists())
+
 
 @unittest.skipUnless(sys.platform == 'linux', 'Linux permission/descriptor contract')
 class StoreTests(unittest.TestCase):

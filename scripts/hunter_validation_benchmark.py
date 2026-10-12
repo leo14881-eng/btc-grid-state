@@ -38,7 +38,7 @@ def main():
     args = parser.parse_args()
     samples = {name: [] for name in ('pure_original', 'pure_cold_compare', 'pure_hot_compare', 'pure_hot_read_only',
                                     'full_original', 'full_cold_compare', 'full_hot_compare')}
-    pure = [sys.executable, '-I', '-S', '-B', str(ROOT / 'scripts/hunter_validation_receipt.py'), '--child']
+    pure = [sys.executable, '-B', '-c', 'from scripts.hunter_validation_receipt import run_candidate; assert run_candidate()']
     full_code = "import subprocess,sys; subprocess.run([sys.executable,'-B','-m','unittest','discover','-s','tests','-p','test_hunter*.py'],check=True)"
     with tempfile.TemporaryDirectory(prefix='hunter-receipt-benchmark-') as temp:
         directory = Path(temp)

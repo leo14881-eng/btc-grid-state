@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import sysconfig
+import tempfile
 import time
 import unittest
 
@@ -77,7 +78,7 @@ def runtime_identity():
     return dict(python=sys.version, implementation=sys.implementation.cache_tag,
                 machine=platform.machine(), kernel=platform.release(), libc=platform.libc_ver(),
                 files={str(p): file_digest(p) for p in sorted(paths)},
-                command_flags=["-I", "-S", "-B"], environment=CHILD_ENV)
+                command_flags=["-I", "-S", "-B", "-X", "pycache_prefix=empty_ephemeral_directory"], environment=CHILD_ENV)
 
 
 def fingerprint(root=ROOT):
@@ -239,8 +240,13 @@ def open_store(directory, key_path, writable=False):
 
 
 def run_candidate(root=ROOT):
-    result = subprocess.run([sys.executable, "-I", "-S", "-B", str(root / "scripts/hunter_validation_receipt.py"), "--child"],
-                            cwd=root, env=CHILD_ENV, capture_output=True, timeout=30)
+    # -B prevents writes, but by itself still READS existing .pyc files. Direct
+    # every cache lookup to a new empty directory so only fingerprinted sources
+    # and native extensions can supply candidate code.
+    with tempfile.TemporaryDirectory(prefix="hunter-validation-bytecode-") as cache:
+        result = subprocess.run([sys.executable, "-I", "-S", "-B", "-X", "pycache_prefix=" + cache,
+                                 str(root / "scripts/hunter_validation_receipt.py"), "--child"],
+                                cwd=root, env=CHILD_ENV, capture_output=True, timeout=30)
     # Do not log subprocess text, which could include input data or paths.
     return result.returncode == 0 and result.stdout.strip() == b'HUNTER_PURE_TESTS_OK 7'
 
