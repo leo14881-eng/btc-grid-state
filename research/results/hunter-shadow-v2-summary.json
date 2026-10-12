@@ -1,12 +1,12 @@
 {
   "realized_net_pnl_usdt": 654.53,
-  "open_unrealized_pnl_usdt": -826.32,
-  "estimated_exit_cost_usdt": 21.95,
-  "mark_to_market_net_pnl_usdt": -204.07,
-  "reference_mark_to_market_net_pnl_usdt": -171.79,
+  "open_unrealized_pnl_usdt": -857.0,
+  "estimated_exit_cost_usdt": 17.48,
+  "mark_to_market_net_pnl_usdt": -230.94,
+  "reference_mark_to_market_net_pnl_usdt": -202.47,
   "closed_win_rate": 0.9333333333333333,
   "open_loss_exposure_usdt": 12000.0,
-  "thesis_invalidated_open_count": 3,
+  "thesis_invalidated_open_count": 4,
   "loss_recovery_open_count": 8,
   "mark_data_unknown_assets": [],
   "exit_data_unknown_assets": [],
@@ -14,9 +14,9 @@
   "mark_to_market_basis": "FULL_QUANTITY_LIQUIDATION_ESTIMATES",
   "estimated_exit_cost_basis": "SAME_DEPTH_RECEIPT_MID",
   "metric_scope": "SHADOW_MODEL_NOT_ACTUAL_FILLS",
-  "generation_id": "20261012T131445374031Z",
+  "generation_id": "MONITOR_20261012T133059300384Z",
   "schema": "hunter_shadow_v2_summary_v3",
-  "as_of_utc": "2026-10-12T13:29:52.473907+00:00",
+  "as_of_utc": "2026-10-12T13:31:20.968299+00:00",
   "mode": "SIMULATION_ONLY_NO_REAL_ORDERS",
   "strategy": "CAPITAL_DECISION_ENGINE_V2",
   "policy_version": "shadow-consistent-v2-leading-risk-phase1",
@@ -195,19 +195,19 @@
         "streak_start_sequence": null,
         "pending_principal_usdt": 0.0,
         "rolling_realized_loss_usdt": 0.0,
-        "evaluated_at_utc": "2026-10-12T13:29:52.473907+00:00",
+        "evaluated_at_utc": "2026-10-12T13:31:20.968299+00:00",
         "loss_threshold_met": false,
         "market_confirmation": {
-          "state": "UNKNOWN",
-          "complete": false,
+          "state": "NOT_BAD",
+          "complete": true,
           "btc_rapid_drop": false,
           "broad_altcoin_weakness": false,
           "confirmed": false,
-          "observation_id": "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1"
+          "observation_id": "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874"
         }
       },
       "loss_freeze_episode": null,
-      "new_risk_blocked": true,
+      "new_risk_blocked": false,
       "effective_quarantined_cash_usdt": 0.0,
       "initial_capital_usdt": 20000.0,
       "realized_net_pnl_usdt": 654.53,
@@ -215,12 +215,12 @@
       "used_capital_usdt": 12000.0,
       "market_regime": "RISK_OFF",
       "market_regime_evidence": {
-        "btc_change_24h_pct": -0.609,
-        "negative_breadth": 0.6029,
+        "btc_change_24h_pct": -0.68,
+        "negative_breadth": 0.6657,
         "max_utilization": 0.6
       },
       "hard_cash_floor_pct": 0.05,
-      "max_deployable_usdt": 0.0,
+      "max_deployable_usdt": 3098.18,
       "allocator_available_usdt": 0.0,
       "strategic_allocator_available_usdt": 0,
       "total_cash_usdt": 8654.53,
@@ -232,8 +232,8 @@
         "stress_loss_fraction_with_buffer": 1.0,
         "tail_cap_usdt": 4000.0,
         "quarantined_cash_usdt": 0.0,
-        "systemic_recovery_release_fraction": 0.0,
-        "effective_tail_cap_usdt": 0.0,
+        "systemic_recovery_release_fraction": 0.25,
+        "effective_tail_cap_usdt": 1000.0,
         "candidate_budget_caps_usdt": {
           "1000": 1000.0,
           "2000": 2000.0,
@@ -243,40 +243,40 @@
         "realized_profit_expands_tail_budget": false
       },
       "systemic_risk": {
-        "level": "HIGH",
-        "raw_level": "HIGH",
+        "level": "ELEVATED",
+        "raw_level": "NORMAL",
         "reasons": [
-          "FAIL_CLOSED_EVIDENCE:MARKET_SCAN_MISSING_OR_STALE"
+          "SYSTEMIC_EVIDENCE_NORMAL"
         ],
-        "entered_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "updated_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "last_observation_id": "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1",
-        "last_observed_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "recovery_observations": 0,
+        "entered_at_utc": "2026-10-12T13:31:20.968299+00:00",
+        "updated_at_utc": "2026-10-12T13:31:20.968299+00:00",
+        "last_observation_id": "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874",
+        "last_observed_at_utc": "2026-10-12T13:30:59.300384+00:00",
+        "recovery_observations": 1,
         "recovery_required": 4,
         "recovery_mode": true,
-        "last_recovery_counted_at_utc": null,
+        "last_recovery_counted_at_utc": "2026-10-12T13:31:20.968299+00:00",
         "recovery_min_gap_seconds": 300.0,
-        "risk_release_fraction": 0.0,
+        "risk_release_fraction": 0.25,
         "evidence": {
           "schema": "hunter_systemic_risk_evidence_v1",
-          "observed_at_utc": "2026-10-12T13:29:52.473907+00:00",
-          "observation_id": "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1",
-          "scan_generation_id": "20261012T131445374031Z",
-          "scan_as_of_utc": "2026-10-12T13:14:45.374031+00:00",
-          "scan_fresh": false,
+          "observed_at_utc": "2026-10-12T13:30:59.300384+00:00",
+          "observation_id": "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874",
+          "scan_generation_id": "MONITOR_20261012T133059300384Z",
+          "scan_as_of_utc": "2026-10-12T13:30:59.300384+00:00",
+          "scan_fresh": true,
           "btc_short": {
-            "return_5m_pct": 0.0234,
-            "return_15m_pct": -0.158,
-            "return_1h_pct": -0.7221,
-            "last_completed_close_utc": "2026-10-12T13:24:59.999000+00:00"
+            "return_5m_pct": -0.0306,
+            "return_15m_pct": -0.0289,
+            "return_1h_pct": -0.7105,
+            "last_completed_close_utc": "2026-10-12T13:29:59.999000+00:00"
           },
           "btc_fetch_error": null,
           "breadth": {
-            "sample_count": 408,
-            "negative_fraction": 0.6029,
-            "loss_5pct_fraction": 0.0686,
-            "loss_10pct_fraction": 0.0172
+            "sample_count": 692,
+            "negative_fraction": 0.6691,
+            "loss_5pct_fraction": 0.1705,
+            "loss_10pct_fraction": 0.0954
           },
           "liquidity": {
             "fresh_sample_count": 327,
@@ -286,21 +286,19 @@
           },
           "stablecoins": {
             "prices": {
-              "USDCUSDT": 1.0009,
+              "USDCUSDT": 1.00091,
               "FDUSDUSDT": 0.998,
               "TUSDUSDT": 0.9997
             },
             "deviation_pct": {
-              "USDCUSDT": 0.09,
+              "USDCUSDT": 0.091,
               "FDUSDUSDT": 0.2,
               "TUSDUSDT": 0.03
             },
             "max_deviation_pct": 0.2,
             "fetch_error": null
           },
-          "missing_or_stale": [
-            "MARKET_SCAN_MISSING_OR_STALE"
-          ],
+          "missing_or_stale": [],
           "capital_authority": "NONE_SHADOW_ONLY"
         },
         "capital_authority": "NONE_SHADOW_ONLY",
@@ -313,10 +311,13 @@
           "2eea7c64a7b987d5ad650dde212a374b6d55c9135f02430cb98b69b086eb25d7",
           "5cb5e90e930c204cb3a2555dc2b0ecc837254aadd27d92a4608b2463ccd770cf",
           "2d6765c4527304e0f21564839d5baa4c86952cc06a601f77bb0d0a13d0d2eca1",
-          "948e1aca2e42e39d4d602826d510bcbd1926e45dbc787622113e5e72b154a418"
+          "948e1aca2e42e39d4d602826d510bcbd1926e45dbc787622113e5e72b154a418",
+          "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1",
+          "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874"
         ],
-        "last_recovery_seen_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "last_recovery_seen_observed_at_utc": "2026-10-12T13:29:52.473907+00:00"
+        "last_recovery_seen_at_utc": "2026-10-12T13:31:20.968299+00:00",
+        "last_recovery_seen_observed_at_utc": "2026-10-12T13:30:59.300384+00:00",
+        "last_recovery_counted_observed_at_utc": "2026-10-12T13:30:59.300384+00:00"
       }
     },
     "tail_risk_phase1": {
@@ -429,55 +430,55 @@
         "streak_start_sequence": null,
         "pending_principal_usdt": 0.0,
         "rolling_realized_loss_usdt": 0.0,
-        "evaluated_at_utc": "2026-10-12T13:29:52.473907+00:00",
+        "evaluated_at_utc": "2026-10-12T13:31:20.968299+00:00",
         "loss_threshold_met": false,
         "market_confirmation": {
-          "state": "UNKNOWN",
-          "complete": false,
+          "state": "NOT_BAD",
+          "complete": true,
           "btc_rapid_drop": false,
           "broad_altcoin_weakness": false,
           "confirmed": false,
-          "observation_id": "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1"
+          "observation_id": "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874"
         }
       },
       "loss_freeze_episode": null,
-      "new_risk_blocked": true,
+      "new_risk_blocked": false,
       "effective_quarantined_cash_usdt": 0.0,
       "systemic_risk": {
-        "level": "HIGH",
-        "raw_level": "HIGH",
+        "level": "ELEVATED",
+        "raw_level": "NORMAL",
         "reasons": [
-          "FAIL_CLOSED_EVIDENCE:MARKET_SCAN_MISSING_OR_STALE"
+          "SYSTEMIC_EVIDENCE_NORMAL"
         ],
-        "entered_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "updated_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "last_observation_id": "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1",
-        "last_observed_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "recovery_observations": 0,
+        "entered_at_utc": "2026-10-12T13:31:20.968299+00:00",
+        "updated_at_utc": "2026-10-12T13:31:20.968299+00:00",
+        "last_observation_id": "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874",
+        "last_observed_at_utc": "2026-10-12T13:30:59.300384+00:00",
+        "recovery_observations": 1,
         "recovery_required": 4,
         "recovery_mode": true,
-        "last_recovery_counted_at_utc": null,
+        "last_recovery_counted_at_utc": "2026-10-12T13:31:20.968299+00:00",
         "recovery_min_gap_seconds": 300.0,
-        "risk_release_fraction": 0.0,
+        "risk_release_fraction": 0.25,
         "evidence": {
           "schema": "hunter_systemic_risk_evidence_v1",
-          "observed_at_utc": "2026-10-12T13:29:52.473907+00:00",
-          "observation_id": "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1",
-          "scan_generation_id": "20261012T131445374031Z",
-          "scan_as_of_utc": "2026-10-12T13:14:45.374031+00:00",
-          "scan_fresh": false,
+          "observed_at_utc": "2026-10-12T13:30:59.300384+00:00",
+          "observation_id": "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874",
+          "scan_generation_id": "MONITOR_20261012T133059300384Z",
+          "scan_as_of_utc": "2026-10-12T13:30:59.300384+00:00",
+          "scan_fresh": true,
           "btc_short": {
-            "return_5m_pct": 0.0234,
-            "return_15m_pct": -0.158,
-            "return_1h_pct": -0.7221,
-            "last_completed_close_utc": "2026-10-12T13:24:59.999000+00:00"
+            "return_5m_pct": -0.0306,
+            "return_15m_pct": -0.0289,
+            "return_1h_pct": -0.7105,
+            "last_completed_close_utc": "2026-10-12T13:29:59.999000+00:00"
           },
           "btc_fetch_error": null,
           "breadth": {
-            "sample_count": 408,
-            "negative_fraction": 0.6029,
-            "loss_5pct_fraction": 0.0686,
-            "loss_10pct_fraction": 0.0172
+            "sample_count": 692,
+            "negative_fraction": 0.6691,
+            "loss_5pct_fraction": 0.1705,
+            "loss_10pct_fraction": 0.0954
           },
           "liquidity": {
             "fresh_sample_count": 327,
@@ -487,21 +488,19 @@
           },
           "stablecoins": {
             "prices": {
-              "USDCUSDT": 1.0009,
+              "USDCUSDT": 1.00091,
               "FDUSDUSDT": 0.998,
               "TUSDUSDT": 0.9997
             },
             "deviation_pct": {
-              "USDCUSDT": 0.09,
+              "USDCUSDT": 0.091,
               "FDUSDUSDT": 0.2,
               "TUSDUSDT": 0.03
             },
             "max_deviation_pct": 0.2,
             "fetch_error": null
           },
-          "missing_or_stale": [
-            "MARKET_SCAN_MISSING_OR_STALE"
-          ],
+          "missing_or_stale": [],
           "capital_authority": "NONE_SHADOW_ONLY"
         },
         "capital_authority": "NONE_SHADOW_ONLY",
@@ -514,10 +513,13 @@
           "2eea7c64a7b987d5ad650dde212a374b6d55c9135f02430cb98b69b086eb25d7",
           "5cb5e90e930c204cb3a2555dc2b0ecc837254aadd27d92a4608b2463ccd770cf",
           "2d6765c4527304e0f21564839d5baa4c86952cc06a601f77bb0d0a13d0d2eca1",
-          "948e1aca2e42e39d4d602826d510bcbd1926e45dbc787622113e5e72b154a418"
+          "948e1aca2e42e39d4d602826d510bcbd1926e45dbc787622113e5e72b154a418",
+          "a85f3f228954c2834620ecbaab1ef3a168402774cce61b3b7af3ceceae97d4d1",
+          "81ca4074157cdf34ca0d59cd261463408990f5c11cbef5abdfc7f6c4954a3874"
         ],
-        "last_recovery_seen_at_utc": "2026-10-12T13:29:52.473907+00:00",
-        "last_recovery_seen_observed_at_utc": "2026-10-12T13:29:52.473907+00:00"
+        "last_recovery_seen_at_utc": "2026-10-12T13:31:20.968299+00:00",
+        "last_recovery_seen_observed_at_utc": "2026-10-12T13:30:59.300384+00:00",
+        "last_recovery_counted_observed_at_utc": "2026-10-12T13:30:59.300384+00:00"
       },
       "calibration_only": true,
       "capital_authority": "NONE_SHADOW_ONLY",
@@ -686,5 +688,110 @@
       }
     }
   },
-  "capital_authority": "NONE_SHADOW_ONLY"
+  "capital_authority": "NONE_SHADOW_ONLY",
+  "exit_decision_cohorts": {
+    "scope": "SEPARATE_REVIEW_COHORTS_TOTAL_REALIZED_PNL_UNCHANGED",
+    "user_manual": {
+      "count": 2,
+      "net_pnl_usdt": -261.83,
+      "opportunity_evaluation": {
+        "evaluated_positions": 2,
+        "holding_mfe_available": 2,
+        "full_opportunity_mfe_available": 2,
+        "completed_72h_observations": 0,
+        "post_exit_coverage": {
+          "1h": {
+            "due": 2,
+            "backfilled": 2
+          },
+          "6h": {
+            "due": 2,
+            "backfilled": 2
+          },
+          "24h": {
+            "due": 2,
+            "backfilled": 2
+          },
+          "48h": {
+            "due": 0,
+            "backfilled": 0
+          },
+          "72h": {
+            "due": 0,
+            "backfilled": 0
+          }
+        },
+        "avg_completed_72h_max_return_from_sell_pct": null,
+        "full_opportunity_metrics_provisional": true,
+        "avg_holding_mfe_pct": 3.6726,
+        "median_holding_mfe_pct": 3.6726,
+        "avg_full_opportunity_mfe_pct": 3.6726,
+        "median_full_opportunity_mfe_pct": 3.6726,
+        "avg_realized_net_return_pct": -13.0915,
+        "avg_holding_profit_capture_ratio": 0.0,
+        "avg_full_opportunity_capture_ratio": 0.0,
+        "potential_premature_exit_count": 0,
+        "profit_giveback_count": 0,
+        "full_opportunity_mfe_distribution": {
+          "lt_0": 0,
+          "0_3": 0,
+          "3_5": 2,
+          "5_10": 0,
+          "10_20": 0,
+          "gt_20": 0
+        }
+      }
+    },
+    "automatic_strategy": {
+      "count": 28,
+      "net_pnl_usdt": 916.36,
+      "opportunity_evaluation": {
+        "evaluated_positions": 28,
+        "holding_mfe_available": 28,
+        "full_opportunity_mfe_available": 28,
+        "completed_72h_observations": 20,
+        "post_exit_coverage": {
+          "1h": {
+            "due": 28,
+            "backfilled": 28
+          },
+          "6h": {
+            "due": 28,
+            "backfilled": 28
+          },
+          "24h": {
+            "due": 24,
+            "backfilled": 24
+          },
+          "48h": {
+            "due": 22,
+            "backfilled": 22
+          },
+          "72h": {
+            "due": 20,
+            "backfilled": 20
+          }
+        },
+        "avg_completed_72h_max_return_from_sell_pct": 8.8075,
+        "full_opportunity_metrics_provisional": true,
+        "avg_holding_mfe_pct": 5.4029,
+        "median_holding_mfe_pct": 4.4803,
+        "avg_full_opportunity_mfe_pct": 13.9458,
+        "median_full_opportunity_mfe_pct": 7.3563,
+        "avg_realized_net_return_pct": 2.4901,
+        "avg_holding_profit_capture_ratio": 0.3653,
+        "avg_full_opportunity_capture_ratio": 0.2286,
+        "potential_premature_exit_count": 4,
+        "profit_giveback_count": 0,
+        "full_opportunity_mfe_distribution": {
+          "lt_0": 0,
+          "0_3": 3,
+          "3_5": 5,
+          "5_10": 12,
+          "10_20": 3,
+          "gt_20": 5
+        }
+      }
+    }
+  }
 }
