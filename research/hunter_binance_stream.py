@@ -282,8 +282,10 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
             if status in (403,418): Budget(store).failure(403,'Binance websocket denial')
             elif status: Budget(store).failure(status,'')
             delay=budget.failed()
+            reason=str(error)
+            if not re.fullmatch(r'[A-Z][A-Z0-9_]{0,127}',reason): reason='UNCLASSIFIED'
             print(json.dumps(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
-                error_type=type(error).__name__,status='UNKNOWN')),flush=True)
+                error_type=type(error).__name__,error_code=reason,status='UNKNOWN')),flush=True)
         if budget.failures<5:
             for _ in range(delay*10):
                 if stop(): return

@@ -1,9 +1,12 @@
 """Real OS sockets/processes against literal loopback; child forbids external IO."""
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
 import select
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -13,6 +16,8 @@ import unittest
 from unittest.mock import patch
 
 from research import hunter_binance_public as public
+from research import hunter_binance_stream as stream
+from research import hunter_bybit_public as coordinator
 from research.hunter_binance_stream_store import Store, Budget
 
 HELPER=Path(__file__).parent/'fixtures/binance_http_child.py'
@@ -77,6 +82,111 @@ class ProcessTests(unittest.TestCase):
         with self.store.db(readonly=True) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],0)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],0)
+
+    def assert_retired(self):
+        self.assertIsNone(Budget(Store.reader(self.path)).status()['halt'])
+        with self.store.db(readonly=True) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM leases').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],0)
+        self.assertEqual(list(self.path.parent.glob('request-*.lock')),[])
+
+    def test_legacy_cleanup_deadline_reproduces_timeout_then_orphan_after_five_seconds(self):
+        # Exercise the deployed helper's unchanged default with real flock/DB.
+        # No HTTP is needed to show that normal completion misses cleanup.
+        def completed_session(*args,**kwargs):
+            token=Budget(self.store).acquire();deadline=time.monotonic()+1
+            with patch.object(coordinator.time,'monotonic',return_value=deadline-.5) as clock:
+                with coordinator.tracked(self.store,token,deadline):
+                    clock.return_value=deadline+1
+        output=io.StringIO();delays=[]
+        with patch.object(stream,'session',side_effect=completed_session) as sessions,\
+             contextlib.redirect_stdout(output),self.assertRaisesRegex(RuntimeError,'ORPHANED_HTTP_REQUEST'):
+            stream.collect(self.store,['btcusdt@kline_5m'],'a'*64,'b'*40,sleep=delays.append)
+        self.assertEqual(sessions.call_count,1);self.assertAlmostEqual(sum(delays),5)
+        event=json.loads(output.getvalue())
+        self.assertEqual((event['failures'],event['error_type']),(1,'TimeoutError'))
+
+    def test_complete_response_past_deadline_retires_owner_before_reconnect(self):
+        server=self.server();client=self.client(server);delays=[];calls=[]
+        with contextlib.ExitStack() as patches:
+            def finished(*args):
+                result=public.exchange(*args)
+                self.assertTrue(server.closed.wait(2))
+                patches.enter_context(patch.object(public.time,'monotonic',return_value=args[1]+.1))
+                return result
+            client.transport=finished
+            def session(*args,**kwargs):
+                calls.append(1)
+                if len(calls)==1:
+                    client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),timeout=3)
+                self.assert_retired()
+            with patch.object(stream,'session',session),contextlib.redirect_stdout(io.StringIO()):
+                stream.collect(self.store,['btcusdt@kline_5m'],'a'*64,'b'*40,sleep=delays.append)
+            self.assertEqual(len(calls),2);self.assertAlmostEqual(sum(delays),5)
+        self.assert_retired()
+
+    def test_complete_response_cancelled_after_reap_retires_without_publishing(self):
+        server=self.server();client=self.client(server);cancelled=Event()
+        def finished(*args):
+            result=public.exchange(*args)
+            self.assertTrue(server.closed.wait(2));cancelled.set()
+            return result
+        client.transport=finished
+        with self.assertRaisesRegex(TimeoutError,'PUBLIC_REQUEST_CANCELLED_OR_EXPIRED'):
+            client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
+                           timeout=3,cancelled=cancelled.is_set)
+        self.assert_retired()
+
+    def test_proven_not_sent_past_deadline_retires_owner(self):
+        with contextlib.ExitStack() as patches:
+            def unsent(url,deadline,*args):
+                patches.enter_context(patch.object(public.time,'monotonic',return_value=deadline+.1))
+                raise public.NotSentError('PUBLIC_REQUEST_NOT_SENT')
+            with self.assertRaises(TimeoutError):
+                public.Client(self.store,transport=unsent).request('/api/v3/klines',
+                    dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),timeout=3)
+        self.assert_retired()
+
+    def test_completed_cleanup_busy_is_bounded_and_keeps_protection(self):
+        server=self.server();client=self.client(server);real=self.store.db
+        @contextlib.contextmanager
+        def busy(*args,**kwargs):
+            with real(*args,**kwargs) as db:
+                class Connection:
+                    def execute(_,sql,params=()):
+                        if sql.startswith('DELETE FROM requests'):
+                            raise sqlite3.OperationalError('database is locked')
+                        return db.execute(sql,params)
+                yield Connection()
+        start=time.monotonic()
+        with patch.object(self.store,'db',busy),self.assertRaisesRegex(public.DurableStopError,'CLEANUP_TIMEOUT'):
+            client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),timeout=3)
+        self.assertLess(time.monotonic()-start,2.5)
+        self.assert_stopped(server)
+
+    def test_completed_late_response_retries_only_cleanup_contention(self):
+        server=self.server();client=self.client(server);real=self.store.db;remaining=[2];calls=[]
+        @contextlib.contextmanager
+        def busy(*args,**kwargs):
+            with real(*args,**kwargs) as db:
+                class Connection:
+                    def execute(_,sql,params=()):
+                        if sql.startswith('DELETE FROM requests') and remaining[0]:
+                            remaining[0]-=1
+                            self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],1)
+                            raise sqlite3.OperationalError('database is locked')
+                        return db.execute(sql,params)
+                yield Connection()
+        with contextlib.ExitStack() as patches:
+            def finished(*args):
+                calls.append(1);result=public.exchange(*args)
+                self.assertTrue(server.closed.wait(2))
+                patches.enter_context(patch.object(public.time,'monotonic',return_value=args[1]+.1))
+                return result
+            client.transport=finished
+            with patch.object(self.store,'db',busy),self.assertRaises(TimeoutError):
+                client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),timeout=3)
+        self.assertEqual((remaining,calls),([0],[1]));self.assert_retired()
 
     def test_slow_body_total_deadline_terminates_socket_and_preserves_unknown(self):
         server=self.server(slow=True);client=self.client(server);start=time.monotonic()

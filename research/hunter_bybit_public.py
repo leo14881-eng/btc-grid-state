@@ -171,7 +171,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None):
 
 
 @contextlib.contextmanager
-def tracked(store, token, deadline, cancelled=lambda:False):
+def tracked(store, token, deadline, cancelled=lambda:False, *, cleanup_timeout=None):
     import fcntl
     path = store.path.parent/('request-'+token+'.lock')
     handle = path.open('xb')
@@ -183,11 +183,19 @@ def tracked(store, token, deadline, cancelled=lambda:False):
                 db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
         coordinate(begin,deadline,cancelled)
         yield handle.close  # Immediate shared stop if denial persistence fails.
+        # Normal exit means the caller proved completion (or no GO). Cleanup
+        # may need its own bounded deadline after the data deadline expired.
+        # Exceptions from the body still retain the marker and lease unchanged.
+        finish_deadline = deadline if cleanup_timeout is None else time.monotonic()+cleanup_timeout
         def finish():
-            with store.db(timeout=max(0,min(.25,deadline-time.monotonic()))) as db:
+            with store.db(timeout=max(0,min(.25,finish_deadline-time.monotonic()))) as db:
                 db.execute('DELETE FROM requests WHERE token=?',(token,))
                 db.execute('DELETE FROM leases WHERE token=?',(token,))
-        coordinate(finish,deadline)
+        try:
+            coordinate(finish,finish_deadline)
+        except TimeoutError as error:
+            if cleanup_timeout is None: raise
+            raise DurableStopError('PUBLIC_REQUEST_CLEANUP_TIMEOUT_MANUAL_REVIEW') from error
         remove = True
         if time.monotonic()>=deadline:
             raise TimeoutError('PUBLIC_RESPONSE_FINISHED_AFTER_DEADLINE')
