@@ -1,0 +1,105 @@
+name: Binance Three Recovery Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_binance_recover_three_once.py'
+      - 'tests/test_binance_three_recovery_package.py'
+      - 'tests/test_binance_three_recovery_plan.py'
+      - '.github/workflows/binance-three-recovery-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Sixteen SQLite and one-attempt fixtures without network or subprocesses
+        run: |
+          python -B - <<'PY'
+          import io,os,shutil,subprocess,sys,tarfile,tempfile,unittest
+          from pathlib import Path
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder).resolve(); tempfile.tempdir=str(root); blocked=[]
+              # Assemble the actual deployment runtime before installing the
+              # no-process guard. Never test this wrapper against main's old client.
+              sha='d52b420f1f0c3e592fb93de67e73c982e1c02767'
+              names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+              names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+              archive=subprocess.check_output(['git','archive',sha,'--',*names])
+              runtime=root/'runtime'; runtime.mkdir()
+              with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:bundle.extractall(runtime)
+              shutil.copyfile('scripts/hunter_binance_recover_three_once.py',runtime/'scripts/hunter_binance_recover_three_once.py')
+              (runtime/'tests').mkdir()
+              shutil.copyfile('tests/test_binance_three_recovery_package.py',runtime/'tests/test_binance_three_recovery_package.py')
+              sys.path.insert(0,str(runtime))
+              print('FIXED_RUNTIME_UNDER_TEST',sha)
+              def inside(path,fd=None):
+                  if isinstance(path,int): return
+                  target=Path(os.fsdecode(path).removeprefix('file:').split('?')[0])
+                  if not target.is_absolute() and isinstance(fd,int) and fd>=0:
+                      target=Path(os.readlink('/proc/self/fd/'+str(fd)))/target
+                  target=target.resolve()
+                  if target!=root and root not in target.parents: raise RuntimeError('WRITE_OUTSIDE_SCRATCH')
+              def guard(event,args):
+                  if event.startswith('socket.') or event in ('subprocess.Popen','os.system','os.posix_spawn','os.fork','os.forkpty') or event.startswith(('os.exec','os.spawn')):
+                      blocked.append(event); raise RuntimeError('NETWORK_OR_PROCESS_FORBIDDEN')
+                  if event=='sqlite3.connect':inside(args[0])
+                  if event=='open':
+                      path,mode,flags=args
+                      if isinstance(mode,str) and any(x in mode for x in 'wax+') or isinstance(flags,int) and flags&(os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC|os.O_APPEND):inside(path)
+                  if event in ('os.mkdir','os.remove','os.rmdir','os.chmod','os.utime'):
+                      i={'os.mkdir':2,'os.remove':1,'os.rmdir':1,'os.chmod':2,'os.utime':3}[event];inside(args[0],args[i] if len(args)>i else None)
+                  if event=='os.rename':inside(args[0]);inside(args[1])
+              sys.addaudithook(guard)
+              result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover(str(runtime/'tests'),pattern='test_binance_three_recovery_package.py'))
+              good=result.wasSuccessful() and result.testsRun==16 and not result.skipped and not blocked
+              print('THREE_RECOVERY_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
+              if not good:raise SystemExit(1)
+          PY
+      - name: One-start deadline and report-durability supervision
+        run: python -B -m unittest discover -s tests -p test_binance_three_recovery_plan.py -v
+      - name: Reproduce fresh-scan child in the actual old-release layout
+        run: |
+          python -B - <<'PY'
+          import datetime as d,io,json,os,subprocess,sys,tarfile,tempfile,venv
+          from pathlib import Path
+          from scripts.hunter_binance_recover_three_once import SCAN_CHECK,command
+          sha='99f75edcf2c2f95d59e5cf797051442639dc64ce'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder); prefix=root/'opt/hunter-binance-stream'; code=prefix/'code'; code.mkdir(parents=True)
+              with tarfile.open(fileobj=io.BytesIO(data)) as bundle:bundle.extractall(code)
+              venv.EnvBuilder(with_pip=False).create(prefix/'venv')
+              for age,expected in [(0,'FRESH_SCOPE_OK'),(1300,'NATURAL_SCAN_TOO_OLD_WAIT_FOR_NEXT_CYCLE'),(2800,'BINANCE_SCAN_NOT_FRESH_COMPLETE')]:
+                  scan=dict(as_of_utc=(d.datetime.now(d.timezone.utc)-d.timedelta(seconds=age)).isoformat(),
+                      binance_complete=True,generation_id='fixture',coins={'BTC':{'pairs':[dict(venue='binance',base='BTC',pair='BTCUSDT')]}})
+                  result=command([prefix/'venv/bin/python','-E','-s','-B','-c',SCAN_CHECK],cwd=code,data=json.dumps(scan).encode(),check=False)
+                  assert (result.returncode==0)==(age==0),(age,result.stderr)
+                  assert expected in (result.stdout+result.stderr).decode(),result.stderr
+                  assert json.loads(result.stdout.splitlines()[0])['as_of_utc']==scan['as_of_utc']
+                  print('OLD_RELEASE_LAYOUT_CHECK',sha,age,expected)
+              assert not list(code.rglob('__pycache__'))
+          PY
+      - name: Verify reused upgrade entry bytes only
+        run: |
+          python -B - <<'PY'
+          import hashlib,subprocess
+          from scripts.hunter_binance_recover_three_once import UPGRADER,UPGRADER_HASH
+          data=subprocess.check_output(['git','show',UPGRADER+':scripts/hunter_binance_upgrade.py'])
+          assert hashlib.sha256(data).hexdigest()==UPGRADER_HASH
+          print('VERIFIED_UPGRADE_ENTRY',UPGRADER,UPGRADER_HASH)
+          PY
