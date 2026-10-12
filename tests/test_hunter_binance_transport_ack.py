@@ -23,17 +23,21 @@ NOW=1791670694000
 
 class Clock:
     def __init__(self):
-        self.owner=get_ident();self.now=NOW;self.local={};self.lock=Lock();self.running=False
+        self.owner=get_ident();self.now=NOW;self.lock=Lock();self.running=False
+        self.delivered=lambda:False
 
     def __call__(self):
+        # One coherent time for sender and supervisor. Never let a send's
+        # simulated 500ms spacing put its timestamp ahead of the next tick.
+        # Start idle time only after real readers latch all configured replies;
+        # a scheduler delay must not manufacture a missing/late exchange ACK.
+        advance=get_ident()==self.owner and self.running and self.delivered()
         with self.lock:
-            if get_ident()==self.owner:
-                if self.running:self.now=max([self.now,*self.local.values()])+1000
-                return self.now
-            return self.local.setdefault(get_ident(),self.now)
+            if advance:self.now+=1000
+            return self.now
 
     def sleep(self,seconds):
-        with self.lock:self.local[get_ident()]=self.local.setdefault(get_ident(),self.now)+int(seconds*1000)
+        with self.lock:self.now+=int(seconds*1000)
         time.sleep(.001) # Give real socket readers a scheduling opportunity.
 
     def dial(self,milliseconds):
@@ -108,6 +112,7 @@ class AckScheduleTests(unittest.TestCase):
         names=[topic('X'+str(i)+'USDT','1h') for i in range(count)]
         self.store.arm(names);clock=Clock();peers=[]
         shards=(count+499)//500
+        clock.delivered=lambda:len(peers)==shards and all(p.processed.is_set() for p in peers)
         @contextlib.contextmanager
         def connect():
             if peers and not peers[-1].processed.wait(3):
@@ -127,7 +132,7 @@ class AckScheduleTests(unittest.TestCase):
             stream.session(self.store,names,'a'*64,self.store.done.is_set,
                 connect=connect,clock=clock,sleep=clock.sleep,repairer=repair)
         finally:
-            self.peers=peers
+            self.peers=peers;self.elapsed=clock.now-NOW
             self.assertTrue(all(not p.thread.is_alive() for p in peers))
         return [r['id'] for p in peers for r in p.requests]
 
@@ -142,12 +147,14 @@ class AckScheduleTests(unittest.TestCase):
         requests=self.run_session(1501,8000)
         self.assertEqual([len(p.requests) for p in self.peers],[5,5,5,1])
         self.assertEqual(len(self.store.applied),1501)
+        self.assertGreater(self.elapsed,30_000)
         self.assert_controls(requests)
 
     def test_current_1228_topics_three_9800ms_dials_keep_500ms_spacing(self):
         requests=self.run_session(1228,9800)
         self.assertEqual([len(p.requests) for p in self.peers],[5,5,3])
         self.assertEqual(len(self.store.applied),1228)
+        self.assertGreater(self.elapsed,30_000)
         self.assert_controls(requests)
 
     def test_genuinely_late_ack_fails_even_when_other_shards_succeed(self):
