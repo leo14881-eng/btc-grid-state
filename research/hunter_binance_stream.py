@@ -147,54 +147,56 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 try: messages.put((index,error,clock()),timeout=.5)
                 except queue.Full: cancelled.set()
     pool=ThreadPoolExecutor(max_workers=4)
+    stack=ExitStack()
     try:
-        with ExitStack() as stack:
-            for index,requests in enumerate(protocol.requests):
-                if stopping(): return
-                ws=stack.enter_context(connect())
-                thread=Thread(target=pump,args=(index,ws,requests),daemon=False)
-                threads.append(thread); thread.start()
-            while not stopping():
-                now=clock()
-                if now-last_check>=1000:
-                    last_check=now; protocol.tick(now)
-                    state=Budget(store).status()
-                    if state['halt'] or now<state['cooldown_ms']:on_nonready('GLOBAL_STOP_OR_COOLDOWN')
-                    if state['halt'] or state['cooldown_ms']-now>=590_000:
-                        raise RuntimeError(state['halt'] or 'BINANCE_GLOBAL_COOLDOWN')
-                    for name,job in list(jobs.items()):
-                        if job.done(): job.result(); completed.add(name); del jobs[name]
-                    for state in store.states():
-                        name=state['topic']
-                        if (not state['ack'] or state['gap'] or state['epoch']!=protocol.epoch
-                                or any(not 0<=now-state[k]<=FRESH_MS for k in ('ws_rx','ws_ts'))):
-                            on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
-                        if state['ack'] and state['gap'] and name not in jobs and len(jobs)<4:
-                            if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
-                            jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
-                        if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
-                            raise TimeoutError('BINANCE_TOPIC_STALE')
-                    if observer and now-last_audit>=30_000:
-                        observer(now); last_audit=now
-                try: pending=[messages.get(timeout=.1)]
-                except queue.Empty: continue
-                while len(pending)<100:
-                    try:pending.append(messages.get_nowait())
-                    except queue.Empty:break
-                protocol.receive_batch(pending)
-            if cancelled.is_set() and not stop(): raise RuntimeError('BINANCE_RECEIVE_BACKPRESSURE')
+        for index,requests in enumerate(protocol.requests):
+            if stopping(): return
+            ws=stack.enter_context(connect())
+            thread=Thread(target=pump,args=(index,ws,requests),daemon=False)
+            threads.append(thread); thread.start()
+        while not stopping():
+            now=clock()
+            if now-last_check>=1000:
+                last_check=now; protocol.tick(now)
+                state=Budget(store).status()
+                if state['halt'] or now<state['cooldown_ms']:on_nonready('GLOBAL_STOP_OR_COOLDOWN')
+                if state['halt'] or state['cooldown_ms']-now>=590_000:
+                    raise RuntimeError(state['halt'] or 'BINANCE_GLOBAL_COOLDOWN')
+                for name,job in list(jobs.items()):
+                    if job.done(): job.result(); completed.add(name); del jobs[name]
+                for state in store.states():
+                    name=state['topic']
+                    if (not state['ack'] or state['gap'] or state['epoch']!=protocol.epoch
+                            or any(not 0<=now-state[k]<=FRESH_MS for k in ('ws_rx','ws_ts'))):
+                        on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
+                    if state['ack'] and state['gap'] and name not in jobs and len(jobs)<4:
+                        if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
+                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
+                    if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
+                        raise TimeoutError('BINANCE_TOPIC_STALE')
+                if observer and now-last_audit>=30_000:
+                    observer(now); last_audit=now
+            try: pending=[messages.get(timeout=.1)]
+            except queue.Empty: continue
+            while len(pending)<100:
+                try:pending.append(messages.get_nowait())
+                except queue.Empty:break
+            protocol.receive_batch(pending)
+        if cancelled.is_set() and not stop(): raise RuntimeError('BINANCE_RECEIVE_BACKPRESSURE')
     finally:
         cancelled.set()
         on_nonready('SESSION_DISCONNECTED')
         try: store.disconnect(protocol.epoch)
         finally:
-            for job in jobs.values(): job.cancel()
-            pool.shutdown(wait=True,cancel_futures=True)
-            for thread in threads: thread.join(timeout=7)
-            if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
-            for job in jobs.values():
-                if not job.cancelled() and isinstance(job.exception(),(DurableStopError,sqlite3.Error)):
-                    raise job.exception()
+            try: stack.close()
+            finally:
+                for job in jobs.values(): job.cancel()
+                pool.shutdown(wait=True,cancel_futures=True)
+                for thread in threads: thread.join(timeout=7)
+                if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
+                for job in jobs.values():
+                    if not job.cancelled() and isinstance(job.exception(),(DurableStopError,sqlite3.Error)):
+                        raise job.exception()
 
 
 def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,

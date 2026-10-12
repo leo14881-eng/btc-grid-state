@@ -319,5 +319,47 @@ class CacheTests(unittest.TestCase):
         self.assertTrue(all(s['ack'] for s in self.store.states()))
         self.assertEqual(next(s for s in self.store.states() if s['topic']==topic('BTCUSDT','15m'))['ws_ts'],NOW+1)
 
+    def test_cache_audit_does_not_change_systemic_observation_dedup_identity(self):
+        from research.hunter_policy import C
+        cached=consumer.Frozen(self.seed())
+        def fetch(url):return rows('5m') if '/klines?' in url else {'price':'1'}
+        with patch.object(consumer,'window',return_value=None):
+            original=risk.collect_systemic_evidence(scan(),{},DATE,C,fetch_json=fetch)
+        with patch.object(consumer,'window',return_value=cached):
+            result=risk.collect_systemic_evidence(scan(),{},DATE,C,fetch_json=fetch)
+        self.assertEqual(result['observation_id'],original['observation_id'])
+        self.assertIn('source_provenance',result['btc_short'])
+
+    def test_disconnect_revokes_repairs_before_waiting_for_socket_close(self):
+        import contextlib
+        from threading import Event
+        started=Event();closed=Event();cancel_seen=Event();sent=[];reads=[0];ticks=[NOW]
+        def clock():ticks[0]+=1000;return ticks[0]
+        class WS:
+            def send(inner,payload):sent.append(json.loads(payload))
+            def recv(inner,timeout):
+                reads[0]+=1
+                if reads[0]==1:return json.dumps(dict(id=sent[0]['id'],result=None))
+                if not started.wait(3):raise AssertionError('repair never started')
+                raise OSError('fixture disconnect')
+        @contextlib.contextmanager
+        def connect():
+            try:yield WS()
+            finally:
+                # The close handshake must not be required for cancellation.
+                self.assertTrue(cancel_seen.wait(3),'repair not cancelled before socket close')
+                closed.set()
+        def repairer(store,epoch,name,deadline,*,cancelled):
+            started.set()
+            for _ in range(300):
+                if cancelled():cancel_seen.set();return
+                closed.wait(.01)
+            raise AssertionError('repair cancellation missing')
+        with self.assertRaisesRegex(OSError,'fixture disconnect'):
+            stream.session(self.store,[topic('BTCUSDT','15m')],'a'*64,lambda:False,
+                connect=connect,clock=clock,sleep=lambda _:None,repairer=repairer)
+        self.assertTrue(closed.is_set())
+        self.assertEqual(self.freeze()['status'],'UNKNOWN')
+
 
 if __name__=='__main__':unittest.main()

@@ -107,7 +107,11 @@ def collect_systemic_evidence(scan,liq,now,cfg,base_url="https://data-api.binanc
     if len(books)<int(cfg["SYSTEMIC_MIN_BOOK_SAMPLE"]):missing.append("CROSS_ASSET_LIQUIDITY_SAMPLE_INSUFFICIENT")
     if len(stable)<int(cfg["SYSTEMIC_MIN_STABLECOIN_SAMPLE"]):missing.append("STABLECOIN_EVIDENCE_INSUFFICIENT")
     material={"scan_generation_id":(scan or {}).get("generation_id"),"scan_as_of_utc":(scan or {}).get("as_of_utc"),
-              "btc_close":btc_short.get("last_completed_close_utc"),"btc":btc_short,"negative":negative,"loss5":loss5,"loss10":loss10,
+              "btc_close":btc_short.get("last_completed_close_utc"),
+              # Transport audit must not turn the same completed-price evidence
+              # into a new recovery observation solely because its cache cut moved.
+              "btc":{k:v for k,v in btc_short.items() if k!='source_provenance'},
+              "negative":negative,"loss5":loss5,"loss10":loss10,
               "book_times":sorted(str(x.get("as_of_utc")) for x in ((liq or {}).get("snapshots") or {}).values() if isinstance(x,dict))[-10:],
               "stable":stable}
     oid=hashlib.sha256(json.dumps(material,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

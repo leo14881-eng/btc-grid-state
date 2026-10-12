@@ -48,7 +48,7 @@ def main():
             # prelude's test_hunter_bybit*.py (and its stricter no-fork log guard).
             suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_hunter_binance_cache.py')
             result=unittest.TextTestRunner(verbosity=2).run(suite)
-            good=result.wasSuccessful() and result.testsRun==35 and not result.skipped and not blocked
+            good=result.wasSuccessful() and result.testsRun==37 and not result.skipped and not blocked
             print('BINANCE_STREAM_OFFLINE_ACCEPTANCE '+json.dumps(dict(tests=result.testsRun,
                   failures=len(result.failures),errors=len(result.errors),skipped=len(result.skipped),
                   blocked_effects=len(blocked),passed=good)))
