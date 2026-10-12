@@ -31,7 +31,7 @@ class DiagnosticTests(unittest.TestCase):
         diagnostic=diagnostic_module((REPO/'deploy/binance-topic-shards-readonly.sh').read_text())
         secret='SENSITIVE_FAKE_TOKEN_012345';contact='private@example.invalid';calls=[]
         journal=[dict(__REALTIME_TIMESTAMP='1791825658000000',MESSAGE=json.dumps(dict(
-            event='BINANCE_STREAM_RECOVERY',error_code='BINANCE_TOPIC_STALE',failures=1,token=secret,contact=contact))),
+            event='BINANCE_STREAM_RECOVERY',error_code='BINANCE_TOPIC_STALE',error_type='TimeoutError',failures=1,token=secret,contact=contact))),
             dict(__REALTIME_TIMESTAMP='1791825663000000',MESSAGE='RuntimeError: ORPHANED_HTTP_REQUEST_MANUAL_REVIEW'),
             dict(__REALTIME_TIMESTAMP='1791825664000000',MESSAGE='unrecognized '+secret+' '+contact)]
         def run(args,**kwargs):
@@ -48,6 +48,7 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(report['historical_processing_evidence']['queue_depth'],'NOT_RECORDED')
         serialized=json.dumps(report);self.assertNotIn(secret,serialized);self.assertNotIn(contact,serialized)
         self.assertIn('ORPHANED_HTTP_REQUEST_MANUAL_REVIEW',serialized)
+        self.assertEqual(report['incident_journal']['records'][0]['evidence']['error_type'],'TimeoutError')
         with tempfile.TemporaryDirectory(dir=REPO) as folder:
             base=Path(folder)/'report';short,checksum=diagnostic.save_report(report,base)
             full=Path(str(base)+'.report.json').read_bytes()
@@ -81,6 +82,25 @@ class DiagnosticTests(unittest.TestCase):
         report=diagnostic.collect_report(b'fixture',run=run,release_reader=lambda:{})
         self.assertEqual(report['status'],'PARTIAL')
         self.assertIn('SOURCE_CHANGED_DURING_CAPTURE',{e['code'] for e in report['errors']})
+
+    def test_rest_only_zero_frame_topic_is_bound_to_current_epoch(self):
+        diagnostic=diagnostic_module((REPO/'deploy/binance-topic-shards-readonly.sh').read_text())
+        stamp=dt.datetime(2026,10,12,tzinfo=dt.timezone.utc)
+        scan=dict(as_of_utc=stamp.isoformat(),binance_complete=True,generation_id='fixture',
+            coins=dict(BTC=dict(pairs=[dict(venue='binance',base='BTC',pair='BTCUSDT')])))
+        names=roster(scan,stamp)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'manifest.json').write_text(json.dumps(scan))
+            store=Store(root/'state.sqlite3');epoch=store.begin_session(names,content_hash(scan))
+            with store.db() as db:
+                for name,session in ((names[0],epoch),(names[1],'a'*32)):
+                    db.execute('INSERT INTO bars VALUES(?,?,?,?,?,?,?,?)',(name,0,'[]',1000,999,1,'OFFICIAL_BINANCE_SPOT_REST',session))
+            report=diagnostic.inspect(root)
+            self.assertEqual((report['no_frame'],report['no_frame_with_current_rest_bars']),(4,1))
+            states={r['topic']:r for r in report['topic_receipts']}
+            self.assertEqual(states[names[0]]['current_epoch_bars_by_origin'][0]['rows'],1)
+            self.assertEqual(states[names[1]]['current_epoch_bars_by_origin'],[])
+            self.assertEqual({r['session']:r['rows'] for r in report['cache_counts_by_session']['bars']},{'current':1,'other':1})
 
     def test_wal_snapshot_maps_topics_without_changing_source_or_owners(self):
         stamp=dt.datetime(2026,10,12,tzinfo=dt.timezone.utc)

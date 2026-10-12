@@ -127,15 +127,20 @@ def inspect(directory):
             query_deadline=time.monotonic()+15
             db.set_progress_handler(lambda:int(time.monotonic()>query_deadline),10000)
             db.execute('PRAGMA query_only=ON');db.execute('BEGIN')
+            database=dict(journal_mode=db.execute('PRAGMA journal_mode').fetchone()[0],
+                page_size=db.execute('PRAGMA page_size').fetchone()[0],page_count=db.execute('PRAGMA page_count').fetchone()[0])
             meta=dict(db.execute("SELECT key,value FROM meta WHERE key IN ('epoch','connected','scope_hash','roster_hash')"))
             rows=[dict(r) for r in db.execute('SELECT topic,epoch,ws_rx,ws_ts,ack,gap FROM topics LIMIT 4001')]
             owners,owner_details=anonymous_owners(db,directory)
             cache_counts={};cache_times={}
             for table in ('bars','revisions','readiness'):
-                cache_counts[table]=[dict(r) for r in db.execute('SELECT CASE WHEN epoch=? THEN \'current\' ELSE \'other\' END AS session,COUNT(*) AS rows,MIN(observed) AS min_observed,MAX(observed) AS max_observed FROM '+table+' GROUP BY session',(meta.get('epoch'),))]
+                cache_counts[table]=[dict(r) for r in db.execute('SELECT CASE WHEN epoch=? THEN \'current\' ELSE \'other\' END AS session,COUNT(*) AS rows,COUNT(DISTINCT topic) AS topics,MIN(observed) AS min_observed,MAX(observed) AS max_observed FROM '+table+' GROUP BY session',(meta.get('epoch'),))]
             for table in ('bars','revisions'):
-                cache_times[table]=[dict(r) for r in db.execute('SELECT origin,confirmed,COUNT(*) AS rows,MIN(observed) AS min_observed,MAX(observed) AS max_observed,MIN(source_time) AS min_source_time,MAX(source_time) AS max_source_time FROM '+table+' WHERE epoch=? GROUP BY origin,confirmed',(meta.get('epoch'),))]
+                cache_times[table]=[dict(r) for r in db.execute('SELECT origin,confirmed,COUNT(*) AS rows,COUNT(DISTINCT topic) AS topics,MIN(observed) AS min_observed,MAX(observed) AS max_observed,MIN(source_time) AS min_source_time,MAX(source_time) AS max_source_time FROM '+table+' WHERE epoch=? GROUP BY origin,confirmed',(meta.get('epoch'),))]
                 for row in cache_times[table]:row['origin']=safe_code(row['origin'])
+            topic_history=[dict(r) for r in db.execute('SELECT topic,origin,COUNT(*) AS rows,MIN(observed) AS min_observed,MAX(observed) AS max_observed FROM bars WHERE epoch=? GROUP BY topic,origin LIMIT 8001',(meta.get('epoch'),))]
+            if len(topic_history)>8000:raise ValueError('CACHE_TOPIC_REPORT_LIMIT_EXCEEDED')
+            for item in topic_history:item['origin']=safe_code(item['origin'])
             budget=dict(db.execute('SELECT next_ms,cooldown_ms,last_ms,halt FROM budget WHERE id=1').fetchone())
             budget['halt']=safe_code(budget['halt']) if budget['halt'] else None
             budget['clock']='BUDGET_CLOCK_DOMAIN_NOT_UTC'
@@ -148,10 +153,14 @@ def inspect(directory):
         raise ValueError('SNAPSHOT_META_INVALID')
     for value in (budget['next_ms'],budget['cooldown_ms'],budget['last_ms']):
         if type(value) is not int or value<0:raise ValueError('SNAPSHOT_BUDGET_INVALID')
-    for items in (*cache_counts.values(),*cache_times.values()):
+    for items in (*cache_counts.values(),*cache_times.values(),topic_history):
         for item in items:
-            if any(value is not None and type(value) is not int for key,value in item.items() if key not in ('session','origin')):
+            if any(value is not None and type(value) is not int for key,value in item.items() if key not in ('session','origin','topic')):
                 raise ValueError('SNAPSHOT_AGGREGATE_INVALID')
+    history=defaultdict(list)
+    for item in topic_history:
+        if item['topic'] not in names:raise ValueError('CACHE_TOPIC_NOT_IN_MANIFEST')
+        history[item['topic']].append({k:v for k,v in item.items() if k!='topic'})
     rows={r['topic']:r for r in rows};groups=defaultdict(list);shards=defaultdict(list)
     for ordinal,name in enumerate(names):
         row=rows[name]
@@ -159,7 +168,8 @@ def inspect(directory):
             raise ValueError('INVALID_PERSISTED_TIMESTAMP')
         if any(row[k] not in (0,1) for k in ('ack','gap')):raise ValueError('INVALID_TOPIC_STATE')
         symbol,interval=name.split('@kline_')
-        row.update(ordinal=ordinal,shard=ordinal//500,subscribe_batch=(ordinal%500)//100,interval=interval)
+        row.update(ordinal=ordinal,shard=ordinal//500,subscribe_batch=(ordinal%500)//100,interval=interval,
+            current_epoch_bars_by_origin=history[name])
         groups[symbol].append(row);shards[row['shard']].append(row)
     summary=[]
     def summarize(items,**identity):
@@ -174,14 +184,16 @@ def inspect(directory):
     for row in rows.values():
         batch_groups[(row['shard'],row['subscribe_batch'])].append(row)
         interval_groups[row['interval']].append(row)
-    fields=('topic','ordinal','shard','subscribe_batch','ws_rx','ws_ts','ack','gap')
+    fields=('topic','ordinal','shard','subscribe_batch','ws_rx','ws_ts','ack','gap','current_epoch_bars_by_origin')
     affected=[dict(symbol=symbol,intervals=[{k:r[k] for k in fields} for r in items])
         for symbol,items in sorted(groups.items()) if any(r['ws_rx']==0 for r in items)]
     buckets=Counter((r['ws_rx']//10000*10000,r['ws_ts']//10000*10000) for r in rows.values())
     return dict(source_read_only=True,query_target='PRIVATE_TEMP_COPY_REMOVED_ON_EXIT',
         source_sha256={name:hashlib.sha256(data).hexdigest() for name,data in source.items()},
+        source_bytes={name:len(data) for name,data in source.items()},database=database,
         epoch=meta['epoch'],connected=meta.get('connected'),owners=owners,owner_details=owner_details,
         cache_counts_by_session=cache_counts,current_epoch_cache_by_origin=cache_times,budget=budget,
+        no_frame_with_current_rest_bars=sum(r['ws_rx']==0 and any(h['origin']=='OFFICIAL_BINANCE_SPOT_REST' for h in history[name]) for name,r in rows.items()),
         lock_metadata_scope='POINT_IN_TIME_LSTAT_ONLY; no contents or lock acquisition',
         manifest_sha256=hashlib.sha256(raw).hexdigest(),scope_hash=meta['scope_hash'],roster_hash=meta['roster_hash'],
         manifest_as_of=dt.datetime.fromisoformat(scan['as_of_utc'].replace('Z','+00:00')).isoformat(),topics=len(names),no_frame=sum(r['ws_rx']==0 for r in rows.values()),
@@ -270,6 +282,9 @@ def sanitized_journal(raw):
         if isinstance(value,dict):
             for key in ('event','reason','error_code','status','capital_authority'):
                 if key in value:evidence[key]=safe_code(value[key])
+            if value.get('error_type') in ('TimeoutError','ValueError','RuntimeError','OSError','ConnectionError',
+                    'OperationalError','DurableStopError','UncertainRequestError','UnreapedRequestError'):
+                evidence['error_type']=value['error_type']
             for key in ('topics','failures','session_age_ms','ws_rx','ws_ts','ingress_rx','ack','gap','queued','active_repairs','shard'):
                 if type(value.get(key)) is int:evidence[key]=value[key]
             for key in ('topic','failed_topic'):
@@ -314,7 +329,7 @@ def collect_report(source,run=command,state_reader=service_state,release_reader=
         per_topic_receiver_count='NOT_RECORDED',queue_high_water='NOT_RECORDED',
         batch_commit_duration='NOT_RECORDED',http_owner_topic_or_response='NOT_RECORDED',
         durable_times='Pump receipt/source timestamps, not SQLite commit timestamps',
-        warning='Final ACK/gap were reset by disconnect; buckets count last persisted topic receipts, not throughput; recovery log occurs after teardown.')
+        warning='Final ACK/gap were reset by disconnect; buckets count last persisted topic receipts, retained rows are not cumulative throughput; recovery log occurs after teardown.')
     report['status']='COMPLETE' if not report['errors'] else 'PARTIAL'
     return report
 
@@ -325,6 +340,7 @@ def summary(report):
         'service='+state.get('ActiveState','UNKNOWN')+'/'+state.get('SubState','UNKNOWN')+' MainPID='+state.get('MainPID','UNKNOWN'),
         'release_head='+release.get('release_head','UNKNOWN')+' critical_files_match='+str(release.get('critical_files_match_known_release')),
         'topics='+str(cache.get('topics','UNKNOWN'))+' no_persisted_frame='+str(cache.get('no_frame','UNKNOWN'))+' owners='+json.dumps(cache.get('owners',{}),sort_keys=True)]
+    lines.append('no_persisted_frame_with_current_rest_bars='+str(cache.get('no_frame_with_current_rest_bars','UNKNOWN')))
     for shard in cache.get('shards',[]):lines.append('shard='+str(shard['shard'])+' total='+str(shard['total'])+' no_persisted_frame='+str(shard['no_frame']))
     codes=sorted({e for row in report.get('incident_journal',{}).get('records',[]) for key,e in row['evidence'].items() if key in ('error_code','exception_code')})
     lines+=['incident_codes='+','.join(codes),'historical queue/commit timing: see explicit NOT_RECORDED fields in full report',
