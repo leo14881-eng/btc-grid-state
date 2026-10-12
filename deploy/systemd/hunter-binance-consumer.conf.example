@@ -1,0 +1,11 @@
+# EXAMPLE ONLY. Inspect actual service identities and existing hardening first.
+# Applies to hunter-discovery.service, hunter-research.service and
+# hunter-position-monitor.service only when their verified code uses this head.
+# Do not install automatically or broaden ReadWritePaths without approval.
+[Service]
+Environment=HUNTER_BINANCE_KLINE_SOURCE=SPOT_CACHE
+Environment=HUNTER_SERVER_ISOLATED_CHECKOUT=1
+SupplementaryGroups=hunter-binance-data
+UMask=0007
+# The existing-only SQLite reader also inspects HTTP lease lock files; the
+# shared directory needs agreed access under actual job sandbox settings.

@@ -1,0 +1,260 @@
+"""Explicit, shadow-only Binance native UTC Kline collector. Default is plan only."""
+import argparse
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
+import datetime as dt
+import json
+from pathlib import Path
+import queue
+import re
+import signal
+import sqlite3
+from threading import Event, Thread
+import time
+
+from research.hunter_binance_stream_store import Store, Budget, STATE_PATH, LIMITS, FRESH_MS, roster, roster_hash, split_topic, content_hash
+from research.hunter_binance_public import Client, DurableStopError
+
+WS_URL = 'wss://data-stream.binance.vision/ws'
+SHARD_SIZE = 500
+MAX_SHARDS = 8
+
+
+def millis(): return time.time_ns()//1_000_000
+
+
+def plan(names):
+    roster_hash(names)
+    shards = (len(names)+SHARD_SIZE-1)//SHARD_SIZE
+    if shards > MAX_SHARDS: raise ValueError('BINANCE_SHARD_CAP_REQUIRES_REVIEW')
+    return dict(topics=len(names), sockets=shards, max_topics_per_socket=SHARD_SIZE,
+                rest_requests_per_attempt=len(names), rest_weight_per_request=2,
+                request_spacing_ms=200, max_inflight=4, recovery_deadline_seconds=900,
+                incoming_control_budget='2 subscribe/s plus protocol pong; below 5/s',
+                network_capacity_verified=False)
+
+
+class RecoveryBudget:
+    def __init__(self): self.failures=0; self.healthy_since=None; self.last_sample=None
+
+    def observe(self, ready, steady):
+        if not ready or (self.last_sample is not None and not 0 <= steady-self.last_sample <= 60):
+            self.healthy_since=None
+        self.last_sample=steady
+        if not ready: return False
+        if self.healthy_since is None: self.healthy_since=steady
+        if self.failures and steady-self.healthy_since >= 300:
+            self.failures=0
+            return True
+        return False
+
+    def failed(self):
+        self.healthy_since=self.last_sample=None
+        self.failures+=1
+        return 5*2**(self.failures-1)
+
+
+class Protocol:
+    def __init__(self, store, names, manifest, now):
+        plan(names)
+        self.store=store; self.epoch=store.begin_session(names,manifest)
+        self.started=now; self.pending={}; self.requests=[]
+        serial=0
+        for offset in range(0,len(names),SHARD_SIZE):
+            batch=[]
+            for start in range(offset,min(offset+SHARD_SIZE,len(names)),100):
+                serial+=1
+                args=names[start:min(start+100,offset+SHARD_SIZE,len(names))]
+                self.pending[serial]=(offset//SHARD_SIZE,args)
+                batch.append(dict(method='SUBSCRIBE',params=args,id=serial))
+            self.requests.append(batch)
+
+    def receive(self, shard, message, now):
+        if 'id' in message:
+            pending=self.pending.pop(message['id'],None)
+            if pending is None or pending[0]!=shard or message.get('result','missing') is not None:
+                raise ValueError('BINANCE_SUBSCRIPTION_ACK_INVALID')
+            self.store.ack(self.epoch,pending[1])
+        else:
+            from research.hunter_binance_stream_store import topic
+            name=topic(message['s'],message['k']['i'])
+            if name not in {n for request in self.requests[shard] for n in request['params']}:
+                raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
+            self.store.ingest_ws(self.epoch,message,now)
+
+    def tick(self, now):
+        if self.pending and now-self.started > 30_000: raise TimeoutError('BINANCE_ACK_TIMEOUT')
+        if now-self.started >= 85_800_000: raise RuntimeError('BINANCE_PLANNED_24H_RECONNECT')
+
+    def receive_batch(self, observations):
+        from research.hunter_binance_stream_store import topic
+        batch=[]
+        def flush():
+            if batch:self.store.ingest_ws_batch(self.epoch,batch);batch.clear()
+        for shard,message,received in observations:
+            if isinstance(message,BaseException):raise message
+            if 'id' in message:
+                flush();self.receive(shard,message,received)
+            else:
+                name=topic(message['s'],message['k']['i'])
+                if name not in {n for request in self.requests[shard] for n in request['params']}:
+                    raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
+                batch.append((message,received))
+        flush()
+
+
+def open_ws():
+    from websockets.sync.client import connect
+    # The library answers server PING frames with matching PONG payloads. No
+    # client heartbeat/control spam; missing market events still fail freshness.
+    return connect(WS_URL,proxy=None,open_timeout=10,close_timeout=5,
+                   ping_interval=None,max_size=262144,max_queue=1024)
+
+
+def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, client=None):
+    symbol,interval=split_topic(name)
+    def active():
+        if cancelled(): raise RuntimeError('BINANCE_RECOVERY_CANCELLED')
+        with store.db(readonly=True) as db: store.check_epoch(db,epoch)
+    active(); requested=clock()
+    if requested>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
+    rows=(client or Client(store)).request('/api/v3/klines',dict(symbol=symbol,
+        interval=interval,limit=LIMITS[interval],endTime=requested),
+        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled)
+    active(); received=clock()
+    if received>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
+    store.ingest_rest(epoch,name,rows,requested,received)
+
+
+def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sleep,
+            repairer=repair,observer=None,on_nonready=lambda *_:None):
+    protocol=Protocol(store,names,manifest,clock())
+    on_nonready('SESSION_STARTED')
+    cancelled=Event(); messages=queue.Queue(maxsize=4096); threads=[]; jobs={}; completed=set()
+    deadline=clock()+900_000; last_check=last_audit=0
+    def stopping(): return cancelled.is_set() or stop()
+    def pump(index,ws,requests):
+        try:
+            for request in requests:
+                if stopping(): return
+                ws.send(json.dumps(request)); sleep(.5)
+            while not stopping():
+                try: raw=ws.recv(timeout=1)
+                except TimeoutError: continue
+                messages.put((index,json.loads(raw),clock()),timeout=.5)
+        except BaseException as error:
+            if not stopping():
+                try: messages.put((index,error,clock()),timeout=.5)
+                except queue.Full: cancelled.set()
+    pool=ThreadPoolExecutor(max_workers=4)
+    try:
+        with ExitStack() as stack:
+            for index,requests in enumerate(protocol.requests):
+                if stopping(): return
+                ws=stack.enter_context(connect())
+                thread=Thread(target=pump,args=(index,ws,requests),daemon=False)
+                threads.append(thread); thread.start()
+            while not stopping():
+                now=clock()
+                if now-last_check>=1000:
+                    last_check=now; protocol.tick(now)
+                    state=Budget(store).status()
+                    if state['halt'] or now<state['cooldown_ms']:on_nonready('GLOBAL_STOP_OR_COOLDOWN')
+                    if state['halt'] or state['cooldown_ms']-now>=590_000:
+                        raise RuntimeError(state['halt'] or 'BINANCE_GLOBAL_COOLDOWN')
+                    for name,job in list(jobs.items()):
+                        if job.done(): job.result(); completed.add(name); del jobs[name]
+                    for state in store.states():
+                        name=state['topic']
+                        if (not state['ack'] or state['gap'] or state['epoch']!=protocol.epoch
+                                or any(not 0<=now-state[k]<=FRESH_MS for k in ('ws_rx','ws_ts'))):
+                            on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
+                        if state['ack'] and state['gap'] and name not in jobs and len(jobs)<4:
+                            if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
+                            jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
+                        if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
+                            raise TimeoutError('BINANCE_TOPIC_STALE')
+                    if observer and now-last_audit>=30_000:
+                        observer(now); last_audit=now
+                try: pending=[messages.get(timeout=.1)]
+                except queue.Empty: continue
+                while len(pending)<100:
+                    try:pending.append(messages.get_nowait())
+                    except queue.Empty:break
+                protocol.receive_batch(pending)
+            if cancelled.is_set() and not stop(): raise RuntimeError('BINANCE_RECEIVE_BACKPRESSURE')
+    finally:
+        cancelled.set()
+        on_nonready('SESSION_DISCONNECTED')
+        try: store.disconnect(protocol.epoch)
+        finally:
+            for job in jobs.values(): job.cancel()
+            pool.shutdown(wait=True,cancel_futures=True)
+            for thread in threads: thread.join(timeout=7)
+            if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
+            for job in jobs.values():
+                if not job.cancelled() and isinstance(job.exception(),(DurableStopError,sqlite3.Error)):
+                    raise job.exception()
+
+
+def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
+            clock=millis,sleep=time.sleep,steady=time.monotonic):
+    budget=RecoveryBudget()
+    def nonready(reason):
+        interrupted=budget.healthy_since is not None
+        budget.observe(False,steady())
+        if interrupted:print(json.dumps(dict(event='BINANCE_RECOVERY_WINDOW_RESET',reason=reason)),flush=True)
+    def audit(now):
+        frozen=store.freeze(names,now,now); finished=clock()
+        ready=frozen['status']=='READY' and 0<=finished-now<=FRESH_MS
+        restored=budget.observe(ready,steady())
+        print(json.dumps(dict(event='BINANCE_CACHE_AUDIT',source_head=source_head,
+            status='READY' if ready else 'UNKNOWN',topics=len(names),
+            roster_hash=roster_hash(names),manifest_sha256=manifest,
+            epoch=frozen.get('epoch'),generation_sha256=frozen.get('generation_sha256'),
+            reason=frozen.get('reason'),failed_topic=frozen.get('failed_topic'),
+            recovery_budget_restored=restored,shadow_only=True,
+            real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY')),flush=True)
+    while budget.failures<5 and not stop():
+        state=Budget(store).status()
+        if state['halt'] or clock()<state['cooldown_ms']: raise RuntimeError(state['halt'] or 'BINANCE_COOLDOWN_ACTIVE')
+        try:
+            session(store,names,manifest,stop,connect,clock,sleep,observer=audit,on_nonready=nonready)
+            return
+        except (DurableStopError,sqlite3.Error): raise
+        except Exception as error:
+            response=getattr(error,'response',None)
+            status=getattr(response,'status_code',0)
+            if status in (403,418): Budget(store).failure(403,'Binance websocket denial')
+            elif status: Budget(store).failure(status,'')
+            delay=budget.failed()
+            print(json.dumps(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
+                error_type=type(error).__name__,status='UNKNOWN')),flush=True)
+        if budget.failures<5:
+            for _ in range(delay*10):
+                if stop(): return
+                sleep(.1)
+    if not stop(): raise RuntimeError('BINANCE_CIRCUIT_OPEN_MANUAL_REVIEW')
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--manifest',required=True,type=Path)
+    parser.add_argument('--source-head-file',type=Path)
+    parser.add_argument('--collect',action='store_true')
+    args=parser.parse_args()
+    scan=json.loads(args.manifest.read_text(encoding='utf-8'))
+    names=roster(scan,dt.datetime.now(dt.timezone.utc))
+    print(json.dumps(plan(names)))
+    if not args.collect: return
+    source=args.source_head_file.read_text().strip() if args.source_head_file else ''
+    if not re.fullmatch('[0-9a-f]{40}',source): raise ValueError('BINANCE_SOURCE_HEAD_REQUIRED')
+    import fcntl
+    stop=Event()
+    for signum in (signal.SIGINT,signal.SIGTERM): signal.signal(signum,lambda *_:stop.set())
+    with (STATE_PATH.parent/'collector.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        collect(Store.reader(),names,content_hash(scan),source,stop.is_set)
+
+
+if __name__=='__main__': main()

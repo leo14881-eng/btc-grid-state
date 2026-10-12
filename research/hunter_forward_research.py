@@ -189,7 +189,15 @@ def research_one(sym,coin,cg,dl,now):
         pair=p["pair"]
         try:
             url=BN+"/api/v3/klines?"+urllib.parse.urlencode({"symbol":pair,"interval":"1d","limit":35})
-            features,err=candle_features(get(url),finite(p.get("volume_24h_usdt")))
+            try:
+                from research.hunter_binance_stream_consumer import window
+            except ModuleNotFoundError as exc:
+                if exc.name!='research': raise
+                from hunter_binance_stream_consumer import window
+            cached=window(pair,'1d',dt.datetime.now(dt.timezone.utc))
+            candles=cached.rows(pair,'1d') if cached else get(url)
+            features,err=candle_features(candles,finite(p.get("volume_24h_usdt")))
+            if cached: result["observations"]["market_structure_source"]=cached.packet(pair,'1d')
             if err:result["missing_facts"].append(err)
             else:result["observations"]["market_structure"]=features
             result["source_urls"].append("https://www.binance.com/en/trade/"+sym+"_USDT")
