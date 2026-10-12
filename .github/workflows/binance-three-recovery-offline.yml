@@ -34,7 +34,7 @@ jobs:
               root=Path(folder).resolve(); tempfile.tempdir=str(root); blocked=[]
               # Assemble the actual deployment runtime before installing the
               # no-process guard. Never test this wrapper against main's old client.
-              sha='d52b420f1f0c3e592fb93de67e73c982e1c02767'
+              sha='8cb92bd7e39251e1997e1b363a5e9500c8344268'
               names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
               names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
               archive=subprocess.check_output(['git','archive',sha,'--',*names])

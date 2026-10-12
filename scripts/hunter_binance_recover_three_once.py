@@ -23,7 +23,7 @@ STATE = Path('/var/lib/hunter-binance-stream')
 SERVICE = 'hunter-binance-stream.service'
 EPOCH = '51c723c224194317a49329ba8751d77f'
 OLD = '99836e5362340725f806d5df6df1ca9835065bdd'
-NEW = 'd52b420f1f0c3e592fb93de67e73c982e1c02767'
+NEW = '8cb92bd7e39251e1997e1b363a5e9500c8344268'
 INCIDENT_REPORT = Path('/tmp/hunter-binance-diagnostic-20261012-1719.report.json')
 REPORT_HASH = '7c05690bbe062fec2638ab5f6b61fe35cd40617306acf35a9f25d383900c1f15'
 ACQUIRED = [589226044,589226249,589226469]
@@ -211,10 +211,10 @@ def prepare_manifest():
     print(json.dumps(dict(status='PREPARED_NOT_STARTED',receipt=receipt),sort_keys=True))
 
 
-def child(function, data=None, check=True):
+def child(function, data=None, check=True, timeout=50):
     source=inspect.getsource(function)+'\nraise SystemExit('+function.__name__+'())\n'
     return command(['runuser','-u','hunter-binance-stream','--',PREFIX/'venv/bin/python',
-                    '-E','-s','-B','-c',source],cwd=PREFIX/'code',data=data,check=check,timeout=50)
+                    '-E','-s','-B','-c',source],cwd=PREFIX/'code',data=data,check=check,timeout=timeout)
 
 
 def save(upgrade, work, name, value):
@@ -325,15 +325,15 @@ def acceptance_sample():
         real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY'),sort_keys=True))
 
 
-def service_state():
-    data=command(['systemctl','--no-pager','show',SERVICE,'-p','ActiveState','-p','SubState','-p','MainPID']).stdout
+def service_state(timeout=60):
+    data=command(['systemctl','--no-pager','show',SERVICE,'-p','ActiveState','-p','SubState','-p','MainPID'],timeout=timeout).stdout
     return dict(line.split('=',1) for line in data.decode().splitlines())
 
 
-def journal_evidence(since):
+def journal_evidence(since,timeout=30):
     import re
     raw=command(['journalctl','--utc','--no-pager','-u',SERVICE,'--since',since,
-                 '-n','10000','-o','json'],timeout=30).stdout
+                 '-n','10000','-o','json'],timeout=timeout).stdout
     allowed={'event','epoch','topic','shard','subscribe_batch','received','processed','changed','last_rx',
         'last_processed_rx','offset','total','topics','final','zero_received','zero_processed','acked_batches',
         'committed_batches','batch_commit_max_us','receipt_to_commit_max_ms','receipt_clock_anomalies',
@@ -341,7 +341,7 @@ def journal_evidence(since):
         'response_complete','process_reaped','owner_retired','http_status','error_type','error_code','status',
         'session_age_ms','ws_rx','ws_ts','ingress_rx','ack','gap','source_head','manifest_sha256','roster_hash',
         'generation_sha256','reason','failed_topic','recovery_budget_restored','shadow_only','real_trading_enabled',
-        'capital_authority','failures'}
+        'capital_authority','failures','observed_at_ms','ready_window_seconds'}
     def clean(value):
         if isinstance(value,dict):return {k:clean(v) for k,v in value.items() if k in allowed}
         if isinstance(value,list):return [clean(v) for v in value[:50]]
@@ -363,19 +363,64 @@ def journal_evidence(since):
     return dict(records=rows,limit=10000,at_limit=len(lines)>=10000)
 
 
+def continuous_ready(journal,sample,prepared,started_ms):
+    """A sampled READY never substitutes for the collector's uninterrupted timer."""
+    records=journal['records']
+    metrics=[x['evidence'] for x in records
+             if x.get('evidence',{}).get('event')=='BINANCE_SESSION_METRICS']
+    require(not journal['at_limit'] and metrics and
+            all(x.get('audit_output_failures')==0 for x in metrics),'OBSERVATION_INCOMPLETE_STOPPED')
+    audits=[(i,x) for i,x in enumerate(records)
+            if x.get('evidence',{}).get('event')=='BINANCE_CACHE_AUDIT']
+    if not audits:return False
+    index,row=audits[-1];audit=row['evidence'];observed=audit.get('observed_at_ms')
+    require(type(observed) is int and started_ms<=observed<=time.time_ns()//1000000
+            and 0<=time.time_ns()//1000000-observed<=60000
+            and str(row.get('journal_us','')).isdigit()
+            and 0<=int(row['journal_us'])//1000-observed<=60000,
+            'READY_AUDIT_NOT_FRESH_STOPPED')
+    require(audit.get('source_head')==NEW and audit.get('manifest_sha256')==prepared['snapshot_sha256']
+            and audit.get('roster_hash')==prepared['roster_hash']
+            and audit.get('shadow_only') is True and audit.get('real_trading_enabled') is False
+            and audit.get('capital_authority')=='NONE_SHADOW_ONLY','READY_AUDIT_BINDING_MISMATCH_STOPPED')
+    seconds=audit.get('ready_window_seconds')
+    require(type(seconds) is int and 0<=seconds<=(observed-started_ms)//1000,
+            'READY_AUDIT_TIMER_INVALID_STOPPED')
+    interrupted=any(x.get('evidence',{}).get('event') in
+                    ('BINANCE_RECOVERY_WINDOW_RESET','BINANCE_STREAM_RECOVERY') for x in records[index+1:])
+    return (not interrupted and audit.get('status')=='READY' and
+            audit.get('epoch')==sample['epoch'] and seconds>=300)
+
+
+def stop_and_verify(upgrade,report):
+    # A timed-out stop is ambiguous. Always try the independent UID/cgroup check.
+    try:report['stop_returncode']=command(['systemctl','stop',SERVICE],check=False,timeout=60).returncode
+    except BaseException as error:report['stop_error_type']=type(error).__name__
+    try:upgrade.quiet();report['stopped_verified']=True
+    except BaseException as error:
+        report.update(stopped_verified=False,status='STOP_UNCONFIRMED_MANUAL_REVIEW',
+                      stop_verification_error_type=type(error).__name__)
+
+
 def supervise(upgrade,work,prepared):
     began=time.monotonic();since=dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+    started_ms=time.time_ns()//1000000
+    def remaining(cap):
+        left=1200-(time.monotonic()-began)
+        require(left>0,'ACCEPTANCE_WINDOW_EXPIRED')
+        return min(cap,left)
     report=dict(schema='binance_three_recovery_v1',old=OLD,new=NEW,incident_epoch=EPOCH,
                 historical_outcome='UNKNOWN',archived_records=3,publication_verified=False,samples=[])
-    healthy=None;epoch=None;accepted=False;started=False
+    healthy=None;epoch=None;accepted=False;started=False;persisted=False
     try:
         started=True  # Even an ambiguous start result must be followed by stop, never another start.
-        command(['systemctl','start',SERVICE])
+        command(['systemctl','start',SERVICE],timeout=remaining(60));remaining(60)
         while time.monotonic()-began<=1200:
-            state=service_state()
+            state=service_state(timeout=remaining(60));remaining(60)
             require(state.get('ActiveState')=='active' and state.get('SubState')=='running'
                     and state.get('MainPID','0')!='0','SERVICE_EXITED_NO_RETRY')
-            sample=json.loads(child(acceptance_sample,json.dumps(prepared).encode()).stdout)
+            sample=json.loads(child(acceptance_sample,json.dumps(prepared).encode(),timeout=remaining(50)).stdout)
+            remaining(50)
             sample['elapsed_seconds']=round(time.monotonic()-began,3);report['samples'].append(sample)
             require(not sample['halt'] and not sample['cooldown_active'],'GLOBAL_STOP_OR_COOLDOWN_PRESERVED')
             require(sample['archived_unknown']==3,'DISPOSITION_AUDIT_CHANGED')
@@ -384,16 +429,13 @@ def supervise(upgrade,work,prepared):
                     require(time.monotonic()-began<=900,'INITIALIZATION_DEADLINE_STOPPED')
                     healthy=time.monotonic();epoch=sample['epoch']
                 if time.monotonic()-healthy>=300:
-                    journal=journal_evidence(since)
-                    metrics=[x['evidence'] for x in journal['records']
-                             if x.get('evidence',{}).get('event')=='BINANCE_SESSION_METRICS']
-                    require(not journal['at_limit'] and metrics and
-                            all(x.get('audit_output_failures')==0 for x in metrics),'OBSERVATION_INCOMPLETE_STOPPED')
-                    report['journal']=journal;accepted=True;break
+                    journal=journal_evidence(since,timeout=remaining(30));remaining(30)
+                    if continuous_ready(journal,sample,prepared,started_ms):
+                        remaining(1);report['journal']=journal;accepted=True;break
             else:healthy=None
             require(time.monotonic()-began<900 or healthy is not None,'INITIALIZATION_DEADLINE_STOPPED')
             print(json.dumps(dict(stage='ACCEPTANCE',**sample)),flush=True)
-            time.sleep(15)
+            time.sleep(remaining(15))
         require(accepted,'ACCEPTANCE_WINDOW_EXPIRED')
         report['status']='READY_300S_CONSUMER_PUBLICATION_PENDING'
     except BaseException as error:
@@ -403,25 +445,27 @@ def supervise(upgrade,work,prepared):
                       error_code=code if re.fullmatch('[A-Z][A-Z0-9_]{0,127}',code) else 'UNCLASSIFIED')
     finally:
         if started and not accepted:
-            result=command(['systemctl','stop',SERVICE],check=False,timeout=60)
-            report['stop_returncode']=result.returncode
-            try:upgrade.quiet();report['stopped_verified']=True
-            except Exception:report['stopped_verified']=False;report['status']='STOP_UNCONFIRMED_MANUAL_REVIEW'
+            stop_and_verify(upgrade,report)
         try:report['journal']=journal_evidence(since)
         except Exception as error:report['journal_error_type']=type(error).__name__
         destination=Path('/tmp/hunter-binance-recovery-'+EPOCH+'.report.json')
         try:
             save(upgrade,work,'recovery-report.json',report)
             upgrade.write_new(destination,json.dumps(report,sort_keys=True).encode());upgrade.sync_dir(destination.parent)
-        except BaseException:
+            digest=hashlib.sha256(destination.read_bytes()).hexdigest();persisted=True
+        except BaseException as error:
+            report.update(status='REPORT_PERSISTENCE_FAILED_STOPPED',report_error_type=type(error).__name__)
             if started and accepted:
-                command(['systemctl','stop',SERVICE],check=False,timeout=60)
-                upgrade.quiet()
-            raise
-        print(json.dumps(dict(status=report['status'],report=str(destination),
-            report_sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),evidence=str(work),
+                stop_and_verify(upgrade,report)
+            accepted=False
+            if report.get('stopped_verified') is False:report['status']='STOP_UNCONFIRMED_MANUAL_REVIEW'
+            try:save(upgrade,work,'recovery-report-persistence-failure.json',report)
+            except BaseException:pass  # The complete sanitized fallback still goes to the root console.
+            print(json.dumps(dict(stage='REPORT_PERSISTENCE_FAILURE',report=report)),flush=True)
+        print(json.dumps(dict(status=report['status'],report=str(destination),report_persisted=persisted,
+            report_sha256=digest if persisted else None,evidence=str(work),
             historical_outcome='UNKNOWN',publication_verified=False)),flush=True)
-    return 0 if accepted else 1
+    return 0 if accepted and persisted else 1
 
 
 def main():

@@ -14,7 +14,7 @@ active blocker, in the same SQLite transaction. No trading ledger is touched.
 ## Fixed deployment and admission
 
 The old runtime is `99836e5362340725f806d5df6df1ca9835065bdd`; the candidate is
-`d52b420f1f0c3e592fb93de67e73c982e1c02767`. The full 110-file manifest is
+`8cb92bd7e39251e1997e1b363a5e9500c8344268`. The full 110-file manifest is
 `binance-upgrade-revision-manifest.json`; only its four enumerated runtime files
 change. The Binance-private copy of the shared transport helper is included;
 the live Bybit installation, units, permissions and consumers are unchanged.
@@ -47,7 +47,12 @@ The entry starts `hunter-binance-stream.service` once. Existing bounded internal
 reconnect behavior remains unchanged; the wrapper never restarts the unit.
 Every 15 seconds it samples the real cache without market HTTP. The complete
 roster must become READY within 900 seconds and stay READY in one epoch for
-300 seconds, within an overall 1200-second window. Zero active owners, archived
+300 seconds, within an overall 1200-second acceptance window. Every blocking
+acceptance call is bounded by the remaining time and checked again on return.
+The latest fresh CACHE_AUDIT must independently report at least 300 seconds
+on the existing runtime continuous-health timer, bound to the exact code,
+manifest, roster and epoch; later reset/recovery events invalidate it. The
+shutdown and evidence-save phase can follow that acceptance deadline. Zero active owners, archived
 UNKNOWN evidence, native windows, closed-bar validation, 90-second freshness
 and source/manifest binding are required. Missing observation or a nondurable
 acceptance report cannot authorize leaving the service running.
@@ -55,7 +60,8 @@ acceptance report cannot authorize leaving the service running.
 On halt, cooldown, new orphan, service exit, changed evidence or expired acceptance
 window, the entry stops the unit, verifies stopped state and preserves evidence.
 It does not retry, clear new unknown owners, reset start limits or roll back state.
-If stopping cannot be verified it reports `STOP_UNCONFIRMED_MANUAL_REVIEW`.
+A stop timeout still triggers independent stopped-state verification and report
+saving. If stopping cannot be verified it reports `STOP_UNCONFIRMED_MANUAL_REVIEW`.
 
 The single result is saved to:
 
