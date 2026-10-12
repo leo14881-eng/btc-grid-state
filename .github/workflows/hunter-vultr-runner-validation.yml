@@ -11,6 +11,10 @@ on:
       - 'tests/test_hunter_lock_capacity.py'
       - 'tests/test_hunter_monitor_retry.py'
       - 'tests/test_hunter_monitor_persist.py'
+      - 'tests/test_hunter_monitor_snapshot.py'
+      - 'tests/test_hunter_history_parallel.py'
+      - 'research/hunter_position_monitor.py'
+      - 'research/hunter_shadow_trader_v2.py'
       - 'deploy/hunter-vultr-runner.md'
       - 'deploy/systemd/hunter-position-monitor.*'
       - '.github/workflows/hunter-vultr-runner-validation.yml'
@@ -86,4 +90,50 @@ jobs:
               for c in s['cycles']:
                   print('CAPACITY_CYCLE',json.dumps({k:v for k,v in c.items() if k not in ('audit_log','traceback')}))
           PY
+  snapshot-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline batch faults and paired publication measurements
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -m unittest tests.test_hunter_monitor_snapshot -v
+          python scripts/hunter_monitor_snapshot_benchmark.py --source-ref HEAD --iterations 100 --cycles 12 --output /tmp/hunter-snapshot-ab.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hunter-snapshot-ab
+          path: /tmp/hunter-snapshot-ab.json
+          if-no-files-found: error
+
+  history-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch immutable input fixture only
+        run: git fetch --no-tags --depth=1 origin 390fca24a4bcd3537739f0a4caa48dba8e070aab
+      - name: Historical page faults and complete paired monitor replay
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHONUTF8: '1'
+        run: |
+          python -m unittest tests.test_hunter_history_parallel -v
+          python scripts/hunter_monitor_history_benchmark.py --code-ref HEAD --iterations 3 --history-delay 0.2 --output /tmp/hunter-history-ab.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hunter-history-ab
+          path: /tmp/hunter-history-ab*.json
+          if-no-files-found: error
 
