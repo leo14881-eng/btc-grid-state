@@ -4,6 +4,8 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from threading import Thread
+import time
 import unittest
 from unittest.mock import patch
 
@@ -78,6 +80,25 @@ class EvidenceTests(unittest.TestCase):
         self.assertFalse(first['response_complete']);self.assertFalse(first['owner_retired'])
         self.assertTrue(last['response_complete'] and last['process_reaped'] and last['owner_retired'])
         self.assertNotIn('error_type',last);self.assertNotIn('secret',out.getvalue())
+
+    def test_concurrent_audit_rows_remain_individual_json_lines(self):
+        class YieldingOutput(io.StringIO):
+            def write(self,value):
+                result=super().write(value);time.sleep(.0001);return result
+        out=YieldingOutput()
+        with contextlib.redirect_stdout(out):
+            threads=[Thread(target=lambda:[stream.emit(dict(event='FIXTURE',n=i)) for i in range(30)]) for _ in range(3)]
+            for thread in threads:thread.start()
+            for thread in threads:thread.join(3);self.assertFalse(thread.is_alive())
+        rows=[json.loads(line) for line in out.getvalue().splitlines()]
+        self.assertEqual(len(rows),90)
+
+    def test_failed_output_does_not_override_an_existing_stop(self):
+        previous=stream.AUDIT_FAILURES
+        with patch('builtins.print',side_effect=OSError('sink')),self.assertRaises(stream.UncertainRequestError):
+            try:raise stream.UncertainRequestError('UNKNOWN')
+            finally:stream.emit(dict(event='FINAL'))
+        self.assertEqual(stream.AUDIT_FAILURES,previous+1)
 
 
 if __name__=='__main__':unittest.main()

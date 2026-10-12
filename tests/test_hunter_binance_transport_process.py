@@ -113,6 +113,14 @@ class ProcessTests(unittest.TestCase):
         self.assertNotIn('RESPONSE',kinds);self.assertNotIn('RETIRED',kinds)
         self.assertEqual(kinds[-2:],['ERROR','END']);self.assert_stopped(server)
 
+    def test_observer_failure_does_not_replace_real_unknown_http_outcome(self):
+        server=self.server(slow=True);client=self.client(server)
+        def broken_observer(*args,**kwargs):raise OSError('unavailable audit sink')
+        with self.assertRaises(public.UncertainRequestError):
+            client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
+                timeout=.4,observe=broken_observer)
+        self.assert_stopped(server)
+
     def test_legacy_cleanup_deadline_reproduces_timeout_then_orphan_after_five_seconds(self):
         # Exercise the deployed helper's unchanged default with real flock/DB.
         # No HTTP is needed to show that normal completion misses cleanup.

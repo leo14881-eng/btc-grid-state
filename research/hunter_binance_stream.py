@@ -19,10 +19,16 @@ WS_URL = 'wss://data-stream.binance.vision/ws'
 SHARD_SIZE = 500
 MAX_SHARDS = 8
 AUDIT_LOCK = Lock()
+AUDIT_FAILURES = 0
 
 
 def emit(value):
-    with AUDIT_LOCK: print(json.dumps(value,sort_keys=True),flush=True)
+    global AUDIT_FAILURES
+    with AUDIT_LOCK:
+        try: print(json.dumps(value,sort_keys=True),flush=True)
+        except Exception:
+            # Diagnostics cannot mask a denial, uncertain owner or unreaped child.
+            AUDIT_FAILURES+=1
 
 
 class ObservedQueue(queue.Queue):
@@ -91,6 +97,7 @@ class SessionEvidence:
                 receipt_to_commit_max_ms=self.receipt_to_processing_max_ms,
                 receipt_clock_anomalies=self.receipt_clock_anomalies,queued=messages.qsize(),
                 queue_high_water=messages.high_water,active_repairs=active_repairs)
+            summary['audit_output_failures']=AUDIT_FAILURES
         emit(summary)
         if final:
             # At most 80 pages for the existing 4000-topic cap; no per-frame IO.
@@ -336,10 +343,10 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                         if ingress and 0<=ingress_now-ingress<=FRESH_MS:
                             on_nonready('CACHE_WRITER_LAG')  # freeze still rejects stale stored data.
                         else:
-                            print(json.dumps(dict(event='BINANCE_TOPIC_STALE_DETAIL',epoch=protocol.epoch,
+                            emit(dict(event='BINANCE_TOPIC_STALE_DETAIL',epoch=protocol.epoch,
                                 topic=name,shard=protocol.topic_shards[name],session_age_ms=now-protocol.started,
                                 ws_rx=state['ws_rx'],ws_ts=state['ws_ts'],ingress_rx=ingress,
-                                ack=state['ack'],gap=state['gap'],queued=messages.qsize(),active_repairs=len(jobs))),flush=True)
+                                ack=state['ack'],gap=state['gap'],queued=messages.qsize(),active_repairs=len(jobs)))
                             raise TimeoutError('BINANCE_TOPIC_STALE')
                 if observer and now-last_audit>=30_000:
                     protocol.evidence.snapshot(messages,len(jobs))
@@ -361,11 +368,14 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 for job in jobs.values(): job.cancel()
                 pool.shutdown(wait=True,cancel_futures=True)
                 for thread in threads: thread.join(timeout=7)
-                protocol.evidence.snapshot(messages,len(jobs),final=True)
-                if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
-                for job in jobs.values():
-                    if not job.cancelled() and isinstance(job.exception(),(DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error)):
-                        raise job.exception()
+                try:
+                    if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
+                    for job in jobs.values():
+                        if not job.cancelled() and isinstance(job.exception(),(DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error)):
+                            raise job.exception()
+                finally:
+                    try:protocol.evidence.snapshot(messages,sum(not job.done() for job in jobs.values()),final=True)
+                    except Exception:pass  # Preserve the original stop/error even if observation fails.
 
 
 def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
@@ -374,18 +384,18 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
     def nonready(reason):
         interrupted=budget.healthy_since is not None
         budget.observe(False,steady())
-        if interrupted:print(json.dumps(dict(event='BINANCE_RECOVERY_WINDOW_RESET',reason=reason)),flush=True)
+        if interrupted:emit(dict(event='BINANCE_RECOVERY_WINDOW_RESET',reason=reason))
     def audit(now):
         frozen=store.freeze(names,now,now); finished=clock()
         ready=frozen['status']=='READY' and 0<=finished-now<=FRESH_MS
         restored=budget.observe(ready,steady())
-        print(json.dumps(dict(event='BINANCE_CACHE_AUDIT',source_head=source_head,
+        emit(dict(event='BINANCE_CACHE_AUDIT',source_head=source_head,
             status='READY' if ready else 'UNKNOWN',topics=len(names),
             roster_hash=roster_hash(names),manifest_sha256=manifest,
             epoch=frozen.get('epoch'),generation_sha256=frozen.get('generation_sha256'),
             reason=frozen.get('reason'),failed_topic=frozen.get('failed_topic'),
             recovery_budget_restored=restored,shadow_only=True,
-            real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY')),flush=True)
+            real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY'))
     while budget.failures<5 and not stop():
         state=Budget(store).status()
         if state['halt'] or clock()<state['cooldown_ms']: raise RuntimeError(state['halt'] or 'BINANCE_COOLDOWN_ACTIVE')
@@ -401,8 +411,8 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
             delay=budget.failed()
             reason=str(error)
             if not re.fullmatch(r'[A-Z][A-Z0-9_]{0,127}',reason): reason='UNCLASSIFIED'
-            print(json.dumps(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
-                error_type=type(error).__name__,error_code=reason,status='UNKNOWN')),flush=True)
+            emit(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
+                error_type=type(error).__name__,error_code=reason,status='UNKNOWN'))
         if budget.failures<5:
             for _ in range(delay*10):
                 if stop(): return
@@ -418,7 +428,7 @@ def main():
     args=parser.parse_args()
     scan=json.loads(args.manifest.read_text(encoding='utf-8'))
     names=roster(scan,dt.datetime.now(dt.timezone.utc))
-    print(json.dumps(plan(names)))
+    emit(plan(names))
     if not args.collect: return
     source=args.source_head_file.read_text().strip() if args.source_head_file else ''
     if not re.fullmatch('[0-9a-f]{40}',source): raise ValueError('BINANCE_SOURCE_HEAD_REQUIRED')

@@ -30,6 +30,14 @@ from research.hunter_bybit_public import (coordinate, DurableStopError,
     UnreapedRequestError, UncertainRequestError, NotSentError)
 
 
+def safe_observer(observer):
+    def observe(*args,**kwargs):
+        try:
+            if observer is not None:observer(*args,**kwargs)
+        except Exception:pass  # Evidence failures must never alter admission or mask durable stops.
+    return observe
+
+
 def worker_command(url):
     return [sys.executable, '-B', str(Path(__file__).with_name('hunter_binance_http_child.py')), url, str(os.getpid())]
 
@@ -41,7 +49,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
     An OS process that cannot be reaped keeps its lease and orphan marker.
     """
     allowed(url)
-    observe=observe or (lambda *args,**kwargs:None)
+    observe=safe_observer(observe)
     if cancelled() or time.monotonic() >= deadline:
         raise NotSentError('PUBLIC_REQUEST_NOT_SENT')
     env = {key:os.environ[key] for key in ('PATH','LANG','SYSTEMROOT') if key in os.environ}
@@ -135,6 +143,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
 
 @contextlib.contextmanager
 def tracked(store, token, deadline, cancelled=lambda:False, *, cleanup_timeout=None, observe=None):
+    observe=safe_observer(observe)
     import fcntl
     path = store.path.parent/('request-'+token+'.lock')
     handle = path.open('xb')
@@ -177,6 +186,7 @@ class Client:
         self.now = clock or (lambda:dt.datetime.now(dt.timezone.utc))
 
     def request(self, path, params=None, *, timeout=30, cancelled=lambda:False, drain_on_cancel=False, observe=None):
+        if observe is not None:observe=safe_observer(observe)
         params = params or {}
         url = 'https://data-api.binance.vision'+path+'?'+urllib.parse.urlencode(params)
         allowed(url)
