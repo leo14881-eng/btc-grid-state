@@ -37,6 +37,34 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(route.configure('availability', env), 'DEFAULT')
         self.assertEqual(env, {})
 
+    def test_default_both_consumers_reject_residual_direct_before_selected(self):
+        from research.hunter_bybit_public import selected
+        for job in route.MODULES:
+            for platform, extra in [('linux', {}), ('linux', {'GITHUB_ACTIONS':'true'}),
+                                    ('win32', {}), ('linux', self.environment())]:
+                env = {**extra, 'HUNTER_BYBIT_SPOT_SOURCE':'SERVER_DIRECT'}
+                env.pop('HUNTER_BYBIT_SERVER_ROUTE', None)
+                with self.subTest(job=job, platform=platform, env=env), patch.dict(os.environ, env, clear=True):
+                    # This was the actual leaking path: selected alone chooses direct.
+                    self.assertEqual(selected(), 'SERVER_DIRECT')
+                    with self.assertRaisesRegex(ValueError, 'DEFAULT_ROUTE_REJECTS_DIRECT'):
+                        route.configure(job, os.environ, platform)
+
+    def test_configure_selected_roundtrip_requires_explicit_complete_server_route(self):
+        from research.hunter_bybit_public import selected
+        for job in route.MODULES:
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(route.configure(job, os.environ, 'linux'), 'DEFAULT')
+                self.assertEqual(selected(), 'WORKER')
+            with patch.dict(os.environ, self.environment(), clear=True):
+                self.assertEqual(route.configure(job, os.environ, 'linux'), 'SERVER_DIRECT')
+                self.assertEqual(selected(), 'SERVER_DIRECT')
+            for missing in ('HUNTER_RESEARCH_ISOLATED_CHECKOUT', 'HUNTER_BYBIT_KLINE_SOURCE',
+                            'HUNTER_BYBIT_DIRECT_DISABLED'):
+                env = self.environment(); env.pop(missing)
+                with self.subTest(job=job, missing=missing), patch.dict(os.environ, env, clear=True):
+                    with self.assertRaises(ValueError): route.configure(job, os.environ, 'linux')
+
     def test_explicit_server_route_preserves_selectors(self):
         env = self.environment()
         before = dict(env)

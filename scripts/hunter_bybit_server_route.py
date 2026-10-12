@@ -16,6 +16,8 @@ MODULES = {'discovery': 'research.hunter_cex_scan',
 def configure(job, env, platform=sys.platform):
     route = env.get('HUNTER_BYBIT_SERVER_ROUTE', 'DEFAULT')
     if route == 'DEFAULT':
+        if env.get('HUNTER_BYBIT_SPOT_SOURCE', 'WORKER') != 'WORKER':
+            raise ValueError('DEFAULT_ROUTE_REJECTS_DIRECT_OR_UNKNOWN_SPOT_SELECTOR')
         if job == 'discovery':
             # Preserve the original hosted-runner direct veto.
             env['HUNTER_BYBIT_DIRECT_DISABLED'] = '1'
