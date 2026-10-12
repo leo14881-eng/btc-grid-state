@@ -212,7 +212,8 @@ class CacheTests(unittest.TestCase):
 
     def test_ack_is_bound_to_shard_and_request(self):
         p=stream.Protocol(self.store,self.names,'a'*64,NOW)
-        with self.assertRaises(ValueError):p.receive(1,dict(id=1,result=None),NOW)
+        request_id=p.requests[0][0]['id'];p.mark_sent(0,request_id,NOW)
+        with self.assertRaises(ValueError):p.receive(1,dict(id=request_id,result=None),NOW)
         with self.assertRaises(ValueError):p.receive(0,dict(id=99,result=None),NOW)
 
     def test_subscription_shards_and_control_budget(self):
@@ -224,8 +225,12 @@ class CacheTests(unittest.TestCase):
 
     def test_ack_and_24h_deadlines(self):
         p=stream.Protocol(self.store,self.names,'a'*64,NOW)
+        p.tick(NOW+30001) # Unsent subscriptions do not share the first dial's age.
+        request_id=p.requests[0][0]['id'];p.mark_sent(0,request_id,NOW)
         with self.assertRaises(TimeoutError):p.tick(NOW+30001)
-        p.receive(0,dict(id=1,result=None),NOW)
+        p.note_arrival(0,dict(id=request_id,result=None),NOW+29999)
+        p.tick(NOW+40000) # Timely receipt may still be waiting in the bounded queue.
+        p.receive(0,dict(id=request_id,result=None),NOW+29999)
         with self.assertRaisesRegex(RuntimeError,'24H'):p.tick(NOW+85800000)
 
     def test_backoff_restores_only_after_continuous_full_health(self):
@@ -315,7 +320,8 @@ class CacheTests(unittest.TestCase):
 
     def test_batched_protocol_applies_ack_before_market_data(self):
         p=stream.Protocol(self.store,self.names,'a'*64,NOW)
-        p.receive_batch([(0,dict(id=1,result=None),NOW),(0,message(),NOW+1)])
+        request_id=p.requests[0][0]['id'];p.mark_sent(0,request_id,NOW)
+        p.receive_batch([(0,dict(id=request_id,result=None),NOW),(0,message(),NOW+1)])
         self.assertTrue(all(s['ack'] for s in self.store.states()))
         self.assertEqual(next(s for s in self.store.states() if s['topic']==topic('BTCUSDT','15m'))['ws_ts'],NOW+1)
 

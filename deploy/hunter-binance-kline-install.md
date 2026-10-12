@@ -36,7 +36,11 @@ is governed by the new collector's budget; inspect shared-IP headroom before ena
   alternate hosts or Worker fallback. Default consumers remain `REST`.
 - Up to 500 topics per socket, 8 sockets maximum; 100 topics per SUBSCRIBE, one
   every 500 ms. websockets answers server PING with matching PONG. Every ACK is
-  bound to request and socket. Planned reconnect before the 24-hour boundary.
+  bound to request, socket and a fresh epoch-specific request ID. Its 30-second
+  deadline starts when that request is sent, not when the first socket begins
+  dialing. Timely receipt is latched before queueing; queued arrivals drain before
+  deadline checks, including between shard dials. Missing or genuinely late ACKs
+  still fail. Planned reconnect before the 24-hour boundary.
 - Fixed, separate `/var/lib/hunter-binance-stream/state.sqlite3`; collector lock,
   persistent global denial/cooldown/orphan lease evidence and four request slots.
   Each Kline request weighs 2, with >=200 ms start spacing. Recovery's shared

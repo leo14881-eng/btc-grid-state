@@ -9,7 +9,7 @@ import queue
 import re
 import signal
 import sqlite3
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 import time
 
 from research.hunter_binance_stream_store import Store, Budget, STATE_PATH, LIMITS, FRESH_MS, roster, roster_hash, split_topic, content_hash
@@ -59,21 +59,53 @@ class Protocol:
         plan(names)
         self.store=store; self.epoch=store.begin_session(names,manifest)
         self.started=now; self.pending={}; self.requests=[]
+        self.sent={}; self.arrivals={}; self.lock=Lock()
         serial=0
         for offset in range(0,len(names),SHARD_SIZE):
             batch=[]
             for start in range(offset,min(offset+SHARD_SIZE,len(names)),100):
                 serial+=1
+                request_id=self.epoch+f'{serial:03d}'
                 args=names[start:min(start+100,offset+SHARD_SIZE,len(names))]
-                self.pending[serial]=(offset//SHARD_SIZE,args)
-                batch.append(dict(method='SUBSCRIBE',params=args,id=serial))
+                self.pending[request_id]=(offset//SHARD_SIZE,args)
+                batch.append(dict(method='SUBSCRIBE',params=args,id=request_id))
             self.requests.append(batch)
+
+    def mark_sent(self, shard, request_id, now):
+        # The pump records the start of this send, not the first shard's dial.
+        # A failed/blocked send still consumes its connection's bounded attempt.
+        with self.lock:
+            pending=self.pending.get(request_id)
+            if pending is None or pending[0]!=shard or request_id in self.sent:
+                raise ValueError('BINANCE_SUBSCRIPTION_SEND_INVALID')
+            self.sent[request_id]=now
+
+    def _validate_ack(self, shard, message, received):
+        request_id=message['id'];pending=self.pending.get(request_id)
+        sent=self.sent.get(request_id)
+        if (pending is None or pending[0]!=shard or sent is None
+                or message.get('result','missing') is not None):
+            raise ValueError('BINANCE_SUBSCRIPTION_ACK_INVALID')
+        if not 0<=received-sent<=30_000:
+            raise TimeoutError('BINANCE_ACK_TIMEOUT')
+        return request_id,pending
+
+    def note_arrival(self, shard, message, received):
+        # Latch receipt before queueing. A timely ACK cannot become late while
+        # the main thread finishes another bounded dial or drains market data.
+        with self.lock:
+            request_id,_=self._validate_ack(shard,message,received)
+            if request_id in self.arrivals:raise ValueError('BINANCE_DUPLICATE_ACK')
+            self.arrivals[request_id]=received
 
     def receive(self, shard, message, now):
         if 'id' in message:
-            pending=self.pending.pop(message['id'],None)
-            if pending is None or pending[0]!=shard or message.get('result','missing') is not None:
-                raise ValueError('BINANCE_SUBSCRIPTION_ACK_INVALID')
+            with self.lock:
+                request_id,pending=self._validate_ack(shard,message,now)
+                if self.arrivals.get(request_id,now)!=now:
+                    raise ValueError('BINANCE_ACK_RECEIPT_MISMATCH')
+                del self.pending[request_id]
+                self.arrivals.pop(request_id,None)
             self.store.ack(self.epoch,pending[1])
         else:
             from research.hunter_binance_stream_store import topic
@@ -83,7 +115,10 @@ class Protocol:
             self.store.ingest_ws(self.epoch,message,now)
 
     def tick(self, now):
-        if self.pending and now-self.started > 30_000: raise TimeoutError('BINANCE_ACK_TIMEOUT')
+        with self.lock:
+            if any(request_id in self.sent and request_id not in self.arrivals
+                   and not 0<=now-self.sent[request_id]<=30_000 for request_id in self.pending):
+                raise TimeoutError('BINANCE_ACK_TIMEOUT')
         if now-self.started >= 85_800_000: raise RuntimeError('BINANCE_PLANNED_24H_RECONNECT')
 
     def receive_batch(self, observations):
@@ -137,27 +172,44 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
         try:
             for request in requests:
                 if stopping(): return
+                protocol.mark_sent(index,request['id'],clock())
                 ws.send(json.dumps(request)); sleep(.5)
             while not stopping():
                 try: raw=ws.recv(timeout=1)
                 except TimeoutError: continue
-                messages.put((index,json.loads(raw),clock()),timeout=.5)
+                received=clock();message=json.loads(raw)
+                if 'id' in message:protocol.note_arrival(index,message,received)
+                messages.put((index,message,received),timeout=.5)
         except BaseException as error:
             if not stopping():
                 try: messages.put((index,error,clock()),timeout=.5)
                 except queue.Full: cancelled.set()
     pool=ThreadPoolExecutor(max_workers=4)
     stack=ExitStack()
+    def drain():
+        # Drain a bounded snapshot before deadline checks. Receipt latches cover
+        # ACKs arriving concurrently after this snapshot; no missing ACK gets one.
+        remaining=min(messages.qsize(),4096)
+        while remaining:
+            pending=[]
+            for _ in range(min(100,remaining)):
+                try:pending.append(messages.get_nowait())
+                except queue.Empty:break
+            if not pending:break
+            protocol.receive_batch(pending);remaining-=len(pending)
     try:
         for index,requests in enumerate(protocol.requests):
             if stopping(): return
+            drain();protocol.tick(clock())
             ws=stack.enter_context(connect())
             thread=Thread(target=pump,args=(index,ws,requests),daemon=False)
             threads.append(thread); thread.start()
         while not stopping():
+            drain()
             now=clock()
+            protocol.tick(now)
             if now-last_check>=1000:
-                last_check=now; protocol.tick(now)
+                last_check=now
                 state=Budget(store).status()
                 if state['halt'] or now<state['cooldown_ms']:on_nonready('GLOBAL_STOP_OR_COOLDOWN')
                 if state['halt'] or state['cooldown_ms']-now>=590_000:
