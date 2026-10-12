@@ -252,10 +252,13 @@ def main():
     exit_failures[a]=type(ex).__name__
     liq.setdefault('snapshots',{})[a]={}  # never reuse an old book after a failed attempt
  refresh['exit_book_refresh_failures']=exit_failures
- # Evaluate after acquisitions finish: a just-fetched book must not appear to
- # come from the future relative to the scan's initial clock snapshot.
- evaluated_at=dt.datetime.now(dt.timezone.utc)
- results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence)]
+ # Sample at each lane's admission: V1 history/serialization can age evidence
+ # before V2 starts. Keep acquisition timestamps unchanged so the existing
+ # freshness guards see the elapsed time rather than V1's earlier clock.
+ results=[]
+ for phase,path,label,v1_mode in (("v1_lifecycle",V1,"SHADOW_V1",True),("v2_lifecycle",V2,"SHADOW_V2",False)):
+  evaluated_at=dt.datetime.now(dt.timezone.utc)
+  results.append(timed(phase,run_lane,path,label,market,review,liq,supply,evaluated_at,v1_mode,excluded,regime_scan,risk_evidence))
  TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
  # Observe subscription drift after authoritative lifecycle updates. The resident
  # stream owns its 30-second subscription self-healing; this never writes its state.
