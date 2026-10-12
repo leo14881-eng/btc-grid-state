@@ -18,6 +18,85 @@ from research.hunter_binance_public import Client, DurableStopError, UncertainRe
 WS_URL = 'wss://data-stream.binance.vision/ws'
 SHARD_SIZE = 500
 MAX_SHARDS = 8
+AUDIT_LOCK = Lock()
+
+
+def emit(value):
+    with AUDIT_LOCK: print(json.dumps(value,sort_keys=True),flush=True)
+
+
+class ObservedQueue(queue.Queue):
+    """High-water is measured under Queue's own mutex, including concurrent drains."""
+    def __init__(self, maxsize):
+        super().__init__(maxsize); self.high_water=0
+
+    def _put(self, item):
+        super()._put(item); self.high_water=max(self.high_water,self._qsize())
+
+
+class SessionEvidence:
+    """Bounded counters only; receipt/processing observations never confer readiness."""
+    def __init__(self, epoch, names):
+        self.epoch=epoch; self.lock=Lock(); self.serial=0
+        self.topics={name:dict(received=0,processed=0,changed=0,last_rx=0,last_processed_rx=0)
+                     for name in names}
+        self.batches=0; self.batch_max_us=0; self.receipt_to_processing_max_ms=0
+        self.receipt_clock_anomalies=0; self.acked_batches=0
+
+    def received(self, name, received):
+        with self.lock:
+            row=self.topics[name]; row['received']+=1; row['last_rx']=max(row['last_rx'],received)
+
+    def committed(self, batch, changed, elapsed_ns):
+        now=millis()
+        with self.lock:
+            self.batches+=1; self.batch_max_us=max(self.batch_max_us,elapsed_ns//1000)
+            for (message,received),did_change in zip(batch,changed):
+                row=self.topics[split_message_topic(message)]
+                row['processed']+=1; row['changed']+=int(bool(did_change))
+                row['last_processed_rx']=max(row['last_processed_rx'],received)
+                if now<received:self.receipt_clock_anomalies+=1
+                else:self.receipt_to_processing_max_ms=max(self.receipt_to_processing_max_ms,now-received)
+
+    def acked(self, shard, batch, received):
+        with self.lock:self.acked_batches+=1
+        emit(dict(event='BINANCE_ACK_COMMITTED',epoch=self.epoch,shard=shard,
+                  subscribe_batch=batch,received=received))
+
+    def request_observer(self, name):
+        with self.lock:self.serial+=1; serial=self.serial
+        row={}
+        def observe(event, **fields):
+            if event=='ATTEMPT':row.clear();row.update(attempt=fields['attempt'],go=False,
+                response_complete=False,process_reaped=False,owner_retired=False)
+            elif event=='GO':row['go']=True
+            elif event=='HEADERS':row['http_status']=fields['status']
+            elif event=='RESPONSE':row.update(response_complete=True,http_status=fields['status'])
+            elif event=='REAPED':row['process_reaped']=True
+            elif event=='RETIRED':row['owner_retired']=True
+            elif event=='ERROR':row['error_type']=fields['error_type']
+            elif event=='END':
+                emit(dict(event='BINANCE_HTTP_LIFECYCLE',epoch=self.epoch,request_number=serial,
+                          topic=name,**row))
+        return observe
+
+    def snapshot(self, messages, active_repairs, *, final=False):
+        with self.lock:
+            rows=[dict(topic=name,**row) for name,row in self.topics.items()]
+            summary=dict(event='BINANCE_SESSION_METRICS',epoch=self.epoch,final=final,
+                topics=len(rows),received=sum(r['received'] for r in rows),
+                processed=sum(r['processed'] for r in rows),zero_received=sum(r['received']==0 for r in rows),
+                zero_processed=sum(r['processed']==0 for r in rows),acked_batches=self.acked_batches,
+                committed_batches=self.batches,batch_commit_max_us=self.batch_max_us,
+                receipt_to_commit_max_ms=self.receipt_to_processing_max_ms,
+                receipt_clock_anomalies=self.receipt_clock_anomalies,queued=messages.qsize(),
+                queue_high_water=messages.high_water,active_repairs=active_repairs)
+        emit(summary)
+        if final:
+            # At most 80 pages for the existing 4000-topic cap; no per-frame IO.
+            for offset in range(0,len(rows),50):
+                emit(dict(event='BINANCE_TOPIC_METRICS',epoch=self.epoch,
+                          offset=offset,total=len(rows),topics=rows[offset:offset+50]))
 
 
 def millis(): return time.time_ns()//1_000_000
@@ -61,6 +140,7 @@ class Protocol:
         self.started=now; self.pending={}; self.requests=[]
         self.sent={}; self.arrivals={}; self.lock=Lock()
         self.market_arrivals={}; self.topic_shards={}
+        self.evidence=SessionEvidence(self.epoch,names); self.topic_batches={}
         serial=0
         for offset in range(0,len(names),SHARD_SIZE):
             batch=[]
@@ -69,6 +149,7 @@ class Protocol:
                 request_id=self.epoch+f'{serial:03d}'
                 args=names[start:min(start+100,offset+SHARD_SIZE,len(names))]
                 self.topic_shards.update((name,offset//SHARD_SIZE) for name in args)
+                self.topic_batches.update((name,(start-offset)//100) for name in args)
                 self.pending[request_id]=(offset//SHARD_SIZE,args)
                 batch.append(dict(method='SUBSCRIBE',params=args,id=request_id))
             self.requests.append(batch)
@@ -79,6 +160,7 @@ class Protocol:
         name=split_message_topic(message)
         if self.topic_shards.get(name)!=shard: raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
         with self.lock:self.market_arrivals[name]=max(received,self.market_arrivals.get(name,0))
+        self.evidence.received(name,received)
 
     def market_arrival(self, name):
         with self.lock:return self.market_arrivals.get(name,0)
@@ -119,12 +201,14 @@ class Protocol:
                 del self.pending[request_id]
                 self.arrivals.pop(request_id,None)
             self.store.ack(self.epoch,pending[1])
+            self.evidence.acked(shard,self.topic_batches[pending[1][0]],now)
         else:
             from research.hunter_binance_stream_store import topic
             name=topic(message['s'],message['k']['i'])
             if self.topic_shards.get(name)!=shard:
                 raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
-            self.store.ingest_ws(self.epoch,message,now)
+            started=time.monotonic_ns(); changed=self.store.ingest_ws(self.epoch,message,now)
+            self.evidence.committed([(message,now)],[changed],time.monotonic_ns()-started)
 
     def tick(self, now):
         with self.lock:
@@ -137,7 +221,9 @@ class Protocol:
         from research.hunter_binance_stream_store import topic
         batch=[]
         def flush():
-            if batch:self.store.ingest_ws_batch(self.epoch,batch);batch.clear()
+            if batch:
+                started=time.monotonic_ns(); changed=self.store.ingest_ws_batch(self.epoch,batch)
+                self.evidence.committed(batch,changed,time.monotonic_ns()-started);batch.clear()
         for shard,message,received in observations:
             if isinstance(message,BaseException):raise message
             if 'id' in message:
@@ -163,16 +249,17 @@ def open_ws():
                    ping_interval=None,max_size=262144,max_queue=1024)
 
 
-def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, client=None):
+def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, client=None, observe=None):
     symbol,interval=split_topic(name)
     def active():
         if cancelled(): raise RuntimeError('BINANCE_RECOVERY_CANCELLED')
         with store.db(readonly=True) as db: store.check_epoch(db,epoch)
     active(); requested=clock()
     if requested>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
+    options={'observe':observe} if observe is not None else {}
     rows=(client or Client(store)).request('/api/v3/klines',dict(symbol=symbol,
         interval=interval,limit=LIMITS[interval],endTime=requested),
-        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled,drain_on_cancel=True)
+        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled,drain_on_cancel=True,**options)
     active(); received=clock()
     if received>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
     store.ingest_rest(epoch,name,rows,requested,received)
@@ -182,7 +269,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
             repairer=repair,observer=None,on_nonready=lambda *_:None):
     protocol=Protocol(store,names,manifest,clock())
     on_nonready('SESSION_STARTED')
-    cancelled=Event(); messages=queue.Queue(maxsize=4096); threads=[]; jobs={}; completed=set()
+    cancelled=Event(); messages=ObservedQueue(maxsize=4096); threads=[]; jobs={}; completed=set()
     deadline=clock()+900_000; last_check=last_audit=0
     def stopping(): return cancelled.is_set() or stop()
     def pump(index,ws,requests):
@@ -241,7 +328,8 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                         on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
                     if state['ack'] and state['gap'] and name not in jobs and len(jobs)<4:
                         if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
-                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
+                        options={'observe':protocol.evidence.request_observer(name)} if repairer is repair else {}
+                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping,**options)
                     if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
                         ingress=protocol.market_arrival(name)
                         ingress_now=clock()  # Receipt can occur after the scan's now.
@@ -254,6 +342,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                                 ack=state['ack'],gap=state['gap'],queued=messages.qsize(),active_repairs=len(jobs))),flush=True)
                             raise TimeoutError('BINANCE_TOPIC_STALE')
                 if observer and now-last_audit>=30_000:
+                    protocol.evidence.snapshot(messages,len(jobs))
                     observer(now); last_audit=now
             try: pending=[messages.get(timeout=.1)]
             except queue.Empty: continue
@@ -272,6 +361,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 for job in jobs.values(): job.cancel()
                 pool.shutdown(wait=True,cancel_futures=True)
                 for thread in threads: thread.join(timeout=7)
+                protocol.evidence.snapshot(messages,len(jobs),final=True)
                 if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
                 for job in jobs.values():
                     if not job.cancelled() and isinstance(job.exception(),(DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error)):

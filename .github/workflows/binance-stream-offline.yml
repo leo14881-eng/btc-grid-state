@@ -75,6 +75,8 @@ jobs:
           PY
       - name: Guarded cache and consumer regressions
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
+      - name: Bounded evidence and commit-versus-ingress regressions
+        run: python -B -m unittest discover -s tests -p test_hunter_binance_observability.py -v
       - name: Real loopback cancellation and denial regressions
         run: python -I -B -X utf8 scripts/check_binance_public_transport.py
       - name: Deployment shell syntax only

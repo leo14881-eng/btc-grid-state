@@ -94,6 +94,25 @@ class ProcessTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],0)
         self.assertEqual(list(self.path.parent.glob('request-*.lock')),[])
 
+    def test_real_lifecycle_reports_reap_and_retirement_after_complete_response(self):
+        server=self.server();client=self.client(server);events=[]
+        self.assertEqual(client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
+            timeout=3,observe=lambda event,**fields:events.append((event,fields))),[])
+        kinds=[x[0] for x in events]
+        self.assertEqual(kinds,['ATTEMPT','GO','HEADERS','RESPONSE','REAPED','RETIRED','END'])
+        self.assertEqual(events[2][1]['status'],200);self.assert_retired()
+        self.assertFalse(any('token' in fields for _,fields in events))
+
+    def test_real_incomplete_response_is_reaped_but_never_claims_owner_retirement(self):
+        server=self.server(slow=True);client=self.client(server);events=[]
+        with self.assertRaises(public.UncertainRequestError):
+            client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
+                timeout=.4,observe=lambda event,**fields:events.append((event,fields)))
+        kinds=[x[0] for x in events]
+        self.assertIn('GO',kinds);self.assertIn('REAPED',kinds)
+        self.assertNotIn('RESPONSE',kinds);self.assertNotIn('RETIRED',kinds)
+        self.assertEqual(kinds[-2:],['ERROR','END']);self.assert_stopped(server)
+
     def test_legacy_cleanup_deadline_reproduces_timeout_then_orphan_after_five_seconds(self):
         # Exercise the deployed helper's unchanged default with real flock/DB.
         # No HTTP is needed to show that normal completion misses cleanup.

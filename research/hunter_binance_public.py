@@ -34,13 +34,14 @@ def worker_command(url):
     return [sys.executable, '-B', str(Path(__file__).with_name('hunter_binance_http_child.py')), url, str(os.getpid())]
 
 
-def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drain_on_cancel=False):
+def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drain_on_cancel=False, observe=None):
     """Monotonic deadline includes start/DNS/TLS/headers/body; cleanup is awaited.
 
     kill+wait is a required closure acknowledgement, not a Future timeout.
     An OS process that cannot be reaped keeps its lease and orphan marker.
     """
     allowed(url)
+    observe=observe or (lambda *args,**kwargs:None)
     if cancelled() or time.monotonic() >= deadline:
         raise NotSentError('PUBLIC_REQUEST_NOT_SENT')
     env = {key:os.environ[key] for key in ('PATH','LANG','SYSTEMROOT') if key in os.environ}
@@ -63,11 +64,13 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
                     before_go()  # Recheck the shared denial/owner state.
                     if cancelled() or time.monotonic()>=deadline: continue
                     sent = True  # A failed write is conservatively uncertain.
+                    observe('GO')
                     process.stdin.write(b'GO\n'); process.stdin.flush(); process.stdin.close()
             elif item.get('kind') == 'headers' and sent and header is None:
                 header = item.get('status')
                 if type(header) is not int or not 100 <= header <= 599:
                     raise ValueError('PUBLIC_HTTP_STATUS_INVALID')
+                observe('HEADERS',status=header)
                 if header in (403,418): on_denial()
             elif item.get('kind') == 'response' and sent and result is None and item.get('status') == header:
                 payload = base64.b64decode(item['payload'], validate=True)
@@ -75,6 +78,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
                 if len(payload)>MAX_BODY or type(retry) is not int or not 0 <= retry <= 600:
                     raise ValueError('PUBLIC_HTTP_RESPONSE_INVALID')
                 result = (header,payload,retry)
+                observe('RESPONSE',status=header)
             elif item.get('kind') == 'error':
                 raise UncertainRequestError('PUBLIC_HTTP_OUTCOME_UNKNOWN_MANUAL_REVIEW')
             else:
@@ -104,6 +108,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
             except ProcessLookupError: pass  # Exit can race poll/kill.
         try:
             process.wait(timeout=1)
+            observe('REAPED')
         except subprocess.TimeoutExpired as error:
             process.stdout.close()
             raise UnreapedRequestError('PUBLIC_HTTP_PROCESS_NOT_REAPED') from error
@@ -129,7 +134,7 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
 
 
 @contextlib.contextmanager
-def tracked(store, token, deadline, cancelled=lambda:False, *, cleanup_timeout=None):
+def tracked(store, token, deadline, cancelled=lambda:False, *, cleanup_timeout=None, observe=None):
     import fcntl
     path = store.path.parent/('request-'+token+'.lock')
     handle = path.open('xb')
@@ -151,6 +156,7 @@ def tracked(store, token, deadline, cancelled=lambda:False, *, cleanup_timeout=N
                 db.execute('DELETE FROM leases WHERE token=?',(token,))
         try:
             coordinate(finish,finish_deadline)
+            if observe is not None:observe('RETIRED')
         except TimeoutError as error:
             if cleanup_timeout is None: raise
             raise DurableStopError('PUBLIC_REQUEST_CLEANUP_TIMEOUT_MANUAL_REVIEW') from error
@@ -170,7 +176,7 @@ class Client:
         self.transport = transport
         self.now = clock or (lambda:dt.datetime.now(dt.timezone.utc))
 
-    def request(self, path, params=None, *, timeout=30, cancelled=lambda:False, drain_on_cancel=False):
+    def request(self, path, params=None, *, timeout=30, cancelled=lambda:False, drain_on_cancel=False, observe=None):
         params = params or {}
         url = 'https://data-api.binance.vision'+path+'?'+urllib.parse.urlencode(params)
         allowed(url)
@@ -190,9 +196,11 @@ class Client:
             release = True
             status, payload, retry = 0, b'', 1
             denied = False
+            if observe is not None:observe('ATTEMPT',attempt=attempt+1)
             try:
                 check()
-                with tracked(self.store, token, deadline, cancelled, cleanup_timeout=1) as orphan:
+                tracking={'observe':observe} if observe is not None else {}
+                with tracked(self.store, token, deadline, cancelled, cleanup_timeout=1,**tracking) as orphan:
                     release = False  # tracked commits marker+lease removal together.
                     def on_denial():
                         nonlocal denied
@@ -219,6 +227,7 @@ class Client:
                         # The transport keeps the real predicate through GO;
                         # draining applies only after admission was sent.
                         options={'drain_on_cancel':True} if drain_on_cancel else {}
+                        if observe is not None:options['observe']=observe
                         status,payload,retry = self.transport(url,deadline,cancelled,on_denial,before_go,**options)
                     except NotSentError as error:
                         not_sent = error
@@ -242,12 +251,19 @@ class Client:
                     # validated. Retire ownership before rejecting late data.
                     check()
                     return body
-            except (UnreapedRequestError,UncertainRequestError,DurableStopError,sqlite3.Error,ValueError):
+            except (UnreapedRequestError,UncertainRequestError,DurableStopError,sqlite3.Error,ValueError) as error:
                 release = False  # Persistent orphan marker is a global stop.
+                if observe is not None:observe('ERROR',error_type=type(error).__name__)
+                raise
+            except BaseException as error:
+                if observe is not None:observe('ERROR',error_type=type(error).__name__)
                 raise
             finally:
-                if release:
-                    self.budget.release(token,timeout=max(0,min(.25,deadline-time.monotonic())))
+                try:
+                    if release:
+                        self.budget.release(token,timeout=max(0,min(.25,deadline-time.monotonic())))
+                finally:
+                    if observe is not None:observe('END')
             if status == 403 or decision != 'BOUNDED_RETRY':
                 raise RuntimeError(decision)
         raise RuntimeError('PUBLIC_RETRY_BUDGET_EXHAUSTED')
