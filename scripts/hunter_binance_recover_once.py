@@ -23,6 +23,16 @@ SERVICE = 'hunter-binance-stream.service'
 EPOCH = '334a5a2f75324d1b924df41c8efaa800'
 UPGRADER = 'db0d59e3f7a6f15d1f99a678c07c2336e4474867'
 UPGRADER_HASH = 'e0615746c73809d258b858f4058cbd346b2df9e011a8d7df819f8e5f77808ddc'
+SCAN_CHECK = """import datetime as d,json,sys
+s=json.load(sys.stdin); now=d.datetime.now(d.timezone.utc)
+print(json.dumps(dict(now_utc=now.isoformat(),as_of_utc=s.get('as_of_utc'),
+    binance_complete=s.get('binance_complete'),generation_id=s.get('generation_id'))),flush=True)
+from research.hunter_binance_stream_store import roster
+roster(s,now)
+stamp=d.datetime.fromisoformat(s['as_of_utc'].replace('Z','+00:00'))
+assert 0 <= (now-stamp).total_seconds() <= 1200, 'NATURAL_SCAN_TOO_OLD_WAIT_FOR_NEXT_CYCLE'
+print('FRESH_SCOPE_OK')
+"""
 
 
 def require(ok, reason):
@@ -174,14 +184,14 @@ def fresh_scan(upgrade):
     head=command(['git','-C',REPO,'rev-parse',reference]).stdout.decode().strip()
     data=command(['git','-C',REPO,'show',head+':research/results/hunter-cex-universe-latest.json']).stdout
     # Validate without state writes. A 20-minute admission limit leaves startup headroom.
-    code="""import datetime as d,json,sys
-from research.hunter_binance_stream_store import roster
-s=json.load(sys.stdin); now=d.datetime.now(d.timezone.utc); roster(s,now)
-stamp=d.datetime.fromisoformat(s['as_of_utc'].replace('Z','+00:00'))
-assert 0 <= (now-stamp).total_seconds() <= 1200, 'NATURAL_SCAN_TOO_OLD_WAIT_FOR_NEXT_CYCLE'
-print('FRESH_SCOPE_OK')
-"""
-    command([PREFIX/'venv/bin/python','-E','-s','-B','-c',code],cwd=PREFIX/'code',data=data)
+    result=command([PREFIX/'venv/bin/python','-E','-s','-B','-c',SCAN_CHECK],
+                   cwd=PREFIX/'code',data=data,check=False)
+    # This child only validates public scan data. Print its bounded diagnostics
+    # before raising; do not expose arbitrary command arguments or Git stderr.
+    print(json.dumps(dict(stage='FRESH_SCAN_VALIDATION',source_head=head,returncode=result.returncode,
+        stdout=result.stdout.decode('utf-8','replace')[-8192:],
+        stderr=result.stderr.decode('utf-8','replace')[-8192:]),sort_keys=True),flush=True)
+    require(result.returncode==0,'FRESH_SCAN_VALIDATION_FAILED_BEFORE_MUTATION_OR_PROBE')
     return dict(source_head=head,snapshot=json.loads(data))
 
 

@@ -9,6 +9,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import time
 import unittest
@@ -55,6 +56,30 @@ class RecoveryTests(unittest.TestCase):
              patch.object(recovery,'command') as command,contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(recovery.main(),0)
         helper.assert_not_called(); command.assert_not_called()
+
+    def test_fresh_scan_failure_preserves_original_diagnostic_and_head(self):
+        output=io.StringIO(); head='a'*40
+        results=[subprocess.CompletedProcess([],0,b'',b''),
+            subprocess.CompletedProcess([],0,(head+'\n').encode(),b''),
+            subprocess.CompletedProcess([],0,b'{"as_of_utc":"2026-10-12T16:17:11Z"}',b''),
+            subprocess.CompletedProcess([],1,b'age evidence\n',b'ValueError: BINANCE_SCAN_NOT_FRESH_COMPLETE\n')]
+        with patch.object(recovery,'command',side_effect=results) as command,\
+             contextlib.redirect_stdout(output),self.assertRaisesRegex(RuntimeError,'BEFORE_MUTATION_OR_PROBE'):
+            recovery.fresh_scan(None)
+        receipt=json.loads(output.getvalue())
+        self.assertEqual((receipt['source_head'],receipt['returncode']),(head,1))
+        self.assertIn('BINANCE_SCAN_NOT_FRESH_COMPLETE',receipt['stderr'])
+        self.assertIn('age evidence',receipt['stdout'])
+        self.assertFalse(command.call_args.kwargs['check'])
+
+    def test_fresh_scan_success_retains_source_binding(self):
+        head='b'*40; snapshot={'as_of_utc':'2026-10-12T16:17:11Z'}
+        results=[subprocess.CompletedProcess([],0,b'',b''),
+            subprocess.CompletedProcess([],0,head.encode(),b''),
+            subprocess.CompletedProcess([],0,json.dumps(snapshot).encode(),b''),
+            subprocess.CompletedProcess([],0,b'FRESH_SCOPE_OK\n',b'')]
+        with patch.object(recovery,'command',side_effect=results),contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(recovery.fresh_scan(None),dict(source_head=head,snapshot=snapshot))
 
     def test_consistent_backup_preserves_source_rows(self):
         receipt=recovery.consistent_backup(self.path)

@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Eleven SQLite and one-attempt fixtures without network or subprocesses
+      - name: Thirteen SQLite and one-attempt fixtures without network or subprocesses
         run: |
           python -B - <<'PY'
           import io,os,shutil,subprocess,sys,tarfile,tempfile,unittest
@@ -62,9 +62,33 @@ jobs:
                   if event=='os.rename':inside(args[0]);inside(args[1])
               sys.addaudithook(guard)
               result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover(str(runtime/'tests'),pattern='test_binance_recovery_package.py'))
-              good=result.wasSuccessful() and result.testsRun==11 and not result.skipped and not blocked
+              good=result.wasSuccessful() and result.testsRun==13 and not result.skipped and not blocked
               print('SINGLE_RECOVERY_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
               if not good:raise SystemExit(1)
+          PY
+      - name: Reproduce fresh-scan child in the actual old-release layout
+        run: |
+          python -B - <<'PY'
+          import datetime as d,io,json,os,subprocess,sys,tarfile,tempfile,venv
+          from pathlib import Path
+          from scripts.hunter_binance_recover_once import SCAN_CHECK,command
+          sha='99f75edcf2c2f95d59e5cf797051442639dc64ce'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder); prefix=root/'opt/hunter-binance-stream'; code=prefix/'code'; code.mkdir(parents=True)
+              with tarfile.open(fileobj=io.BytesIO(data)) as bundle:bundle.extractall(code)
+              venv.EnvBuilder(with_pip=False).create(prefix/'venv')
+              for age,expected in [(0,'FRESH_SCOPE_OK'),(1300,'NATURAL_SCAN_TOO_OLD_WAIT_FOR_NEXT_CYCLE'),(2800,'BINANCE_SCAN_NOT_FRESH_COMPLETE')]:
+                  scan=dict(as_of_utc=(d.datetime.now(d.timezone.utc)-d.timedelta(seconds=age)).isoformat(),
+                      binance_complete=True,generation_id='fixture',coins={'BTC':{'pairs':[dict(venue='binance',base='BTC',pair='BTCUSDT')]}})
+                  result=command([prefix/'venv/bin/python','-E','-s','-B','-c',SCAN_CHECK],cwd=code,data=json.dumps(scan).encode(),check=False)
+                  assert (result.returncode==0)==(age==0),(age,result.stderr)
+                  assert expected in (result.stdout+result.stderr).decode(),result.stderr
+                  assert json.loads(result.stdout.splitlines()[0])['as_of_utc']==scan['as_of_utc']
+                  print('OLD_RELEASE_LAYOUT_CHECK',sha,age,expected)
+              assert not list(code.rglob('__pycache__'))
           PY
       - name: Verify reused upgrade entry bytes only
         run: |
