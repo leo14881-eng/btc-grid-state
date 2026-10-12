@@ -11,7 +11,7 @@ sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
 sys.dont_write_bytecode=True
 
 
-def main(pattern='test_hunter_binance_transport*.py',expected=28,expected_failures=0):
+def main(pattern='test_hunter_binance_transport*.py',expected=30,expected_failures=0):
     with tempfile.TemporaryDirectory(prefix='public-http-offline-') as directory:
         scratch=Path(directory).resolve();tempfile.tempdir=str(scratch)
         helper=(ROOT/'tests/fixtures/binance_http_child.py').resolve()

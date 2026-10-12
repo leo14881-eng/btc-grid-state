@@ -24,8 +24,10 @@ HELPER=Path(__file__).parent/'fixtures/binance_http_child.py'
 
 
 class Server:
-    def __init__(self,status=200,slow=False,headers_slow=False):
+    def __init__(self,status=200,slow=False,headers_slow=False,defer_headers=False,retry_after=1):
         self.status,self.slow,self.headers_slow=status,slow,headers_slow
+        self.defer_headers,self.retry_after=defer_headers,retry_after
+        self.received=Event();self.release_headers=Event();self.requests=0
         self.ready=Event();self.closed=Event();self.stop=Event();self.count=0
         self.socket=socket.socket();self.socket.bind(('127.0.0.1',0));self.socket.listen(1)
         self.port=self.socket.getsockname()[1]
@@ -38,8 +40,10 @@ class Server:
             with connection:
                 connection.settimeout(4);request=b''
                 while b'\r\n\r\n' not in request:request+=connection.recv(4096)
+                self.requests+=1;self.received.set()
+                if self.defer_headers and not self.release_headers.wait(3):return
                 body=(b'country' if self.status==403 else b'[]')
-                head=f'HTTP/1.1 {self.status} Fixture\r\nContent-Length: {1000000 if self.slow else len(body)}\r\nConnection: close\r\n\r\n'.encode()
+                head=f'HTTP/1.1 {self.status} Fixture\r\nContent-Length: {1000000 if self.slow else len(body)}\r\nRetry-After: {self.retry_after}\r\nConnection: close\r\n\r\n'.encode()
                 if self.headers_slow:head=b'HTTP/1.1 200 Fixture\r\nX-Slow: '
                 connection.sendall(head)
                 if not self.slow and not self.headers_slow:connection.sendall(body)
@@ -226,6 +230,69 @@ class ProcessTests(unittest.TestCase):
         with self.assertRaises(public.UncertainRequestError):
             client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),timeout=3,cancelled=server.ready.is_set)
         self.assert_stopped(server)
+
+    def test_cancelled_drain_receives_429_and_persists_cooldown_before_retiring(self):
+        server=self.server(status=429,defer_headers=True,retry_after=7);client=self.client(server)
+        stopped=Event();children=[];decisions=[];failure=client.budget.failure
+        def cancelled():
+            if server.received.is_set():
+                stopped.set();server.release_headers.set()  # 429 is sent only after cancellation.
+            return stopped.is_set()
+        def record_failure(status,*args,**kwargs):
+            decision=failure(status,*args,**kwargs)
+            with self.store.db(readonly=True) as db:
+                self.assertEqual(tuple(db.execute('SELECT COUNT(*) FROM '+name).fetchone()[0]
+                    for name in ('requests','leases')),(1,1))
+            decisions.append((status,decision));return decision
+        popen=public.subprocess.Popen
+        def spawn(*args,**kwargs):
+            child=popen(*args,**kwargs);children.append(child);return child
+        with patch.object(public.subprocess,'Popen',spawn),patch.object(client.budget,'failure',record_failure),\
+             self.assertRaisesRegex(TimeoutError,'PUBLIC_REQUEST_CANCELLED_OR_EXPIRED'):
+            client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
+                timeout=3,cancelled=cancelled,drain_on_cancel=True)
+        self.assertTrue(stopped.is_set());self.assertTrue(server.closed.wait(2))
+        self.assertEqual((len(children),server.requests),(1,1))
+        self.assertTrue(all(child.poll() is not None for child in children))
+        self.assertEqual(decisions,[(429,'BOUNDED_RETRY')]);self.assert_retired()
+        with self.store.db(readonly=True) as db:
+            remaining=db.execute('SELECT cooldown_ms FROM budget').fetchone()[0]-time.monotonic_ns()//1_000_000
+            self.assertGreater(remaining,5000)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM bars').fetchone()[0],0)
+        self.assertIsNone(Budget(Store.reader(self.path)).acquire())
+        print('CANCEL_DRAIN_429',dict(http_requests=server.requests,retired=True,cooldown_remaining_ms=remaining,published_bars=0))
+
+    def test_unreaped_wait_failure_retains_owner_and_stops_without_backoff(self):
+        # A real child/socket is killed at its original deadline. Inject failure
+        # only at the OS wait acknowledgement; the test later reaps the child.
+        server=self.server(slow=True);client=self.client(server);children=[];waits=[];delays=[];calls=[]
+        popen=public.subprocess.Popen
+        def spawn(*args,**kwargs):
+            child=popen(*args,**kwargs);children.append(child)
+            class FailedWait:
+                def __getattr__(self,name):return getattr(child,name)
+                def wait(self,timeout):
+                    waits.append(timeout);raise subprocess.TimeoutExpired(child.args,timeout)
+            return FailedWait()
+        def session(*args,**kwargs):
+            calls.append(1)
+            client.request('/api/v3/klines',dict(symbol='BTCUSDT',interval='5m',limit=16,endTime=1),
+                timeout=1,cancelled=server.ready.is_set,drain_on_cancel=True)
+        try:
+            with patch.object(public.subprocess,'Popen',spawn),patch.object(stream,'session',session),\
+                 contextlib.redirect_stdout(io.StringIO()),self.assertRaisesRegex(public.UnreapedRequestError,'PROCESS_NOT_REAPED'):
+                stream.collect(self.store,['btcusdt@kline_5m'],'a'*64,'b'*40,sleep=delays.append)
+            self.assertEqual((len(children),calls,waits,delays),(1,[1],[1],[]))
+            self.assert_stopped(server)
+            with self.store.db(readonly=True) as db:
+                counts=tuple(db.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('requests','leases','bars'))
+            self.assertEqual(counts,(1,1,0));self.assertEqual(len(list(self.path.parent.glob('request-*.lock'))),1)
+            with self.assertRaisesRegex(RuntimeError,'ORPHANED'):Budget(Store.reader(self.path)).acquire()
+            print('UNREAPED_WAIT_FAULT',dict(counts=counts,backoff=delays,session_calls=len(calls),wait_timeout=waits))
+        finally:
+            for child in children:
+                if child.poll() is None:child.kill()
+                child.wait(timeout=2)
 
     def test_supervisor_death_kills_http_child_and_orphan_blocks_restart(self):
         server=self.server(slow=True)
