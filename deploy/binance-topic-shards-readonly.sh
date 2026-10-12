@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -eu
-systemctl show hunter-binance-stream.service -p ActiveState -p SubState -p MainPID -p ControlGroup -p Result -p ExecMainStatus
+state=$(systemctl show hunter-binance-stream.service -p ActiveState -p SubState -p MainPID -p ControlGroup -p Result -p ExecMainStatus)
+printf '%s\n' "$state"
+if ! printf '%s\n' "$state" | grep -Eq '^ActiveState=(failed|inactive)$' || ! printf '%s\n' "$state" | grep -qx 'MainPID=0'; then
+  printf '%s\n' 'STOPPED_SERVICE_REQUIRED; no service action taken' >&2
+  exit 1
+fi
 journalctl --utc --no-pager -u hunter-binance-stream.service --since '2026-10-12 17:19:00' --until '2026-10-12 17:22:00' -o short-iso -n 200
 runuser -u hunter-binance-stream -- /opt/hunter-binance-stream/venv/bin/python -B - <<'PY'
 """One consistent, read-only snapshot of the stopped Binance collector.
@@ -15,6 +20,7 @@ import json
 from pathlib import Path
 import re
 import sqlite3
+import tempfile
 
 
 def digest(value):
@@ -36,14 +42,35 @@ def inspect(directory):
     # Exact deployed roster(): lexicographic topics, 500 per socket and 100
     # per SUBSCRIBE. Historical manifest age is evidence, not readiness.
     names=sorted([s.lower()+'@kline_'+i for s in symbols for i in ('15m','1h','1d')]+['btcusdt@kline_5m'])
-    uri=(directory/'state.sqlite3').resolve().as_uri()+'?mode=ro'
-    db=sqlite3.connect(uri,uri=True,timeout=1);db.row_factory=sqlite3.Row
-    try:
-        db.execute('PRAGMA query_only=ON');db.execute('BEGIN')
-        meta=dict(db.execute("SELECT key,value FROM meta WHERE key IN ('epoch','connected','scope_hash','roster_hash')"))
-        rows=[dict(r) for r in db.execute('SELECT topic,epoch,ws_rx,ws_ts FROM topics')]
-        owners={name:db.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('requests','leases')}
-    finally:db.close()
+    # Even mode=ro can update the live WAL shm reader marks. Never open the
+    # source with SQLite: capture bytes, then query an isolated temporary copy.
+    def capture():
+        result={}
+        for name in ('state.sqlite3','state.sqlite3-wal','state.sqlite3-shm','manifest.json'):
+            path=directory/name
+            if not path.exists():
+                if name in ('state.sqlite3','manifest.json'):raise ValueError('SOURCE_FILE_MISSING')
+                continue
+            if path.is_symlink() or not path.is_file() or path.stat().st_size>256*1024*1024:
+                raise ValueError('SOURCE_FILE_UNSAFE_OR_TOO_LARGE')
+            result[name]=path.read_bytes()
+        return result
+    source=capture()
+    if source.get('manifest.json')!=raw or capture()!=source:
+        raise ValueError('SOURCE_CHANGED_DURING_CAPTURE')
+    with tempfile.TemporaryDirectory(prefix='binance-readonly-snapshot-') as scratch:
+        snapshot=Path(scratch)
+        for name in ('state.sqlite3','state.sqlite3-wal'):
+            if name in source:(snapshot/name).write_bytes(source[name])
+        db=sqlite3.connect((snapshot/'state.sqlite3').as_uri()+'?mode=ro',uri=True,timeout=1)
+        db.row_factory=sqlite3.Row
+        try:
+            db.execute('PRAGMA query_only=ON');db.execute('BEGIN')
+            meta=dict(db.execute("SELECT key,value FROM meta WHERE key IN ('epoch','connected','scope_hash','roster_hash')"))
+            rows=[dict(r) for r in db.execute('SELECT topic,epoch,ws_rx,ws_ts FROM topics')]
+            owners={name:db.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ('requests','leases')}
+        finally:db.close()
+    if capture()!=source:raise ValueError('SOURCE_CHANGED_DURING_DIAGNOSTIC')
     if (meta.get('scope_hash')!=digest(scan) or meta.get('roster_hash')!=digest(names)
             or sorted(r['topic'] for r in rows)!=names or any(r['epoch']!=meta.get('epoch') for r in rows)):
         raise ValueError('SNAPSHOT_MANIFEST_OR_EPOCH_MISMATCH')
@@ -66,7 +93,9 @@ def inspect(directory):
     affected=[dict(symbol=symbol,intervals=[{k:r[k] for k in fields} for r in items])
         for symbol,items in sorted(groups.items()) if any(r['ws_rx']==0 for r in items)]
     buckets=Counter((r['ws_rx']//10000*10000,r['ws_ts']//10000*10000) for r in rows.values())
-    return dict(read_only=True,epoch=meta['epoch'],connected=meta.get('connected'),owners=owners,
+    return dict(source_read_only=True,query_target='PRIVATE_TEMP_COPY_REMOVED_ON_EXIT',
+        source_sha256={name:hashlib.sha256(data).hexdigest() for name,data in source.items()},
+        epoch=meta['epoch'],connected=meta.get('connected'),owners=owners,
         manifest_sha256=hashlib.sha256(raw).hexdigest(),scope_hash=meta['scope_hash'],roster_hash=meta['roster_hash'],
         manifest_as_of=scan.get('as_of_utc'),topics=len(names),no_frame=sum(r['ws_rx']==0 for r in rows.values()),
         index_base=0,shards=summary,affected_symbols=affected,

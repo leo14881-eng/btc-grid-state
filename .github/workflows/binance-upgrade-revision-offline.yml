@@ -5,6 +5,8 @@ on:
       - 'scripts/hunter_binance_upgrade_revision.py'
       - 'tests/test_binance_upgrade_revision.py'
       - 'deploy/binance-upgrade-revision-manifest.json'
+      - 'deploy/binance-topic-shards-readonly.sh'
+      - 'tests/test_binance_topic_diagnostic.py'
       - '.github/workflows/binance-upgrade-revision-offline.yml'
 permissions:
   contents: read
@@ -27,6 +29,10 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Adapter argument and hash boundaries
         run: python -B -m unittest discover -s tests -p test_binance_upgrade_revision.py -v
+      - name: Diagnostic never opens the source WAL with SQLite
+        run: |
+          bash -n deploy/binance-topic-shards-readonly.sh
+          python -B -m unittest discover -s tests -p test_binance_topic_diagnostic.py -v
       - name: Exact current package upgrade and rollback with immutable sibling directories
         run: |
           python -B - <<'PY'
