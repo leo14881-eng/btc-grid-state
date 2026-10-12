@@ -30,6 +30,6 @@ jobs:
       - name: Read-only default mode
         run: python -I -B scripts/hunter_kline_install.py
       - name: Fetch exact approved payload for staging regression only
-        run: git fetch --no-tags origin 99f75edcf2c2f95d59e5cf797051442639dc64ce
+        run: timeout 60s git fetch --depth=1 --no-tags origin 99f75edcf2c2f95d59e5cf797051442639dc64ce
       - name: Real isolated staged prepare, including original missing-config reproduction
         run: python -I -B scripts/check_kline_stage_offline.py
