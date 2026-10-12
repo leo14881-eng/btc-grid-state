@@ -1,0 +1,220 @@
+name: Stock production preflight contract
+on:
+  pull_request:
+    paths:
+      - 'research/stock_shadow/**'
+      - 'tests/test_stock*.py'
+      - '.github/workflows/stock-preflight-contract.yml'
+      - 'deploy/stock-shadow/**'
+  workflow_dispatch:
+    inputs:
+      investigation:
+        description: Offline investigation scope
+        type: choice
+        options: [preflight, sec-concurrency, sec-concurrency-candidate]
+        default: preflight
+permissions:
+  contents: read
+jobs:
+  preflight:
+    if: github.event_name != 'workflow_dispatch' || inputs.investigation == 'preflight'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ci, service, noexec-control]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare isolated test dependencies
+        run: |
+          docker build -t stock-preflight - <<'DOCKERFILE'
+          FROM python:3.12-bookworm
+          RUN python -m pip install --disable-pip-version-check pytest
+          DOCKERFILE
+      - name: Exact production selectors and environment, no provider network
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          limits=()
+          test_home=/tmp/preflight-home
+          test_tmp=/var/lib/stock-shadow/work/preflight/tmp
+          state_dir=$(mktemp -d "$RUNNER_TEMP/stock-preflight.XXXXXX")
+          mkdir -p "$state_dir/work/preflight/tmp"
+          if [[ "$PROFILE" != ci ]]; then
+            limits=(--cpus=0.5 --memory=1g --pids-limit=64 --read-only
+                    --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs /home:mode=000
+                    --cap-drop=ALL --security-opt=no-new-privileges)
+            test_home=/var/lib/stock-shadow
+          fi
+          if [[ "$PROFILE" == noexec-control ]]; then
+            test_tmp=/tmp
+          fi
+          docker run --rm -i --network=none "${limits[@]}" \
+            --user "$(id -u):$(id -g)" -e PROFILE -e HOME="$test_home" \
+            -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e TZ=UTC \
+            -e TMPDIR="$test_tmp" \
+            -v "$state_dir:/var/lib/stock-shadow" \
+            -v "$PWD:/var/lib/stock-shadow/work/preflight/repo" \
+            -w /var/lib/stock-shadow/work/preflight/repo stock-preflight python - <<'PY'
+          import ast
+          import errno
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          import tempfile
+          from research.stock_shadow.server import runner, runtime
+
+          if os.environ['PROFILE'] != 'ci':
+              os.umask(0o077)
+          else:
+              Path(os.environ['HOME']).mkdir()
+          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          identity = dict(source_commit=source, owner='server', epoch=3, job='main',
+                          run_id='offline-preflight-contract', attempt=1)
+          identity['generation'] = runtime.generation(source, 'server', 3, 'main', identity['run_id'])
+          env = dict(os.environ, **runtime.environment(identity))
+          for key in ('PYTHONPATH', 'PYTHONHOME', 'STOCK_SHADOW_FORCE', 'STOCK_SHADOW_FORCE_MONITOR'):
+              env.pop(key, None)
+          env.update(APCA_API_KEY_ID='offline-dummy', APCA_API_SECRET_KEY='offline-dummy',
+                     SEC_USER_AGENT='offline@example.invalid', SEC_TRANSPORT_STATE='/tmp/unused.sqlite3',
+                     STOCK_SHADOW_INCREMENTAL_QUOTES='0')
+          env = runner.test_environment(runner.quote_cache_environment(env, 'main', False, '/tmp'))
+          command = [sys.executable, '-m', 'pytest', '-q', '--durations=10',
+                     'tests/test_stock_shadow.py', 'tests/test_stock_server_migration.py']
+          # The checked-in runner is the source of truth for selector order and timeout.
+          module = ast.parse(Path(runner.__file__).read_text())
+          call = next(node for node in ast.walk(module) if isinstance(node, ast.Call)
+                      and isinstance(node.func, ast.Attribute) and node.func.attr == 'run'
+                      and node.args and isinstance(node.args[0], ast.List)
+                      and any(isinstance(item, ast.Constant) and item.value == 'pytest'
+                              for item in node.args[0].elts))
+          assert [item.value for item in call.args[0].elts[1:]] == command[1:]
+          timeout = next(item.value.value for item in call.keywords if item.arg == 'timeout')
+          assert timeout == 180
+          assert not any(key in env for key in runner.PROVIDER_ENV_KEYS + runner.QUOTE_CACHE_ENV_KEYS)
+          before = runner.canonical_inventory()
+          print(json.dumps(dict(profile=os.environ['PROFILE'], source=source,
+                                python=sys.version, command=command, timeout=timeout)), flush=True)
+          with tempfile.TemporaryDirectory(prefix='stock-preflight-') as temp:
+              env['TMPDIR'] = temp
+              probe = Path(temp) / 'exec-probe'
+              probe.write_text('#!/bin/sh\nexit 0\n')
+              probe.chmod(0o700)
+              try:
+                  subprocess.run([str(probe)], check=True)
+                  executable = True
+              except PermissionError as error:
+                  assert error.errno == errno.EACCES
+                  executable = False
+              print(json.dumps(dict(temp_executable=executable, tmpdir=os.environ['TMPDIR'])), flush=True)
+              if os.environ['PROFILE'] == 'noexec-control':
+                  assert not executable, 'NEGATIVE_CONTROL_REQUIRES_NOEXEC'
+                  result = subprocess.run(command, env=env, timeout=timeout,
+                                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                  print(result.stdout, flush=True)
+              else:
+                  assert executable, 'DEPLOYMENT_TMPDIR_MUST_SUPPORT_GIT_TEST_HOOKS'
+                  result = subprocess.run(command, env=env, timeout=timeout)
+          assert runner.canonical_inventory() == before, 'PREFLIGHT_MUTATED_CANONICAL_FILES'
+          assert not runner.changed_paths(), 'PREFLIGHT_MUTATED_CHECKOUT'
+          if os.environ['PROFILE'] == 'noexec-control':
+              # Prove this environment is rejected; do not waive a production test.
+              expected = {
+                  'tests/test_stock_shadow.py::test_p0_push_race_retries_only_own_outputs',
+                  'tests/test_stock_server_migration.py::test_pause_between_final_fetch_and_push_fences_the_candidate',
+                  'tests/test_stock_server_migration.py::test_repeated_crypto_and_hunter_push_races_preserve_both_systems',
+              }
+              failed = {line.split()[1] for line in result.stdout.splitlines() if line.startswith('FAILED ')}
+              assert result.returncode == 1 and failed == expected, (result.returncode, failed)
+              assert '3 failed, 367 passed' in result.stdout
+              print('NOEXEC_CONTROL_REJECTED_BY_UNCHANGED_PREFLIGHT_TESTS', flush=True)
+              raise SystemExit(0)
+          raise SystemExit(result.returncode)
+          PY
+  sec-concurrency:
+    if: github.event_name == 'workflow_dispatch' && (inputs.investigation == 'sec-concurrency' || inputs.investigation == 'sec-concurrency-candidate')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu_load_workers: [0, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.investigation == 'sec-concurrency' && '383e6eeb35b59abba53858585ca47a633d226d7a' || github.sha }}
+          persist-credentials: false
+      - name: Prepare isolated test dependencies
+        run: |
+          docker build -t stock-sec-concurrency - <<'DOCKERFILE'
+          FROM python:3.12-bookworm
+          RUN python -m pip install --disable-pip-version-check pytest
+          DOCKERFILE
+      - name: Repeat SEC process tests with bounded synthetic CPU load
+        env:
+          LOAD_WORKERS: ${{ matrix.cpu_load_workers }}
+          EXPECTED_SOURCE: ${{ inputs.investigation == 'sec-concurrency' && '383e6eeb35b59abba53858585ca47a633d226d7a' || github.sha }}
+        run: |
+          state_dir=$(mktemp -d "$RUNNER_TEMP/stock-sec-concurrency.XXXXXX")
+          mkdir -p "$state_dir/work/preflight/tmp"
+          docker run --rm -i --network=none --cpus=0.5 --memory=1g --pids-limit=64 \
+            --read-only --tmpfs /tmp:rw,nosuid,nodev,size=512m --tmpfs /home:mode=000 \
+            --cap-drop=ALL --security-opt=no-new-privileges \
+            --user "$(id -u):$(id -g)" -e LOAD_WORKERS -e EXPECTED_SOURCE -e HOME=/var/lib/stock-shadow \
+            -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONUNBUFFERED=1 -e TZ=UTC \
+            -e TMPDIR=/var/lib/stock-shadow/work/preflight/tmp \
+            -v "$state_dir:/var/lib/stock-shadow" \
+            -v "$PWD:/var/lib/stock-shadow/work/preflight/repo:ro" \
+            -w /var/lib/stock-shadow/work/preflight/repo stock-sec-concurrency python - <<'PY'
+          import importlib.metadata
+          import json
+          import os
+          import sqlite3
+          import subprocess
+          import sys
+          import time
+          from research.stock_shadow.server import runner, runtime
+
+          os.umask(0o077)
+          source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert source == os.environ['EXPECTED_SOURCE']
+          identity = dict(source_commit=source, owner='server', epoch=3, job='main',
+                          run_id='offline-sec-concurrency', attempt=1)
+          identity['generation'] = runtime.generation(source, 'server', 3, 'main', identity['run_id'])
+          env = runner.test_environment(dict(os.environ, **runtime.environment(identity)))
+          for key in ('PYTHONPATH', 'PYTHONHOME', 'STOCK_SHADOW_FORCE', 'STOCK_SHADOW_FORCE_MONITOR'):
+              env.pop(key, None)
+          print(json.dumps(dict(source=source, python=sys.version,
+                                pytest=importlib.metadata.version('pytest'), sqlite=sqlite3.sqlite_version,
+                                synthetic_cpu_workers=int(os.environ['LOAD_WORKERS']))), flush=True)
+          command = [sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
+                     '--tb=long', '--showlocals',
+                     'tests/test_stock_shadow.py::test_sec_budget_is_shared_by_concurrent_processes_and_restart']
+          if source != '383e6eeb35b59abba53858585ca47a633d226d7a':
+              command.append('tests/test_stock_server_migration.py::test_observer_process_deadline_releases_sec_lock_and_stops_pipeline')
+          load = [subprocess.Popen([sys.executable, '-c', 'while True: pass'], env=env)
+                  for _ in range(int(os.environ['LOAD_WORKERS']))]
+          failed = False
+          try:
+              for attempt in range(1, 11):
+                  began = time.monotonic()
+                  result = subprocess.run(command, env=env, timeout=60, stdout=subprocess.PIPE,
+                                          stderr=subprocess.STDOUT, text=True)
+                  print(json.dumps(dict(attempt=attempt, returncode=result.returncode,
+                                        elapsed_seconds=time.monotonic()-began)), flush=True)
+                  print(result.stdout, flush=True)
+                  if result.returncode:
+                      failed = True
+                      break
+          finally:
+              for process in load:
+                  process.terminate()
+              for process in load:
+                  process.wait(timeout=10)
+          raise SystemExit(1 if failed else 0)
+          PY

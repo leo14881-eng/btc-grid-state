@@ -658,6 +658,118 @@ def stub_engine(monkeypatch, fail=False):
     return commands
 
 
+@pytest.mark.parametrize('stall_at', ['headers', 'redirect_body'])
+def test_observer_process_deadline_releases_sec_lock_and_stops_pipeline(tmp_path, monkeypatch, stall_at):
+    """Real child kill/reap and SQLite recovery; no provider or Git requests."""
+    import sqlite3
+    observer = ROOT / 'research/stock_shadow/fundamentals_observer.py'
+    script_path, production_timeout = runner.COMMANDS['main'][0]
+    assert script_path == 'research/stock_shadow/fundamentals_observer.py'
+    assert production_timeout == 480
+    checkout = tmp_path / 'checkout'
+    script = checkout / script_path
+    script.parent.mkdir(parents=True)
+    script.write_text('OBSERVER = ' + repr(str(observer)) + '\n' + r'''
+import importlib.util, io, json, os, sqlite3, sys, time
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('observer', OBSERVER)
+m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+m.urllib.request.urlopen=lambda *a,**k: (_ for _ in ()).throw(AssertionError('network forbidden'))
+root=Path(os.environ['SEC_TRANSPORT_STATE']).parent
+def stall(phase):
+    probe=sqlite3.connect(os.environ['SEC_TRANSPORT_STATE'], timeout=.05)
+    try:
+        try: probe.execute('BEGIN IMMEDIATE')
+        except sqlite3.OperationalError as error:
+            assert 'locked' in str(error)
+        else: raise AssertionError('dispatch must still hold the SQLite transaction')
+    finally: probe.close()
+    (root/'stalled.json').write_text(json.dumps({'phase':phase, 'pid':os.getpid()}))
+    # A progressing transport can remain here indefinitely despite a socket
+    # operation timeout. The real runner's subprocess deadline must kill it.
+    while True:
+        with (root/'progress').open('a') as progress: progress.write('.')
+        time.sleep(.02)
+class SlowRedirectBody:
+    def read(self): stall('redirect_body')
+    def close(self): pass
+started=time.monotonic_ns()
+def dispatch(req, timeout):
+    if len(sys.argv)>1 and sys.argv[1]=='recover':
+        print(json.dumps({'wait_ns':time.monotonic_ns()-started}))
+        return io.BytesIO(b'{}')
+    assert timeout==25  # This is deliberately not used as a total deadline.
+    if os.environ['OFFLINE_SEC_STALL']=='headers': stall('headers')
+    return m._SECRedirectHandler().http_error_302(
+        req, SlowRedirectBody(), 302, 'Found', {'location':'https://data.sec.gov/fixture.json'})
+m._sec_urlopen=dispatch
+m._sec_open('https://www.sec.gov/fixture.json', 'application/json').close()
+''')
+    book = checkout / RESULTS / 'portfolio-v1.json'
+    book.parent.mkdir(parents=True)
+    book.write_text('{"offline_original_book":true}\n')
+    trades = book.with_name('trades-v1.json')
+    trades.write_text('{"offline_original_trades":true}\n')
+    original_files = {p: p.read_bytes() for p in (book, trades)}
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv('OFFLINE_SEC_STALL', stall_at)
+    for key in runner.PROVIDER_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv('APCA_API_KEY_ID', 'offline-fixture')
+    monkeypatch.setenv('APCA_API_SECRET_KEY', 'offline-fixture')
+    monkeypatch.setenv('SEC_USER_AGENT', 'Fixture contact@example.invalid')
+    monkeypatch.setattr(runner, 'changed_paths', lambda: [])
+    monkeypatch.setattr(runner, 'git', lambda *args, **kwargs:
+                        subprocess.CompletedProcess(args, 0, 'a'*40+'\n', ''))
+    def admission(owner, job, run_id, source):
+        return dict(admitted=True, owner=owner, job=job, run_id=run_id,
+                    source_commit=source, epoch=3, attempt=1, generation='b'*64)
+    monkeypatch.setattr(runner, 'admission', admission)
+    monkeypatch.setattr(runner, 'check_fence', lambda *args: None)
+    monkeypatch.setattr(runner, 'persist', lambda *args: pytest.fail('timeout must not publish'))
+    # Scale only the fixture duration; keep the real runner/subprocess kill path.
+    monkeypatch.setitem(runner.COMMANDS, 'main', [(script_path, 4), *runner.COMMANDS['main'][1:]])
+    real_run, real_popen = subprocess.run, subprocess.Popen
+    children, commands, child_env = [], [], {}
+    def popen(*args, **kwargs):
+        child = real_popen(*args, **kwargs)
+        children.append(child)
+        return child
+    monkeypatch.setattr(runner.subprocess, 'Popen', popen)
+    def run(command, **kwargs):
+        commands.append(command)
+        if command[1:3] == ['-m', 'pytest']:
+            assert kwargs['timeout'] == 180
+            return subprocess.CompletedProcess(command, 0)
+        assert command == [sys.executable, script_path], 'later engines must not run'
+        assert kwargs['timeout'] == 4
+        child_env.update(kwargs['env'])
+        return real_run(command, **kwargs)
+    monkeypatch.setattr(runner.subprocess, 'run', run)
+    runtime_dir = tmp_path / 'runtime'
+    with pytest.raises(subprocess.TimeoutExpired):
+        runner.run('main', False, runtime_dir)
+    assert len(commands) == 2 and len(children) == 1
+    assert children[0].poll() is not None  # Actual child was killed and reaped.
+    stalled = json.loads((runtime_dir / 'stalled.json').read_text())
+    assert stalled == {'phase': stall_at, 'pid': children[0].pid}
+    assert len((runtime_dir / 'progress').read_text()) > 2
+    record = json.loads(next(runtime_dir.glob('run-*.json')).read_text())
+    assert record['status'] == 'FAILED' and record['error_type'] == 'TimeoutExpired'
+    assert record['verified'] is False and record['finished_at']
+    assert 'failure_health_publication' not in record
+    assert all(p.read_bytes() == content for p, content in original_files.items())
+    db = sqlite3.connect(runtime_dir / 'sec-transport.sqlite3', timeout=.1)
+    try:
+        db.execute('BEGIN IMMEDIATE')  # OS death released the old transaction.
+        db.rollback()
+    finally:
+        db.close()
+    recovered = real_run([sys.executable, script_path, 'recover'], env=child_env,
+                         capture_output=True, text=True, check=True, timeout=10)
+    assert json.loads(recovered.stdout)['wait_ns'] >= 200_000_000
+
+
 @pytest.mark.parametrize('job', ['main', 'monitor'])
 @pytest.mark.parametrize('preview', [False, True])
 @pytest.mark.parametrize('failure', ['timeout', 'assertion'])

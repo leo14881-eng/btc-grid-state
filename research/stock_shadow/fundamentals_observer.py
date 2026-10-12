@@ -15,6 +15,7 @@ SEC_MAX_WIRE_BYTES=8*1024*1024
 SEC_MAX_DECODED_BYTES=32*1024*1024
 SEC_REQUEST_INTERVAL=0.2
 SEC_DENIAL_BACKOFF_SECONDS=3600
+_sec_dispatch_state=threading.local()
 
 class SECTransportError(ValueError):
     def __init__(self, code):
@@ -60,30 +61,76 @@ def _sec_budget():
     finally:
         if db is not None: db.close()
 
-def _sec_start(url):
+def _sec_reserve(db, url, minimum_wait=0.0):
     host=_sec_host(url)
-    with _sec_budget() as db:
-        current=time.time()
-        denied=db.execute("SELECT value FROM budget WHERE key=?",("denied:"+host,)).fetchone()
-        if denied and (not math.isfinite(denied[0]) or denied[0]<0):
-            raise SECTransportError("SEC_SHARED_BUDGET_INVALID")
-        if denied and denied[0]>current:
-            error=urllib.error.HTTPError(url,403,"SEC_ACCESS_DENIED_CACHED",{},None)
-            error.sec_cached_denial=True
-            raise error
-        row=db.execute("SELECT value FROM budget WHERE key='next_start'").fetchone()
-        next_start=row[0] if row else current
-        if not math.isfinite(next_start) or next_start>current+60:
-            raise SECTransportError("SEC_SHARED_BUDGET_CLOCK_INVALID")
-        wait=max(0.0,next_start-current)
-        if wait: time.sleep(wait)
-        db.execute("INSERT OR REPLACE INTO budget VALUES ('next_start',?)",
-                   (max(time.time(),next_start)+SEC_REQUEST_INTERVAL,))
+    current=time.time()
+    denied=db.execute("SELECT value FROM budget WHERE key=?",("denied:"+host,)).fetchone()
+    if denied and (not math.isfinite(denied[0]) or denied[0]<0):
+        raise SECTransportError("SEC_SHARED_BUDGET_INVALID")
+    if denied and denied[0]>current:
+        error=urllib.error.HTTPError(url,403,"SEC_ACCESS_DENIED_CACHED",{},None)
+        error.sec_cached_denial=True
+        raise error
+    row=db.execute("SELECT value FROM budget WHERE key='next_start'").fetchone()
+    next_start=row[0] if row else current
+    if not math.isfinite(next_start) or next_start>current+60:
+        raise SECTransportError("SEC_SHARED_BUDGET_CLOCK_INVALID")
+    wait=max(minimum_wait,next_start-current)
+    if wait: time.sleep(wait)
+    db.execute("INSERT OR REPLACE INTO budget VALUES ('next_start',?)",
+               (max(time.time(),next_start)+SEC_REQUEST_INTERVAL,))
+
+def _sec_start(url, dispatch=None):
+    _sec_host(url)
+    active=getattr(_sec_dispatch_state,"db",None)
+    if active is not None:
+        if dispatch is not None: raise SECTransportError("SEC_NESTED_DISPATCH_UNSUPPORTED")
+        # Redirects stay in the outer dispatch transaction; never relock SQLite.
+        _sec_reserve(active,url,SEC_REQUEST_INTERVAL)
+        return
+    result=None; failure=None
+    try:
+        with _sec_budget() as db:
+            # A full interval after acquiring the lock also fences a predecessor
+            # killed after dispatch: its uncommitted reservation may be rolled back.
+            _sec_reserve(db,url,SEC_REQUEST_INTERVAL if dispatch is not None else 0.0)
+            if dispatch is None: return
+            _sec_dispatch_state.db=db
+            try:
+                # Hold the shared transaction through request opening/redirects,
+                # not the final body download. A paused permit cannot overtake.
+                # Socket timeout is not a wall-clock deadline (redirect bodies
+                # may be read here). The server runner kills this process at
+                # 480s; standalone callers need their own process deadline.
+                result=dispatch()
+            except BaseException as error:
+                failure=(error,error.__traceback__)
+                if isinstance(error,urllib.error.HTTPError) and error.code==403:
+                    _sec_deny(error.url or url)
+            finally:
+                _sec_dispatch_state.db=None
+                prior=db.execute("SELECT value FROM budget WHERE key='next_start'").fetchone()[0]
+                db.execute("INSERT OR REPLACE INTO budget VALUES ('next_start',?)",
+                           (max(prior,time.time()+SEC_REQUEST_INTERVAL),))
+        # Commit pacing and any denial before propagating the transport error.
+        if failure: raise failure[0].with_traceback(failure[1])
+        return result
+    except BaseException:
+        if result is not None:
+            try: result.close()
+            except Exception: pass
+        raise
 
 def _sec_deny(url):
+    host=_sec_host(url)
+    active=getattr(_sec_dispatch_state,"db",None)
+    if active is not None:
+        active.execute("INSERT OR REPLACE INTO budget VALUES (?,?)",
+                       ("denied:"+host,time.time()+SEC_DENIAL_BACKOFF_SECONDS))
+        return
     with _sec_budget() as db:
         db.execute("INSERT OR REPLACE INTO budget VALUES (?,?)",
-                   ("denied:"+_sec_host(url),time.time()+SEC_DENIAL_BACKOFF_SECONDS))
+                   ("denied:"+host,time.time()+SEC_DENIAL_BACKOFF_SECONDS))
 
 class _SECRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -98,13 +145,7 @@ def _sec_open(url, accept, timeout=25, encoding="gzip, deflate"):
     _sec_host(url)
     req=urllib.request.Request(url,headers={
         "User-Agent":sec_user_agent(),"Accept":accept,"Accept-Encoding":encoding})
-    _sec_start(url)
-    try:
-        return _sec_urlopen(req,timeout)
-    except urllib.error.HTTPError as error:
-        if error.code==403:
-            _sec_deny(error.url or url)
-        raise
+    return _sec_start(url,lambda: _sec_urlopen(req,timeout))
 
 def _sec_decode(payload, encoding):
     encoding=encoding.strip().lower()
