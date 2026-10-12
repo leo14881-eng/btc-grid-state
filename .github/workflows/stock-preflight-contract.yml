@@ -131,7 +131,7 @@ jobs:
               }
               failed = {line.split()[1] for line in result.stdout.splitlines() if line.startswith('FAILED ')}
               assert result.returncode == 1 and failed == expected, (result.returncode, failed)
-              assert '3 failed, 365 passed' in result.stdout
+              assert '3 failed, 367 passed' in result.stdout
               print('NOEXEC_CONTROL_REJECTED_BY_UNCHANGED_PREFLIGHT_TESTS', flush=True)
               raise SystemExit(0)
           raise SystemExit(result.returncode)
@@ -155,7 +155,7 @@ jobs:
           FROM python:3.12-bookworm
           RUN python -m pip install --disable-pip-version-check pytest
           DOCKERFILE
-      - name: Repeat unchanged single test on failed source with bounded synthetic CPU load
+      - name: Repeat SEC process tests with bounded synthetic CPU load
         env:
           LOAD_WORKERS: ${{ matrix.cpu_load_workers }}
           EXPECTED_SOURCE: ${{ inputs.investigation == 'sec-concurrency' && '383e6eeb35b59abba53858585ca47a633d226d7a' || github.sha }}
@@ -195,6 +195,8 @@ jobs:
           command = [sys.executable, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
                      '--tb=long', '--showlocals',
                      'tests/test_stock_shadow.py::test_sec_budget_is_shared_by_concurrent_processes_and_restart']
+          if source != '383e6eeb35b59abba53858585ca47a633d226d7a':
+              command.append('tests/test_stock_server_migration.py::test_observer_process_deadline_releases_sec_lock_and_stops_pipeline')
           load = [subprocess.Popen([sys.executable, '-c', 'while True: pass'], env=env)
                   for _ in range(int(os.environ['LOAD_WORKERS']))]
           failed = False

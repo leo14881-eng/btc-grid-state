@@ -97,8 +97,11 @@ def _sec_start(url, dispatch=None):
             if dispatch is None: return
             _sec_dispatch_state.db=db
             try:
-                # Hold the shared transaction through HTTP dispatch/headers, not
-                # response-body download. A descheduled permit cannot overtake.
+                # Hold the shared transaction through request opening/redirects,
+                # not the final body download. A paused permit cannot overtake.
+                # Socket timeout is not a wall-clock deadline (redirect bodies
+                # may be read here). The server runner kills this process at
+                # 480s; standalone callers need their own process deadline.
                 result=dispatch()
             except BaseException as error:
                 failure=(error,error.__traceback__)
