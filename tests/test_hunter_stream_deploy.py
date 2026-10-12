@@ -73,7 +73,7 @@ class RouteTests(unittest.TestCase):
             # Read the same workflow parser used by the server launcher.
             with patch.object(runner.pathlib, 'Path', side_effect=lambda *p:ROOT.joinpath(*p)):
                 steps = runner.workflow_steps(job)
-            step = next(x for x in steps if x['name'].startswith(needle))
+            step = next(x for x in steps if x.get('name', '').startswith(needle))
             self.assertIn('scripts.hunter_bybit_server_route', step['run'])
             self.assertNotIn('HUNTER_BYBIT_DIRECT_DISABLED', step.get('env', {}))
 

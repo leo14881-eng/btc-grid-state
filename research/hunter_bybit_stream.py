@@ -295,7 +295,7 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
 
 
 def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False,
-            observer=lambda *_:None):
+            observer=None):
     """Bounded reconnects; a permanent deny survives process restart in SQLite."""
     last_error = 'NOT_STARTED'
     for attempt in range(MAX_CONNECTION_ATTEMPTS):
@@ -306,7 +306,8 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             raise RuntimeError(state['halt'] or 'GLOBAL_COOLDOWN_ACTIVE')
         try:
             with connect() as ws:
-                session(store, topics, scope_hash, ws, stop, clock, sleep, observer=observer)
+                options = {} if observer is None else dict(observer=observer)
+                session(store, topics, scope_hash, ws, stop, clock, sleep, **options)
             return
         except DurableStopError:
             raise

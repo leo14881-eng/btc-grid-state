@@ -40,12 +40,16 @@ missing cache remains UNKNOWN; the wrapper never retries via Worker.
 | Bybit-only Discovery signals and BTC benchmark | 25 x 15m, 5 x 60m; 1h uses last 2 hourly rows and 4h uses all 5 | Full captured roster + BTC, both subscriptions per symbol |
 | Binance early signals (`hunter_early_signals.rolling/micro`) | 25 x 15m, 5 x 1h; no native 4h subscription needed | Existing REST remains; WS cache consumer is **not implemented** |
 | Binance systemic risk (`hunter_tail_risk._btc_short_returns`) | BTCUSDT 5m, latest 16 rows filtered to completed bars | Existing REST remains; 5m WS consumer is **not implemented** |
+| Binance forward research (`hunter_forward_research.research_one`) | 35 x 1d on the research rotation's verified Binance pairs | Existing REST remains; 1d is a real consumer requirement, WS consumer is **not implemented** |
 | Binance opportunity backfill (`hunter_shadow_trader_v2._fetch_binance_kline_page`) | Bounded historical 5m pages to position-specific cutoffs | Retain REST history; a current rolling cache cannot replace historical coverage |
-| Binance tail/leading replay and blind replay | Historical 5m windows / monthly archives | Retain historical REST/archive transport; do not touch PR112 files |
+| Binance tail/leading replay | Historical 5m stress windows | Retain historical REST; do not touch PR112 files |
+| Binance missed-opportunity replay (`day_stats`) | 15m day-start-to-cutoff window, up to 1000 rows | Retain bounded historical REST; 25 live bars cannot replace the full day |
+| Binance blind replay (`download_month`) | Monthly ZIP archives of **1d** candles, 2022–2025 | Retain historical archives; no current WS stream can reconstruct these years |
 
 Thus **all-crypto WS migration is incomplete**: Binance needs reviewed 15m/1h
-full signal-roster subscriptions and BTC 5m with its own venue-matched cache,
-budget and consumers. Do not subscribe meaningless 4h/1d bars, label quote
+full signal-roster subscriptions, BTC 5m and forward-research 1d with its own
+venue-matched cache, budget and consumers. Do not add native 4h bars without a
+consumer, label quote
 health as Kline readiness, or activate a blanket “migration complete” gate.
 Bybit directories/tickers, held-position depth and historical initialization
 remain HTTP where required. Alpha and held-position requests still use their
