@@ -31,6 +31,12 @@ class RevisionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'ENTRY_HASH_MISMATCH'):
             revision.configure(b'raise AssertionError("executed")',*revision.PAIR)
 
+    def test_rejected_candidate_cannot_be_reintroduced(self):
+        args=self.args();args[5]='133f7422cd66204131f57afaaa5f4d3414e676c0'
+        with patch.object(revision,'load') as load,self.assertRaisesRegex(ValueError,'UNREVIEWED_RELEASE_PAIR'):
+            revision.main(args+['--apply'])
+        load.assert_not_called()
+
     def test_each_action_is_forwarded_without_added_recovery(self):
         previous=sys.argv
         for action in (['--check'],['--apply'],['--rollback','fixture-evidence']):

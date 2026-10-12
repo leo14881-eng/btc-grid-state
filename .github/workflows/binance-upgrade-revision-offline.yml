@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/hunter_binance_upgrade_revision.py'
       - 'tests/test_binance_upgrade_revision.py'
+      - 'deploy/binance-upgrade-revision-manifest.json'
       - '.github/workflows/binance-upgrade-revision-offline.yml'
 permissions:
   contents: read
@@ -18,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -28,24 +30,37 @@ jobs:
       - name: Exact current package upgrade and rollback with immutable sibling directories
         run: |
           python -B - <<'PY'
-          import os,subprocess,sys,tempfile
+          import json,os,sqlite3,subprocess,sys,tempfile
           from pathlib import Path
           from unittest.mock import patch
           from scripts.hunter_binance_upgrade_revision import load,PAIR
           upgrade=load(Path.cwd(),*PAIR);old,new=upgrade.releases(Path.cwd())
           assert len(old)==len(new)==110
           assert upgrade.CHANGED=={p for p in old if old[p]!=new[p]}
+          manifest=json.loads(Path('deploy/binance-upgrade-revision-manifest.json').read_text())
+          assert (manifest['old'],manifest['new'])==PAIR
+          assert manifest['runtime_file_count']==len(old)
+          assert manifest['changed']==sorted(upgrade.CHANGED)
+          assert manifest['old_tree']==upgrade.tree_manifest(old)
+          assert manifest['new_tree']==upgrade.tree_manifest(new)
           with tempfile.TemporaryDirectory() as folder:
               root=Path(folder).resolve();prefix=root/'opt/hunter-binance-stream';prefix.mkdir(parents=True)
               state=root/'var/lib/hunter-binance-stream';state.mkdir(parents=True)
               bybit=root/'opt/hunter-bybit-stream';bybit.mkdir();(bybit/'untouched').write_bytes(b'unchanged')
               work=prefix/'upgrade-0123456789abcdef0123456789abcdef';work.mkdir(mode=0o700)
-              saved,staged,rolled=upgrade.code_paths(prefix,work);owner=os.getuid()
+              saved,staged,rolled=upgrade.code_paths(prefix,work);owner=os.getuid();db=None
               try:
                   upgrade.stage(prefix/'code',old);upgrade.write_new(prefix/'release-head',(PAIR[0]+'\n').encode(),0o444)
-                  for name,value in {'state.sqlite3':b'opaque existing database','state.sqlite3-wal':b'WAL',
-                      'state.sqlite3-shm':b'SHM','manifest.json':b'{}','collector.lock':b'',
-                      'request-'+('a'*32)+'.lock':b'held evidence'}.items():
+                  db=sqlite3.connect(state/'state.sqlite3');db.execute('PRAGMA journal_mode=WAL')
+                  db.executescript('CREATE TABLE requests(token TEXT PRIMARY KEY, denied INTEGER DEFAULT 0);'
+                                   'CREATE TABLE leases(token TEXT PRIMARY KEY, acquired_ms INTEGER);')
+                  for index in range(3):
+                      token=f'{index:032x}'
+                      db.execute('INSERT INTO requests(token) VALUES(?)',(token,))
+                      db.execute('INSERT INTO leases VALUES(?,?)',(token,index))
+                      (state/('request-'+token+'.lock')).write_bytes(b'unresolved fixture evidence')
+                  db.commit()
+                  for name,value in {'manifest.json':b'{}','collector.lock':b''}.items():
                       (state/name).write_bytes(value)
                   with patch.object(upgrade,'STATE',state):hashes=upgrade.state_evidence(work)
                   upgrade.stage(staged,new);upgrade.write_new(work/'new-release-head',(PAIR[1]+'\n').encode(),0o444)
@@ -61,8 +76,12 @@ jobs:
                   with patch.object(upgrade,'STATE',state):upgrade.state_unchanged(hashes)
                   assert (prefix/'release-head').read_text().strip()==PAIR[0]
                   assert (bybit/'untouched').read_bytes()==b'unchanged'
+                  assert tuple(db.execute('SELECT COUNT(*) FROM '+name).fetchone()[0]
+                      for name in ('requests','leases'))==(3,3)
                   print('CURRENT_LAYOUT_UPGRADE_ROLLBACK_OK',PAIR,len(old),sorted(upgrade.CHANGED))
+                  print('THREE_UNRESOLVED_OWNERS_AND_WAL_PRESERVED')
               finally:
+                  if db is not None:db.close()
                   # Only the newly allocated test tree: allow removal of immutable fixture directories.
                   for path in [root,*root.rglob('*')]:
                       assert path.resolve()==root or root in path.resolve().parents

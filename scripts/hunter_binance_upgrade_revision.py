@@ -10,7 +10,7 @@ import types
 ENTRY = 'db0d59e3f7a6f15d1f99a678c07c2336e4474867'
 ENTRY_HASH = 'e0615746c73809d258b858f4058cbd346b2df9e011a8d7df819f8e5f77808ddc'
 PAIR = ('99836e5362340725f806d5df6df1ca9835065bdd',
-        '133f7422cd66204131f57afaaa5f4d3414e676c0')
+        '3a940b3effba5e1f959659fbf83619ae6f10ba67')
 
 
 def require_pair(old, new):
