@@ -165,7 +165,8 @@ class LocalGitTests(unittest.TestCase):
         self.assertEqual(self.prepared, [self.new]); self.assertTrue(self.started)
         fetches = [args for phase, args in self.stages if phase == 'FETCH_MAIN_ONCE']
         self.assertEqual(len(fetches), 1)
-        self.assertEqual(fetches[0][-1], 'main:refs/remotes/origin/main')
+        self.assertTrue(fetches[0][-1].startswith('main:refs/hunter-kline-start/'))
+        self.assertIn('--refmap=', fetches[0])
         self.assertNotIn('--force', fetches[0])
 
     def test_remote_advance_after_probe_uses_fetched_head_not_probe_head(self):
@@ -214,9 +215,21 @@ class LocalGitTests(unittest.TestCase):
         self.g(self.checkout, 'commit', '-m', 'concurrent fixture change')
         concurrent = self.g(self.checkout, 'rev-parse', 'HEAD')
         self.g(self.checkout, 'update-ref', 'refs/remotes/origin/main', concurrent)
-        with self.assertRaisesRegex(RuntimeError, 'FETCH_MAIN_ONCE_FAILED'):
+        with self.assertRaisesRegex(RuntimeError, 'REQUIRE_FAST_FORWARD_FAILED'):
             start.fetch_prepare_start(self.runner, self.checkout)
         self.assertEqual(self.g(self.checkout, 'rev-parse', 'origin/main'), concurrent)
+        self.assertFalse(self.prepared); self.assertFalse(self.started)
+
+    def test_concurrent_tracking_ref_update_fails_cas_without_overwrite(self):
+        actual_run = self.runner.run
+        def race(stage, args, timeout):
+            if stage == 'CAS_ORIGIN_MAIN':
+                self.g(self.checkout, 'update-ref', 'refs/remotes/origin/main', self.new)
+            return actual_run(stage, args, timeout)
+        self.runner.run = race
+        with self.assertRaisesRegex(RuntimeError, 'CAS_ORIGIN_MAIN_FAILED'):
+            start.fetch_prepare_start(self.runner, self.checkout)
+        self.assertEqual(self.g(self.checkout, 'rev-parse', 'origin/main'), self.new)
         self.assertFalse(self.prepared); self.assertFalse(self.started)
 
 

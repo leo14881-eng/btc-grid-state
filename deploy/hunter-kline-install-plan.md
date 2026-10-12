@@ -171,10 +171,13 @@ requires five minutes of remaining validity; original 900/1800-second validation
 is not relaxed. Prefix timestamps are only a cheap admission hint: the complete
 snapshot is still validated by the original installer before manifests are written.
 
-Only after admission, it performs **one** non-forced fetch from named `main` to
-`refs/remotes/origin/main` (60-second bound), fixes the fetched tracking-ref SHA,
-and reads both complete snapshots from that same SHA. It does not fetch an old
-probe SHA or rely on FETCH_HEAD. The original installer's exact-origin/main guard
+Only after admission, it performs **one** fetch from named `main` into a unique
+private ref (60-second bound). `--refmap=` prevents implicit tracking-ref updates.
+It verifies ancestry and updates `refs/remotes/origin/main` with a compare-and-swap
+against its pre-fetch value, then reads both complete snapshots from that exact
+fetched SHA. It never rewinds origin/main; the private ref is deleted only by its
+expected value after successful CAS, and retained on failure for diagnosis.
+It does not fetch an old probe SHA or rely on FETCH_HEAD. The original installer's exact-origin/main guard
 remains active; additional comparisons before/after the 180-second prepare prevent
 starting if another process moves the local ref. Changed/stale data, a failed
 prepare, non-fast-forward ref, mixed service state, network error or timeout stops

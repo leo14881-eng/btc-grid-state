@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 REPO = Path('/opt/shadow-runner/btc-grid-state')
 INSTALLER = Path('/root/hunter-kline-repair-3da03c9.py')
@@ -57,7 +58,7 @@ class Runner:
         self.serial += 1
         self.log(stage, event='BEGIN', timeout_seconds=timeout)
         started = time.monotonic()
-        process = subprocess.Popen([str(a) for a in args], env=ENV, stdin=subprocess.DEVNULL,
+        process = subprocess.Popen([str(a) for a in args], env=ENV, stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
         try:
             while True:
@@ -188,11 +189,19 @@ def prepare(runner, repo, readback):
 
 
 def fetch_prepare_start(runner, repo):
-    # A named branch and an explicit, non-forced tracking ref. Never fetch only
-    # the probe SHA: FETCH_HEAD alone does not satisfy the installer's guard.
+    # Fetch named main into a private ref. --refmap= prevents opportunistic
+    # origin/main updates; check ancestry, then CAS the tracking ref ourselves.
+    # Never rewind a ref or mistake SHA-only FETCH_HEAD for origin/main.
+    previous = origin_head(runner, repo)
+    private_ref = 'refs/hunter-kline-start/'+uuid.uuid4().hex
+    runner.log('FETCH_PRIVATE_REF', ref=private_ref)
     git(runner, repo, 'FETCH_MAIN_ONCE', 'fetch', '--no-tags', 'origin',
-        'main:refs/remotes/origin/main', timeout=60)
-    readback = origin_head(runner, repo)  # Remote may have advanced since probe.
+        '--refmap=', 'main:'+private_ref, timeout=60)
+    readback = sha(git(runner, repo, 'PIN_FETCHED_MAIN', 'rev-parse', private_ref))
+    git(runner, repo, 'REQUIRE_FAST_FORWARD', 'merge-base', '--is-ancestor', previous, readback)
+    git(runner, repo, 'CAS_ORIGIN_MAIN', 'update-ref', 'refs/remotes/origin/main', readback, previous)
+    git(runner, repo, 'RELEASE_PRIVATE_REF', 'update-ref', '-d', private_ref, readback)
+    require(origin_head(runner, repo) == readback, 'ORIGIN_MAIN_CHANGED_AFTER_FETCH')
     stamps = {}
     for venue, path, key, _ in SOURCES:
         data = git(runner, repo, 'READ_'+venue.upper(), 'show', readback+':'+path, timeout=20)
