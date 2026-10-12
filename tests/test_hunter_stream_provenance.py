@@ -200,8 +200,9 @@ class CacheProvenanceTests(unittest.TestCase):
         quarter['transport'][-2]['confirm'] = False
         rehash(quarter)
         original = copy.deepcopy(value)
-        self.sources(value)
-        with self.assertRaisesRegex(ValueError, 'LATEST_CLOSED_HISTORY_INCOMPLETE'):
+        with self.assertRaisesRegex(ValueError, 'SOURCE_CACHE_CLOSED_BAR_UNCONFIRMED'):
+            self.sources(value)
+        with self.assertRaisesRegex(ValueError, 'SOURCE_CACHE_CLOSED_BAR_UNCONFIRMED'):
             provenance.reconstruct_trend(value, 'ALT', OBSERVED-dt.timedelta(minutes=30))
         self.assertEqual(value, original)
 

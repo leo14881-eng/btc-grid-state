@@ -238,6 +238,13 @@ class Store:
             needed = {anchor-i*step for i in range(LIMITS[interval])}
             if not needed <= have:
                 db.execute("UPDATE topics SET gap=1,error='MISSING_WINDOW' WHERE topic=?", (name,))
+            # A forming bar may arrive before the previous close. Readers stay
+            # UNKNOWN immediately; repair only after the normal freshness grace.
+            unclosed = db.execute('''SELECT 1 FROM bars WHERE topic=? AND start>=?
+                AND start+?<=? AND confirmed=0 LIMIT 1''',
+                (name, min(needed), step+FRESH_MS, ts)).fetchone()
+            if unclosed:
+                db.execute("UPDATE topics SET gap=1,error='MISSING_CLOSE_CONFIRMATION' WHERE topic=?", (name,))
             if observed:
                 self._record_readiness(db, name, received_ms)
         return changed
@@ -313,6 +320,8 @@ class Store:
                             (name, start, generation_end, generation_end)).fetchone()
                         if bar is None:
                             return dict(out, reason='HISTORY_MISSING_FOR_GENERATION', failed_topic=name)
+                        if start+step <= generation_end and not bar['confirmed']:
+                            return dict(out, reason='CLOSED_BAR_UNCONFIRMED', failed_topic=name)
                         if (bar['origin'] not in ('OFFICIAL_BYBIT_V5_SPOT_WS','OFFICIAL_BYBIT_V5_SPOT_REST')
                                 or type(bar['confirmed']) is not int or bar['confirmed'] not in (0,1)
                                 or not isinstance(bar['epoch'], str) or not re.fullmatch('[a-f0-9]{32}',bar['epoch'])

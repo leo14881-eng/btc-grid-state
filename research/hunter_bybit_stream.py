@@ -10,6 +10,7 @@ import hashlib
 import http.client
 import json
 from pathlib import Path
+import re
 import signal
 import sqlite3
 import sys
@@ -27,6 +28,32 @@ WS_URL = 'wss://stream.bybit.com/v5/public/spot'
 REST_URL = 'https://api.bybit.com/v5/market/kline'
 MAX_CONNECTION_ATTEMPTS = 5
 MAX_REST_ATTEMPTS = 3
+
+
+class RecoveryBudget:
+    """Five consecutive failures; sampled full health with no observed interruption."""
+    def __init__(self):
+        self.failures = 0
+        self.healthy_since = self.last_sample = None
+
+    def observe(self, ready, monotonic_seconds):
+        previous = self.last_sample
+        self.last_sample = monotonic_seconds
+        if not ready:
+            self.healthy_since = None
+            return False
+        if (self.healthy_since is None or previous is None
+                or not 0 <= monotonic_seconds-previous <= 60):
+            self.healthy_since = monotonic_seconds
+        if monotonic_seconds-self.healthy_since >= 300 and self.failures:
+            self.failures = 0
+            return True
+        return False
+
+    def failed(self):
+        self.healthy_since = self.last_sample = None
+        self.failures += 1
+        return 5*2**(self.failures-1)
 
 
 def record_failure(budget, status, text, now, retry_after=1, real_clock=False):
@@ -225,14 +252,17 @@ def open_ws():
                    ping_interval=None, max_size=262_144, max_queue=1024)
 
 
-def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.sleep, repairer=repair):
+def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.sleep, repairer=repair,
+            observer=lambda *_:None, on_nonready=lambda *_:None):
     if stop():
         return
     protocol = Protocol(store, topics, scope_hash, clock())
+    on_nonready('SESSION_STARTED')
     cancelled = Event()
     jobs = {}
     completed = set()
     deadline = clock()+plan(topics)['deadline_seconds']*1000
+    last_report = 0
     # Only four submitted jobs at a time: no unbounded pending retries on 403.
     with ThreadPoolExecutor(max_workers=4) as pool:
         try:
@@ -244,6 +274,8 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
             while not stop():
                 now = clock()
                 global_state = Budget(store).status()
+                if global_state['halt'] or now < global_state['cooldown_ms']:
+                    on_nonready('GLOBAL_STOP_OR_COOLDOWN')
                 if global_state['halt'] or global_state['cooldown_ms']-now >= 590_000:
                     raise RuntimeError(global_state['halt'] or 'GLOBAL_COOLDOWN_10_MINUTES')
                 for name, job in list(jobs.items()):
@@ -252,6 +284,14 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                         completed.add(name)
                         del jobs[name]
                 states = store.states()
+                if (len(states) != len(topics) or any(not state['ack'] or state['gap']
+                        or state['epoch'] != protocol.epoch
+                        or any(not 0 <= now-state[key] <= FRESH_MS for key in ('ws_rx','ws_ts'))
+                        for state in states)):
+                    on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
+                if now-last_report >= 30_000:
+                    observer(store, protocol.epoch, now)
+                    last_report = now
                 for state in states:
                     name = state['topic']
                     if state['ack'] and state['gap'] and name not in jobs and len(jobs) < 4:
@@ -272,6 +312,7 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                 protocol.receive(json.loads(message), clock())
         finally:
             cancelled.set()
+            on_nonready('SESSION_DISCONNECTED')
             try:
                 store.disconnect(protocol.epoch)
             finally:
@@ -288,10 +329,27 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                             raise error
 
 
-def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False):
+def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False,
+            observer=None, steady=time.monotonic):
     """Bounded reconnects; a permanent deny survives process restart in SQLite."""
     last_error = 'NOT_STARTED'
-    for attempt in range(MAX_CONNECTION_ATTEMPTS):
+    recovery = RecoveryBudget()
+    def nonready(reason):
+        interrupted = recovery.healthy_since is not None
+        recovery.observe(False, steady())
+        if interrupted:
+            print(json.dumps(dict(event='BYBIT_RECOVERY_HEALTH_WINDOW_RESET',
+                reason=reason, status='UNKNOWN')), flush=True)
+    def observe(current_store, epoch, now):
+        generation = current_store.freeze(topics, now, now)
+        finished = clock()
+        ready = generation['status'] == 'READY' and 0 <= finished-now <= FRESH_MS
+        if recovery.observe(ready, steady()):
+            print(json.dumps(dict(event='BYBIT_RECOVERY_BUDGET_RESTORED', epoch=epoch,
+                reason='SAMPLED_FULL_ROSTER_READY_300_SECONDS_NO_OBSERVED_INTERRUPTION',
+                status='OBSERVATION_ONLY')), flush=True)
+        if observer is not None: observer(current_store, epoch, finished)
+    while recovery.failures < MAX_CONNECTION_ATTEMPTS:
         if stop():
             return
         state = Budget(store).status()
@@ -299,7 +357,8 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             raise RuntimeError(state['halt'] or 'GLOBAL_COOLDOWN_ACTIVE')
         try:
             with connect() as ws:
-                session(store, topics, scope_hash, ws, stop, clock, sleep)
+                session(store, topics, scope_hash, ws, stop, clock, sleep,
+                        observer=observe, on_nonready=nonready)
             return
         except DurableStopError:
             raise
@@ -309,9 +368,6 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             raise RuntimeError('CACHE_STORAGE_UNAVAILABLE') from error
         except (OSError, TimeoutError, ValueError, RuntimeError) as error:
             last_error = type(error).__name__
-            # Do not emit arbitrary exception text (may contain headers/body).
-            print(json.dumps(dict(event='BYBIT_SIDECAR_RECOVERY', attempt=attempt+1,
-                                  error_type=last_error, status='UNKNOWN')), flush=True)
         except Exception as error:
             # websockets exceptions aren't OSError. A denied HTTP handshake is
             # classified globally; protocol/closed errors share the bounded loop.
@@ -323,24 +379,49 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             last_error = type(error).__name__
         if stop():
             return
-        if attempt+1 < MAX_CONNECTION_ATTEMPTS:
-            for _ in range(min(60, 5*2**attempt)*10):
+        delay = recovery.failed()
+        print(json.dumps(dict(event='BYBIT_SIDECAR_RECOVERY', consecutive_failures=recovery.failures,
+            error_type=last_error, status='UNKNOWN')), flush=True)
+        if recovery.failures < MAX_CONNECTION_ATTEMPTS:
+            for _ in range(delay*10):
                 if stop():
                     return
                 sleep(.1)
+    print(json.dumps(dict(event='BYBIT_SIDECAR_CIRCUIT_OPEN', consecutive_failures=recovery.failures,
+                          status='MANUAL_REVIEW_REQUIRED')), flush=True)
     raise RuntimeError('CONNECTION_BUDGET_EXHAUSTED:'+last_error)
+
+
+def audit(store, epoch, now, source_head):
+    """Bounded per-topic diagnostics, not a publishable-generation readiness claim."""
+    states = store.states()
+    with store.db(readonly=True) as db:
+        meta = dict(db.execute('SELECT key,value FROM meta'))
+    print(json.dumps(dict(event='BYBIT_KLINE_COLLECTOR', source_head_sha=source_head,
+        epoch=epoch, manifest_sha256=meta.get('scope_hash'), roster_hash=meta.get('roster_hash'),
+        observed_at_ms=now, topics=len(states), acked=sum(bool(s['ack']) for s in states),
+        gaps=sum(bool(s['gap']) for s in states),
+        stale=sum(not 0 <= now-s['ws_rx'] <= FRESH_MS or not 0 <= now-s['ws_ts'] <= FRESH_MS for s in states),
+        shadow_only=True, real_trading_enabled=False, capital_authority='NONE_SHADOW_ONLY',
+        status='OBSERVATION_ONLY_USE_FROZEN_CHECK_FOR_ACCEPTANCE'), sort_keys=True), flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', required=True, type=Path, help='Existing validated direct/Worker snapshot, read-only roster')
     parser.add_argument('--collect', action='store_true', help='Opt-in live sidecar only; requires separately approved rollout')
+    parser.add_argument('--source-head-file', type=Path, help='Root-owned installed release SHA receipt')
     args = parser.parse_args()
     snapshot = json.loads(args.manifest.read_text(encoding='utf-8'))
     topics = roster(snapshot, dt.datetime.now(dt.timezone.utc))
     print(json.dumps(plan(topics), sort_keys=True))
     if not args.collect:
         return
+    if args.source_head_file is None:
+        parser.error('--collect requires --source-head-file')
+    source_head = args.source_head_file.read_text(encoding='utf-8').strip()
+    if not re.fullmatch('[0-9a-f]{40}', source_head):
+        raise ValueError('COLLECTOR_SOURCE_HEAD_REQUIRED')
     import fcntl  # Deployment target Linux; fail explicitly elsewhere.
     stopped = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
@@ -349,7 +430,14 @@ def main():
     # command-line/env override that accidentally creates an independent budget.
     with (STATE_PATH.parent/'collector.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        collect(Store(), topics, snapshot['snapshot_sha256'], stop=stopped.is_set)
+        # Initialization is explicit. A lost DB must never create a fresh budget.
+        store = Store.reader()
+        try:
+            collect(store, topics, snapshot['snapshot_sha256'], stop=stopped.is_set,
+                    observer=lambda s,e,n:audit(s,e,n,source_head))
+        finally:
+            print(json.dumps(dict(event='BYBIT_KLINE_COLLECTOR_STOPPED', source_head_sha=source_head,
+                                  manifest_sha256=snapshot['snapshot_sha256'])), flush=True)
 
 
 if __name__ == '__main__':

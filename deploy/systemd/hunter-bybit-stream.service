@@ -1,0 +1,34 @@
+[Unit]
+Description=Hunter Bybit public spot Kline collector (shadow only)
+After=network-online.target
+Wants=network-online.target
+# Internal reconnect budget is bounded. Do not reset it via automatic restarts.
+StartLimitIntervalSec=3600
+StartLimitBurst=1
+
+[Service]
+Type=simple
+User=hunter-bybit-stream
+Group=hunter-bybit-data
+WorkingDirectory=/opt/hunter-bybit-stream/code
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hunter-bybit-stream/venv/bin/python -B -m research.hunter_bybit_stream --manifest /var/lib/hunter-bybit-stream/manifest.json --source-head-file /opt/hunter-bybit-stream/release-head --collect
+Restart=no
+KillMode=control-group
+TimeoutStopSec=45
+SendSIGKILL=yes
+UMask=0007
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hunter-bybit-stream
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=512M
+TasksMax=32
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
