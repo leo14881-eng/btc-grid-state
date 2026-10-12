@@ -76,6 +76,8 @@ def validate_cache(packet, observed, period):
         if (type(start) is not int or type(end) is not int
                 or start > item['source_time_ms']):
             raise ValueError('SOURCE_CACHE_TRANSPORT_TIME_INVALID')
+        if end < generation and not item['confirm']:
+            raise ValueError('SOURCE_CACHE_CLOSED_BAR_UNCONFIRMED')
         rest = item['source'] == 'OFFICIAL_BYBIT_V5_SPOT_REST'
         if (item['confirmation'] != ('REST_INFERRED' if rest else 'WS_EXPLICIT')
                 or (rest and item['confirm'] != (end < item['source_time_ms']))

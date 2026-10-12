@@ -10,6 +10,7 @@ import hashlib
 import http.client
 import json
 from pathlib import Path
+import re
 import signal
 import sqlite3
 import sys
@@ -225,7 +226,8 @@ def open_ws():
                    ping_interval=None, max_size=262_144, max_queue=1024)
 
 
-def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.sleep, repairer=repair):
+def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.sleep, repairer=repair,
+            observer=lambda *_:None):
     if stop():
         return
     protocol = Protocol(store, topics, scope_hash, clock())
@@ -233,6 +235,7 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
     jobs = {}
     completed = set()
     deadline = clock()+plan(topics)['deadline_seconds']*1000
+    last_report = 0
     # Only four submitted jobs at a time: no unbounded pending retries on 403.
     with ThreadPoolExecutor(max_workers=4) as pool:
         try:
@@ -252,6 +255,9 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                         completed.add(name)
                         del jobs[name]
                 states = store.states()
+                if now-last_report >= 30_000:
+                    observer(store, protocol.epoch, now)
+                    last_report = now
                 for state in states:
                     name = state['topic']
                     if state['ack'] and state['gap'] and name not in jobs and len(jobs) < 4:
@@ -288,7 +294,8 @@ def session(store, topics, scope_hash, ws, stop, clock=millis, sleeper=time.slee
                             raise error
 
 
-def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False):
+def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time.sleep, stop=lambda:False,
+            observer=lambda *_:None):
     """Bounded reconnects; a permanent deny survives process restart in SQLite."""
     last_error = 'NOT_STARTED'
     for attempt in range(MAX_CONNECTION_ATTEMPTS):
@@ -299,7 +306,7 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
             raise RuntimeError(state['halt'] or 'GLOBAL_COOLDOWN_ACTIVE')
         try:
             with connect() as ws:
-                session(store, topics, scope_hash, ws, stop, clock, sleep)
+                session(store, topics, scope_hash, ws, stop, clock, sleep, observer=observer)
             return
         except DurableStopError:
             raise
@@ -331,16 +338,36 @@ def collect(store, topics, scope_hash, connect=open_ws, clock=millis, sleep=time
     raise RuntimeError('CONNECTION_BUDGET_EXHAUSTED:'+last_error)
 
 
+def audit(store, epoch, now, source_head):
+    """Bounded per-topic diagnostics, not a publishable-generation readiness claim."""
+    states = store.states()
+    with store.db(readonly=True) as db:
+        meta = dict(db.execute('SELECT key,value FROM meta'))
+    print(json.dumps(dict(event='BYBIT_KLINE_COLLECTOR', source_head_sha=source_head,
+        epoch=epoch, manifest_sha256=meta.get('scope_hash'), roster_hash=meta.get('roster_hash'),
+        observed_at_ms=now, topics=len(states), acked=sum(bool(s['ack']) for s in states),
+        gaps=sum(bool(s['gap']) for s in states),
+        stale=sum(not 0 <= now-s['ws_rx'] <= FRESH_MS or not 0 <= now-s['ws_ts'] <= FRESH_MS for s in states),
+        shadow_only=True, real_trading_enabled=False, capital_authority='NONE_SHADOW_ONLY',
+        status='OBSERVATION_ONLY_USE_FROZEN_CHECK_FOR_ACCEPTANCE'), sort_keys=True), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', required=True, type=Path, help='Existing validated direct/Worker snapshot, read-only roster')
     parser.add_argument('--collect', action='store_true', help='Opt-in live sidecar only; requires separately approved rollout')
+    parser.add_argument('--source-head-file', type=Path, help='Root-owned installed release SHA receipt')
     args = parser.parse_args()
     snapshot = json.loads(args.manifest.read_text(encoding='utf-8'))
     topics = roster(snapshot, dt.datetime.now(dt.timezone.utc))
     print(json.dumps(plan(topics), sort_keys=True))
     if not args.collect:
         return
+    if args.source_head_file is None:
+        parser.error('--collect requires --source-head-file')
+    source_head = args.source_head_file.read_text(encoding='utf-8').strip()
+    if not re.fullmatch('[0-9a-f]{40}', source_head):
+        raise ValueError('COLLECTOR_SOURCE_HEAD_REQUIRED')
     import fcntl  # Deployment target Linux; fail explicitly elsewhere.
     stopped = Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
@@ -349,7 +376,14 @@ def main():
     # command-line/env override that accidentally creates an independent budget.
     with (STATE_PATH.parent/'collector.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        collect(Store(), topics, snapshot['snapshot_sha256'], stop=stopped.is_set)
+        # Initialization is explicit. A lost DB must never create a fresh budget.
+        store = Store.reader()
+        try:
+            collect(store, topics, snapshot['snapshot_sha256'], stop=stopped.is_set,
+                    observer=lambda s,e,n:audit(s,e,n,source_head))
+        finally:
+            print(json.dumps(dict(event='BYBIT_KLINE_COLLECTOR_STOPPED', source_head_sha=source_head,
+                                  manifest_sha256=snapshot['snapshot_sha256'])), flush=True)
 
 
 if __name__ == '__main__':
