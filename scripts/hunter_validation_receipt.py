@@ -92,7 +92,9 @@ def runtime_identity():
         dirs[:] = sorted(d for d in dirs if d not in ("site-packages", "__pycache__"))
         if any((Path(base) / d).is_symlink() for d in dirs):
             raise Unavailable("RUNTIME_SYMLINK")
-        paths.update(Path(base) / f for f in files if f.endswith((".py", ".so", ".zip")))
+        # Legacy sourceless runtime bytecode is an input too. __pycache__ is
+        # excluded only because the child redirects those lookups elsewhere.
+        paths.update(Path(base) / f for f in files if f.endswith((".py", ".pyc", ".so", ".zip")))
     for line in Path("/proc/self/maps").read_text().splitlines():
         parts = line.split()
         if len(parts) >= 6 and parts[-1].startswith("/") and ".so" in parts[-1]:
