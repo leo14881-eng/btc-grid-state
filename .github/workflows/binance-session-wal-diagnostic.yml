@@ -42,7 +42,7 @@ jobs:
               grep -E 'SESSION_WAL_COMPACT|BINANCE_SESSION_TOPOLOGY_(LEG|FINAL)' "$RUNNER_TEMP/binance-session-wal-diagnostic.log" | cut -c1-2000 || true
               exit 1
             }
-          grep -E 'BINANCE_SESSION_TOPOLOGY_FINAL' "$RUNNER_TEMP/binance-session-wal-diagnostic.log" | cut -c1-2000
+          grep -E 'SESSION_WAL_COMPACT|BINANCE_SESSION_TOPOLOGY_FINAL' "$RUNNER_TEMP/binance-session-wal-diagnostic.log" | cut -c1-4000
       - uses: actions/upload-artifact@v4
         if: always()
         with:
