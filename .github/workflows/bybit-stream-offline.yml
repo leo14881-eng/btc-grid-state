@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - 'research/hunter_bybit_stream*.py'
+      - 'research/hunter_bybit_health*.py'
       - 'research/hunter_bybit_public.py'
       - 'research/hunter_bybit_http_child.py'
       - 'research/hunter_bybit_direct.py'
@@ -14,10 +15,13 @@ on:
       - 'research/hunter_early_signals.py'
       - 'research/hunter_signal_provenance.py'
       - 'tests/test_hunter_stream*.py'
+      - 'tests/test_hunter_health_bybit*.py'
       - 'tests/test_hunter_public_transport_process.py'
       - 'tests/fixtures/public_http_child.py'
       - 'scripts/check_bybit_public_transport.py'
       - 'scripts/check_bybit_stream_offline.py'
+      - 'scripts/check_bybit_health_offline.py'
+      - 'deploy/bybit-health-supervision.md'
       - 'scripts/hunter_bybit_server_route.py'
       - 'scripts/hunter_bybit_stream_ops.py'
       - 'scripts/hunter_bybit_preflight.sh'
@@ -37,6 +41,9 @@ jobs:
         python: ['3.10', '3.12']
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -51,11 +58,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - name: Guarded fixtures and real multiprocess budget tests (no market calls)
         run: python -I -B -X utf8 scripts/check_bybit_stream_offline.py
+      - name: Install pinned WebSocket dependency for local health checks
+        run: python -m pip install -r deploy/hunter-bybit-stream-requirements.txt
+      - name: Guarded health, consumer and shutdown regressions (no market calls)
+        run: python -I -B -X utf8 scripts/check_bybit_health_offline.py
+      - name: Shared HTTP ownership compatibility with Binance defaults
+        run: |
+          python -I -B -X utf8 scripts/check_binance_stream_offline.py
+          python -I -B -X utf8 scripts/check_binance_public_transport.py
       - name: Deployment shell syntax only (no installation)
         run: bash -n scripts/hunter_bybit_preflight.sh scripts/hunter_bybit_stage.sh

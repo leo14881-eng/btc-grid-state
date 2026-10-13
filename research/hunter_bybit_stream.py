@@ -410,11 +410,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', required=True, type=Path, help='Existing validated direct/Worker snapshot, read-only roster')
     parser.add_argument('--collect', action='store_true', help='Opt-in live sidecar only; requires separately approved rollout')
+    parser.add_argument('--health-supervision', action='store_true', help='Opt-in Bybit health/quiet contract; matching reader required')
     parser.add_argument('--source-head-file', type=Path, help='Root-owned installed release SHA receipt')
     args = parser.parse_args()
     snapshot = json.loads(args.manifest.read_text(encoding='utf-8'))
     topics = roster(snapshot, dt.datetime.now(dt.timezone.utc))
-    print(json.dumps(plan(topics), sort_keys=True))
+    if args.health_supervision:
+        from research.hunter_bybit_health import plan as health_plan
+        print(json.dumps(health_plan(topics),sort_keys=True))
+    else:
+        print(json.dumps(plan(topics), sort_keys=True))
     if not args.collect:
         return
     if args.source_head_file is None:
@@ -433,8 +438,16 @@ def main():
         # Initialization is explicit. A lost DB must never create a fresh budget.
         store = Store.reader()
         try:
-            collect(store, topics, snapshot['snapshot_sha256'], stop=stopped.is_set,
-                    observer=lambda s,e,n:audit(s,e,n,source_head))
+            if args.health_supervision:
+                from research.hunter_bybit_health import collect as health_collect
+                from research.hunter_bybit_health_store import Store as HealthStore
+                health_collect(HealthStore.reader(),topics,snapshot['snapshot_sha256'],source_head,stop=stopped.is_set)
+            else:
+                with store.db(readonly=True) as db:
+                    if db.execute("SELECT 1 FROM meta WHERE key='health_contract'").fetchone():
+                        raise ValueError('HEALTH_CACHE_LEGACY_COLLECTOR_REQUIRES_REVIEW')
+                collect(store, topics, snapshot['snapshot_sha256'], stop=stopped.is_set,
+                        observer=lambda s,e,n:audit(s,e,n,source_head))
         finally:
             print(json.dumps(dict(event='BYBIT_KLINE_COLLECTOR_STOPPED', source_head_sha=source_head,
                                   manifest_sha256=snapshot['snapshot_sha256'])), flush=True)
