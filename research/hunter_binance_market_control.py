@@ -264,12 +264,13 @@ class MarketControlMixin:
                 if ticket is not None:
                     self._market_writer.release(ticket)
 
-    def transaction_diagnostics(self):
+    def transaction_diagnostics(self, *, include_file_state=True):
         self._local()
         with self._market_metrics_lock:
             result = _timing_snapshot(self._market_metrics,self._market_connection_observations)
-        wal = Path(str(self.path)+'-wal')
-        result['wal_bytes'] = wal.stat().st_size if wal.exists() else 0
+        if include_file_state:
+            wal = Path(str(self.path)+'-wal')
+            result['wal_bytes'] = wal.stat().st_size if wal.exists() else 0
         return result
 
     def enable_control(self, path=None, *, readonly=False):

@@ -424,18 +424,34 @@ class Control:
                 if int(self.clock()*1e9)<b['cooldown_ns']:
                     raise ControlError('CONTROL_GLOBAL_COOLDOWN')
                 self._check_owners(db)
-                if self._blocked(db,scope,meta['epoch']):
-                    raise ScopeQuarantined('CONTROL_SCOPE_QUARANTINED')
+                quarantines=[r[0] for r in db.execute(
+                    "SELECT scope FROM quarantines WHERE epoch=? AND state!='RESOLVED'",(meta['epoch'],))]
+                retiring=[(r[0],r[1]) for r in db.execute(
+                    "SELECT scope,retire_deadline_ns FROM owners WHERE state='RETIRING'")]
                 rows = dict(db.execute('SELECT topic,version FROM versions'))
-                if not set(scope) <= rows.keys():
-                    raise ControlError('CONTROL_SCOPE_OUTSIDE_ROSTER')
-                for p in db.execute("SELECT scope FROM publications WHERE epoch=? AND state IN ('PREPARED','FAILED')",(meta['epoch'],)):
-                    if set(scope).intersection(json.loads(p['scope'])):
-                        raise ScopeQuarantined('CONTROL_PUBLICATION_PENDING')
-                result = dict(epoch=meta['epoch'],source_head=meta['source_head'],
-                    manifest_sha256=meta['manifest_sha256'],roster_hash=meta['roster_hash'],
-                    budget_version=b['revocation'],
-                    versions={n:rows[n] for n in scope})
+                publications=[r[0] for r in db.execute(
+                    "SELECT scope FROM publications WHERE epoch=? AND state IN ('PREPARED','FAILED')",(meta['epoch'],))]
+            # All rows above belong to one SQLite snapshot. Decode the copied
+            # strings after releasing its SHARED lock; a decoder pause must
+            # not pin another connection's commit. Owner identity checks stay
+            # inside the snapshot so committed retirement cannot release its
+            # native ownership lock between that read and verification.
+            requested=set(scope)
+            blocked=False
+            for value in quarantines:
+                if requested.intersection(json.loads(value)):blocked=True
+            now=int(self.clock()*1e9)
+            for value,deadline in retiring:
+                if deadline<=now and requested.intersection(json.loads(value)):blocked=True
+            if blocked:
+                raise ScopeQuarantined('CONTROL_SCOPE_QUARANTINED')
+            if not requested <= rows.keys():
+                raise ControlError('CONTROL_SCOPE_OUTSIDE_ROSTER')
+            if any(requested.intersection(json.loads(value)) for value in publications):
+                raise ScopeQuarantined('CONTROL_PUBLICATION_PENDING')
+            result = dict(epoch=meta['epoch'],source_head=meta['source_head'],
+                manifest_sha256=meta['manifest_sha256'],roster_hash=meta['roster_hash'],
+                budget_version=b['revocation'],versions={n:rows[n] for n in scope})
             self._read_latch()
             return result
         finally:
@@ -743,13 +759,15 @@ class Control:
         with self._db(readonly=True) as db:
             row=db.execute('SELECT * FROM publications WHERE id=?',(identity,)).fetchone()
             if row is None:raise ControlError('CONTROL_INTENT_MISSING')
-            return self._intent(row)
+            row=dict(row)
+        return self._intent(row)
 
     def pending_intents(self, epoch=None):
         with self._db(readonly=True) as db:
             sql="SELECT * FROM publications WHERE state='PREPARED'"
-            rows=db.execute(sql+(' AND epoch=?' if epoch is not None else ''),() if epoch is None else (epoch,)).fetchall()
-            return [self._intent(r) for r in rows]
+            rows=[dict(row) for row in db.execute(sql+(' AND epoch=?' if epoch is not None else ''),
+                () if epoch is None else (epoch,))]
+        return [self._intent(r) for r in rows]
 
     def publication_applied(self, identity, market_receipt):
         return self.reconcile(identity,market_receipt)

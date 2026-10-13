@@ -41,6 +41,14 @@ query, and uses a detached JSON snapshot copy for plain JSON trees. Unusual
 Python values retain the old deepcopy path. Public copies, proof/hash checks,
 delivery fences, per-frame savepoints, revision retention and receipt accounting
 remain intact. Neither queue capacity nor publication frequency is relaxed.
+Rejected delivery audit copies also use the already-owned JSON snapshot;
+non-JSON graphs retain deepcopy behavior. This is a copy-cost reduction, not
+evidence that the sustained queue-capacity failure has been resolved.
+The per-frame history gate now returns aggregate scalars from SQLite instead
+of materializing every stored history row. Its exact needed-start set, history
+floor and confirmation truthiness remain equivalent; malformed stored starts
+use the old Python path. Tests compare all durable tables and frozen outputs
+against the immutable prior hot path, including invalid and duplicate frames.
 
 Each database reports its own phase histogram, count, maximum and cumulative
 microseconds. P99 is explicitly a histogram bucket upper bound over the Store
@@ -54,6 +62,18 @@ reporting without claiming it happened on the server. Python added the error
 attributes in 3.11; `Connection.setconfig` (3.12) is not an error-code switch.
 See the [Python exception attributes](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Error)
 and [connection configuration API](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Connection.setconfig).
+
+The loopback reconnect fixture captures the original collector traceback and
+connection context, plus independent in-memory phase metrics from both files.
+It does not perform extra competing database reads after each watcher BUSY.
+Final cleanup reads retain unknown counts when unavailable, and all watcher
+SQLite failures still fail acceptance. Bounded, hashed log chunks preserve
+large failure records without relying on one oversized CI assertion line.
+Control intent and scope JSON decoding now happens after copying rows from
+one read transaction and closing it. Native owner checks remain inside the
+snapshot, and the independent gate and final fence checks remain active.
+Event-controlled regressions show that paused decoding no longer pins a
+competing commit. This does not establish the sole cause of the Linux BUSY5.
 
 Market publication has three steps: durable intent and scope revocation;
 atomic market rows plus receipt; control reconciliation. Replaying a committed
@@ -121,6 +141,14 @@ not refresh the 90-second WS clock. A single stale required topic can keep an
 entire consumer set UNKNOWN. `collector_inventory` and actual consumer
 acceptance are reported separately by the ops checker.
 
+The receipt boundary is arrival after protocol parsing, before queue admission.
+A queue-rejected market frame is still received and must become a durable
+`unprocessed_recorded` receipt with its exact scope and event identity. It is
+never counted as accepted/committed. Deterministic tests exercise the real
+session pump with a one-entry queue, check revocation before drain, and verify
+scoped repair in the same and a new epoch without clearing another topic's
+unresolved receipt. The full-load acceptance queue remains 4,096 entries.
+
 SHADOW ONLY; real trading false; capital authority NONE_SHADOW_ONLY. No changes
 to V2 20000/17000/3000, SingleWriter, CAS, generation, the five-minute Monitor,
 deduplication, historical ledger, Sentinel or trading workflows. The separate
@@ -187,6 +215,12 @@ receipt/batch latency histograms, quiet completion waits and per-topic receipt
 partitions. Reader rejections and non-READY durations remain visible; occasional
 READY reads must not be described as continuous readiness. The dedicated
 PR131 Linux job waits for the short acceptance jobs and uses the same head.
+Workers share a start gate after HTTP and thread preparation; setup time is
+excluded from the load target. Batch and consumer read/delivery CPU and wall
+time are separate, and checkpoints sample maximum WAL size. Thread CPU clock
+resolution is reported, so zero samples on a coarse clock are not zero cost.
+Test collection explicitly orders the load before the real-process reconnect,
+including in the one-hour mode; it does not rely on alphabetical class order.
 
 The prior-cache comparison loads only the immutable ec3d49b9 stream store,
 health store and consumer modules. Candidate coordination, diagnostics and

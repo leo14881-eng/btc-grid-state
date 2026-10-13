@@ -35,6 +35,14 @@ class CacheReadError(ValueError):
         super().__init__(reason)
         self.generation=copy.deepcopy(generation or {})
 
+    @classmethod
+    def _from_frozen(cls,reason,frozen):
+        # generation returns an owned audit copy from the cached JSON, or keeps
+        # deepcopy's graph/type semantics for snapshots outside that fast path.
+        error=cls(reason)
+        error.generation=frozen.generation
+        return error
+
 
 def _encode_json_tree(value):
     """Check once; preserve deepcopy semantics for every non-JSON graph.
@@ -150,7 +158,7 @@ class Frozen:
             self.checked_at_ms=finished
             return finished
         except (ValueError,RuntimeError) as error:
-            raise CacheReadError(str(error),self._generation) from error
+            raise CacheReadError._from_frozen(str(error),self) from error
 
     def rows(self,symbol,interval,count=None):
         name=topic(symbol,interval)

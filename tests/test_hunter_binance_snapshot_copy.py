@@ -78,6 +78,53 @@ class SnapshotCopyTests(unittest.TestCase):
                 self.assertEqual(frozen.generation,original)
                 self.assertIsNot(frozen.generation['extra'],original['extra'])
 
+    def test_rejected_non_json_snapshot_keeps_aliases_and_owned_error_copy(self):
+        from research.hunter_binance_stream_store import content_hash
+        class RejectingReader:
+            def finish_read(self,*args):raise RuntimeError('fixture revoked')
+        shared=[];original=snapshot({'one':shared,'two':shared,'tuple':(1,2)})
+        original['generation_end_ms']=1
+        original['generation_sha256']=content_hash(original)
+        frozen=Frozen(original,checked_at=1,reader=RejectingReader(),fence={},clock=lambda:1)
+        self.assertIsNone(frozen._snapshot_json)
+        with self.assertRaises(consumer.CacheReadError) as caught:frozen.check_delivery()
+        error=caught.exception
+        self.assertEqual(str(error),'fixture revoked')
+        self.assertIsInstance(error.__cause__,RuntimeError)
+        self.assertEqual(error.generation,original)
+        self.assertIs(error.generation['extra']['one'],error.generation['extra']['two'])
+        self.assertIs(type(error.generation['extra']['tuple']),tuple)
+        error.generation['extra']['one'].append('changed error')
+        self.assertEqual(shared,[])
+        self.assertEqual(frozen.generation['extra']['one'],[])
+
+    def test_direct_error_constructor_keeps_owned_deepcopy_graph(self):
+        shared=[];shared.append(shared)
+        original=snapshot({'one':shared,'two':shared,'tuple':(1,2)})
+        error=consumer.CacheReadError('fixture rejection',original)
+        copied=error.generation['extra']
+        self.assertEqual(str(error),'fixture rejection')
+        self.assertIs(copied['one'],copied['two'])
+        self.assertIs(copied['one'][0],copied['one'])
+        self.assertIsNot(copied['one'],shared)
+        self.assertIs(type(copied['tuple']),tuple)
+        copied['one'].append('changed error')
+        self.assertEqual(len(shared),1)
+
+    def test_error_factory_keeps_owned_cycle_fallback(self):
+        cyclic=[];cyclic.append(cyclic)
+        frozen=Frozen(snapshot(cyclic),checked_at=1)
+        self.assertIsNone(frozen._snapshot_json)
+        error=consumer.CacheReadError._from_frozen('fixture rejection',frozen)
+        copied=error.generation['extra']
+        self.assertIs(copied[0],copied)
+        self.assertIsNot(copied,cyclic)
+        copied.append('changed error')
+        second=consumer.CacheReadError._from_frozen('fixture rejection',frozen)
+        self.assertEqual(len(second.generation['extra']),1)
+        self.assertIs(second.generation['extra'][0],second.generation['extra'])
+        self.assertIsNot(second.generation['extra'],copied)
+
 
 class ActualSnapshotCopyTests(unittest.TestCase):
     setUp=runtime.DataCases.setUp
@@ -92,6 +139,26 @@ class ActualSnapshotCopyTests(unittest.TestCase):
         frozen.check_delivery()
         market.store.start_draining(market.epoch)
         with self.assertRaises(ValueError):frozen.check_delivery()
+
+    def test_real_delivery_rejection_audit_copy_is_complete_and_independently_owned(self):
+        market=self.market();stamp=market.seed();frozen=market.read(market.names,stamp+1)
+        original=frozen.generation
+        self.assertIsNotNone(frozen._snapshot_json)
+        market.store.start_draining(market.epoch)
+        with patch.object(consumer.copy,'deepcopy',wraps=consumer.copy.deepcopy) as copied:
+            with self.assertRaises(consumer.CacheReadError) as caught:frozen.check_delivery()
+        error=caught.exception
+        self.assertEqual(str(error),str(error.__cause__))
+        self.assertIsInstance(error.__cause__,ValueError)
+        self.assertEqual(error.generation,original)
+        self.assertTrue(all(call.args[0] is not frozen._generation for call in copied.call_args_list))
+        name=market.names[0]
+        error.generation['windows'][name]['rows'][0][1]='tampered error audit'
+        error.generation['generation_sha256']='tampered error identity'
+        self.assertEqual(frozen.generation,original)
+        with self.assertRaises(consumer.CacheReadError) as second:frozen.check_delivery()
+        self.assertEqual(second.exception.generation,original)
+        self.assertIsNot(second.exception.generation,error.generation)
 
 
 if __name__=='__main__':unittest.main()

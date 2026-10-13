@@ -177,6 +177,7 @@ def soak_drain_metrics(state, *, final=True):
         read_rejections=dict(state.get('read_rejections', {})),
         jobs_shutdown=state.get('work'), diagnostic_errors=[])
     result['load_error'] = state.get('load_error')
+    result['jobs_shutdown_error'] = state.get('jobs_shutdown_error')
     result['latencies'] = {key: value.snapshot() for key, value in state.get('histograms', {}).items()}
     if 'quiet_lock' in state:
         with state['quiet_lock']:
@@ -214,6 +215,8 @@ def soak_drain_metrics(state, *, final=True):
         busy_results=sum(row[0] != 0 for row in checkpoint_rows),
         max_log_pages=max([row[1] for row in checkpoint_rows]+[0]),
         max_checkpointed_pages=max([row[2] for row in checkpoint_rows]+[0]))
+    result['checkpoint_wal_bytes_max'] = state.get('checkpoint_wal_bytes_max')
+    result['thread_cpu_clock_resolution_seconds'] = time.get_clock_info('thread_time').resolution
     market, jobs = state.get('market'), state.get('jobs')
     for label, read in (
             ('market_transactions', lambda: market.store.transaction_diagnostics()),
@@ -393,7 +396,7 @@ class WholeRosterSoak(unittest.TestCase):
         seed_seconds = time.monotonic()-wall_started
         state['seed_wall_seconds'] = seed_seconds
         self.assertLess(seed_seconds, 75, 'seed fixture exceeded freshness/CI preparation budget')
-        stopped, producer_done = Event(), Event()
+        stopped, producer_done, load_gate = Event(), Event(), Event()
         observed = stream.ObservedQueue(4096)
         errors, checkpoints, read_rejections, finals, thread_error_details = [], [], {}, [], []
         metrics = dict(rounds=0, queued=0, processed=0, max_ws_delay_ms=0, cumulative_ws_delay_ms=0,
@@ -401,10 +404,12 @@ class WholeRosterSoak(unittest.TestCase):
                        read_attempts=0, read_rejected=0,
                        crossed_boundaries={interval: 0 for interval in STEPS})
         histograms = dict(receipt_to_commit=LatencyHistogram('ms'),
-                          receive_batch_wall=LatencyHistogram('us'), quiet_submit_to_done=LatencyHistogram('ms'))
+                          receive_batch_wall=LatencyHistogram('us'), receive_batch_cpu=LatencyHistogram('us'),
+                          consumer_read_and_delivery_wall=LatencyHistogram('us'),
+                          consumer_read_and_delivery_cpu=LatencyHistogram('us'),
+                          quiet_submit_to_done=LatencyHistogram('ms'))
         receipt_started, quiet_by_key, quiet_lock = {}, {}, Lock()
-        load_started = time.monotonic()
-        deadline = load_started+LOAD_SECONDS
+        load_started = deadline = None
         pool = ThreadPoolExecutor(max_workers=4)
         jobs = health.CoordinatedJobs(market.store, market.protocol, names, pool, clock,
                                      stopped.is_set, public.Client if sys.platform == 'linux' else BodyClient)
@@ -413,7 +418,7 @@ class WholeRosterSoak(unittest.TestCase):
             checkpoints=checkpoints, read_rejections=read_rejections, finals=finals,
             observed=observed, jobs=jobs, load_started=load_started, histograms=histograms,
             quiet_by_key=quiet_by_key, quiet_lock=quiet_lock)
-        state.update(read_intervals={}, unready_since=load_started, max_nonready_seconds=0)
+        state.update(read_intervals={}, unready_since=None, max_nonready_seconds=0)
         original_submit = jobs.submit
 
         def measured_submit(key, kind, scope):
@@ -444,6 +449,7 @@ class WholeRosterSoak(unittest.TestCase):
         jobs.submit = measured_submit
 
         def producer():
+            load_gate.wait()
             previous = {}
             try:
                 while not stopped.is_set() and time.monotonic() < deadline:
@@ -485,6 +491,7 @@ class WholeRosterSoak(unittest.TestCase):
                 producer_done.set()
 
         def writer():
+            load_gate.wait()
             try:
                 while not producer_done.is_set() or not observed.empty():
                     try:
@@ -497,8 +504,11 @@ class WholeRosterSoak(unittest.TestCase):
                         except queue.Empty:
                             break
                     batch_started = time.perf_counter_ns()
+                    batch_cpu_started = time.thread_time_ns()
                     market.protocol.receive_batch(batch)
                     committed = time.perf_counter_ns()
+                    batch_cpu_finished = time.thread_time_ns()
+                    histograms['receive_batch_cpu'].add((batch_cpu_finished-batch_cpu_started)//1000)
                     histograms['receive_batch_wall'].add((committed-batch_started)//1000)
                     for _, value, _ in batch:
                         histograms['receipt_to_commit'].add((committed-receipt_started.pop(id(value)))//1000000)
@@ -513,10 +523,16 @@ class WholeRosterSoak(unittest.TestCase):
                 stopped.set()
 
         def checkpoint():
+            load_gate.wait()
             try:
                 with closing(sqlite3.connect(market.path, timeout=.25)) as db:
                     while not stopped.wait(.2):
                         checkpoints.append(tuple(db.execute('PRAGMA wal_checkpoint(PASSIVE)').fetchone()))
+                        try:
+                            size = Path(str(market.path)+'-wal').stat().st_size
+                        except FileNotFoundError:
+                            size = 0
+                        state['checkpoint_wal_bytes_max'] = max(state.get('checkpoint_wal_bytes_max', 0), size)
             except BaseException as error:
                 errors.append(('checkpoint', type(error).__name__, str(error)))
                 thread_error_details.append(error_detail('checkpoint', error))
@@ -526,7 +542,7 @@ class WholeRosterSoak(unittest.TestCase):
                    Thread(target=checkpoint, name='soak-checkpoint')]
         state['threads'] = threads
         next_work = 0
-        next_heartbeat = load_started+60
+        next_heartbeat = None
         http = None
         load_finished = None
         with ExitStack() as stack:
@@ -542,6 +558,13 @@ class WholeRosterSoak(unittest.TestCase):
                 state['phase'] = 'CONTINUOUS_LOAD'
                 for thread in threads:
                     thread.start()
+                # Setup and thread creation are outside the promised load
+                # duration. All three workers start from this shared gate.
+                load_started = time.monotonic()
+                deadline = load_started+LOAD_SECONDS
+                next_heartbeat = load_started+60
+                state.update(load_started=load_started, unready_since=load_started)
+                load_gate.set()
                 while time.monotonic() < deadline and not stopped.is_set():
                     now = clock()
                     jobs.tick(now)
@@ -557,8 +580,10 @@ class WholeRosterSoak(unittest.TestCase):
                         if not any((k, name) in jobs.active for k in ('seed', 'repair', 'quiet')):
                             jobs.submit((kind, name), kind, [name])
                         next_work += 5
+                    read_started = time.monotonic()
+                    read_wall_started = time.perf_counter_ns()
+                    read_cpu_started = time.thread_time_ns()
                     try:
-                        read_started = time.monotonic()
                         period = str(clock()//STEPS['15m']*STEPS['15m'])
                         interval_read = state['read_intervals'].setdefault(period, dict(attempts=0, ready=0, rejected=0))
                         interval_read['attempts'] += 1
@@ -579,6 +604,9 @@ class WholeRosterSoak(unittest.TestCase):
                         interval_read['rejected'] += 1
                         if state['unready_since'] is None:
                             state['unready_since'] = read_started
+                    finally:
+                        histograms['consumer_read_and_delivery_wall'].add((time.perf_counter_ns()-read_wall_started)//1000)
+                        histograms['consumer_read_and_delivery_cpu'].add((time.thread_time_ns()-read_cpu_started)//1000)
                     if time.monotonic() >= next_heartbeat:
                         report = soak_drain_metrics(state, final=False)
                         report['event'] = 'BINANCE_SOAK_HEARTBEAT'
@@ -590,7 +618,8 @@ class WholeRosterSoak(unittest.TestCase):
             except BaseException as error:
                 state['load_error'] = error_detail(state['phase'], error)
                 emit_bounded('BINANCE_SOAK_INTERRUPTED', dict(metrics,
-                    seed_wall_seconds=seed_seconds, load_wall_seconds=time.monotonic()-load_started,
+                    seed_wall_seconds=seed_seconds,
+                    load_wall_seconds=None if load_started is None else time.monotonic()-load_started,
                     error_type=type(error).__name__, error=str(error),
                     control_phase=getattr(error, 'control_phase', None),
                     queue_depth=observed.qsize(), queue_high_water=observed.high_water,
@@ -599,12 +628,21 @@ class WholeRosterSoak(unittest.TestCase):
             finally:
                 state.update(load_finished=time.monotonic(), phase='RECEIPT_DRAIN', drain_started=time.monotonic())
                 stopped.set()
+                load_gate.set()
                 for thread in threads:
                     if thread.ident is not None:
                         thread.join(12)
                 state.update(drain_finished=time.monotonic(), phase='JOBS_SHUTDOWN', jobs_shutdown_started=time.monotonic())
-                work = jobs.shutdown(time.monotonic()+35)
-                state.update(work=work, jobs_shutdown_finished=time.monotonic())
+                work = None
+                try:
+                    work = jobs.shutdown(time.monotonic()+35)
+                except BaseException as error:
+                    state['jobs_shutdown_error'] = error_detail('jobs.shutdown', error)
+                    work = dict(complete=False, errors=[state['jobs_shutdown_error']])
+                    if state.get('load_error') is None:
+                        raise
+                finally:
+                    state.update(work=work, jobs_shutdown_finished=time.monotonic())
             state['phase'] = 'POST_DRAIN_ASSERTIONS'
             self.assertFalse(any(thread.is_alive() for thread in threads), 'soak thread did not stop')
             self.assertEqual(errors, [])
@@ -773,7 +811,15 @@ class ReconnectProcess(unittest.TestCase):
             process.wait(timeout=15)
             stdout_thread.join(3)
             stderr = process.stderr.read().decode(errors='replace')
-            self.assertEqual(process.returncode, 0, stderr[-4000:]+' '+json.dumps(events[-4:]))
+            # Preserve the original child failure before the assertion stops
+            # this test. Full phase histograms/tracebacks can exceed CI's line
+            # limit; the existing chunk format retains their content hash.
+            for index, value in enumerate(events):
+                if value.get('event') == 'FIXTURE_PROCESS_FINAL' or index >= len(events)-4:
+                    emit_bounded('BINANCE_RECONNECT_CHILD_AUDIT', dict(index=index, child_event=value))
+            if stderr:
+                emit_bounded('BINANCE_RECONNECT_CHILD_STDERR', dict(stderr=stderr))
+            self.assertEqual(process.returncode, 0, 'collector failed; see bounded BINANCE_RECONNECT_CHILD_AUDIT/STDERR')
             self.assertFalse(stdout_thread.is_alive())
             self.assertEqual(parse_errors, [])
             self.assertEqual(len(ready), 2)
@@ -808,9 +854,9 @@ class ReconnectProcess(unittest.TestCase):
             self.assertEqual(http.active, 0)
             self.assertGreater(http.requests, 6)
             self.assertLess(time.monotonic()-wall_started, 70)
-            print('BINANCE_REAL_PROCESS_WS_RECONNECT '+json.dumps(dict(summary,
+            emit_bounded('BINANCE_REAL_PROCESS_WS_RECONNECT', dict(summary,
                 websocket_connections=len(connections), subscriptions=len(subscriptions),
-                session_finals=len(session_finals), http_requests=http.requests), sort_keys=True))
+                session_finals=len(session_finals), http_requests=http.requests))
         finally:
             if process is not None and process.poll() is None:
                 (scratch/'stop').write_text('STOP\n', encoding='ascii')
@@ -830,6 +876,13 @@ class ReconnectProcess(unittest.TestCase):
             if process is not None:
                 process.stdout.close()
                 process.stderr.close()
+
+
+def load_tests(loader, tests, pattern):
+    # The final real-process reconnect must follow the load, including the
+    # 3,600-second mode. Default class-name ordering would run it first.
+    return unittest.TestSuite((loader.loadTestsFromTestCase(WholeRosterSoak),
+                               loader.loadTestsFromTestCase(ReconnectProcess)))
 
 
 if __name__ == '__main__':

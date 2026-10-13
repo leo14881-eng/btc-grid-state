@@ -121,7 +121,6 @@ import json
 import sqlite3
 from threading import Event, Thread
 import time
-import traceback
 from websockets.sync.client import connect
 from research import hunter_binance_health as health
 from research import hunter_binance_public as public
@@ -130,6 +129,7 @@ from research import hunter_binance_stream_consumer as consumer
 from research.hunter_binance_control import Control, ControlError
 from research.hunter_binance_health_store import Store
 from research.hunter_binance_stream_store import topic
+from tests.fixtures.binance_reconnect_diagnostics import append_error, error_detail, final_state
 
 config = json.loads((scratch/'fixture.json').read_text(encoding='utf-8'))
 names = sorted([topic('BTCUSDT', '5m'), topic('BTCUSDT', '1h'), topic('ETHUSDT', '15m')])
@@ -145,40 +145,22 @@ Control.provision(scratch/'control.sqlite3', store.path)
 store.enable_control()
 stop = Event()
 ready_epochs, watch_errors, rejected_old, sqlite_errors = [], [], [], []
+sqlite_error_count = 0
 started = time.monotonic()
 public.worker_command = lambda value: [sys.executable, '-B', str(HELPER), '--http-child',
     value, str(os.getpid()), str(http_port), str(scratch)]
 
 
 def sqlite_diagnostic(operation, error):
-    # Failure-only observations: retain the original error even if a phase
-    # read also fails. These later reads aren't a snapshot of the failure.
-    detail = dict(operation=operation, type=type(error).__name__, message=str(error),
-        traceback=''.join(traceback.format_exception(type(error), error, error.__traceback__)),
-        error_market_phase=getattr(error, 'market_phase', None),
-        error_control_phase=getattr(error, 'control_phase', None),
-        sqlite_errorcode=getattr(error, 'sqlite_errorcode', None),
-        sqlite_errorname=getattr(error, 'sqlite_errorname', None),
+    # Do not issue more competing DB reads to diagnose an already failed read.
+    # sqlite_context records this connection's settings and original phase.
+    return dict(error_detail(operation, error),
         elapsed_wall_seconds=time.monotonic()-started,
-        phase_observation='BEST_EFFORT_AFTER_ERROR', market_phase=None, control_phase=None,
-        market_epoch=None, control_epoch=None, diagnostic_errors=[])
-    try:
-        meta = store.metadata()
-        detail.update(market_phase=meta.get('health_phase'), market_epoch=meta.get('epoch'))
-    except BaseException as diagnostic_error:
-        detail['diagnostic_errors'].append(dict(operation='market.metadata',
-            type=type(diagnostic_error).__name__, message=str(diagnostic_error)))
-    try:
-        with store.control._db(readonly=True, timeout=.05) as db:
-            meta = dict(db.execute('SELECT key,value FROM meta'))
-        detail.update(control_phase=meta.get('phase'), control_epoch=meta.get('epoch'))
-    except BaseException as diagnostic_error:
-        detail['diagnostic_errors'].append(dict(operation='control.meta',
-            type=type(diagnostic_error).__name__, message=str(diagnostic_error)))
-    return detail
+        phase_observation='ORIGINAL_EXCEPTION_CONTEXT_NO_EXTRA_DATABASE_READ')
 
 
 def watch():
+    global sqlite_error_count
     first = None
     operation = 'watch.start'
     try:
@@ -234,7 +216,8 @@ def watch():
                     seeded=len(seeded), acked=len(states), windows=len(frozen.generation['windows']),
                     old_frozen_rejected=bool(rejected_old), source_head=config['source_head']))
             except sqlite3.Error as error:
-                sqlite_errors.append(sqlite_diagnostic(operation, error))
+                sqlite_error_count += 1
+                append_error(sqlite_errors, sqlite_diagnostic(operation, error))
                 continue
             except (ValueError, ControlError):
                 # Startup, a revoked epoch, or a publication in progress is
@@ -242,8 +225,9 @@ def watch():
                 continue
     except BaseException as error:
         if isinstance(error, sqlite3.Error):
-            sqlite_errors.append(sqlite_diagnostic(operation, error))
-        watch_errors.append(str(error))
+            sqlite_error_count += 1
+            append_error(sqlite_errors, sqlite_diagnostic(operation, error))
+        append_error(watch_errors, error_detail(operation, error))
         stop.set()
 
 
@@ -255,24 +239,19 @@ try:
         connect=lambda: connect(f'ws://127.0.0.1:{ws_port}', proxy=None, ping_interval=None,
             open_timeout=3, close_timeout=1, max_queue=1024), clock=clock, coordinated=True)
 except BaseException as error:
-    problem = dict(type=type(error).__name__, message=str(error))
+    problem = error_detail('health.collect', error)
 finally:
     stop.set()
     watcher.join(3)
-    with store.control._db(readonly=True) as db:
-        owner_count = db.execute('SELECT COUNT(*) FROM owners').fetchone()[0]
-        request_count = db.execute('SELECT COUNT(*) FROM requests').fetchone()[0]
-        call_count, terminal_count = db.execute('SELECT COUNT(*),COUNT(terminal) FROM calls').fetchone()
-        attempt_count, retired_count = db.execute(
-            "SELECT COUNT(*),SUM(CASE WHEN terminal='RETIRED' THEN 1 ELSE 0 END) FROM attempts").fetchone()
-    stream.emit(dict(event='FIXTURE_PROCESS_FINAL', ready_epochs=ready_epochs,
+    final = final_state(store, scratch)
+    stream.emit(dict(final, event='FIXTURE_PROCESS_FINAL', ready_epochs=ready_epochs,
         old_frozen_rejected=bool(rejected_old), watcher_alive=watcher.is_alive(),
-        active_owners=owner_count, requests=request_count, calls=call_count, terminals=terminal_count,
-        attempts=attempt_count, retired=retired_count, orphan_files=len(list(scratch.glob('*.owner-*.lock'))),
         watch_errors=watch_errors, sqlite_errors=sqlite_errors, blocked_effects=blocked,
+        sqlite_error_count=sqlite_error_count, sqlite_errors_truncated=sqlite_error_count > len(sqlite_errors),
         problem=problem, elapsed_wall_seconds=time.monotonic()-started,
-        connected=store.metadata().get('connected'), market_clock='FIXED_UTC_PLUS_REAL_ELAPSED',
+        market_clock='FIXED_UTC_PLUS_REAL_ELAPSED',
         natural_utc_rollover_verified=False))
-if (problem or watch_errors or sqlite_errors or blocked or watcher.is_alive() or len(ready_epochs) != 2
-        or not rejected_old or owner_count or request_count or call_count != terminal_count):
+if (problem or watch_errors or sqlite_error_count or blocked or watcher.is_alive() or len(ready_epochs) != 2
+        or not rejected_old or final['final_read_errors'] or final['active_owners'] != 0
+        or final['requests'] != 0 or final['calls'] is None or final['calls'] != final['terminals']):
     raise SystemExit(1)

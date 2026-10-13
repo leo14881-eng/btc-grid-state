@@ -178,6 +178,37 @@ class Store(MarketControlMixin, CoordinationStore):
              name,int(row[0]),observed-HISTORY_MS,MAX_REVISIONS))
         return True
 
+    def _history_gap(self, db, name, interval, source):
+        step = STEPS[interval]
+        summary = db.execute('''SELECT MAX(start),MIN(typeof(start)='integer'),
+            (SELECT payload FROM metadata WHERE kind=?) FROM bars WHERE topic=?''',
+            ('history_floor:'+name,name)).fetchone()
+        if summary[1] != 1:
+            # Keep the former Python ordering/type errors for malformed stored
+            # starts (and an empty table); SQLite MAX alone would ignore NULL.
+            bars = {r['start']:r for r in db.execute(
+                'SELECT start,confirmed FROM bars WHERE topic=?',(name,))}
+            anchor = max(bars)
+            floor = summary[2]
+            needed = {anchor-i*step for i in range(LIMITS[interval])
+                      if floor is None or anchor-i*step >= int(floor)}
+            return (not needed <= set(bars) or any(s+step+FRESH_MS <= source
+                    and not bars[s]['confirmed'] for s in needed & bars.keys()))
+        anchor,floor = summary[0],summary[2]
+        needed = {anchor-i*step for i in range(LIMITS[interval])
+                  if floor is None or anchor-i*step >= int(floor)}
+        if not needed:return False
+        # Return two scalars instead of materializing every history row. An IN
+        # set preserves exact/off-grid membership. Match Python truthiness of
+        # SQLite values: NULL, numeric zero and empty text/blob are false; SQL
+        # NOT confirmed would incorrectly treat nonempty text as false.
+        marks = ','.join('?' for _ in needed)
+        present,unclosed = db.execute('''SELECT COUNT(*),MAX(start<=? AND
+            (confirmed IS NULL OR confirmed=0 OR length(CAST(confirmed AS BLOB))=0))
+            FROM bars WHERE topic=? AND start IN ('''+marks+')',
+            (source-step-FRESH_MS,name,*sorted(needed))).fetchone()
+        return present != len(needed) or bool(unclosed)
+
     def _ingest_ws(self, db, epoch, message, received, state=None):
         # A supplied state belongs to this frame in this same write transaction.
         # It must never be cached across frames, batches, or transactions.
@@ -198,14 +229,7 @@ class Store(MarketControlMixin, CoordinationStore):
         changed = self._put(db,name,row,received,source,k['x'],WS_SOURCE,epoch)
         db.execute('UPDATE topics SET ws_rx=?,ws_ts=? WHERE topic=?',(received,source,name))
         self._trim(db,name,source)
-        bars = {r['start']:r for r in db.execute('SELECT start,confirmed FROM bars WHERE topic=?',(name,))}
-        anchor = max(bars)
-        floor = db.execute('SELECT payload FROM metadata WHERE kind=?',('history_floor:'+name,)).fetchone()
-        needed = {anchor-i*step for i in range(LIMITS[k['i']])
-                  if floor is None or anchor-i*step >= int(floor[0])}
-        missing = not needed <= set(bars)
-        unclosed = any(s+step+FRESH_MS <= source and not bars[s]['confirmed'] for s in needed & bars.keys())
-        if missing or unclosed:
+        if self._history_gap(db,name,k['i'],source):
             db.execute("UPDATE topics SET gap=1,error='MISSING_HISTORY_OR_CLOSE' WHERE topic=?",(name,))
         self._record_readiness(db,name,received)
         return changed

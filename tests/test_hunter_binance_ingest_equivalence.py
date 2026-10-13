@@ -27,7 +27,10 @@ SCENARIOS = (
     'all_intervals', 'duplicate_conflict_old', 'same_topic_batch', 'invalid_envelopes',
     'attempted_unclose', 'post_write_rollback', 'unacked', 'stale_epoch',
     'closed_boundary', 'missing_close', 'daily_history_floor',
-    'revision_pruning', 'legacy_default_state', 'legacy_batch_rollback')
+    'revision_pruning', 'legacy_default_state', 'legacy_batch_rollback',
+    'missing_history', 'off_grid_anchor', 'floor_absent', 'floor_above_anchor',
+    'floor_off_grid', 'floor_invalid', 'confirmed_storage_types',
+    'start_real', 'start_text', 'start_blob', 'start_null')
 
 
 def rows(interval, stamp=NOW, count=None):
@@ -227,6 +230,44 @@ def replay(store_class, path, scenario):
         except ValueError as error:
             result['errors'].append(str(error))
         end = NOW+3
+    elif scenario in ('missing_history', 'off_grid_anchor', 'floor_absent',
+                      'floor_above_anchor', 'floor_off_grid', 'floor_invalid'):
+        name = topic('BTCUSDT','15m'); step = STEPS['15m']; anchor = NOW//step*step
+        with store.db() as db:
+            if scenario == 'missing_history':
+                db.execute('DELETE FROM bars WHERE topic=? AND start=?',(name,anchor-step))
+            elif scenario == 'off_grid_anchor':
+                db.execute('''INSERT INTO bars SELECT topic,start+1,row_json,observed,
+                    source_time,confirmed,origin,epoch FROM bars WHERE topic=? AND start=?''',
+                    (name,anchor))
+            elif scenario == 'floor_absent':
+                db.execute('DELETE FROM metadata WHERE kind=?',('history_floor:'+name,))
+            else:
+                floor = {'floor_above_anchor':anchor+1,
+                         'floor_off_grid':anchor-10*step+1,
+                         'floor_invalid':'not an integer'}[scenario]
+                db.execute('UPDATE metadata SET payload=? WHERE kind=?',
+                           (str(floor),'history_floor:'+name))
+        end = NOW+2; ingest([message(stamp=end)])
+    elif scenario == 'confirmed_storage_types':
+        name = topic('BTCUSDT','15m'); old = (NOW//STEPS['15m']-2)*STEPS['15m']
+        values = (None,0,0.0,False,1,2,-1,.5,'','false','0notnumber','\0','\0value',
+                  b'',b'\0',b'0',b'false')
+        for index,value in enumerate(values):
+            with store.db() as db:
+                db.execute('UPDATE topics SET gap=0,error=NULL WHERE topic=?',(name,))
+                db.execute('UPDATE bars SET confirmed=? WHERE topic=? AND start=?',(value,name,old))
+            end = NOW+index+2; ingest([message(stamp=end)])
+            result['checkpoints'].append(table_snapshot(store))
+    elif scenario in ('start_real','start_text','start_blob','start_null'):
+        name = topic('BTCUSDT','15m'); anchor = NOW//STEPS['15m']*STEPS['15m']
+        value = {'start_real':anchor+.5,'start_text':'unexpected',
+                 'start_blob':b'noninteger','start_null':None}[scenario]
+        with store.db() as db:
+            db.execute('''INSERT INTO bars SELECT topic,?,row_json,observed,
+                source_time,confirmed,origin,epoch FROM bars WHERE topic=? AND start=?''',
+                (value,name,anchor))
+        end = NOW+2; ingest([message(stamp=end)])
     result['frozen'].append(store.freeze(NAMES, end, end))
     result['tables'] = table_snapshot(store)
     return result
@@ -332,6 +373,56 @@ class IngestEquivalenceTests(unittest.TestCase):
                 self.assertEqual(store.ingest_accounted(epoch,[(message(stamp=NOW+i),NOW+i) for i in (1,2)]),
                                  ['committed','committed'])
             self.assertEqual(checked.call_count,3)  # Admission plus every accepted frame.
+
+    def test_aggregate_keeps_exact_membership_and_history_floor(self):
+        for scenario in ('missing_history','off_grid_anchor','floor_absent',
+                         'floor_above_anchor','floor_off_grid','floor_invalid'):
+            with self.subTest(scenario=scenario):
+                value = self.compare(scenario)
+                state = next(r for r in value['tables']['topics'] if r['topic']==topic('BTCUSDT','15m'))
+                self.assertEqual(value['outcomes'][-1],
+                                 ['invalid' if scenario=='floor_invalid' else 'committed'])
+                self.assertEqual(state['gap'],int(scenario in ('missing_history','off_grid_anchor','floor_invalid')))
+
+    def test_aggregate_matches_python_confirmation_truthiness_for_sqlite_types(self):
+        value = self.compare('confirmed_storage_types')
+        name = topic('BTCUSDT','15m'); old = (NOW//STEPS['15m']-2)*STEPS['15m']
+        for snapshot in value['checkpoints']:
+            confirmed = next(r['confirmed'] for r in snapshot['bars'] if r['topic']==name and r['start']==old)
+            state = next(r for r in snapshot['topics'] if r['topic']==name)
+            self.assertEqual(state['gap'],int(not confirmed))
+        self.assertTrue(all(outcomes==['committed'] for outcomes in value['outcomes'][1:]))
+
+    def test_malformed_start_fallback_preserves_original_outcome_and_receipts(self):
+        for scenario in ('start_real','start_text','start_blob','start_null'):
+            with self.subTest(scenario=scenario):
+                value = self.compare(scenario)
+                self.assertEqual(value['outcomes'][-1],['committed' if scenario=='start_real' else 'invalid'])
+                state = next(r for r in value['tables']['topics'] if r['topic']==topic('BTCUSDT','15m'))
+                self.assertEqual(state['gap'],1)
+
+    def test_history_check_returns_bounded_sqlite_rows_with_identical_durable_result(self):
+        measurements=[];snapshots=[]
+        with tempfile.TemporaryDirectory() as root:
+            for index,store_class in enumerate((Store,Ec3dHotPathOracle)):
+                store=store_class(Path(root)/('store%d.sqlite3'%index));store.enable_health()
+                name=topic('BTCUSDT','1d')
+                with patch('uuid.uuid4',return_value=uuid.UUID(hex=EPOCH)):
+                    epoch=store.begin_session([name],'a'*64)
+                store.begin_health(epoch,[name],NOW);store.ack(epoch,[name])
+                store.ingest_rest(epoch,name,rows('1d'),NOW,NOW)
+                returned=[]
+                with store.db() as db:
+                    factory=db.row_factory
+                    def measured_row(cursor,row):
+                        returned.append(len(row))
+                        return factory(cursor,row)
+                    db.row_factory=measured_row
+                    self.assertTrue(store._ingest_ws(db,epoch,message('1d'),NOW+1))
+                measurements.append(len(returned));snapshots.append(table_snapshot(store))
+        self.assertEqual(snapshots[0],snapshots[1])
+        self.assertLessEqual(measurements[0],8)
+        self.assertGreaterEqual(measurements[1],LIMITS['1d'])
 
 
 if __name__ == '__main__':
