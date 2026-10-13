@@ -304,6 +304,12 @@ pending publication, quarantine, revocation and proof expiry. No fence result
 is cached; the initial freeze still verifies the complete stored roster.
 This addresses measured delivery overhead, but its performance result and the
 unchanged continuous full-reader acceptance must be checked independently.
+The first same-seed comparison at `1552e948` measured Monitor 47.201 to
+7.114 seconds on Python 3.10 and 58.474 to 8.929 seconds on 3.12; Research
+was 0.558 to 0.426 and 0.758 to 0.504 seconds. Output/generation/scope and
+all 1250 instrumented calls matched. Both subsequent continuous full-reader
+legs still filled the collector queue. These are the single-pair measurements
+described above, not completed sustained-load acceptance.
 
 The paired scheduling probe at `e2b52ab788cabb3cdd2d7669a2081547955d683a`
 did not solve the backlog: changing only the diagnostic switch interval from
@@ -361,6 +367,17 @@ proof expiry, per-topic receipts and Monitor completion deadlines. Preserve
 the original full-scope collector load, queue limit and per-use checks. No
 production pressure test, multi-tenant rewrite or service activation is part
 of this patch.
+
+The proposed future stocks/crypto data center is outside this repair: share
+public collection and indicators by complete venue/market/instrument/interval
+keys, coalesce identical history-fill work, and publish versioned signal
+events with event identity and expiry. A separate execution service would
+persist consumption, enforce per-account/action idempotency and unique
+writers, handle reordering/redelivery/crash recovery, and reconcile unknown
+outcomes before retrying. Receipt of a signal would still require account
+risk authorization and a current-price check. None of that future protocol,
+cross-service deduplication or real execution has been implemented or accepted
+here; shadow mode, strategy and capital limits remain unchanged.
 
 ## Offline provisioning and reviewed installation
 

@@ -88,14 +88,14 @@ class DeliveryScopeTests(unittest.TestCase):
         except ValueError as error:
             return ('error', type(error), str(error))
 
-    def equivalent(self, call, reason=None, *, expected=True):
+    def equivalent(self, call, reason=None):
         actual = self.outcome(call)
         with patch.object(self.store, '_delivery_states', side_effect=old_delivery_states), \
                 patch.object(self.control, '_fence_versions', side_effect=old_fence_versions):
             legacy = self.outcome(call)
         self.assertEqual(actual, legacy)
         if reason is None:
-            self.assertEqual(actual, ('value', expected))
+            self.assertEqual(actual, ('value', True))
         else:
             self.assertEqual(actual[0], 'error')
             self.assertEqual(actual[2], reason)
@@ -140,7 +140,7 @@ class DeliveryScopeTests(unittest.TestCase):
             names = self.names[:count]
             fence = self.control.fence(names, EPOCH)
             call = lambda: self.control.validate_fence(fence, names, EPOCH)
-            self.equivalent(call, expected=None)
+            self.equivalent(call)
             for name in (names[0], names[-1]):
                 for change in ('missing', 'version'):
                     with self.subTest(count=count, topic=name, change=change):
@@ -202,7 +202,7 @@ class DeliveryScopeTests(unittest.TestCase):
                     with self.control._db(readonly=True) as db:
                         changed = old_fence_versions(db, names)[names[-1]] != 0
                     self.equivalent(lambda: self.control.validate_fence(fence['control'], names, EPOCH),
-                                    'CONTROL_READ_FENCE_CHANGED' if changed else None, expected=None)
+                                    'CONTROL_READ_FENCE_CHANGED' if changed else None)
                 finally:
                     self.write(self.control.path, 'UPDATE versions SET version=0 WHERE topic=?', (names[-1],))
 
