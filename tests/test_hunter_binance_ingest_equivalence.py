@@ -364,7 +364,7 @@ class IngestEquivalenceTests(unittest.TestCase):
         self.assertEqual(value['errors'], ['BINANCE_BAR_VALUES_INVALID'])
         self.assertFalse(any(row['source_time']>NOW+1 for row in value['tables']['revisions']))
 
-    def test_accepted_frames_keep_individual_epoch_checks(self):
+    def test_accepted_frames_share_one_epoch_check_in_same_write_transaction(self):
         with tempfile.TemporaryDirectory() as root:
             store = Store(Path(root)/'state.sqlite3'); store.enable_health()
             epoch = store.begin_session(NAMES,'a'*64)
@@ -372,7 +372,20 @@ class IngestEquivalenceTests(unittest.TestCase):
             with patch.object(store,'check_epoch',wraps=store.check_epoch) as checked:
                 self.assertEqual(store.ingest_accounted(epoch,[(message(stamp=NOW+i),NOW+i) for i in (1,2)]),
                                  ['committed','committed'])
-            self.assertEqual(checked.call_count,3)  # Admission plus every accepted frame.
+            self.assertEqual(checked.call_count,1)  # Only admission, still inside one BEGIN IMMEDIATE transaction.
+
+    def test_standalone_write_still_checks_epoch_and_rejects_stale_owner(self):
+        with tempfile.TemporaryDirectory() as root:
+            store=Store(Path(root)/'state.sqlite3');store.enable_health()
+            epoch=store.begin_session(NAMES,'a'*64)
+            store.begin_health(epoch,NAMES,NOW);store.ack(epoch,NAMES)
+            with patch.object(store,'check_epoch',wraps=store.check_epoch) as checked:
+                self.assertTrue(store.ingest_ws(epoch,message(stamp=NOW+1),NOW+1))
+            self.assertEqual(checked.call_count,1)
+            with self.assertRaisesRegex(ValueError,'STALE_SESSION'):
+                store.ingest_accounted('f'*32,[(message(stamp=NOW+2),NOW+2)])
+            with self.assertRaisesRegex(ValueError,'STALE_SESSION'):
+                store.ingest_ws('f'*32,message(stamp=NOW+3),NOW+3)
 
     def test_aggregate_keeps_exact_membership_and_history_floor(self):
         for scenario in ('missing_history','off_grid_anchor','floor_absent',
