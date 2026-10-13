@@ -46,6 +46,8 @@ parser.add_argument('--probe-switch-interval', type=float, choices=(.0005,),
                     help='Diagnostic-only third full-reader leg; restores the original interval on exit')
 parser.add_argument('--probe-snapshot-codec', action='store_true',
                     help='Diagnostic-only owned-copy codec oracle and full-reader leg at the original interval')
+parser.add_argument('--probe-consumer-cost', action='store_true',
+                    help='Measure actual Research/Monitor read segments on the initialized scratch cache')
 args = parser.parse_args()
 repo = args.repo.resolve(strict=True)
 if sys.platform != 'linux':
@@ -67,6 +69,8 @@ from tests import test_hunter_binance_coordinated_runtime as runtime
 from tests.test_hunter_binance_cache import rows, message
 if args.probe_snapshot_codec:
     from tests.fixtures import binance_snapshot_codec_probe as codec_probe
+if args.probe_consumer_cost:
+    from tests.fixtures import binance_consumer_cost_probe as consumer_probe
 
 SECONDS = 8
 STAMP = runtime.MIDNIGHT + 120000
@@ -544,6 +548,8 @@ def main():
     source_files = {'scripts/profile_binance_contention.py'}
     # Hash lazy-loaded research helpers before running any fixture as well.
     source_files.update(path.relative_to(repo).as_posix() for path in (repo/'research').glob('*.py'))
+    if args.probe_consumer_cost:
+        source_files.add('research/results/hunter-shadow-rules.json')
     for module in list(sys.modules.values()):
         filename = getattr(module, '__file__', None)
         if filename:
@@ -563,6 +569,7 @@ def main():
         sqlite=sqlite3.sqlite_version, switch_interval_seconds=original_switch_interval,
         probe_switch_interval_seconds=args.probe_switch_interval,
         probe_snapshot_codec=args.probe_snapshot_codec,
+        probe_consumer_cost=args.probe_consumer_cost,
         checkout_source_head=args.source_head, source_file_sha256_before=source_hashes,
         fixed_market_stamp=STAMP, fixture_source_head=runtime.HEAD,
         fixture_manifest=runtime.MANIFEST, fixture_identity_is_synthetic=True,
@@ -582,6 +589,9 @@ def main():
         initial.check_delivery()
         if args.probe_snapshot_codec:
             report['snapshot_codec_probe'] = codec_probe.run_codec_probe(initial.generation)
+        if args.probe_consumer_cost:
+            report['consumer_cost_probe'] = consumer_probe.run_consumer_cost_probe(
+                market, stamp=STAMP+1, scratch_root=scratch)
         for filename in ('state.sqlite3', 'control.sqlite3'):
             source = active/filename
             with closing(sqlite3.connect(source)) as db:
@@ -620,6 +630,8 @@ def main():
             if report['fatal_errors']:
                 break
     except BaseException as error:
+        if hasattr(error, 'consumer_cost_probe_report'):
+            report['consumer_cost_probe'] = error.consumer_cost_probe_report
         report['fatal_errors'].append(dict(type=type(error).__name__, message=str(error),
             traceback=''.join(traceback.format_exception(type(error), error, error.__traceback__))))
     finally:

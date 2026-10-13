@@ -259,6 +259,75 @@ that process are decoded; no binary cache is loaded from a file or network.
 All generation/window hashes, proof, time and delivery fence checks remain.
 The candidate is applied only within this diagnostic and restored afterwards;
 faster copying alone does not establish sustainable writer throughput.
+The separate `--probe-consumer-cost` option measures actual Research and
+Monitor read segments on the initialized scratch cache before writer load.
+It uses the original selection rules, rows/packet/proof/fence code and signal
+formulas, with only cache selection, scratch reader and fixture clock bound
+by the harness. It excludes external enrichment/order books, ledger access
+and publication. These isolated segment timings are not whole-job timings,
+concurrent-writer measurements or multiple-user capacity acceptance. The
+continuous full-reader pair and strict acceptance remain separate and unchanged.
+
+## Performance and multiple-user boundary
+
+The current full-load gate has not passed. At candidate
+`0f89ab505b30676680866fff7cec8df5875f7386`, strict Python 3.10/3.12 each ran
+183 tests with one `SOAK_QUEUE_FULL` failure. The 32-second target stopped at
+7.046/8.301 seconds. Queue high water was 4096; receipt-to-commit maximum was
+4508/3435 ms and its P99 histogram upper bound was 5000 ms on both. Full-scope
+read maximum was 2118.628/1233.193 ms (P99 upper bound 5000/2000 ms). Both
+subsequent real-process reconnects completed two READY epochs and retired all
+eight attempts with no recorded SQLite error. The hour gate was skipped.
+See [exact-head CI](https://github.com/leo14881-eng/btc-grid-state/actions/runs/38429609562).
+
+The paired scheduling probe at `e2b52ab788cabb3cdd2d7669a2081547955d683a`
+did not solve the backlog: changing only the diagnostic switch interval from
+5 to 0.5 ms changed load-period committed throughput from 577 to 488 frames/s
+on Python 3.10, and 913 to 1005 on 3.12. Both 3.10 legs refused a frame;
+both 3.12 legs retained 4196 accepted frames at load stop. The default interval
+was restored. The later owned-copy codec probe at `0f89ab5` changed 725 to
+769 frames/s and 448 to 514 respectively; all four reader legs refused a
+frame before eight seconds. The codec remains diagnostic-only. Neither probe
+is a production fix, an exact prior-version benchmark, or permission to start
+the hour gate. Drain throughput is excluded from these rates.
+
+The production collector also has a synchronous read cost: coordinated/health
+`sample()` freezes the complete scope every ten seconds before its main loop
+can receive another batch; legacy initialization and the roughly thirty-second
+audit also freeze data. Research and Monitor are separate CLI processes in
+the checked-in service design, but the installed server units and selectors
+remain unverified. Separate processes do not eliminate SQLite, memory or CPU
+contention. A safe change must measure the complete read path and its effect
+on the writer, not just copy/encode time. A same-epoch cache key is insufficient:
+cut, observations, proof and generation hash can change within that epoch.
+
+There is no tested capacity claim for 1000 users or 1000 concurrent requests.
+Registration count, active users, request frequency and simultaneous requests
+are different inputs. For example, 1000 active users requesting once per five
+minutes average about 3.33 requests/s but can still create a simultaneous
+1000-request burst; requesting every second implies 1000 requests/s.
+
+The repository provides a shared public market cache, a finite collector
+queue, bounded exchange HTTP work and budget, independent consumer CLIs, and
+the existing five-minute Monitor timer/SingleWriter/CAS. It does not provide
+a user-facing bounded read service, tenant quotas, measured overload rejection
+or verified reserved Monitor CPU/memory/read slots. A job timeout is not a
+resource reservation. Do not create a subscription or a full 1228-topic
+snapshot for every user request. Reuse can cover only an exactly identified,
+immutable public result; each use must still pass current freshness and
+revocation checks. User authorizations, portfolios and ledgers cannot be
+stored or shared as part of that public cache.
+
+After the present writer gate passes, a separate offline capacity matrix
+should vary active users (1/10/100/1000), concurrent requests (1/4/16/64),
+frequency (five minutes/one minute/one second), actual Research and Monitor
+scopes, equal versus changing cuts, and bursts. These are test targets, not
+promised capacity. Measure accepted and rejected reads, queue depth and age,
+read/receipt-to-commit distributions, writer admission/BEGIN/BODY/COMMIT/CLOSE,
+proof expiry, per-topic receipts and Monitor completion deadlines. Preserve
+the original full-scope collector load, queue limit and per-use checks. No
+production pressure test, multi-tenant rewrite or service activation is part
+of this patch.
 
 ## Offline provisioning and reviewed installation
 

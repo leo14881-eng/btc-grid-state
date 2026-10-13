@@ -15,6 +15,7 @@ on:
       - 'tests/fixtures/binance_ws_reconnect.py'
       - 'tests/fixtures/binance_reconnect_diagnostics.py'
       - 'tests/fixtures/binance_snapshot_codec_probe.py'
+      - 'tests/fixtures/binance_consumer_cost_probe.py'
       - 'scripts/*binance*'
       - 'deploy/*binance*'
       - 'deploy/systemd/*binance*'
@@ -145,7 +146,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CHECKOUT_SHA"
           python -I -B -X utf8 scripts/profile_binance_contention.py \
             --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
-            --probe-snapshot-codec \
+            --probe-consumer-cost \
             | tee "$RUNNER_TEMP/binance-contention.log"
       - uses: actions/upload-artifact@v4
         if: always()
