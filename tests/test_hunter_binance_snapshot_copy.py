@@ -27,6 +27,30 @@ class SnapshotCopyTests(unittest.TestCase):
         self.assertEqual(len(frozen.generation['windows']['btcusdt@kline_5m']['rows']),1)
         self.assertIsNotNone(frozen._snapshot_json)
 
+    def test_plain_owned_json_matches_circular_checked_original_bytes(self):
+        import json
+        payload=snapshot({'windows':[[{'x':[1,True,None,'汉字','🙂']},-0.0]
+                                     for _ in range(24)],'nested':{'safe':True}})
+        original=json.dumps(payload,ensure_ascii=True,allow_nan=False,separators=(',',':'))
+        fast=consumer._encode_json_tree(payload)
+        self.assertEqual(fast,original)
+        with patch.object(consumer.json,'dumps',wraps=consumer.json.dumps) as encoded:
+            frozen=Frozen(payload,checked_at=1)
+        self.assertTrue(encoded.call_args.kwargs.get('check_circular') is False)
+        self.assertEqual(frozen.generation,json.loads(original))
+        self.assertEqual(frozen._snapshot_json,original)
+        self.assertIsNot(frozen.generation,frozen.generation)
+        self.assertIsNot(frozen.generation['windows'],payload['windows'])
+
+    def test_shared_alias_and_cycle_never_enter_unchecked_json(self):
+        repeated=[];cycle=[];cycle.append(cycle)
+        for value in (snapshot({'left':repeated,'right':repeated}),snapshot(cycle)):
+            with self.subTest(case='alias' if value['extra'] is not cycle else 'cycle'):
+                with patch.object(consumer.json,'dumps',wraps=consumer.json.dumps) as encoded:
+                    result=consumer._encode_json_tree(value)
+                self.assertIsNone(result)
+                encoded.assert_not_called()
+
     def test_aliases_preserve_deepcopy_memo_without_exposing_original(self):
         shared=[];original=snapshot({'one':shared,'two':shared})
         frozen=Frozen(original,checked_at=1);export=frozen.generation
