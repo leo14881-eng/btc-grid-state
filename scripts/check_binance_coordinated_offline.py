@@ -17,5 +17,5 @@ if __name__=='__main__':
         raise SystemExit('LINUX_REQUIRED: do not count platform skips as acceptance')
     print('COORDINATED_RUNTIME',dict(python=sys.version,sqlite=sqlite3.sqlite_version))
     # Exact count is deliberately maintained with the candidate test suite.
-    raise SystemExit(main(patterns=PATTERNS,expected=94,
+    raise SystemExit(main(patterns=PATTERNS,expected=96,
         extra_helpers=('tests/fixtures/binance_coordinated_crash.py',)))

@@ -232,6 +232,34 @@ class ConsumerUseBoundaryTests(unittest.TestCase):
         self.assertTrue(all(row['signal_evidence']=={} for row in review['candidates']))
         self.assertEqual(guards,[]);fetch.assert_not_called()
 
+    def test_monitor_known_legacy_reader_without_delivery_method_keeps_v1_api(self):
+        from research import hunter_position_monitor as monitor
+        class LegacyFrozen:
+            def __init__(self,contract):
+                self.generation=dict(schema='binance_stream_generation_v1',status='READY',health_contract=contract)
+        for contract in (None,'binance_health_v1'):
+            with self.subTest(contract=contract),patch.object(consumer,'Frozen',LegacyFrozen):
+                guard=LegacyFrozen(contract)
+                (review,_,refresh),guards,_=self.refresh(guard)
+                self.assertFalse(refresh['failures']);self.assertEqual(len(guards),1)
+                monitor.revalidate_management_evidence(guards,review,refresh)
+                self.assertFalse(refresh['failures'])
+
+    def test_monitor_missing_delivery_method_never_downgrades_control_generation(self):
+        from research import hunter_position_monitor as monitor
+        class MissingFence:
+            def __init__(self,**contracts):
+                self.generation=dict(schema='binance_stream_generation_v1',status='READY',**contracts)
+        for contracts in ({'health_contract':consumer.CONTROL_HEALTH_CONTRACT},
+                          {'health_contract':'binance_health_v1','control_contract':consumer.CONTROL_CONTRACT}):
+            with self.subTest(contracts=contracts),patch.object(consumer,'Frozen',MissingFence):
+                guard=MissingFence(**contracts)
+                (review,_,refresh),guards,fetch=self.refresh(guard)
+                self.assertEqual(set(refresh['failures']),{'BTC','ETH'})
+                self.assertTrue(all(row['signal_evidence']=={} for row in review['candidates']))
+                self.assertEqual(guards,[]);fetch.assert_not_called()
+                with self.assertRaisesRegex(ValueError,'FENCE_REQUIRED'):monitor.check_cache_delivery(guard)
+
     def test_monitor_use_gate_clears_only_signal_evidence_and_never_serializes_guard(self):
         from research import hunter_position_monitor as monitor
         guard=Mock();guard.check_delivery.return_value=NOW+1

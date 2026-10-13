@@ -474,7 +474,7 @@ class LinuxProcessCases(unittest.TestCase):
                     self.assertEqual(db.execute('SELECT COUNT(*) FROM owners').fetchone()[0], 1)
                     self.assertEqual(db.execute('SELECT COUNT(*) FROM requests').fetchone()[0], 1)
                     charged = db.execute('SELECT charged_total FROM budget WHERE id=1').fetchone()[0]
-                    self.assertGreaterEqual(charged, 40)
+                    self.assertEqual(charged, 20)
                 for name in dependent:
                     with self.assertRaises((ValueError, ControlError)):
                         market.read([name], stamp+1)
@@ -520,7 +520,7 @@ class LinuxProcessCases(unittest.TestCase):
             job_key=context['job_key'], recovery_id=recovery_id)
         self.assertEqual(market.read(market.names, stamp+3).generation['status'], 'READY')
         with sqlite3.connect(control_path) as db:
-            self.assertEqual(db.execute('SELECT charged_total FROM budget WHERE id=1').fetchone()[0], charged+40)
+            self.assertEqual(db.execute('SELECT charged_total FROM budget WHERE id=1').fetchone()[0], charged+20)
             self.assertEqual(db.execute('SELECT state FROM quarantines WHERE id=?', (recovery_id,)).fetchone()[0], 'RESOLVED')
 
     def test_real_crash_before_and_after_market_commit_reconciles_exactly_once(self):
@@ -610,7 +610,7 @@ class LinuxProcessCases(unittest.TestCase):
                 with sqlite3.connect(market.path.with_name('control.sqlite3')) as control:
                     self.assertEqual(control.execute('SELECT COUNT(*) FROM owners').fetchone()[0], 0)
                     self.assertEqual(control.execute('SELECT COUNT(*) FROM requests').fetchone()[0], 0)
-                    self.assertEqual(control.execute('SELECT charged_total FROM budget WHERE id=1').fetchone()[0], charged_before+40)
+                    self.assertEqual(control.execute('SELECT charged_total FROM budget WHERE id=1').fetchone()[0], charged_before+20)
             writer.start()
             self.assertTrue(started.wait(2))
             writer.join(30)

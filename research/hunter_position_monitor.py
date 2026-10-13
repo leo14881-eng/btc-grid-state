@@ -145,6 +145,22 @@ def management_selection(states,cursor,budget):
  selected=priority+[ordinary[(cursor+i)%len(ordinary)] for i in range(count)] if ordinary else priority
  return selected,(cursor+count)%len(ordinary) if ordinary else 0
 
+def check_cache_delivery(cached):
+ """Keep the known pre-control reader compatible; never downgrade v2 gates."""
+ check=getattr(cached,'check_delivery',None)
+ if callable(check):return check()
+ generation=getattr(cached,'generation',None)
+ if (type(cached) is not binance_cache.Frozen
+     or callable(getattr(type(cached),'check_delivery',None))
+     or not isinstance(generation,dict)
+     or generation.get('schema')!='binance_stream_generation_v1'
+     or generation.get('status')!='READY'
+     or generation.get('health_contract') not in (None,'binance_health_v1')
+     or generation.get('control_contract') is not None):
+  raise ValueError('BINANCE_CACHE_DELIVERY_FENCE_REQUIRED')
+ # PR126 Frozen already checked its immutable v1 proofs at read completion.
+ # It has no independent control fence; this branch preserves only that API.
+
 def refresh_management_evidence(states,market,review,liq,now,guard_sink=None):
  """Refresh bounded rotating holdings, including names no longer EARLY. No entry path."""
  import copy
@@ -160,7 +176,7 @@ def refresh_management_evidence(states,market,review,liq,now,guard_sink=None):
   cache_args=() if cached is None else (cached,)
   r1=timed("evidence_1h",signals.rolling,pairs,"1h",*cache_args);r4=timed("evidence_4h",signals.rolling,pairs,"4h",*cache_args);micro=timed("evidence_micro",signals.micro,pairs,*cache_args)
   if cached is not None:
-   cached.check_delivery()
+   check_cache_delivery(cached)
    if guard_sink is not None:guard_sink.append((cached,tuple(selected)))
   for a in selected:
    row=signals.score_row(a+"USDT",a,r1,r4,r1.get("BTCUSDT"),r4.get("BTCUSDT"),micro)
@@ -202,7 +218,7 @@ def refresh_management_evidence(states,market,review,liq,now,guard_sink=None):
 def revalidate_management_evidence(guards,review,refresh):
  """Revoke only the original signal evidence before a lane consumes it."""
  for cached,selected in guards:
-  try:cached.check_delivery()
+  try:check_cache_delivery(cached)
   except Exception as exc:
    reason="SIGNAL_REFRESH_FAILED:"+type(exc).__name__
    by={row.get('asset'):row for row in review.get('candidates') or []}
