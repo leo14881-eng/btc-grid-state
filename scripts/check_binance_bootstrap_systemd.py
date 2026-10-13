@@ -38,9 +38,6 @@ def fixture(mode):
     root=Path(__file__).resolve().parent;config=json.loads((root/'fixture.json').read_bytes())
     entry=load(root/'entry.py');entry.PREFIX=root/'prefix';entry.STATE=root/'state'
     entry.SERVICE=config['collector'];entry.SUPERVISOR=config['supervisor']
-    # Compress only this fixture's wall clock. All seven other cases validate
-    # the production 1800-second property; this case must really expire in PID 1.
-    if config['case']=='timeout':entry.SUPERVISOR_SECONDS=2
     # Exact hook validation points to this isolated fixture driver, which calls
     # the candidate's real cleanup. Production uses the standalone entry.py.
     entry.__file__=str(Path(__file__).resolve())
@@ -64,7 +61,23 @@ def fixture(mode):
                 if name=='supervisor-final.json':raise OSError('fixture final receipt fsync failure')
             evidence.save=failed_save
         return entry.main(['--cleanup'])
-    invocation=entry.supervisor_entry(evidence)
+    if config['case']=='timeout':
+        # Compress only this fixture's wall clock; first verify PID 1 reports
+        # exactly 2s, then adapt only that observed field for admission. The
+        # candidate's literal 30min requirement stays unchanged and all seven
+        # other cases exercise it directly. Every other property is unmodified.
+        real_command=evidence.command
+        def compressed_clock(args,**kwargs):
+            value=real_command(args,**kwargs)
+            assert args[:4]==['systemctl','--no-pager','show',entry.SUPERVISOR]
+            assert value.stdout.count(b'RuntimeMaxUSec=2s\n')==1
+            print('FIXTURE_RUNTIME_COMPRESSION_VERIFIED 2s TO 30min ADMISSION_ONLY',flush=True)
+            return subprocess.CompletedProcess(value.args,value.returncode,
+                value.stdout.replace(b'RuntimeMaxUSec=2s\n',b'RuntimeMaxUSec=30min\n'),value.stderr)
+        evidence.command=compressed_clock
+        try:invocation=entry.supervisor_entry(evidence)
+        finally:evidence.command=real_command
+    else:invocation=entry.supervisor_entry(evidence)
     work=entry.PREFIX/('upgrade-'+'a'*32);work.mkdir(mode=0o700)
     write(entry.marker(),dict(invocation_id=invocation,new=entry.NEW,evidence=str(work)))
     write(work/'start-intent.json',dict(invocation_id=invocation,since='now'))
