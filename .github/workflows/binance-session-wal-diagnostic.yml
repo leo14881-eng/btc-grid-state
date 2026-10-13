@@ -35,6 +35,7 @@ jobs:
         env:
           CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
           BINANCE_DIAGNOSTIC_MARKET_WAL: '1'
+          BINANCE_DIAGNOSTIC_CACHE_FAILURE: '1'
           TMPDIR: ${{ runner.temp }}
         run: |
           python -I -B -X utf8 scripts/profile_binance_session_topology.py \
