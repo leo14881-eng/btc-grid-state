@@ -643,6 +643,15 @@ def collector(scratch):
     start = time.monotonic()
     try:
         store = TimedStore(scratch/'state.sqlite3')
+        # Scratch diagnostic ONLY: compare real health.session under WAL and DELETE.
+        # No production provisioning, existing SQLite safety approval, or runtime switch.
+        diagnostic_wal = os.environ.get('BINANCE_DIAGNOSTIC_MARKET_WAL') == '1'
+        if diagnostic_wal:
+            with contextlib.closing(sqlite3.connect(store.path.as_uri()+'?mode=rw',
+                                                   uri=True,timeout=.25,isolation_level=None)) as mode_db:
+                actual_mode = mode_db.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+                if actual_mode.upper() != 'WAL':
+                    raise AssertionError('DIAGNOSTIC_WAL_SWITCH_FAILED')
         Control.provision(scratch/'control.sqlite3',store.path)
         store.enable_control()
         with patch.object(health,'Protocol',MeasuredProtocol), patch.object(health,'CoordinatedJobs',BootstrapJobs), \
@@ -673,7 +682,8 @@ def collector(scratch):
                 'public.worker_command:guarded_loopback_HTTP_child',
                 'sqlite3.connect:Connection/Cursor_subclass_actual_call_timeline',
                 '_connection_context:FIRST_CONNECTION_FOR_KIND_same_connection_read_PRAGMA_locking_mode'],
-            journal_override=False, queue_capacity=4096, batch_limit=100,
+            journal_override=bool(os.environ.get('BINANCE_DIAGNOSTIC_MARKET_WAL') == '1'),
+            diagnostic_only_wal_override=True, queue_capacity=4096, batch_limit=100,
             samples=samples, failures=failures, blocked_effects=blocked,
             source_audit=audit,stage_partitions=partitions,load_cutoff=state.get('load_cutoff'),
             receipt_timing_origin='ARRIVED_RETURN_AFTER_JSON_AND_INGRESS_ACCOUNTING',
