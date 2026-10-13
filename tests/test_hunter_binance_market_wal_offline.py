@@ -12,6 +12,10 @@ from unittest.mock import patch
 from research import hunter_binance_market_wal as wal
 from research.hunter_binance_stream_store import Store
 
+# Mechanism experiments use scratch DBs. Native SQLite on CI may be unfixed;
+# version safety itself is separately tested without mocking this original.
+ORIGINAL_WAL_VERSION_GATE = wal._wal_reset_fixed
+
 
 @unittest.skipUnless(sys.platform == 'linux', 'offline migration requires Linux flock')
 class WalOfflineTests(unittest.TestCase):
@@ -22,6 +26,11 @@ class WalOfflineTests(unittest.TestCase):
         self.state = self.directory/'state.sqlite3'
         self.lock = self.directory/'collector.lock'
         self.lock.write_bytes(b'')
+        # TEST-ONLY override of the release gate for scratch mechanism tests;
+        # this is not evidence that the native CI SQLite is safe in production.
+        patcher=patch.object(wal,'_wal_reset_fixed',return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.store = Store(self.state)
         with self.store.db() as db:
             db.execute("INSERT OR REPLACE INTO meta VALUES('connected','0')")
@@ -213,6 +222,31 @@ w.migrate(Path(sys.argv[1]))
                 proc.wait()
             proc.stdout.close()
             proc.stderr.close()
+
+
+    def test_actual_version_gate_matches_upstream_fix_and_backports(self):
+        cases={
+            (3,44,5):False,(3,44,6):True,(3,45,3):False,
+            (3,46,1):False,(3,50,6):False,(3,50,7):True,
+            (3,51,2):False,(3,51,3):True,(3,52,0):False,
+            (3,53,0):True,(3,53,4):True
+        }
+        for version, expected in cases.items():
+            with self.subTest(version=version):
+                self.assertIs(ORIGINAL_WAL_VERSION_GATE(version),expected)
+
+    def test_unpatched_sqlite_refuses_before_durable_marker(self):
+        with patch.object(wal,'_wal_reset_fixed',return_value=False):
+            with self.assertRaisesRegex(wal.WalMigrationError,'SQLITE_WAL_RESET_FIX_UNVERIFIED'):
+                wal.migrate(self.state)
+        self.assertFalse(self.marker().exists())
+        self.assertEqual(self.mode(),'DELETE')
+
+    def test_unpatched_runtime_does_not_open_existing_migrated_market(self):
+        wal.migrate(self.state)  # mechanism-only scratch fixture
+        with patch.object(wal,'_wal_reset_fixed',return_value=False):
+            with self.assertRaisesRegex(wal.WalMigrationError,'SQLITE_WAL_RESET_FIX_UNVERIFIED'):
+                Store.reader(self.state)
 
     def test_symlink_database_refused(self):
         alias=self.directory/'alias.sqlite3'
