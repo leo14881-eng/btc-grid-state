@@ -273,7 +273,10 @@ class Store(MarketControlMixin, CoordinationStore):
             (source-step-FRESH_MS,name,*sorted(needed))).fetchone()
         return present != len(needed) or bool(unclosed)
 
-    def _ingest_ws(self, db, epoch, message, received, state=None):
+    def _ingest_ws(self, db, epoch, message, received, state=None, *, epoch_checked=False):
+        # Only the owning batched ingest caller may assert that the same SQLite
+        # write transaction has already checked the epoch; standalone ingest_ws
+        # always retains its own validation and cannot use this fast path.
         # A supplied state belongs to this frame in this same write transaction.
         # It must never be cached across frames, batches, or transactions.
         k = message['k']; name = topic(message['s'], k['i'])
@@ -285,7 +288,7 @@ class Store(MarketControlMixin, CoordinationStore):
         row = valid_row([k['t'],k['o'],k['h'],k['l'],k['c'],k['v'],k['T'],k['q'],k['n'],k['V'],k['Q'],'0'], k['i'])
         if row[0] > source or (k['x'] and row[6] > source):
             raise ValueError('BINANCE_WS_CONFIRMATION_INVALID')
-        self.check_epoch(db, epoch)
+        if not epoch_checked:self.check_epoch(db, epoch)
         if state is None:
             state = db.execute('SELECT * FROM topics WHERE topic=?',(name,)).fetchone()
         if not state or not state['ack']: raise ValueError('BINANCE_TOPIC_NOT_ACKED')
@@ -343,9 +346,16 @@ class Store(MarketControlMixin, CoordinationStore):
             # and all share this one consistent read transaction.
             for offset in range(0,len(names),400):
                 group=names[offset:offset+400];marks=','.join('?' for _ in group)
-                readiness.update({r['topic']:dict(r) for r in db.execute('''SELECT * FROM (
-                    SELECT *,ROW_NUMBER() OVER (PARTITION BY topic ORDER BY observed DESC,id DESC) AS chosen
-                    FROM readiness WHERE observed<=? AND topic IN ('''+marks+')) WHERE chosen=1',(cut,*group))})
+                # Query only the latest qualifying row for each requested topic,
+                # using readiness_topic(topic, observed) rather than scanning and
+                # sorting every historical readiness row in the time window.
+                # The chosen=1 projection preserves the legacy copied-row schema.
+                values=','.join('( ? )' for _ in group)
+                readiness_query=('WITH requested(topic) AS (VALUES '+values+') '
+                    'SELECT r.*,1 AS chosen FROM requested JOIN readiness r ON r.id = ('
+                    'SELECT prior.id FROM readiness prior WHERE prior.topic=requested.topic '
+                    'AND prior.observed<=? ORDER BY prior.observed DESC,prior.id DESC LIMIT 1)')
+                readiness.update({r['topic']:dict(r) for r in db.execute(readiness_query,(*group,cut))})
                 revision_query='''SELECT r.* FROM revisions r
                     JOIN (SELECT topic,start,MAX(source_time) AS latest FROM revisions
                           WHERE observed<=? AND source_time<=? AND topic IN ('''+marks+''') GROUP BY topic,start) chosen
