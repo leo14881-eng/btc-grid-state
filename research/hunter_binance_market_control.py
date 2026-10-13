@@ -331,7 +331,13 @@ class MarketControlMixin:
                     or row['epoch']!=generation.get('epoch') for row in current.values())):
                 raise ValueError('BINANCE_FINAL_TOPIC_REVOKED')
             if meta.get('health_contract'):
-                unresolved={r[0] for r in db.execute('SELECT DISTINCT topic FROM bn_unprocessed WHERE resolved_at IS NULL')}
+                # Only original delivery scope can revoke this generation; use the
+                # partial unresolved-receipts index without weakening any fence.
+                unresolved=set()
+                for offset in range(0,len(names),400):
+                    group=names[offset:offset+400]; marks=','.join('?' for _ in group)
+                    unresolved.update(r[0] for r in db.execute(
+                        'SELECT DISTINCT topic FROM bn_unprocessed WHERE resolved_at IS NULL AND topic IN ('+marks+')',group))
                 reverify={r[0].split(':',1)[1] for r in db.execute("SELECT kind FROM metadata WHERE kind LIKE 'quiet_reverify:%'")}
                 if requested & (unresolved|reverify):
                     raise ValueError('BINANCE_FINAL_TOPIC_REVOKED')

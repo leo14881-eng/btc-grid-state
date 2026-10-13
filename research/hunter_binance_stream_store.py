@@ -364,7 +364,12 @@ class Store(MarketControlMixin, CoordinationStore):
             instruments={};unresolved=set();reverify=set()
             if meta.get('health_contract'):
                 instruments = dict(db.execute("SELECT topic,payload FROM bn_validity WHERE kind='instrument'"))
-                unresolved = {r[0] for r in db.execute('SELECT DISTINCT topic FROM bn_unprocessed WHERE resolved_at IS NULL')}
+                # Snapshot only original requested topics. Scope binding and
+                # every delivery/revocation proof remain unchanged.
+                for offset in range(0,len(names),400):
+                    group=names[offset:offset+400]; marks=','.join('?' for _ in group)
+                    unresolved.update(r[0] for r in db.execute(
+                        'SELECT DISTINCT topic FROM bn_unprocessed WHERE resolved_at IS NULL AND topic IN ('+marks+')',group))
                 reverify = {r[0].split(':',1)[1] for r in db.execute("SELECT kind FROM metadata WHERE kind LIKE 'quiet_reverify:%'")}
             # Legacy readers retain their exact governor. Coordinated readers
             # check the independent control file after closing this transaction.
