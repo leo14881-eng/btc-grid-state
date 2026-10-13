@@ -68,6 +68,15 @@ def _encode_json_tree(value):
             if not math.isfinite(item):return None
         elif kind not in (str,int,bool,type(None)):
             return None
+    # Explicit opt-in: internal, self-encoded owned snapshot only. If an
+    # unusual otherwise-JSON-compatible value is rejected by orjson, preserve
+    # the original JSON/deepcopy acceptance rather than widening semantics.
+    if os.getenv('BINANCE_EXPERIMENTAL_OWNED_CODEC')=='ORJSON':
+        try:
+            import orjson
+            return orjson.dumps(value)
+        except (ImportError,TypeError,ValueError,OverflowError,RecursionError):
+            pass
     try:
         return json.dumps(value,ensure_ascii=True,allow_nan=False,separators=(',',':'))
     except (TypeError,ValueError,OverflowError,RecursionError):
@@ -82,8 +91,14 @@ class Frozen:
         # Private owned snapshot and separately owned exports. Cache the JSON
         # encoding once so repeated exports do not traverse the Python tree.
         self._snapshot_json=_encode_json_tree(generation)
-        self._generation=(json.loads(self._snapshot_json) if self._snapshot_json is not None
-                          else copy.deepcopy(generation))
+        # Byte payloads can only arise from the above self-encoded opt-in path;
+        # never deserialize externally supplied bytes or change public JSON.
+        if type(self._snapshot_json) is bytes:
+            import orjson
+            self._generation=orjson.loads(self._snapshot_json)
+        else:
+            self._generation=(json.loads(self._snapshot_json) if self._snapshot_json is not None
+                              else copy.deepcopy(generation))
         self._reader=reader;self._fence=copy.deepcopy(fence);self._clock=clock
         self._names=tuple(sorted(names if names is not None else generation['windows']))
         self._started_at=started_at
@@ -104,6 +119,9 @@ class Frozen:
     def generation(self):
         # Callers can inspect a snapshot, but cannot mutate the version used by
         # later rows/packet deliveries or the independent revocation fence.
+        if type(self._snapshot_json) is bytes:
+            import orjson
+            return orjson.loads(self._snapshot_json)
         return (json.loads(self._snapshot_json) if self._snapshot_json is not None
                 else copy.deepcopy(self._generation))
 
