@@ -18,6 +18,7 @@ on:
       - 'tests/fixtures/binance_consumer_cost_probe.py'
       - 'tests/fixtures/binance_process_death.py'
       - 'tests/fixtures/binance_session_reader.py'
+      - 'tests/fixtures/binance_wal_lifecycle_child.py'
       - 'scripts/*binance*'
       - 'deploy/*binance*'
       - 'deploy/systemd/*binance*'
@@ -198,6 +199,42 @@ jobs:
             ${{ runner.temp }}/binance-session-topology-*/**/*.stdout
             ${{ runner.temp }}/binance-session-topology-*/**/*.stderr
             ${{ runner.temp }}/binance-session-topology.log
+          if-no-files-found: error
+  wal-lifecycle:
+    # Scratch-only locking/lifecycle evidence; cannot authorize production WAL
+    # or replace the unchanged offline/hour gates.
+    if: github.event.pull_request.number == 131
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Scratch DELETE and WAL with independent reader and writer processes
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          python -I -B -X utf8 scripts/profile_binance_wal_lifecycle.py \
+            | tee "$RUNNER_TEMP/binance-wal-lifecycle.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binance-wal-lifecycle-${{ matrix.python }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/binance-wal-lifecycle-*/wal-lifecycle-report.json
+            ${{ runner.temp }}/binance-wal-lifecycle-*/**/*.stderr.log
+            ${{ runner.temp }}/binance-wal-lifecycle.log
           if-no-files-found: error
   hour-load:
     if: github.event.pull_request.number == 131

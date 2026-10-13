@@ -438,18 +438,20 @@ def correlate_transactions(collector_trace, reader_trace):
             setup_end_events_evicted=trace.get('setup_end_event_ring_evicted',0),
             failure_end_events_evicted=trace.get('failure_end_event_ring_evicted',0),
             active_transactions=len(trace.get('active_transactions',[])),
-            retained_inexact_boundaries=sum(not row['exact_end_call']
-                for rows in trace.get('retained_transactions',{}).values() for row in rows))
-    incomplete = any(any(value[key] for key in ('runtime_end_events_evicted','setup_end_events_evicted',
+            retained_inexact_boundaries=sum(not row['exact_end_call'] for row in
+                [*trace.get('setup_transaction_end_tail',[]),
+                 *(row for rows in trace.get('retained_transactions',{}).values() for row in rows)]))
+    incomplete = any(not value['trace_present'] or any(value[key] for key in ('runtime_end_events_evicted','setup_end_events_evicted',
         'failure_end_events_evicted','active_transactions','retained_inexact_boundaries')) for value in coverage.values())
     candidates = []
     for failure in collector_trace.get('failures',[]):
         if failure['end_operation']!='COMMIT': continue
         overlaps = []
         for trace in (collector_trace,reader_trace):
-            for row in trace.get('retained_transactions',{}).get(failure['database'],[]):
+            for row in [*trace.get('setup_transaction_end_tail',[]),
+                        *trace.get('retained_transactions',{}).get(failure['database'],[])]:
                 first = row.get('first_select_return_mono')
-                if (row['path']!=failure['path'] or row['begin_sql'].strip().upper()!='BEGIN' or first is None
+                if (row['database']!=failure['database'] or row['path']!=failure['path'] or row['begin_sql'].strip().upper()!='BEGIN' or first is None
                         or not row['exact_end_call'] or row['error'] is not None): continue
                 overlap = min(failure['end_mono'],row['end_start_mono'])-max(failure['end_start_mono'],first)
                 if overlap>0:
@@ -878,8 +880,10 @@ def run_leg(scratch, with_reader, ports, head, source):
         for key in ('committed','duplicate','invalid','unprocessed_recorded'))
     cutoff = c.get('load_cutoff')
     result['load_cutoff_matches_load_counter'] = bool(cutoff) and cutoff['completed']==c.get('stage_partitions',{}).get('load')
-    result['reader_is_separate_process'] = (not with_reader or
-        r.get('pid')==processes['reader'].pid and c.get('pid')==processes['collector'].pid and r.get('pid')!=c.get('pid'))
+    read_child = processes.get('reader'); collector_child = processes.get('collector')
+    result['reader_started'] = read_child is not None
+    result['reader_is_separate_process'] = (not with_reader or bool(read_child is not None and collector_child is not None
+        and r.get('pid')==read_child.pid and c.get('pid')==collector_child.pid and r.get('pid')!=c.get('pid')))
     result['diagnostic_completed'] = bool(c) and parent_error is None and (not with_reader or result['reader'] is not None)
     result['load_succeeded'] = bool(result['diagnostic_completed'] and c.get('session_succeeded')
         and len(samples)>=2 and not errors and not http.errors and all(p.returncode==0 for p in processes.values())
