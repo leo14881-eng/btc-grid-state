@@ -299,6 +299,24 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(self.store.read_health()['service_status'],'INITIALIZING')
         self.assertEqual(self.store.read_health()['data_status'],'UNKNOWN')
 
+    def test_health_write_lock_rechecks_current_budget_and_data_gate(self):
+        for kind in ('halt','reverify','gap'):
+            with self.subTest(kind=kind):
+                with self.store.db() as db:
+                    db.execute('UPDATE budget SET halt=NULL')
+                    db.execute('DELETE FROM metadata WHERE kind=?',('bybit_quiet_reverify:'+self.name,))
+                self.seed(); self.protocol.alive(NOW+2,'MATCHING_PONG'); jobs=self.jobs(); real=self.store.store_health
+                def changed(value,**kwargs):
+                    with self.store.db() as db:
+                        if kind=='halt': db.execute("UPDATE budget SET halt='COUNTRY_403_MANUAL_REVIEW'")
+                        if kind=='reverify': db.execute('INSERT OR REPLACE INTO metadata VALUES(?,?)',('bybit_quiet_reverify:'+self.name,str(NOW+2)))
+                        if kind=='gap': db.execute('UPDATE topics SET gap=1 WHERE topic=?',(self.name,))
+                    return real(value,**kwargs)
+                with patch.object(self.store,'store_health',changed):
+                    result=health.sample(self.store,self.protocol,self.names,jobs,NOW+2,0,NOW+2,clock=lambda:NOW+2)
+                self.assertEqual(result['data_status'],'UNKNOWN')
+                self.assertEqual(self.store.read_health()['data_status'],'UNKNOWN')
+
     def test_recovery_budget_can_reset_after_300s_degraded_connection(self):
         budget=health.stream.RecoveryBudget(); budget.failed()
         for elapsed in range(0,301,10): budget.observe(True,elapsed)

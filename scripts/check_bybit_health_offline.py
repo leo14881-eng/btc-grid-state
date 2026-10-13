@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT/'tests')]
 sys.dont_write_bytecode = True
 # Exact contract/runtime/process suite: every case must run on Linux.
-EXPECTED_TESTS = 51
+EXPECTED_TESTS = 52
 
 
 def main():

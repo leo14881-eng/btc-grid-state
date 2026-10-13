@@ -352,7 +352,12 @@ class Store(BaseStore):
             if finalizer is not None:
                 budget=budget_state(db)
                 budget['halt']=budget['halt'] or request_gate(self,db)
-                value=finalizer(value,budget)
+                def publication_gate(now):
+                    states=db.execute('SELECT * FROM topics').fetchall()
+                    return (len(states)==value['topics'] and roster_hash([s['topic'] for s in states])==value['roster_hash']
+                            and all(s['ack'] and not s['gap'] and s['epoch']==value['epoch']
+                                    and topic_gate(db,s['topic'],now,meta) is None for s in states))
+                value=finalizer(value,budget,publication_gate)
             db.execute('INSERT OR REPLACE INTO metadata VALUES(?,?)', (CONTRACT,json.dumps(value,sort_keys=True)))
         return value
 

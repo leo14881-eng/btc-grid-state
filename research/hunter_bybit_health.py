@@ -275,21 +275,24 @@ def sample(store, protocol, names, jobs, now, queued, queue_progress_at, clock=N
                 work_failures=sum(jobs.failures.values()),halt=budget['halt'],cooldown_active=finished<budget['cooldown_ms'],
                 http=http,publication_verified=False,shadow_only=True,real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY',
                 **jobs.diagnostics(finished))
-    last_budget=[budget]
-    def finalize(value,current_budget):
+    last_budget=[budget]; last_readable=[False]
+    def finalize(value,current_budget,publication_gate=None):
         # Recheck AFTER the health record's write lock is acquired, and again
         # after commit before emitting/returning evidence to recovery observers.
         last_budget[0]=current_budget
         actual=clock() if clock is not None else now
+        if publication_gate is not None: last_readable[0]=publication_gate(actual)
         timely=0<=actual-now<=30000
-        ready=(generation['status']=='READY' and actual>=now and validate_generation(generation,actual))
+        readable=last_readable[0] and not current_budget['halt'] and actual>=current_budget['cooldown_ms']
+        ready=(readable and generation['status']=='READY' and actual>=now and validate_generation(generation,actual))
         healthy=(timely and all_ack and observed>0 and 0<=actual-observed<=FRESH_MS
                  and not current_budget['halt'] and actual>=current_budget['cooldown_ms']
                  and (not queued or 0<=actual-queue_progress_at<=30000)
                  and all(0<=actual-start<=45000 for start in jobs.started.values()))
         return dict(value,observed_at=actual,service_status=('HEALTHY' if ready else 'DEGRADED') if healthy else 'INITIALIZING',
                     data_status='READY' if ready else 'UNKNOWN',
-                    data_reason=None if ready else generation.get('reason','BYBIT_HEALTH_SAMPLE_FINISHED_STALE'),
+                    data_reason=None if ready else ('BYBIT_HEALTH_CURRENT_GATE_FAILED' if not readable
+                                                   else generation.get('reason','BYBIT_HEALTH_SAMPLE_FINISHED_STALE')),
                     health_reason=None if timely else 'SAMPLE_FINISHED_STALE_OR_CLOCK_ROLLBACK',
                     halt=current_budget['halt'],cooldown_active=actual<current_budget['cooldown_ms'],
                     oldest_active_ms=max([actual-start for start in jobs.started.values()]+[0]))
