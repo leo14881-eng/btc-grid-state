@@ -76,7 +76,10 @@ class OwnedOrjsonTests(TestCase):
                 else:
                     self.assertEqual(exported,value)
                     self.assertIs(type(exported),type(value))
-                self.assertIsNot(exported,value)
+                if isinstance(value,(dict,list)):
+                    self.assertIsNot(exported,value)
+                # Python deepcopy is permitted to return the same immutable
+                # tuple/float object; the preexisting semantics require that.
 
     def test_external_bytes_never_enter_orjson_decode(self):
         value=self.payload({'secret':b'raw external bytes'})
