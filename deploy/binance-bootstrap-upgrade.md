@@ -151,8 +151,11 @@ Success requires all of the following together:
    Require the durable PID 1 success record: `_PID=1`,
    `UNIT=hunter-binance-bootstrap-f4e8ad4.service`, `INVOCATION_ID` equal to the
    new guard, and `MESSAGE` ending `: Deactivated successfully.`. It must follow
-   the same invocation's `FINAL_SUPERVISOR_RECEIPT` from the exit hook. Retain the
-   full JSON record, including `MESSAGE_ID`, cursor and monotonic timestamp.
+   the same invocation's `FINAL_SUPERVISOR_RECEIPT` from the exit hook: the hook's
+   `_SYSTEMD_INVOCATION_ID` equals the guard invocation, both records have the
+   same `_BOOT_ID`, and the hook's numeric `__MONOTONIC_TIMESTAMP` is strictly
+   less than the PID 1 terminal record's. Retain both full JSON records, including
+   `MESSAGE_ID`, `__CURSOR`, `_BOOT_ID` and monotonic timestamp.
    systemd's [unit success implementation](https://github.com/systemd/systemd/blob/v255/src/core/unit.c)
    identifies this terminal event; the Linux fixture prints the actual PID 1
    fields for every tested outcome. `Started`, main exit 0, a hook receipt alone,

@@ -169,8 +169,9 @@ def main():
                     assert len(hooks)==1 and len(successful)==1
                     assert hooks[0]['_BOOT_ID']==successful[0]['_BOOT_ID']
                     assert int(hooks[0]['__MONOTONIC_TIMESTAMP'])<int(successful[0]['__MONOTONIC_TIMESTAMP'])
-                fields=('_PID','UNIT','INVOCATION_ID','MESSAGE_ID','MESSAGE','UNIT_RESULT','__MONOTONIC_TIMESTAMP')
-                print('REAL_SYSTEMD_FINAL_EVIDENCE',case,json.dumps([{key:item[key] for key in fields if key in item} for item in terminal],sort_keys=True),flush=True)
+                fields=('_PID','UNIT','INVOCATION_ID','_SYSTEMD_INVOCATION_ID','_BOOT_ID','MESSAGE_ID','MESSAGE','UNIT_RESULT','__CURSOR','__MONOTONIC_TIMESTAMP')
+                proof=(hooks if case=='success' else [])+terminal
+                print('REAL_SYSTEMD_FINAL_EVIDENCE',case,json.dumps([{key:item[key] for key in fields if key in item} for item in proof],sort_keys=True),flush=True)
                 if case in ('component-loss','corrupt-intent'):assert 'INDEPENDENT_EXIT_STOP_FALLBACK' in logs
                 elif case!='success':assert len(reports)==1 and json.loads(reports[0].read_bytes())['stopped_verified'] is True
                 print('REAL_SYSTEMD_EXIT_CHECK',case,'PASS',flush=True)
