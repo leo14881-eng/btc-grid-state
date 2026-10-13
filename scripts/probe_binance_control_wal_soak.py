@@ -12,6 +12,10 @@ import sys
 import unittest
 from unittest.mock import patch
 
+# Direct script execution must import the repository package, not only scripts/.
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+
 if sys.platform!='linux' or os.environ.get('GITHUB_ACTIONS')!='true':
     raise SystemExit('SCRATCH_GITHUB_LINUX_ONLY')
 from tests import test_hunter_binance_coordinated_runtime as runtime
