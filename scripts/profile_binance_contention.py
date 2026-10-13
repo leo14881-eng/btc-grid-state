@@ -649,6 +649,7 @@ def main():
         if args.probe_snapshot_codec:
             conditions.append((True, original_switch_interval, 'marshal_owned_memory', 'candidate'))
         for with_reader, switch_interval, codec, revision_copy in conditions:
+            prior_error_count = len(report['fatal_errors'])
             sys.setswitchinterval(switch_interval)
             with (codec_probe.installed_codec() if codec != 'json' else nullcontext()), \
                     (original_revision_copy() if revision_copy == 'original_rows' else nullcontext()):
@@ -672,7 +673,10 @@ def main():
                             for name in ('state.sqlite3', 'control.sqlite3')}
             if current_seed != report['seed_file_sha256']:
                 report['fatal_errors'].append('SEED_CHANGED')
-            if report['fatal_errors']:
+            # Keep a prior consumer-cost failure red, but finish independent
+            # load observations. Only a new leg safety/execution failure stops
+            # the next leg; no acceptance condition is removed.
+            if len(report['fatal_errors']) > prior_error_count:
                 break
     except BaseException as error:
         if hasattr(error, 'consumer_cost_probe_report'):

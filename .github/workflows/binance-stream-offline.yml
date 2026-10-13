@@ -160,6 +160,45 @@ jobs:
             ${{ runner.temp }}/binance-paired8-*/paired8-report.json
             ${{ runner.temp }}/binance-contention.log
           if-no-files-found: error
+  session-topology:
+    # Additional diagnosis, never a replacement for offline or hour-load.
+    if: github.event.pull_request.number == 131
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pinned loopback WebSocket runtime
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: Real session with synchronous health and separate full-reader process
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          python -I -B -X utf8 scripts/profile_binance_session_topology.py \
+            | tee "$RUNNER_TEMP/binance-session-topology.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binance-session-topology-${{ matrix.python }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/binance-session-topology-*/**/*.json
+            ${{ runner.temp }}/binance-session-topology-*/*.json
+            ${{ runner.temp }}/binance-session-topology-*/**/*.stdout
+            ${{ runner.temp }}/binance-session-topology-*/**/*.stderr
+            ${{ runner.temp }}/binance-session-topology.log
+          if-no-files-found: error
   hour-load:
     if: github.event.pull_request.number == 131
     needs: offline

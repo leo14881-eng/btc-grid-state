@@ -21,6 +21,12 @@ if scenario not in ('queued', 'durable-overflow', 'memory-only-overflow', 'activ
     raise ValueError('PROCESS_DEATH_SCENARIO_INVALID')
 if not scratch.is_dir():
     raise ValueError('EXISTING_SCRATCH_REQUIRED')
+blocked = []
+
+
+def reject(reason):
+    blocked.append(reason)
+    raise RuntimeError(reason)
 
 
 def inside(path, dir_fd=None):
@@ -31,14 +37,14 @@ def inside(path, dir_fd=None):
         target = Path(os.readlink('/proc/self/fd/'+str(dir_fd)))/target
     target = target.resolve()
     if target != scratch and scratch not in target.parents:
-        raise RuntimeError('PROCESS_DEATH_WRITE_OUTSIDE_SCRATCH')
+        reject('PROCESS_DEATH_WRITE_OUTSIDE_SCRATCH')
 
 
 def guard(event, args):
     if (event.startswith('socket.') or event in ('subprocess.Popen', 'os.system',
             'os.posix_spawn', 'os.fork', 'os.forkpty', 'os.kill', 'os.killpg')
             or event.startswith(('os.exec', 'os.spawn'))):
-        raise RuntimeError('PROCESS_DEATH_NETWORK_OR_PROCESS_FORBIDDEN')
+        reject('PROCESS_DEATH_NETWORK_OR_PROCESS_FORBIDDEN')
     if event == 'sqlite3.connect':
         inside(args[0])
     if event == 'open':
@@ -51,7 +57,7 @@ def guard(event, args):
         index = {'os.mkdir': 2, 'os.remove': 1, 'os.rmdir': 1, 'os.chmod': 2, 'os.utime': 3}[event]
         inside(args[0], args[index] if len(args) > index else None)
     if event in ('os.rename', 'os.replace', 'os.link', 'os.symlink'):
-        raise RuntimeError('PROCESS_DEATH_RENAME_OR_LINK_FORBIDDEN')
+        reject('PROCESS_DEATH_RENAME_OR_LINK_FORBIDDEN')
 
 
 sys.addaudithook(guard)
@@ -63,7 +69,11 @@ from tests.test_hunter_binance_coordinated_runtime import Market, MIDNIGHT, HEAD
 
 
 def emit(event, **value):
-    print(json.dumps(dict(event=event, **value), sort_keys=True), flush=True)
+    # Imported code must not turn a swallowed audit rejection into a valid
+    # handshake. No prohibited attempt is permitted, even if it had no effect.
+    if blocked:
+        raise AssertionError('PROCESS_DEATH_BLOCKED_AUDIT_ATTEMPTS:'+repr(blocked))
+    print(json.dumps(dict(event=event, blocked_effects=len(blocked), **value), sort_keys=True), flush=True)
 
 
 # The same flock primitive/path basename as stream.main, without invoking main,

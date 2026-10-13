@@ -19,8 +19,9 @@ import unittest
 
 from research import hunter_binance_stream_consumer as consumer
 from research.hunter_binance_control import NativeLock
-from research.hunter_binance_health_store import Store
+from research.hunter_binance_health_store import Store, payload_hash
 from research.hunter_binance_stream_store import FRESH_MS, STEPS, split_topic
+from tests.test_hunter_binance_cache import message as fixture_message
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT/'tests/fixtures/binance_process_death.py'
@@ -29,7 +30,8 @@ SOURCES = ('research/hunter_binance_stream.py', 'research/hunter_binance_health.
            'research/hunter_binance_health_store.py', 'research/hunter_binance_stream_store.py',
            'research/hunter_binance_market_control.py', 'research/hunter_binance_control.py',
            'research/hunter_binance_stream_consumer.py', 'tests/fixtures/binance_process_death.py',
-           'tests/test_hunter_binance_process_death.py')
+           'tests/test_hunter_binance_process_death.py',
+           'tests/test_hunter_binance_coordinated_runtime.py', 'tests/test_hunter_binance_cache.py')
 
 
 def source_hashes():
@@ -61,6 +63,7 @@ class ProcessDeathTests(unittest.TestCase):
         value = json.loads(line)
         self.assertEqual(value['event'], expected)
         self.assertEqual(value['pid'], child.pid)
+        self.assertEqual(value['blocked_effects'], 0)
         return value
 
     def state(self, store):
@@ -90,6 +93,8 @@ class ProcessDeathTests(unittest.TestCase):
             control_clock_mode='REAL_MONOTONIC_NOT_ADVANCED',
             actual_source_head=os.environ.get('CHECKOUT_SHA'), source_sha256=original_sources,
             diagnostic_only=True, crash_receipt_safety_claim=False, no_http=True,
+            ingress_count_semantics='CHILD_PROTOCOL_INGRESS_DELTA_RECEIVED_BY_PARENT_IN_STAGED_HANDSHAKE',
+            parent_observed_individual_wire_frames=False,
             dangerous_counterfactual=scenario == 'memory-only-overflow', observations=[])
         try:
             child = subprocess.Popen([sys.executable, '-B', str(HELPER), str(self.scratch), scenario],
@@ -173,15 +178,16 @@ class ProcessDeathTests(unittest.TestCase):
                 clock[0] = point
                 observe(label)
 
-            # Compare every topic's parent-observed input delta with durable
-            # outcome deltas, not just the accepted queue size or success flag.
+            # Parent received these per-topic Protocol ingress deltas in the
+            # child's STAGED handshake; it did not observe individual wire
+            # frames. Compare those reported deltas with durable outcomes.
             prior = {r['topic']: r for r in baseline['market']['counts']}
             current = {r['topic']: r for r in after_death['market']['counts']}
             accounting = {}
             for name in names:
                 delta = {key: current[name][key]-prior[name][key] for key in OUTCOMES}
                 received = staged['received_delta'][name]
-                accounting[name] = dict(received_parent_observed=received, durable_delta=delta,
+                accounting[name] = dict(ingress_delta_reported_by_child=received, durable_delta=delta,
                     unaccounted_after_sigkill=received-sum(delta.values()))
             report['receipt_accounting'] = accounting
             lost = sum(row['unaccounted_after_sigkill'] for row in accounting.values())
@@ -189,6 +195,8 @@ class ProcessDeathTests(unittest.TestCase):
             report['durable_receipt_partition_complete'] = lost == 0
             expected_received = 4097 if scenario.endswith('overflow') else 1
             self.assertEqual(sum(staged['received_delta'].values()), expected_received)
+            self.assertEqual(staged['received_delta'],
+                {n: expected_received if n == staged['target_topic'] else 0 for n in names})
             self.assertEqual(staged['capacity'], 4096)
             self.assertEqual(staged['accepted'], 4096 if scenario.endswith('overflow') else 1)
             self.assertEqual(staged['queued'], staged['accepted'])
@@ -202,9 +210,14 @@ class ProcessDeathTests(unittest.TestCase):
             receipts = after_death['market']['receipts']
             self.assertEqual(len(receipts), int(scenario == 'durable-overflow'))
             if receipts:
-                self.assertEqual(receipts[0]['reason'], 'RECEIVE_QUEUE_FULL')
-                self.assertEqual(receipts[0]['topic'], staged['target_topic'])
-                self.assertIsNone(receipts[0]['resolved_at'])
+                symbol, interval = split_topic(staged['target_topic'])
+                expected_message = fixture_message(symbol, interval, staged['received_at'])
+                expected_receipt = dict(epoch=seeded['epoch'], topic=staged['target_topic'],
+                    received_at=staged['received_at'], open_time=expected_message['k']['t'],
+                    event_time=expected_message['E'], payload_sha256=payload_hash(expected_message),
+                    reason='RECEIVE_QUEUE_FULL', category='unprocessed_recorded', resolved_at=None)
+                report['expected_durable_receipt'] = expected_receipt
+                self.assertEqual({key: receipts[0][key] for key in expected_receipt}, expected_receipt)
             owner_case = scenario == 'active-owner'
             self.assertEqual(after_death['status']['active_owners'], int(owner_case))
             self.assertEqual(after_death['status']['halt'], 'CONTROL_ORPHAN_REQUIRES_REVIEW' if owner_case else None)
@@ -233,9 +246,9 @@ class ProcessDeathTests(unittest.TestCase):
                 else:
                     new_reason = None
                 for key, reason in (('old_frozen', old_reason), ('fresh_read', new_reason)):
-                    with self.subTest(scenario=scenario, point=row['label'], reader=key):
-                        self.assertEqual(row[key]['reason'], reason)
-                        self.assertEqual(row[key]['accepted'], reason is None)
+                    label = scenario+':'+row['label']+':'+key
+                    self.assertEqual(row[key]['reason'], reason, label)
+                    self.assertEqual(row[key]['accepted'], reason is None, label)
             report['immediate_invalidation_observed'] = not immediate['old_frozen']['accepted']
             report['observed_contract_assertions_passed'] = True
         finally:
