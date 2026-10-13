@@ -32,7 +32,7 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Repository-wide F2 health consumers audit (read-only)
         run: |
-          git grep -n -E 'read_health\\(|data_status|collector_accepted|BINANCE_COLLECTOR_HEALTH' -- research scripts deploy .github/workflows || true
+          git grep -n -F -e 'read_health(' -e 'data_status' -e 'collector_accepted' -e 'BINANCE_COLLECTOR_HEALTH' -- research scripts deploy .github/workflows || true
           echo 'AUDIT_SEARCH_COMPLETED'
       - name: Preserve original assertions and print bounded failure diagnostics
         run: |
