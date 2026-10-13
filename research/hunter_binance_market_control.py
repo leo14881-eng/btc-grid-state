@@ -1,24 +1,90 @@
 """Binance market/control boundary. No network, strategy, or trading ledger writes."""
 import contextlib
+from collections import deque
 import json
+import math
+import os
 import sqlite3
 import threading
 import time
+import weakref
 from pathlib import Path
 
 HEALTH_CONTROL_CONTRACT = 'binance_health_control_v2'
 CONTROL_CONTRACT = 'binance_control_v1'
+MARKET_ADMISSION_SECONDS = 2
+_WRITERS = weakref.WeakValueDictionary()
+_WRITERS_LOCK = threading.Lock()
+_LOCAL_INIT_LOCK = threading.Lock()
+
+
+class MarketAdmissionTimeout(sqlite3.OperationalError):
+    """The process queue expired before any SQLite connection was opened."""
+
+
+class _WriterAdmission:
+    """FIFO for collaborating writers in this process, never an SQLite retry."""
+    def __init__(self):
+        self.condition = threading.Condition()
+        self.waiting = deque()
+        self.active = None
+        self.thread = None
+
+    def acquire(self, timeout):
+        ticket = object()
+        deadline = time.monotonic()+timeout
+        with self.condition:
+            if self.thread == threading.get_ident():
+                raise sqlite3.OperationalError('BINANCE_MARKET_WRITER_REENTRY')
+            self.waiting.append(ticket)
+            self.condition.notify_all()
+            waited = False
+            try:
+                while True:
+                    remaining = deadline-time.monotonic()
+                    if self.active is None and self.waiting[0] is ticket and (not waited or remaining > 0):
+                        self.waiting.popleft()
+                        self.active = ticket
+                        self.thread = threading.get_ident()
+                        return ticket
+                    if remaining <= 0:
+                        raise MarketAdmissionTimeout('BINANCE_MARKET_ADMISSION_TIMEOUT')
+                    waited = True
+                    self.condition.wait(remaining)
+            except BaseException:
+                self.waiting.remove(ticket)
+                self.condition.notify_all()
+                raise
+
+    def release(self, ticket):
+        with self.condition:
+            if self.active is not ticket or self.thread != threading.get_ident():
+                raise RuntimeError('BINANCE_MARKET_ADMISSION_OWNER_MISMATCH')
+            self.active = self.thread = None
+            self.condition.notify_all()
+
+
+def _writer_for(path):
+    identity = os.path.normcase(str(Path(path).resolve()))
+    with _WRITERS_LOCK:
+        writer = _WRITERS.get(identity)
+        if writer is None:
+            writer = _WriterAdmission()
+            _WRITERS[identity] = writer
+        return writer
 
 
 class MarketControlMixin:
     """Keep HTTP ownership independent of the market database's writer lock."""
 
     def _local(self):
-        # Instances are prepared before worker threads are admitted.
         if not hasattr(self, '_market_local'):
-            self._market_local = threading.local()
-            self._market_metrics_lock = threading.Lock()
-            self._market_metrics = {}
+            with _LOCAL_INIT_LOCK:
+                if not hasattr(self, '_market_local'):
+                    self._market_metrics_lock = threading.Lock()
+                    self._market_metrics = {}
+                    self._market_writer = _writer_for(self.path)
+                    self._market_local = threading.local()
         return self._market_local
 
     def _measure(self, kind, phase, started, error=None):
@@ -46,13 +112,25 @@ class MarketControlMixin:
             return
         existing = readonly or self._existing
         address = self.path.as_uri()+('?mode=ro' if readonly else '?mode=rw') if existing else str(self.path)
-        if getattr(self,'control',None) is not None:
+        coordinated = getattr(self,'control',None) is not None
+        admission_timeout = None
+        if coordinated:
+            if not math.isfinite(timeout) or timeout < 0:
+                raise ValueError('BINANCE_MARKET_TIMEOUT_INVALID')
+            # Separate, explicit queue budget. No SQLite connection, control
+            # transaction or HTTP owner is held while waiting for this turn.
+            admission_timeout = min(timeout,MARKET_ADMISSION_SECONDS)
             timeout = min(timeout,.25)
         kind = 'read' if readonly else write_kind
         started = time.perf_counter_ns()
         connection = None
-        phase = 'connect'
+        ticket = None
+        phase = 'admission_wait' if coordinated and not readonly else 'connect'
         try:
+            if coordinated and not readonly:
+                ticket = self._market_writer.acquire(admission_timeout)
+                self._measure(kind,phase,started)
+                phase = 'connect'; started = time.perf_counter_ns()
             connection = sqlite3.connect(address,uri=existing,timeout=timeout)
             connection.row_factory = sqlite3.Row
             self._measure(kind,phase,started)
@@ -66,6 +144,7 @@ class MarketControlMixin:
             connection.commit()
             self._measure(kind,phase,started)
         except BaseException as error:
+            error.market_phase = phase
             self._measure(kind,phase,started,error)
             if connection is not None:
                 rollback = time.perf_counter_ns()
@@ -78,8 +157,12 @@ class MarketControlMixin:
                     self._measure(kind,'rollback',rollback)
             raise
         finally:
-            if connection is not None:
-                connection.close()
+            try:
+                if connection is not None:
+                    connection.close()
+            finally:
+                if ticket is not None:
+                    self._market_writer.release(ticket)
 
     def transaction_diagnostics(self):
         self._local()

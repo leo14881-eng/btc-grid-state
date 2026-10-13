@@ -121,6 +121,7 @@ import json
 import sqlite3
 from threading import Event, Thread
 import time
+import traceback
 from websockets.sync.client import connect
 from research import hunter_binance_health as health
 from research import hunter_binance_public as public
@@ -149,8 +150,37 @@ public.worker_command = lambda value: [sys.executable, '-B', str(HELPER), '--htt
     value, str(os.getpid()), str(http_port), str(scratch)]
 
 
+def sqlite_diagnostic(operation, error):
+    # Failure-only observations: retain the original error even if a phase
+    # read also fails. These later reads aren't a snapshot of the failure.
+    detail = dict(operation=operation, type=type(error).__name__, message=str(error),
+        traceback=''.join(traceback.format_exception(type(error), error, error.__traceback__)),
+        error_market_phase=getattr(error, 'market_phase', None),
+        error_control_phase=getattr(error, 'control_phase', None),
+        sqlite_errorcode=getattr(error, 'sqlite_errorcode', None),
+        sqlite_errorname=getattr(error, 'sqlite_errorname', None),
+        elapsed_wall_seconds=time.monotonic()-started,
+        phase_observation='BEST_EFFORT_AFTER_ERROR', market_phase=None, control_phase=None,
+        market_epoch=None, control_epoch=None, diagnostic_errors=[])
+    try:
+        meta = store.metadata()
+        detail.update(market_phase=meta.get('health_phase'), market_epoch=meta.get('epoch'))
+    except BaseException as diagnostic_error:
+        detail['diagnostic_errors'].append(dict(operation='market.metadata',
+            type=type(diagnostic_error).__name__, message=str(diagnostic_error)))
+    try:
+        with store.control._db(readonly=True, timeout=.05) as db:
+            meta = dict(db.execute('SELECT key,value FROM meta'))
+        detail.update(control_phase=meta.get('phase'), control_epoch=meta.get('epoch'))
+    except BaseException as diagnostic_error:
+        detail['diagnostic_errors'].append(dict(operation='control.meta',
+            type=type(diagnostic_error).__name__, message=str(diagnostic_error)))
+    return detail
+
+
 def watch():
     first = None
+    operation = 'watch.start'
     try:
         while not stop.wait(.05):
             if (scratch/'stop').exists():
@@ -159,9 +189,11 @@ def watch():
             if time.monotonic()-started > 65:
                 raise AssertionError('FIXTURE_COLLECTOR_WALL_TIMEOUT')
             if first is not None and not rejected_old:
+                operation = 'market.metadata.before_old_frozen'
                 meta = store.metadata()
                 if meta.get('epoch') != first.generation['epoch'] or meta.get('health_phase') != 'ACTIVE':
                     try:
+                        operation = 'old_frozen.check_delivery.after_epoch_change'
                         first.check_delivery()
                     except (ValueError, ControlError):
                         rejected_old.append(True)
@@ -169,23 +201,28 @@ def watch():
                             current_epoch=meta.get('epoch'), health_phase=meta.get('health_phase')))
             try:
                 now = clock()
+                operation = 'consumer.read.full_scope'
                 frozen = consumer.read(names, dt.datetime.fromtimestamp(now/1000, dt.timezone.utc),
                                        reader=store, clock=clock)
                 epoch = frozen.generation['epoch']
+                operation = 'control.publications.read_applied'
                 with store.control._db(readonly=True) as db:
                     publications = [json.loads(row[0]) for row in db.execute(
                         "SELECT payload FROM publications WHERE epoch=? AND state='APPLIED'", (epoch,))]
                 seeded = {n for p in publications if p['kind'] == 'seed' for n in p['names']}
                 if seeded != set(names) or epoch in ready_epochs:
                     continue
+                operation = 'market.states.check_ack'
                 states = store.states()
                 if not all(s['epoch'] == epoch and s['ack'] for s in states):
                     continue
+                operation = 'frozen.check_delivery.before_ready'
                 frozen.check_delivery()
                 if first is None:
                     first = frozen
                 else:
                     try:
+                        operation = 'old_frozen.check_delivery.before_second_ready'
                         first.check_delivery()
                     except (ValueError, ControlError):
                         if not rejected_old:
@@ -197,13 +234,15 @@ def watch():
                     seeded=len(seeded), acked=len(states), windows=len(frozen.generation['windows']),
                     old_frozen_rejected=bool(rejected_old), source_head=config['source_head']))
             except sqlite3.Error as error:
-                sqlite_errors.append(type(error).__name__+':'+str(error))
+                sqlite_errors.append(sqlite_diagnostic(operation, error))
                 continue
             except (ValueError, ControlError):
                 # Startup, a revoked epoch, or a publication in progress is
                 # expected UNKNOWN. It never produces a fixture READY receipt.
                 continue
     except BaseException as error:
+        if isinstance(error, sqlite3.Error):
+            sqlite_errors.append(sqlite_diagnostic(operation, error))
         watch_errors.append(str(error))
         stop.set()
 

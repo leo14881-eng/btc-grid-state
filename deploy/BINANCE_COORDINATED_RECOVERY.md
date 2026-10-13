@@ -22,6 +22,16 @@ quarantine, publication intents and per-topic revocation versions. No control
 transaction waits for HTTP, a market transaction or a Future. There is no
 dedicated writer daemon/thread. The existing collector process owns the work.
 
+Coordinated market writes enter a FIFO queue shared by Store instances for the
+same canonical database path within one process. Continuous WS batches cannot
+overtake an already queued directory/history publication. Admission has its own
+explicit deadline, at most two seconds and no longer than the caller's timeout;
+the SQLite busy timeout remains at most 250ms, with no hidden BEGIN retry.
+Waiting holds no database transaction or HTTP owner. Reads and an existing
+publication's nested helpers bypass the queue. Diagnostics distinguish queue
+admission from SQLite begin/body/commit failures. This provides local writer
+ordering, not cross-process fairness or a two-second transaction-duration bound.
+
 Market publication has three steps: durable intent and scope revocation;
 atomic market rows plus receipt; control reconciliation. Replaying a committed
 receipt is idempotent. A quiet-bar mismatch commits its corrective rows and

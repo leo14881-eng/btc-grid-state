@@ -62,6 +62,7 @@ class DynamicHTTP:
     """Linux parent fixture; existing public validation remains in its child."""
     def __init__(self):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from socketserver import TCPServer
         self.lock = Lock()
         self.requests = self.active = self.closed = 0
         self.errors = []
@@ -92,7 +93,14 @@ class DynamicHTTP:
                         fixture.active -= 1
                         fixture.closed += 1
 
-        self.server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        class LiteralLoopbackServer(ThreadingHTTPServer):
+            def server_bind(self):
+                # HTTPServer's default calls reverse DNS for server_name.
+                # The fixture needs only its literal, already-bound address.
+                TCPServer.server_bind(self)
+                self.server_name, self.server_port = self.server_address
+
+        self.server = LiteralLoopbackServer(('127.0.0.1', 0), Handler)
         self.port = self.server.server_address[1]
         self.thread = Thread(target=self.server.serve_forever)
         self.thread.start()
@@ -369,7 +377,11 @@ class ReconnectProcess(unittest.TestCase):
                 ws_errors.append(type(error).__name__+':'+str(error))
 
         http = DynamicHTTP()
-        server = serve(websocket_handler, '127.0.0.1', 0, ping_interval=None, close_timeout=1)
+        try:
+            server = serve(websocket_handler, '127.0.0.1', 0, ping_interval=None, close_timeout=1)
+        except BaseException:
+            http.close()
+            raise
         server_thread = Thread(target=server.serve_forever)
         server_thread.start()
         command = [sys.executable, '-B', str(HELPER), '--collector', str(scratch),
