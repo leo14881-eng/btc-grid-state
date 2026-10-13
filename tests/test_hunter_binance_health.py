@@ -271,6 +271,17 @@ class StoreTests(unittest.TestCase):
         self.assertTrue(valid_proof(value,'quiet',name,self.store.metadata(),stamp))
         self.assertFalse(valid_proof(value,'quiet',name,self.store.metadata(),stamp+1001))
 
+    def test_quiet_http_crossing_boundary_cannot_clear_mismatch_obligation(self):
+        name=topic('BTCUSDT','5m');stamp=NOW+STEPS['5m']-1000
+        self.status(stamp=stamp);self.seed(stamp=stamp)
+        changed=rows('5m',stamp);changed[-2][4]='102'
+        self.store.verify_quiet(self.epoch,name,changed,stamp,stamp)
+        value=self.store.verify_quiet(self.epoch,name,changed,stamp+999,stamp+1001)
+        self.assertEqual(value['result'],'UNKNOWN')
+        self.assertEqual(value['reason'],'VERIFICATION_EXPIRED_OR_NATIVE_BOUNDARY')
+        with self.store.db(readonly=True) as db:
+            self.assertIsNotNone(db.execute('SELECT 1 FROM metadata WHERE kind=?',('quiet_reverify:'+name,)).fetchone())
+
     def test_kline_validity_expiry_and_wrong_kind_rejected_by_consumer(self):
         self.status();self.seed();name=self.names[1];self.frame(name)
         generation=self.store.freeze([name],NOW+2,NOW+2)

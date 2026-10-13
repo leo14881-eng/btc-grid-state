@@ -235,6 +235,9 @@ class Store(BaseStore):
         reason=None if good else ('CLOSED_BAR_MISMATCH' if not same else 'TRADING_STATUS_UNVERIFIED')
         value=proof('quiet',name,meta,REST_SOURCE,requested,received,min(requested+FRESH_MS,(requested//step+1)*step-1),
                     'VALID' if good else 'UNKNOWN',reason,comparison='SAME_CLOSED_NATIVE_BAR',closed_start=closed)
+        if good and not valid_proof(value,'quiet',name,meta,received):
+            good=False
+            value.update(result='UNKNOWN',reason='VERIFICATION_EXPIRED_OR_NATIVE_BOUNDARY')
         with self.db() as db:
             self.check_epoch(db,epoch)
             db.execute('INSERT OR REPLACE INTO bn_validity VALUES(?,?,?)',('quiet',name,json.dumps(value,sort_keys=True)))
