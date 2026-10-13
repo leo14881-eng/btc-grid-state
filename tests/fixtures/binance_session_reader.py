@@ -12,7 +12,8 @@ sys.path.insert(0, str(ROOT))
 
 
 def main():
-    from scripts.profile_binance_session_topology import install_guard, read_config, summarize, write_json, loaded_source_audit
+    from scripts.profile_binance_session_topology import (install_guard, read_config, summarize,
+        write_json, loaded_source_audit, SQLiteTimeline)
     if sys.platform != 'linux' or len(sys.argv) != 2:
         raise ValueError('SESSION_READER_LINUX_EXACT_ARGUMENTS_REQUIRED')
     scratch = Path(sys.argv[1])
@@ -28,6 +29,7 @@ def main():
     names = topics(['BTCUSDT']+['S%03dUSDT' % i for i in range(408)])
     clock = lambda: config['base_ms']+int((time.monotonic()-config['anchor_mono'])*1000)
     hist = {key: LatencyHistogram('us') for key in ('wall', 'thread_cpu')}
+    timeline = SQLiteTimeline(scratch,'reader'); timeline.install()
     reader = Store.reader(scratch/'state.sqlite3')
     transient = {'CONTROL_PUBLICATION_PENDING','CONTROL_READ_FENCE_CHANGED',
         'BINANCE_FINAL_READ_REVOKED','BINANCE_FINAL_TOPIC_REVOKED',
@@ -77,6 +79,13 @@ def main():
                 source_audit=loaded_source_audit(before))
         except BaseException as error:
             result['errors'].append(error_detail('reader.final_evidence',error))
+        try:
+            result['sqlite_file_state'] = timeline.file_state()
+        except BaseException as error:
+            result['errors'].append(error_detail('reader.final_file_state',error))
+        result['sqlite_timeline'] = timeline.snapshot()
+        timeline.patches.close()
+        result['errors'].extend(result['sqlite_timeline']['diagnostic_errors'])
         result['diagnostic_completed'] = not result['errors'] and not blocked and result.get('source_audit',{}).get('before_after_equal',False)
         # The guard permits only this one result file, never SQLite mutation.
         write_json(scratch/'reader.result.json', result)

@@ -5,6 +5,7 @@ declared portable gate elsewhere. These tests do not run a Monitor lane, write
 a portfolio, or claim throughput. Public delivery and use guards stay real.
 """
 import datetime as dt
+import json
 from threading import Lock
 import unittest
 from unittest.mock import patch
@@ -58,6 +59,11 @@ class FormulaBoundaryTests(unittest.TestCase):
         original = self.outputs(LegacyCache(self.cached))
         actual = self.outputs(self.cached)
         self.assertEqual(actual, original)
+        # Returned decisions contain ordinary detached values. A Frozen/view,
+        # generator, future or callable escaping through nested provenance is
+        # not a serializable report, even when a superficial equality passes.
+        encoded = json.dumps(actual, sort_keys=True, allow_nan=False)
+        self.assertEqual(encoded, json.dumps(original, sort_keys=True, allow_nan=False))
         for result in actual[:3]:
             self.assertEqual(set(result), set(self.symbols))
             self.assertTrue(all(row['source_provenance'] for row in result.values()))

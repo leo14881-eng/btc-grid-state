@@ -5,15 +5,17 @@ Two 25-second legs preserve production health.session, synchronous tick/sample,
 transport and transparent timing wrappers differ. No trading or production I/O.
 """
 import contextlib
+from collections import deque
 import hashlib
 import json
 import os
 from pathlib import Path
 import stat
+import sqlite3
 import subprocess
 import sys
 import tempfile
-from threading import Event, Lock, Thread
+from threading import Event, Lock, Thread, get_ident
 import time
 from urllib.parse import unquote, urlsplit
 
@@ -167,6 +169,301 @@ def native_sqlite_errors(value):
     return total
 
 
+class SQLiteTimeline:
+    """Fixture-only call observation; no periodic sampling or new connections.
+
+    BEGIN is not a lock-acquisition timestamp. A successful SELECT execute has
+    stepped the statement; fetch timings are separate and all times are Linux
+    host monotonic seconds. No diagnostic lock encloses SQLite or file I/O.
+    One read-only locking_mode probe extends the existing first-kind connection
+    observation; this can occur during load. No other SQL is added.
+    """
+    def __init__(self, scratch, role):
+        self.scratch, self.role = scratch, role
+        self.lock = Lock(); self.serial = 0; self.total = 0; self.started = 0
+        self.stage = 'setup' if role=='collector' else 'independent_reader'
+        self.rows = {'market':deque(maxlen=2048),'control':deque(maxlen=2048)}
+        self.setup = deque(maxlen=64); self.setup_count = 0; self.runtime_count = 0
+        self.failures = deque(maxlen=32); self.failed_end_events = 0
+        self.special = deque(maxlen=128)
+        self.errors = deque(maxlen=16); self.config = deque(maxlen=128); self.active = {}
+        self.connection_counts = {}
+        self.raw_connect = sqlite3.connect
+        timeline = self
+
+        class Cursor(sqlite3.Cursor):
+            def execute(self, sql, *args):
+                return self._execute('execute', sql, args)
+
+            def executemany(self, sql, *args):
+                return self._execute('executemany', sql, args)
+
+            def executescript(self, sql, *args):
+                return self._execute('executescript', sql, args)
+
+            def _execute(self, method, sql, args):
+                con = self.connection; started = time.monotonic(); prior = con.in_transaction
+                self._select = sql.lstrip().upper().startswith(('SELECT','WITH'))
+                self._sql = sql
+                error = None
+                try:
+                    return getattr(super(),method)(sql,*args)
+                except BaseException as caught:
+                    error = caught
+                    raise
+                finally:
+                    ended = time.monotonic()
+                    timeline.safe(con.sql_done, method, sql, started, ended, prior, error)
+
+            def fetchall(self):
+                started = time.monotonic(); error = None; value = None
+                try:
+                    value = super().fetchall()
+                    return value
+                except BaseException as caught:
+                    error = caught
+                    raise
+                finally:
+                    if getattr(self,'_select',False):
+                        timeline.safe(self.connection.fetch_done,self._sql,'fetchall',started,time.monotonic(),
+                                      error is None,error)
+
+        class Connection(sqlite3.Connection):
+            def cursor(self, factory=Cursor): return super().cursor(factory)
+            def execute(self, sql, *args): return self.cursor().execute(sql,*args)
+            def executemany(self, sql, *args): return self.cursor().executemany(sql,*args)
+            def executescript(self, sql, *args): return self.cursor().executescript(sql,*args)
+
+            def start_record(self, sql, started, ended):
+                self._transaction_serial += 1
+                self._transaction = dict(**self._identity,transaction_id=self._transaction_serial,
+                    stage=timeline.stage,begin_sql=sql,begin_start_mono=started,
+                    begin_end_mono=ended,select_count=0,select_execute_seconds=0,fetch_seconds=0,
+                    observed_connection=dict(self._observed))
+                with timeline.lock:
+                    timeline.started += 1
+                    timeline.active[self._identity['connection_id']] = self._transaction
+
+            def sql_done(self, method, sql, started, ended, prior, error):
+                upper = sql.lstrip().upper()
+                if method=='executescript':
+                    # CPython implicitly commits an open legacy transaction before
+                    # running the script. The exact internal COMMIT time is unknown.
+                    self.finish('EXECUTESCRIPT_IMPLICIT_COMMIT_BOUNDARY',started,ended,prior,error,
+                                exact_end=False)
+                if upper.startswith('BEGIN') and error is None or not prior and self.in_transaction:
+                    self.start_record(sql if upper.startswith('BEGIN') else 'IMPLICIT_SQLITE_TRANSACTION',started,ended)
+                record = getattr(self,'_transaction',None)
+                if record is not None and upper.startswith(('SELECT','WITH')):
+                    record['select_count'] += 1
+                    record['select_execute_seconds'] += ended-started
+                    if error is None and 'first_select_start_mono' not in record:
+                        record.update(first_select_start_mono=started,first_select_return_mono=ended,
+                                      first_select_sql=sql[:768])
+                    if ended-started>record.get('slowest_select_execute',{}).get('seconds',-1):
+                        record['slowest_select_execute'] = dict(sql=sql[:768],sql_sha256=hashlib.sha256(sql.encode()).hexdigest(),
+                            start_mono=started,end_mono=ended,seconds=ended-started,error=timeline.error(error))
+                if method=='executescript' or upper.startswith(('PRAGMA','CREATE','ALTER','DROP')):
+                    item = dict(**self._identity,method=method,sql=sql[:1024],sql_sha256=hashlib.sha256(sql.encode()).hexdigest(),
+                        start_mono=started,end_mono=ended,in_transaction_before=prior,
+                        in_transaction_after=self.in_transaction,error=timeline.error(error),
+                        scope='OBSERVED_SCHEMA_OR_PRAGMA',
+                        diagnostic_added_probe=getattr(self,'_added_locking_probe',False))
+                    with timeline.lock: timeline.special.append(item)
+
+            def fetch_done(self, sql, method, started, ended, exhausted, error):
+                record = getattr(self,'_transaction',None)
+                if record is None: return
+                record['fetch_seconds'] += ended-started
+                value = dict(sql=sql[:768],method=method,start_mono=started,end_mono=ended,
+                    seconds=ended-started,cursor_exhaustion_observed=exhausted,error=timeline.error(error))
+                if value['seconds']>record.get('slowest_fetch',{}).get('seconds',-1):
+                    record['slowest_fetch'] = value
+
+            def finish(self, operation, started, ended, prior, error, exact_end=True):
+                record = getattr(self,'_transaction',None)
+                if record is None: return
+                value = dict(record,end_operation=operation,end_start_mono=started,end_mono=ended,
+                    transaction_seconds=ended-record['begin_start_mono'],end_call_seconds=ended-started,
+                    in_transaction_before=prior,in_transaction_after=('unknown' if error else False) if operation=='CLOSE' else self.in_transaction,
+                    exact_end_call=exact_end,error=timeline.error(error))
+                with timeline.lock:
+                    timeline.total += 1
+                    if value['stage']=='setup':
+                        timeline.setup_count += 1; timeline.setup.append(value)
+                    else:
+                        timeline.runtime_count += 1; timeline.rows[value['database']].append(value)
+                    if error is not None:
+                        timeline.failed_end_events += 1; timeline.failures.append(value)
+                    if error is None or operation=='CLOSE':
+                        timeline.active.pop(self._identity['connection_id'],None)
+                if error is None or operation=='CLOSE': self._transaction = None
+
+            def _end(self, operation, method):
+                started = time.monotonic(); prior = self.in_transaction; error = None
+                try:
+                    return method()
+                except BaseException as caught:
+                    error = caught
+                    raise
+                finally:
+                    timeline.safe(self.finish,operation,started,time.monotonic(),prior,error)
+
+            def commit(self): return self._end('COMMIT',super().commit)
+            def rollback(self): return self._end('ROLLBACK',super().rollback)
+            def close(self):
+                if getattr(self,'_timeline_closed',False): return super().close()
+                value = self._end('CLOSE',super().close)
+                self._timeline_closed = True
+                return value
+
+        self.connection_class = Connection
+
+    @staticmethod
+    def error(error):
+        if error is None: return None
+        code = getattr(error,'sqlite_errorcode',None)
+        return dict(type=type(error).__name__,message=str(error)[:512],extended_code=code,
+                    primary_code=None if code is None else code & 255,
+                    sqlite_errorname=getattr(error,'sqlite_errorname',None))
+
+    def safe(self, function, *args):
+        try: return function(*args)
+        except BaseException as error:
+            # Evidence failure is reported/red, but never replaces the SQLite error.
+            with self.lock: self.errors.append(self.error(error))
+
+    def connect(self, database, *args, **kwargs):
+        if len(args)>4 or 'factory' in kwargs:
+            raise RuntimeError('SESSION_UNEXPECTED_SQLITE_FACTORY')
+        raw = os.fsdecode(database); path = Path(unquote(urlsplit(raw).path) if raw.startswith('file:') else raw).resolve()
+        if path not in (self.scratch/'state.sqlite3',self.scratch/'control.sqlite3'):
+            raise RuntimeError('SESSION_TIMELINE_DB_OUTSIDE_PAIR')
+        connection = self.raw_connect(database,*args,factory=self.connection_class,**kwargs)
+        caller = sys._getframe(1)
+        context = caller.f_locals.get('context')
+        database_role = 'market' if path.name=='state.sqlite3' else 'control'
+        access_mode = next((p[5:] for p in urlsplit(raw).query.split('&') if p.startswith('mode=')),'default_rw_create')
+        kind = context.get('kind','unknown') if isinstance(context,dict) else 'unknown'
+        with self.lock:
+            self.serial += 1; number = self.serial
+            key = database_role+':'+str(kind)+':'+access_mode
+            self.connection_counts[key] = self.connection_counts.get(key,0)+1
+        connection._identity = dict(pid=os.getpid(),thread_id=get_ident(),process_role=self.role,
+            database=database_role,path=str(path),connection_id=number,access_mode=access_mode,
+            connect_timeout_seconds=kwargs.get('timeout',args[0] if args else 5.0),
+            connect_caller=dict(file=caller.f_code.co_filename,line=caller.f_lineno,
+                                context=context))
+        connection._observed = dict(journal_mode='unknown',locking_mode='unknown',busy_timeout_ms='unknown')
+        connection._transaction = None; connection._transaction_serial = 0
+        return connection
+
+    def observe(self, original, connection, context, observation):
+        value = original(connection,context,observation)
+        value.setdefault('locking_mode','unknown')
+        if observation=='FIRST_CONNECTION_FOR_KIND' and connection is not None:
+            connection._added_locking_probe = True
+            try: value['locking_mode'] = connection.execute('PRAGMA locking_mode').fetchone()[0]
+            except BaseException as error:
+                value['locking_mode'] = 'unknown'
+                with self.lock: self.errors.append(self.error(error))
+            finally:
+                connection._added_locking_probe = False
+        if hasattr(connection,'_observed'):
+            connection._observed.update(value)
+            with self.lock: self.config.append(dict(**connection._identity,observation=value))
+        return value
+
+    def install(self):
+        from unittest.mock import patch
+        from research import hunter_binance_market_control as market, hunter_binance_control as control
+        self.patches = contextlib.ExitStack()
+        original = market._connection_context
+        observer = lambda *args:self.observe(original,*args)
+        self.patches.enter_context(patch.object(sqlite3,'connect',self.connect))
+        self.patches.enter_context(patch.object(market,'_connection_context',observer))
+        self.patches.enter_context(patch.object(control,'_connection_context',observer))
+
+    def snapshot(self):
+        with self.lock:
+            return dict(role=self.role,pid=os.getpid(),clock='LINUX_HOST_TIME_MONOTONIC_SECONDS',
+                python=sys.version,sqlite_runtime=sqlite3.sqlite_version,
+                connections=self.serial,unique_transactions_started=self.started,total_transaction_end_events=self.total,
+                complete_connection_counts_by_db_kind_uri_mode=dict(self.connection_counts),
+                end_event_note='FAILED_COMMIT_AND_LATER_ROLLBACK_SHARE_CONNECTION_ID_AND_TRANSACTION_ID; NOT_UNIQUE_TRANSACTIONS',
+                retained_transactions={key:list(value) for key,value in self.rows.items()},
+                transaction_end_ring_limit_per_db=2048,runtime_end_event_ring_evicted=max(0,self.runtime_count-sum(map(len,self.rows.values()))),
+                setup_transaction_end_tail=list(self.setup),setup_end_events=self.setup_count,
+                setup_end_event_ring_evicted=max(0,self.setup_count-len(self.setup)),
+                failures=list(self.failures),failed_end_events=self.failed_end_events,
+                failure_ring_limit=32,failure_end_event_ring_evicted=max(0,self.failed_end_events-len(self.failures)),
+                active_transactions=list(self.active.values()),
+                schema_and_pragma_calls=list(self.special),schema_pragma_limit=128,
+                actual_connection_observations=list(self.config),diagnostic_errors=list(self.errors),
+                connection_observation_limit=128,unobserved_runtime_pragmas='unknown',
+                lock_interval_meaning='SUCCESSFUL_FIRST_SELECT_RETURN_TO_TERMINAL_CALL_START_IS_OBSERVED_READ_TX_INTERIOR; BEGIN_ALONE_IS_NOT_A_LOCK',
+                instrumentation='CONNECTION_CURSOR_SUBCLASSES_DELEGATE_UNCHANGED_SQL_AND_PARAMETERS; FETCHALL_ONLY; NO_PER_ROW_HOOK',
+                unmeasured='FETCHONE_FETCHMANY_ITERATION_PYTHON_BETWEEN_CALLS_AND_OBSERVER_COST_NOT_SEPARATED; NOT_UNMODIFIED_CAPACITY')
+
+    def file_state(self):
+        def stat_file(path):
+            try:
+                state = path.stat()
+                return dict(status='OBSERVED',device=state.st_dev,inode=state.st_ino,bytes=state.st_size)
+            except FileNotFoundError:
+                return dict(status='ABSENT_OR_DISAPPEARED_BEFORE_STAT',bytes=None)
+            except OSError as error:
+                return dict(status='UNKNOWN',error=self.error(error))
+        result = []
+        for label,name in (('market','state.sqlite3'),('control','control.sqlite3')):
+            path = self.scratch/name
+            state = stat_file(path)
+            if state['status']!='OBSERVED':
+                with self.lock: self.errors.append(dict(operation='database_file_stat',path=str(path),state=state))
+            modes = {v['observation'].get('journal_mode','unknown') for v in self.config if v['database']==label}
+            result.append(dict(database=label,path=str(path),state=state,
+                journal_modes_observed=sorted(modes),
+                checkpoint='NOT_APPLICABLE_DELETE' if modes=={'delete'} else 'NOT_QUERIED_READ_ONLY_DIAGNOSTIC',
+                checkpoint_sql_executed_by_diagnostic=False,
+                files={suffix:stat_file(Path(str(path)+suffix)) for suffix in ('-wal','-shm','-journal')}))
+        return result
+
+
+def correlate_transactions(collector_trace, reader_trace):
+    """Intervals only: never infer SHARED ownership from BEGIN or a histogram."""
+    coverage = {}
+    for name,trace in (('collector',collector_trace),('reader',reader_trace)):
+        coverage[name] = dict(trace_present=bool(trace),
+            runtime_end_events_evicted=trace.get('runtime_end_event_ring_evicted',0),
+            setup_end_events_evicted=trace.get('setup_end_event_ring_evicted',0),
+            failure_end_events_evicted=trace.get('failure_end_event_ring_evicted',0),
+            active_transactions=len(trace.get('active_transactions',[])),
+            retained_inexact_boundaries=sum(not row['exact_end_call']
+                for rows in trace.get('retained_transactions',{}).values() for row in rows))
+    incomplete = any(any(value[key] for key in ('runtime_end_events_evicted','setup_end_events_evicted',
+        'failure_end_events_evicted','active_transactions','retained_inexact_boundaries')) for value in coverage.values())
+    candidates = []
+    for failure in collector_trace.get('failures',[]):
+        if failure['end_operation']!='COMMIT': continue
+        overlaps = []
+        for trace in (collector_trace,reader_trace):
+            for row in trace.get('retained_transactions',{}).get(failure['database'],[]):
+                first = row.get('first_select_return_mono')
+                if (row['path']!=failure['path'] or row['begin_sql'].strip().upper()!='BEGIN' or first is None
+                        or not row['exact_end_call'] or row['error'] is not None): continue
+                overlap = min(failure['end_mono'],row['end_start_mono'])-max(failure['end_start_mono'],first)
+                if overlap>0:
+                    overlaps.append(dict(reader_transaction=row,overlap_seconds=overlap,
+                        separate_process=row['pid']!=failure['pid'],
+                        read_interior_covers_failed_commit=first<=failure['end_start_mono'] and row['end_start_mono']>=failure['end_mono']))
+        candidates.append(dict(failed_commit=failure,observed_read_transaction_overlaps=overlaps,
+            conclusion='OBSERVED_READ_TRANSACTION_INTERIOR_OVERLAP' if overlaps else
+                'UNKNOWN_INCOMPLETE_TIMELINE' if incomplete else 'NO_RETAINED_READ_TRANSACTION_INTERIOR_OVERLAP'))
+    return dict(commit_failures=candidates,coverage=coverage,complete_transaction_history=not incomplete,
+        empty_result_meaning='UNKNOWN_INCOMPLETE_TIMELINE' if incomplete else 'NO_RETAINED_FAILED_COMMIT',
+        meaning='SAME_FILE_OBSERVED_TRANSACTION_OVERLAP; EMPTY_OVERLAP_DOES_NOT_EXCLUDE_EVICTED_ACTIVE_OR_IMPLICIT_BOUNDARIES; NO_KERNEL_LOCK_OWNER_PROBE')
+
+
 def collector(scratch):
     config = read_config(scratch)
     blocked = install_guard(scratch, 'collector', {config['ws_port'],config['http_port']})
@@ -214,6 +511,16 @@ def collector(scratch):
                      for name,fn in (('session',health.session),('sample',health.sample),
                          ('jobs_tick',health.CoordinatedJobs.tick),('protocol_tick',health.Protocol.tick),
                          ('freeze',Store.freeze))}
+    from research.hunter_bybit_stream_store import Store as BaseStore
+    initialization = dict(fixture='FRESH_MARKET_STORE_CONSTRUCTOR_AND_OFFLINE_CONTROL_PROVISION',
+        production='STREAM_MAIN_HEALTHSTORE_READER_EXISTING_MARKET_AND_EXISTING_CONTROL',
+        both_session_paths='HEALTH_SESSION_ENABLE_HEALTH_EXECUTESCRIPT_AND_CONDITIONAL_ALTER',
+        deployed_journal_mode='NOT_OBSERVED_NO_PRODUCTION_ACCESS',
+        files_are_separate=True,functions={name:dict(file=inspect.getsourcefile(fn),
+            line=inspect.getsourcelines(fn)[1],sha256=hashlib.sha256(inspect.getsource(fn).encode()).hexdigest())
+            for name,fn in (('base_store_init',BaseStore.__init__),('existing_store_reader',BaseStore.reader),
+                            ('offline_control_provision',Control.provision),('health_schema',Store.enable_health),
+                            ('production_main',stream.main))})
 
     @contextlib.contextmanager
     def timed(name):
@@ -288,6 +595,7 @@ def collector(scratch):
                     if received is not None:
                         stages.setdefault(phase()+'.arrived_return_to_batch_completion',LatencyHistogram('us')).add((finished-received)//1000)
             if not self.pending and not (scratch/'subscriptions.ready').exists():
+                timeline.stage = 'session_after_subscriptions'
                 (scratch/'subscriptions.ready').write_text('acknowledged',encoding='utf-8')
             return result
 
@@ -328,11 +636,13 @@ def collector(scratch):
             shutdowns.append(value)
         emit(value)
 
-    store = TimedStore(scratch/'state.sqlite3')
-    Control.provision(scratch/'control.sqlite3',store.path)
-    store.enable_control()
+    timeline = SQLiteTimeline(scratch,'collector'); timeline.install()
+    store = None
     start = time.monotonic()
     try:
+        store = TimedStore(scratch/'state.sqlite3')
+        Control.provision(scratch/'control.sqlite3',store.path)
+        store.enable_control()
         with patch.object(health,'Protocol',MeasuredProtocol), patch.object(health,'CoordinatedJobs',BootstrapJobs), \
              patch.object(health,'sample',sampled), patch.object(stream,'ObservedQueue',ObservedQueue), \
              patch.object(stream,'emit',measured_emit), patch.object(public,'worker_command',lambda url:
@@ -351,13 +661,16 @@ def collector(scratch):
         audit = loaded_source_audit(before)
         result = dict(diagnostic_completed=True, session_succeeded=failed is None, problem=failed,pid=os.getpid(),
             source_head=config['source_head'],original_method_sha256=source_hashes,
+            database_initialization=initialization,
             bootstrap='SYNTHETIC_DIRECTORY_AND_HISTORY_REAL_APPLY_WORK_NO_HTTP_ADMISSION_CLAIM',
             exact_wrappers=['Protocol.__init__/tick/arrived/receive_batch:delegate+timing',
                 'CoordinatedJobs.__init__:delegate+synthetic_apply_work+seeded_set',
                 'CoordinatedJobs.tick:delegate+timing','Store.freeze:delegate+timing',
                 'Store.ingest_accounted/unprocessed:delegate+postcommit_memory_counters',
                 'health.sample:delegate+timing','ObservedQueue.__init__:delegate+capture','stream.emit:delegate+capture',
-                'public.worker_command:guarded_loopback_HTTP_child'],
+                'public.worker_command:guarded_loopback_HTTP_child',
+                'sqlite3.connect:Connection/Cursor_subclass_actual_call_timeline',
+                '_connection_context:FIRST_CONNECTION_FOR_KIND_same_connection_read_PRAGMA_locking_mode'],
             journal_override=False, queue_capacity=4096, batch_limit=100,
             samples=samples, failures=failures, blocked_effects=blocked,
             source_audit=audit,stage_partitions=partitions,load_cutoff=state.get('load_cutoff'),
@@ -373,8 +686,15 @@ def collector(scratch):
             result['budget_final'] = store.control.status()
         except BaseException as error:
             result['budget_error'] = error_detail('control.status.final',error)
+        try:
+            result['sqlite_file_state'] = timeline.file_state()
+        except BaseException as error:
+            timeline.safe(lambda: (_ for _ in ()).throw(error))
+        result['sqlite_timeline'] = timeline.snapshot()
+        timeline.patches.close()
         write_json(scratch/'collector.result.json',result)
-    return 0 if failed is None and not blocked and audit['before_after_equal'] and 'budget_error' not in result else 1
+    return 0 if (failed is None and not blocked and audit['before_after_equal'] and 'budget_error' not in result
+                 and not result['sqlite_timeline']['diagnostic_errors']) else 1
 
 
 def run_leg(scratch, with_reader, ports, head, source):
@@ -538,6 +858,7 @@ def run_leg(scratch, with_reader, ports, head, source):
         result[name] = json.loads(path.read_text(encoding='utf-8')) if path.is_file() else None
     c = result['collector'] or {}; final = c.get('final',{})
     r = result['reader'] or {}
+    result['sqlite_transaction_correlation'] = correlate_transactions(c.get('sqlite_timeline',{}),r.get('sqlite_timeline',{}))
     session_finals = [v for v in c.get('shutdowns',[]) if v.get('event')=='BINANCE_HEALTH_SESSION_FINAL']
     samples = [] if load is None else [s for s in c.get('samples',[]) if load['start_mono']<=s['mono']<=load['end_mono']]
     result['health_samples_within_load'] = len(samples)
@@ -571,6 +892,7 @@ def run_leg(scratch, with_reader, ports, head, source):
         and all(result['receipt_totals'][key]==0 for key in ('invalid','unprocessed_recorded','unattributed_invalid'))
         and result['reader_is_separate_process'] and not server_thread.is_alive()
         and c.get('source_audit',{}).get('before_after_equal')
+        and c.get('sqlite_timeline') and not c['sqlite_timeline']['diagnostic_errors']
         and result['producer_sent']==result['session_final_received']
         and (not with_reader or r.get('ready',0)>0 and r.get('diagnostic_completed'))
         and c.get('queue_depth')==0 and load['parent_observed_end_mono']>=load['end_mono'])

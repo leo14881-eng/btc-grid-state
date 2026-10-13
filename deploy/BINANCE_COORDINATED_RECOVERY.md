@@ -448,6 +448,37 @@ here; shadow mode, strategy and capital limits remain unchanged.
 
 ## Third-party review boundaries and pending evidence
 
+The completed [b44c950 Linux run](https://github.com/leo14881-eng/btc-grid-state/actions/runs/38444757783)
+is not accepted: both Python versions passed 213 of 214 strict cases and failed
+only the unchanged full-scope soak after about 8.3 seconds with queue high-water
+4096. Its hour gate was skipped. All thirteen formula and four process-death
+cases passed on that head. Both real reconnect checks retired all eight HTTP
+attempts and ended with zero owners, requests, orphan children or native SQLite
+errors. A subsequent head must be checked separately.
+
+That head's separate real-session experiment ran production synchronous
+`health.session` sample/tick and the same queue, batch size and offered rate.
+Without an external reader, each version completed 25 seconds: Python 3.10
+committed 38,279 frames during load and 1,017 during drain; Python 3.12 committed
+38,275 during load and 1,021 during drain. Each recorded two load-period health
+samples. These are synthetic offered-load results, not maximum capacity.
+
+With a separate continuous full-scope reader process, the same experiment
+failed at market `ws_receipts` COMMIT after 0.903 seconds (3.10) and 2.004 seconds
+(3.12). Both scratch databases used DELETE journal mode; the failed writer
+connection had a 250ms busy timeout. The reader's first market connection was
+observed at 10 seconds before lazy control attachment; its control connection
+was 250ms. The first-connection observations are not every-connection samples.
+Python 3.12 exposed native `5/SQLITE_BUSY`; Python 3.10 did not expose a native
+code. No 517 was observed. The failures preceded the first load-period health
+sample, so neither same-process GIL contention nor duplicate health sampling
+alone explains these failures. The maximum reader transaction-body observations
+were about 287/279ms and failed COMMIT observations about 251/256ms. Aggregated
+durations do not prove the exact overlapping transaction or SQL statement;
+connection and transaction timelines are required before selecting a fix.
+The two legs have independent synthetic seeds, not a restored identical seed,
+and the full-scope reader is pressure coverage, not the actual Monitor entry.
+
 The third-party review used `e8b0b8f5`, not the later revision-copy candidate
 `cb820829`. On that latter exact head, Linux Python 3.12 passed all 197 strict
 cases and its 32.506-second short load; Python 3.10 still failed only

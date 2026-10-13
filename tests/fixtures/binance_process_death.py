@@ -17,7 +17,7 @@ if sys.platform != 'linux':
     raise SystemExit('LINUX_REQUIRED')
 scratch = Path(sys.argv[1]).resolve()
 scenario = sys.argv[2]
-if scenario not in ('queued', 'durable-overflow', 'memory-only-overflow', 'active-owner'):
+if scenario not in ('queued', 'durable-overflow', 'memory-only-overflow', 'active-owner', 'inflight-transaction'):
     raise ValueError('PROCESS_DEATH_SCENARIO_INVALID')
 if not scratch.is_dir():
     raise ValueError('EXISTING_SCRATCH_REQUIRED')
@@ -126,14 +126,38 @@ with (scratch/'collector.lock').open('a') as collector_lock:
             raise AssertionError('PROCESS_DEATH_OWNER_NOT_ADMITTED')
         # No GO, socket or HTTP child. Real durable owner and NativeLock remain
         # active until SIGKILL; no graceful retirement is performed.
-    received_delta = {n: row['received']-before[n]
-                      for n, row in market.protocol.evidence.topics.items()}
-    emit('STAGED', pid=os.getpid(), received_at=received, target_topic=name,
-         received_delta=received_delta, accepted=accepted, queued=messages.qsize(),
-         capacity=messages.maxsize, full=full, memory_only_revoked=memory_only_revoked,
-         owner_token=owner.token if owner else None,
-         owner_identity=list(owner.lock.identity) if owner else None,
-         dangerous_counterfactual=scenario == 'memory-only-overflow')
+    def staged(**transaction):
+        received_delta = {n: row['received']-before[n]
+                          for n, row in market.protocol.evidence.topics.items()}
+        emit('STAGED', pid=os.getpid(), received_at=received, target_topic=name,
+             received_delta=received_delta, accepted=accepted, queued=messages.qsize(),
+             capacity=messages.maxsize, full=full, memory_only_revoked=memory_only_revoked,
+             owner_token=owner.token if owner else None,
+             owner_identity=list(owner.lock.identity) if owner else None,
+             dangerous_counterfactual=scenario == 'memory-only-overflow', **transaction)
+
+    if scenario == 'inflight-transaction':
+        original_put = market.store._put
+
+        def pause_after_real_put(db, *args, **kwargs):
+            changes = db.total_changes
+            changed = original_put(db, *args, **kwargs)
+            if not changed or not db.in_transaction or db.total_changes <= changes:
+                raise AssertionError('REAL_UNCOMMITTED_REVISION_WRITE_REQUIRED')
+            staged(transaction_in_progress=True, transaction_phase='AFTER_REAL_PUT_BEFORE_COMMIT',
+                   transaction_changes=db.total_changes-changes,
+                   journal_mode=db.execute('PRAGMA journal_mode').fetchone()[0],
+                   inflight=len(market.protocol.inflight))
+            # SIGKILL bypasses the real ingest transaction's commit/rollback
+            # and savepoint cleanup. No forced spill, journal rewrite or fake
+            # successful commit is introduced by this diagnostic.
+            sys.stdin.readline()
+            raise AssertionError('SIGKILL_REQUIRED_INSIDE_TRANSACTION')
+
+        market.store._put = pause_after_real_put
+        market.protocol.receive_batch([messages.get_nowait()])
+        raise AssertionError('TRANSACTION_PAUSE_NOT_REACHED')
+    staged(transaction_in_progress=False, inflight=0)
     # A live pipe keeps all queue/owner objects resident. Parent must SIGKILL;
     # EOF or a second command is a harness error, not a successful crash.
     sys.stdin.readline()
