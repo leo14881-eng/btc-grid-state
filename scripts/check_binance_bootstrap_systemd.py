@@ -38,6 +38,9 @@ def fixture(mode):
     root=Path(__file__).resolve().parent;config=json.loads((root/'fixture.json').read_bytes())
     entry=load(root/'entry.py');entry.PREFIX=root/'prefix';entry.STATE=root/'state'
     entry.SERVICE=config['collector'];entry.SUPERVISOR=config['supervisor']
+    # Compress only this fixture's wall clock. All seven other cases validate
+    # the production 1800-second property; this case must really expire in PID 1.
+    if config['case']=='timeout':entry.SUPERVISOR_SECONDS=2
     # Exact hook validation points to this isolated fixture driver, which calls
     # the candidate's real cleanup. Production uses the standalone entry.py.
     entry.__file__=str(Path(__file__).resolve())
@@ -76,7 +79,6 @@ def fixture(mode):
     if case=='exit-failure':return 7
     if case=='component-loss':return 7
     if case=='corrupt-intent':(work/'start-intent.json').write_bytes(b'{');return 7
-    if case=='timeout':run(['systemctl','set-property',entry.SUPERVISOR,'RuntimeMaxSec=2s'])
     time.sleep(30);return 9
 
 
@@ -137,7 +139,7 @@ def main():
                 # Detached from the command's terminal. The launcher exits while
                 # the supervised fixture continues under the service manager.
                 run(['systemd-run','--quiet','--unit',supervisor,'--service-type=exec',
-                    '--setenv=GITHUB_ACTIONS=true','--property=Restart=no','--property=RuntimeMaxSec=1800',
+                    '--setenv=GITHUB_ACTIONS=true','--property=Restart=no','--property=RuntimeMaxSec='+('2' if case=='timeout' else '1800'),
                     '--property=TimeoutStopSec=240','--property=KillMode=control-group',
                     '--property=StandardInput=null','--property=StandardOutput=journal','--property=StandardError=journal',
                     '--property=ExecStopPost=/usr/bin/python3 -I -B '+str(script)+' --cleanup',
@@ -161,6 +163,7 @@ def main():
                 assert terminal,'MISSING_PID1_FINAL_INVOCATION_RESULT'
                 successful=[item for item in terminal if item.get('MESSAGE','').endswith(': Deactivated successfully.')]
                 assert bool(successful)==(case=='success'),(case,terminal)
+                if case=='timeout':assert any(item.get('UNIT_RESULT')=='timeout' for item in terminal),terminal
                 if case=='success':
                     final=json.loads(next((root/'prefix').glob('upgrade-*/supervisor-final.json')).read_bytes())
                     assert final['accepted'] is True and final['invocation_id']==guard['invocation_id']
