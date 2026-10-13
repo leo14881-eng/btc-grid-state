@@ -127,6 +127,14 @@ class GateTests(unittest.TestCase):
             result=entry.stop_owned(Path('/unused'))
         verify.assert_called_once_with(stopped);self.assertTrue(result['stopped_verified']);self.assertTrue(result['stop_timed_out'])
 
+    def test_cleanup_retains_verified_running_invocation_before_binding_persist(self):
+        running={'ActiveState':'active','MainPID':'12','InvocationID':'a'*32}
+        quiet={'ActiveState':'inactive','MainPID':'0','Job':''}
+        with patch.object(entry,'owned_service',return_value=running), patch.object(entry,'command',return_value=Mock(returncode=0)), patch.object(entry,'show',return_value=quiet),patch.object(entry,'stopped_processes'):
+            result=entry.stop_owned(Path('/unused'))
+        self.assertTrue(result['stopped_verified'])
+        self.assertEqual(result['owned_collector_invocation'],'a'*32)
+
     def test_no_stop_when_already_stopped(self):
         state={'ActiveState':'failed','MainPID':'0','Job':''}
         with patch.object(entry,'owned_service',return_value=state), patch.object(entry,'command',side_effect=AssertionError), patch.object(entry,'show',return_value=state),patch.object(entry,'stopped_processes'):

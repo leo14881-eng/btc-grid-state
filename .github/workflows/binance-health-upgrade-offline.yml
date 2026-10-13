@@ -22,13 +22,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - name: Fetch immutable reviewed runtime dependencies only
-        run: git fetch --no-tags origin f4e8ad4de377a19763f4803e4fd56882c27d887a 33abf19c7a91855ba2efc2e65e1d383055494d75 db0d59e3f7a6f15d1f99a678c07c2336e4474867 7bd133584a21d5cc2af1147594f24031e29fd635
+        run: git fetch --depth=1 --no-tags origin f4e8ad4de377a19763f4803e4fd56882c27d887a 33abf19c7a91855ba2efc2e65e1d383055494d75 db0d59e3f7a6f15d1f99a678c07c2336e4474867 7bd133584a21d5cc2af1147594f24031e29fd635
       - name: Verify pinned complete runtime package
         run: |
           python -B scripts/build_binance_health_upgrade_bundle.py --output /tmp/binance-reviewed-bundle
@@ -40,9 +40,9 @@ jobs:
           result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_binance_predeploy_readback.py'))
           assert result.wasSuccessful() and result.testsRun==29 and not result.skipped
           result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_binance_health_upgrade.py'))
-          assert result.wasSuccessful() and result.testsRun==21 and not result.skipped
+          assert result.wasSuccessful() and result.testsRun==22 and not result.skipped
           result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_binance_health_upgrade_journal.py'))
-          assert result.wasSuccessful() and result.testsRun==29 and not result.skipped
+          assert result.wasSuccessful() and result.testsRun==32 and not result.skipped
           PY
       - name: Real PID1 exit supervision on generated fake units only
         if: matrix.python == '3.12'

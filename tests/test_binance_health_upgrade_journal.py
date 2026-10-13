@@ -43,8 +43,10 @@ def closed(epoch=EPOCH):
     return [dict(event='BINANCE_HEALTH_TOPIC_FINAL', **row) for row in rows] + [final]
 
 
-def encode(values, invocation=INVOCATION, start=1000000, bytes_message=False):
+def encode(values, invocation=INVOCATION, start=1000000, bytes_message=False, include_plan=True):
     result = []
+    if include_plan and (not values or 'event' in values[0]):
+        values = [journal.startup_plan(len(NAMES))] + values
     for i, value in enumerate(values):
         message = json.dumps(value)
         result.append(json.dumps(dict(MESSAGE=list(message.encode()) if bytes_message else message,
@@ -66,7 +68,7 @@ class JournalTests(unittest.TestCase):
         self.assertEqual(result['topic_coverage'][0]['final_state'], 'ACTIVE_NO_FINAL')
         self.assertFalse(result['topic_coverage'][0]['receipt_conservation_verified'])
         self.assertFalse(result['collector_accepted']);self.assertFalse(result['publication_verified'])
-        self.assertEqual(result['records'][0]['evidence'],health())
+        self.assertEqual(result['records'][1]['evidence'],health())
 
     def test_strict_final_requires_terminal_record(self):
         self.assertIncomplete(self.parse([health()],require_final=True),'JOURNAL_SESSION_FINAL_MISSING')
@@ -75,7 +77,7 @@ class JournalTests(unittest.TestCase):
         values=[health()]+closed();result=self.parse(values,require_final=True)
         self.assertTrue(result['complete'],result)
         self.assertTrue(result['topic_coverage'][0]['receipt_conservation_verified'])
-        self.assertEqual([x['evidence'] for x in result['records']],values)
+        self.assertEqual([x['evidence'] for x in result['records'][1:]],values)
 
     def test_false_conserved_flag_fails_even_if_math_balances(self):
         values=closed();values[0]['conserved']=False
@@ -205,7 +207,7 @@ class JournalTests(unittest.TestCase):
             attempt=1,go=True,response_complete=True,process_reaped=True,owner_retired=True,http_status=200),
             dict(event='BINANCE_HEALTH_WORK_FAILED',epoch=EPOCH,kind='quiet',topics=[NAMES[0]],attempt=1,error_type='ValueError')]
         result=self.parse(events);self.assertTrue(result['complete'],result)
-        self.assertEqual(result['records'][1]['evidence'],events[1])
+        self.assertEqual(result['records'][2]['evidence'],events[1])
         events[1]['topic']='other'
         self.assertIncomplete(self.parse(events),'JOURNAL_HTTP_TOPIC_OUTSIDE_SCOPE')
 
@@ -231,10 +233,42 @@ class JournalTests(unittest.TestCase):
         evidence=types.SimpleNamespace(lock=threading.Lock(),topics={name:dict(received=10,last_rx=123456) for name in NAMES})
         subject=types.SimpleNamespace(store=store,evidence=evidence,epoch=EPOCH,
             raw_frames=23,control_receipts=2,invalid_envelopes=1,controls=1)
-        events=[health()];namespace['final'](subject,'STOP_REQUESTED')
+        source=subprocess.check_output(['git','-C',str(ROOT),'show',
+            '33abf19c7a91855ba2efc2e65e1d383055494d75:research/hunter_binance_stream.py'],timeout=20)
+        tree=ast.parse(source)
+        plan=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='plan')
+        constants=[n for n in tree.body if isinstance(n,ast.Assign) and any(
+            isinstance(t,ast.Name) and t.id in ('SHARD_SIZE','MAX_SHARDS') for t in n.targets)]
+        namespace['roster_hash']=lambda names:journal.content_hash(sorted(names))
+        exec(compile(ast.Module(body=constants+[plan],type_ignores=[]),'<reviewed-plan>','exec'),namespace)
+        events=[namespace['plan'](NAMES),health()];namespace['final'](subject,'STOP_REQUESTED')
         result=self.parse(events,require_final=True)
         self.assertTrue(result['complete'],result)
+        self.assertEqual(result['startup_plan'],events[0])
         self.assertTrue(result['topic_coverage'][0]['receipt_conservation_verified'])
+
+    def test_startup_plan_requires_exact_roster_derived_values_and_types(self):
+        for change in ({'topics':3},{'sockets':2},{'max_inflight':True},{'network_capacity_verified':0},
+                       {'incoming_control_budget':'other'},{'Environment':'SECRET_VALUE'}):
+            result=self.parse([dict(journal.startup_plan(len(NAMES)),**change),health()])
+            self.assertIncomplete(result,'JOURNAL_STARTUP_PLAN_INVALID')
+            self.assertNotIn('SECRET_VALUE',json.dumps(result))
+
+    def test_missing_duplicate_or_late_startup_plan_is_not_complete(self):
+        missing=journal.parse_journal(encode([health()],include_plan=False),expected=EXPECTED)
+        self.assertIncomplete(missing,'JOURNAL_STARTUP_PLAN_MISSING')
+        plan=journal.startup_plan(len(NAMES))
+        for values in ([plan,plan,health()],[plan,health(),plan]):
+            self.assertIncomplete(self.parse(values),'JOURNAL_STARTUP_PLAN_DUPLICATE_OR_LATE')
+
+    def test_actual_full_scope_plan_uses_three_sockets_for_1228_topics(self):
+        names=['coin%dusdt@kline_15m'%n for n in range(1228)]
+        expected=dict(EXPECTED,topics=names,roster_hash=journal.content_hash(sorted(names)))
+        row=health();row.update(topics=len(names),roster_hash=expected['roster_hash'])
+        plan=journal.startup_plan(len(names))
+        self.assertEqual(plan['sockets'],3)
+        result=journal.parse_journal(encode([plan,row]),expected=expected)
+        self.assertTrue(result['complete'],result)
 
 
 if __name__=='__main__':unittest.main()

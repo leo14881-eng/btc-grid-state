@@ -38,6 +38,15 @@ MAX_BYTES = 32 * 1024 * 1024
 MAX_MESSAGE_BYTES = 65536
 
 
+def startup_plan(topics):
+    """Exact event-less object emitted by the reviewed stream.main -> plan."""
+    return dict(topics=topics, sockets=(topics+499)//500, max_topics_per_socket=500,
+                rest_requests_per_attempt=topics, rest_weight_per_request=2,
+                request_spacing_ms=200, max_inflight=4, recovery_deadline_seconds=900,
+                incoming_control_budget='2 subscribe/s plus protocol pong; below 5/s',
+                network_capacity_verified=False)
+
+
 def content_hash(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
                                      allow_nan=False).encode()).hexdigest()
@@ -131,7 +140,7 @@ def parse_journal(raw, *, expected, require_final=False, record_limit=10000):
     last_timestamp = None
     report = dict(schema='binance_health_upgrade_journal_v1', raw_sha256=hashlib.sha256(raw).hexdigest(),
                   expected=dict(expected), limit=record_limit, at_limit=False, records=records,
-                  topic_coverage=[], collector_accepted=False, publication_verified=False)
+                  topic_coverage=[], startup_plan=None, collector_accepted=False, publication_verified=False)
     if len(raw) > MAX_BYTES:
         issues.add('JOURNAL_BYTES_LIMIT')
         lines = []
@@ -163,7 +172,13 @@ def parse_journal(raw, *, expected, require_final=False, record_limit=10000):
                     raise ValueError('JOURNAL_STRUCTURED_MESSAGE_INVALID')
                 row['raw_omitted'] = True
                 continue
-            if not isinstance(value, dict) or not _shape(value):
+            is_plan = isinstance(value, dict) and 'event' not in value
+            if is_plan:
+                wanted = startup_plan(len(names))
+                if (set(value) != set(wanted) or any(type(value[k]) is not type(v) or value[k] != v
+                        for k, v in wanted.items())):
+                    raise ValueError('JOURNAL_STARTUP_PLAN_INVALID')
+            elif not isinstance(value, dict) or not _shape(value):
                 raise ValueError('JOURNAL_EVENT_SCHEMA_UNRECOGNIZED')
             if entry.get('_SYSTEMD_INVOCATION_ID') != expected['collector_invocation']:
                 raise ValueError('JOURNAL_INVOCATION_MISMATCH')
@@ -174,6 +189,13 @@ def parse_journal(raw, *, expected, require_final=False, record_limit=10000):
             if timestamp <= 0 or (last_timestamp is not None and timestamp < last_timestamp):
                 raise ValueError('JOURNAL_TIMESTAMP_REGRESSION')
             last_timestamp = timestamp
+            if is_plan:
+                if report['startup_plan'] is not None or order:
+                    raise ValueError('JOURNAL_STARTUP_PLAN_DUPLICATE_OR_LATE')
+                report['startup_plan'] = value
+                row.update(journal_us=str(timestamp), collector_invocation=expected['collector_invocation'],
+                           startup_plan=value)
+                continue
             row.update(journal_us=str(timestamp), collector_invocation=expected['collector_invocation'], evidence=value)
             event = value['event']
             if event == 'BINANCE_HEALTH_RECOVERY':
@@ -235,6 +257,8 @@ def parse_journal(raw, *, expected, require_final=False, record_limit=10000):
             row['error_code'] = reason
     if not order:
         issues.add('JOURNAL_EPOCH_EVIDENCE_MISSING')
+    if report['startup_plan'] is None:
+        issues.add('JOURNAL_STARTUP_PLAN_MISSING')
     if expected.get('epoch') is not None and (not order or order[-1] != expected['epoch']):
         issues.add('JOURNAL_LAST_EPOCH_MISMATCH')
     if require_final:

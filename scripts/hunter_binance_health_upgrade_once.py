@@ -26,7 +26,7 @@ NEW = '33abf19c7a91855ba2efc2e65e1d383055494d75'
 LOCK_HASH = '417ec411c5cdc17ab597873e585b4b8ebb7ac270f9f4fbe8dffac2213d89a6c1'
 UPGRADER_HASH = 'e0615746c73809d258b858f4058cbd346b2df9e011a8d7df819f8e5f77808ddc'
 WRAPPER_HASH = '05aab679ee1f4b3cc53ad4fcf366959340fe79a0856e55fa066b07a77c93fdfa'
-JOURNAL_HASH = '51d7db101269b8253cf04f2592342baefbe8ccf76f982b21209bf18978a05355'
+JOURNAL_HASH = 'bd6869fdaa2dde909641352e5c0b89c252b3517176840b9e6df60904f107246f'
 REPO = Path('/opt/shadow-runner/btc-grid-state')
 PREFIX = Path('/opt/hunter-binance-stream')
 STATE = Path('/var/lib/hunter-binance-stream')
@@ -347,6 +347,8 @@ def stop_owned(work):
     try:
         state = owned_service(work)
         if not stopped(state):
+            if state.get('MainPID', '0') != '0' and re.fullmatch('[a-f0-9]{32}', state.get('InvocationID', '')):
+                result['owned_collector_invocation'] = state['InvocationID']
             result['stop_attempted'] = True
             try: result['stop_returncode'] = command(['systemctl', 'stop', SERVICE], timeout=STOP_SECONDS, check=False).returncode
             except subprocess.TimeoutExpired: result['stop_timed_out'] = True
@@ -501,8 +503,12 @@ def cleanup():
     result = stop_owned(work)
     try:
         _, evidence, _, _ = bundle()
-        collector = private_json(work / 'collector-binding.json')['invocation_id']
-        result['journal'] = journal(work, private_json(work / 'prepared.json'), collector, require_final=True)
+        binding = work / 'collector-binding.json'
+        collector = private_json(binding)['invocation_id'] if binding.exists() else result.get('owned_collector_invocation')
+        if collector is None:
+            result['journal'] = dict(complete=False, reason='NO_COLLECTOR_INVOCATION', collector_accepted=False, publication_verified=False)
+        else:
+            result['journal'] = journal(work, private_json(work / 'prepared.json'), collector, require_final=True)
     except BaseException as error: result['journal_error_type'] = type(error).__name__
     result.update(status='FAILED_STOPPED' if result['stopped_verified'] else 'STOP_UNCONFIRMED_REVIEW_REQUIRED',
                   supervisor_invocation=invocation, collector_accepted=False, publication_verified=False)
