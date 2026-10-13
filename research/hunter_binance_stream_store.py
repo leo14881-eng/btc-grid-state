@@ -167,10 +167,24 @@ def valid_row(row, interval):
 
 class Store(MarketControlMixin, CoordinationStore):
     def __init__(self, path=STATE_PATH):
+        # Only explicit offline provisioning may change SQLite journal mode.
+        # A PREPARED/unknown migration marker is a hard startup refusal.
+        try:
+            from research.hunter_binance_market_wal import require_no_interrupted_migration
+        except ModuleNotFoundError as error:
+            if error.name != 'research': raise
+            from hunter_binance_market_wal import require_no_interrupted_migration
+        require_no_interrupted_migration(path)
         super().__init__(path)
 
     @classmethod
     def reader(cls, path=STATE_PATH):
+        try:
+            from research.hunter_binance_market_wal import require_no_interrupted_migration
+        except ModuleNotFoundError as error:
+            if error.name != 'research': raise
+            from hunter_binance_market_wal import require_no_interrupted_migration
+        require_no_interrupted_migration(path)
         return super().reader(path)
 
     def begin_session(self, names, manifest):
