@@ -39,7 +39,7 @@ jobs:
         run: |
           python -I -B -X utf8 scripts/profile_binance_contention.py \
             --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
-            --probe-consumer-cost --probe-revision-copy \
+            --probe-consumer-cost --probe-revision-copy --probe-snapshot-codec \
             | tee "$RUNNER_TEMP/binance-integrated-read-cpu.log"
       - uses: actions/upload-artifact@v4
         if: always()
