@@ -28,6 +28,56 @@ CACHE_SOURCE = 'OFFICIAL_BINANCE_SPOT_CACHE'
 SCHEMA = 'binance_stream_generation_v1'
 
 
+_REVISION_COLUMNS = ('topic','start','row_json','observed','source_time','confirmed','origin','epoch')
+_REVISION_TEXT_COLUMNS = frozenset(('topic','row_json','origin','epoch'))
+
+
+def _copy_revision_rows_legacy(db, query, parameters):
+    """Owned copies from the original query; also the unusual-value fallback."""
+    return 'rows', [dict(row) for row in db.execute(query,parameters)]
+
+
+def _copy_revision_rows(db, query, parameters):
+    """Pack conventional revision cells in SQLite; decode after the read closes.
+
+    This changes only the copy boundary, never the revision selection or row_json
+    parser. SQLite REAL values must not make a potentially lossy JSON round trip.
+    BLOBs, unusual text and schema extensions retain the original query/copies in
+    this SAME transaction. Ordinary row_json is already ensure_ascii=True text.
+    """
+    description=db.execute('SELECT * FROM ('+query+') LIMIT 0',parameters).description
+    if tuple(column[0] for column in description)!=_REVISION_COLUMNS:
+        return _copy_revision_rows_legacy(db,query,parameters)
+    predicates=[];members=[]
+    for name in _REVISION_COLUMNS:
+        column='copied.'+name
+        if name in _REVISION_TEXT_COLUMNS:
+            # ASCII only avoids depending on JSON1's handling of malformed UTF-8
+            # stored as TEXT. Legitimate Unicode/control/NUL text is copied by
+            # the legacy path, without rejecting or rewriting that value.
+            valid=("(typeof("+column+")='null' OR (typeof("+column+")='text'"
+                   " AND "+column+" NOT GLOB '*[^ -~]*'"
+                   " AND instr("+column+",char(0))=0"
+                   " AND length(CAST("+column+" AS BLOB))=length("+column+")))")
+        else:
+            valid="typeof("+column+") IN ('integer','null')"
+        predicates.append(valid)
+        # Do not feed REAL/BLOB values into JSON1, even for a discarded packet.
+        members.extend(("'"+name+"'",'CASE WHEN '+valid+' THEN '+column+' ELSE NULL END'))
+    packed=('SELECT COALESCE(SUM(CASE WHEN '+' AND '.join(predicates)+
+            ' THEN 0 ELSE 1 END),0),json_group_array(json_object('+','.join(members)+
+            ')) FROM ('+query+') AS copied')
+    try:
+        unusual,payload=db.execute(packed,parameters).fetchone()
+    except sqlite3.OperationalError as error:
+        if str(error) not in ('no such function: json_group_array','no such function: json_object'):
+            raise
+        return _copy_revision_rows_legacy(db,query,parameters)
+    if unusual:
+        return _copy_revision_rows_legacy(db,query,parameters)
+    return 'json',payload
+
+
 class Budget(SharedBudget):
     """Same four owners; directory weight consumes proportionally more spacing."""
     def acquire(self,now_ms=None,timeout=10,*,weight=2):
@@ -273,7 +323,7 @@ class Store(MarketControlMixin, CoordinationStore):
         with self.db(readonly=True) as db:
             meta = dict(db.execute('SELECT key,value FROM meta'))
             states = {r['topic']:dict(r) for r in db.execute('SELECT * FROM topics')}
-            readiness={};revisions={}
+            readiness={};revision_copies=[]
             # Keep the complete roster binding, but only copy history needed by
             # this consumer. Chunks stay below SQLite's older 999-variable cap
             # and all share this one consistent read transaction.
@@ -282,10 +332,11 @@ class Store(MarketControlMixin, CoordinationStore):
                 readiness.update({r['topic']:dict(r) for r in db.execute('''SELECT * FROM (
                     SELECT *,ROW_NUMBER() OVER (PARTITION BY topic ORDER BY observed DESC,id DESC) AS chosen
                     FROM readiness WHERE observed<=? AND topic IN ('''+marks+')) WHERE chosen=1',(cut,*group))})
-                revisions.update({(r['topic'],r['start']):dict(r) for r in db.execute('''SELECT r.* FROM revisions r
+                revision_query='''SELECT r.* FROM revisions r
                     JOIN (SELECT topic,start,MAX(source_time) AS latest FROM revisions
                           WHERE observed<=? AND source_time<=? AND topic IN ('''+marks+''') GROUP BY topic,start) chosen
-                    ON r.topic=chosen.topic AND r.start=chosen.start AND r.source_time=chosen.latest''',(cut,cut,*group))})
+                    ON r.topic=chosen.topic AND r.start=chosen.start AND r.source_time=chosen.latest'''
+                revision_copies.append(_copy_revision_rows(db,revision_query,(cut,cut,*group)))
             instruments={};unresolved=set();reverify=set()
             if meta.get('health_contract'):
                 instruments = dict(db.execute("SELECT topic,payload FROM bn_validity WHERE kind='instrument'"))
@@ -297,6 +348,14 @@ class Store(MarketControlMixin, CoordinationStore):
                 budget={'halt':None,'cooldown_ms':0};legacy_gate=None
             else:
                 budget=dict(budget_state(db));legacy_gate=request_gate(self,db)
+        revisions={}
+        for kind,value in revision_copies:
+            # row_json remains an unchanged string, not embedded/parsed SQL JSON.
+            # The selected non-NULL primary keys are unique; aggregation order
+            # cannot change the (topic,start) mapping. Consumer order remains the
+            # existing sorted topics/starts, with every source/proof/hash check.
+            copied=json.loads(value) if kind=='json' else value
+            revisions.update({(row['topic'],row['start']):row for row in copied})
         return meta,states,readiness,revisions,instruments,unresolved,reverify,budget,legacy_gate
 
     def freeze(self, names, cut, read_at, expected_roster=None):

@@ -50,6 +50,22 @@ floor and confirmation truthiness remain equivalent; malformed stored starts
 use the old Python path. Tests compare all durable tables and frozen outputs
 against the immutable prior hot path, including invalid and duplicate frames.
 
+The next candidate copies ordinary revision rows through SQLite JSON aggregation
+instead of returning each row separately to Python. It retains the same query,
+400-topic chunks and single read transaction; JSON decoding and revision-map
+construction occur after that transaction closes. Exact column layout and
+storage-type checks select this copy path. REAL/BLOB, non-ASCII or otherwise
+unusual values use the original row copy in that same transaction. Only an
+explicitly missing JSON function permits a capability fallback; lock, I/O and
+corruption errors are not retried or hidden. All candle/source/proof/hash and
+final fence checks still run. This has no persistent cache or schema migration.
+The profile optionally compares original and candidate revision copies under
+the unchanged continuous full-reader load on the same restored seed. Results
+for a prior head do not validate this candidate; its strict gate must pass
+before the real-hour job can run. SQLite JSON functions can be omitted at build
+time, so their presence is not assumed from a version number alone; see the
+[SQLite JSON function contract](https://www.sqlite.org/json1.html).
+
 Each database reports its own phase histogram, count, maximum and cumulative
 microseconds. P99 is explicitly a histogram bucket upper bound over the Store
 or Control instance lifetime, not an exact percentile or sliding window.
@@ -310,6 +326,57 @@ was 0.558 to 0.426 and 0.758 to 0.504 seconds. Output/generation/scope and
 all 1250 instrumented calls matched. Both subsequent continuous full-reader
 legs still filled the collector queue. These are the single-pair measurements
 described above, not completed sustained-load acceptance.
+
+Each algorithm has only one measured 80-pair Monitor batch, with no concurrent
+writer. Its quoted seconds sum seven non-overlapping groups: one
+management_inputs (including the initial read), one rolling 1h, one rolling 4h,
+one micro pass, the sum of 80 score_row calls, and two final delivery checks.
+Each formula pass submits 80 tasks to the existing 64-worker executor. The
+1250 records are nested method observations per algorithm (200 Research and
+1050 Monitor), not repeated Monitor batches, SQL statements or network calls.
+Do not add their durations together. Selection, seed, diagnostic output checks,
+external data and the rest of Monitor are excluded. A batch sample size of one
+does not establish batch p50/p95; within-method distributions describe only
+that batch's calls. The old profile field seed_seconds includes the optional
+probes and backup; a separate initialization-before-probes field now makes
+that boundary explicit.
+
+Real consumer history scopes differ from the full load fixture. Early requests
+scan symbols plus BTC at 15m/1h (818 topics for 409 symbols); Research performs
+one 1d read per selected asset; Monitor requests management_selection plus BTC
+at 15m/1h. Monitor includes every eligible V2 priority position, so its actual
+set can exceed the nominal V1 rotation budget. Complete roster state is still
+checked, but revision history is selected only for the requested topics. The
+1228-topic whole-generation reader is the strict contention fixture and the
+collector's complete health sample, not every consumer's read scope. A Frozen
+object may reuse its owned immutable payload/encoding, while each delivery
+must still check current expiry and revocation for its original scope. No
+independently timed chunk transactions are assembled into one generation.
+
+Each side runs exactly one 80-pair Monitor read segment. The reported seconds
+sum management_inputs once, rolling(1h) once, rolling(4h) once, micro once,
+80 score_row calls and two final checks. They exclude initialization, Research,
+selection/setup, helper output checks and the rest of Monitor. Every formula
+stage submits 80 tasks to the unchanged 64-worker executor. The 1250 records
+per side are nested method observations (200 Research, 1050 Monitor), not
+1250 independent jobs or SQL queries. Do not add their inclusive totals again.
+One full-batch sample cannot establish a batch p50/p95. Per-method distributions
+are reported with their individual counts and are not cross-run batch tails.
+In that first comparison initial management_inputs stayed near 0.12 seconds;
+the three formula stages each fell from about 15.6 to 2.3 seconds on 3.10,
+and about 19.4 to 2.9 seconds on 3.12. The old delivery scans, not initialization
+or network access, explain the measured formula-stage reduction. SQL/decoding/
+hash components were not separately timed in that historical measurement.
+
+Actual history scope is selected before copying: Early requests each scan
+symbol's 15m/1h windows (818 topics for 409 symbols), Research requests one
+selected asset's 1d window at a time, and Monitor requests its management
+selection plus BTC at 15m/1h. Monitor's V2 priority set can exceed the nominal
+80-item V1 rotation budget. The snapshot still reads complete topic states to
+verify roster identity, but its history queries are already scoped. It does
+not first copy all 1228 histories and then filter each small consumer. The
+continuous stress fixture and collector health sample explicitly request the
+full roster. All history chunks remain inside a single consistent transaction.
 
 The paired scheduling probe at `e2b52ab788cabb3cdd2d7669a2081547955d683a`
 did not solve the backlog: changing only the diagnostic switch interval from

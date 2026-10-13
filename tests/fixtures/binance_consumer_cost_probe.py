@@ -16,7 +16,7 @@ import math
 import os
 from pathlib import Path
 import sys
-from threading import Lock
+from threading import Lock, local
 import time
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -133,13 +133,24 @@ class _Measurements:
     def __init__(self):
         self.segment = 'setup'
         self.calls = []
+        self.detail_calls = []
         self.lock = Lock()
+        self.local = local()
+
+    def thread_state(self):
+        if not hasattr(self.local, 'depth'):
+            self.local.depth = 0
+            self.local.stack = []
+        return self.local
 
     def call(self, label, function, *args, **kwargs):
+        state = self.thread_state()
         segment = self.segment
         wall = time.perf_counter_ns()
         cpu = time.thread_time_ns()
         error = None
+        state.depth += 1
+        state.stack.append(label)
         try:
             return function(*args, **kwargs)
         except BaseException as exc:
@@ -148,6 +159,8 @@ class _Measurements:
         finally:
             elapsed = (time.perf_counter_ns()-wall)//1000
             used = (time.thread_time_ns()-cpu)//1000
+            state.stack.pop()
+            state.depth -= 1
             with self.lock:
                 _require(len(self.calls) < 20000, 'MEASUREMENT_BOUND')
                 self.calls.append(dict(segment=segment, method=label, wall_us=elapsed,
@@ -159,9 +172,40 @@ class _Measurements:
             return self.call(label, function, *args, **kwargs)
         return measured
 
-    def summary(self):
+    def detail_call(self, label, function, *args, **kwargs):
+        state = self.thread_state()
+        if state.depth == 0:
+            return function(*args, **kwargs)
+        segment = self.segment
+        parent = state.stack[-1]
+        wall = time.perf_counter_ns()
+        cpu = time.thread_time_ns()
+        error = None
+        state.stack.append(label)
+        try:
+            return function(*args, **kwargs)
+        except BaseException as exc:
+            error = dict(type=type(exc).__name__, message=str(exc)[:500])
+            raise
+        finally:
+            elapsed = (time.perf_counter_ns()-wall)//1000
+            used = (time.thread_time_ns()-cpu)//1000
+            state.stack.pop()
+            with self.lock:
+                _require(len(self.detail_calls) < 20000, 'DETAIL_MEASUREMENT_BOUND')
+                self.detail_calls.append(dict(segment=segment, method=label,
+                    parent=parent, wall_us=elapsed, thread_cpu_us=used, error=error))
+
+    def detail_wrap(self, label, function):
+        @wraps(function)
+        def measured(*args, **kwargs):
+            return self.detail_call(label, function, *args, **kwargs)
+        return measured
+
+    @staticmethod
+    def summarize(calls):
         groups = {}
-        for call in self.calls:
+        for call in calls:
             groups.setdefault(call['segment']+':'+call['method'], []).append(call)
         result = {}
         for key, calls in sorted(groups.items()):
@@ -169,9 +213,80 @@ class _Measurements:
             for field in ('wall_us', 'thread_cpu_us'):
                 values = sorted(c[field] for c in calls)
                 item[field] = dict(total=sum(values), maximum=values[-1],
-                    p99=values[(99*len(values)+99)//100-1])
+                    **{'p'+str(p): values[(p*len(values)+99)//100-1] for p in (50, 95, 99)})
             result[key] = item
         return result
+
+    def summary(self):
+        return self.summarize(self.calls)
+
+    def detail_summary(self):
+        return self.summarize(self.detail_calls)
+
+
+@contextmanager
+def _detail_measurements(measured, consumer):
+    """Nested diagnostics only while an existing measured method is executing.
+
+    No extra read, SQLite-row wrapper or worker is introduced. Global JSON
+    bindings are restored on exit; thread-local depth excludes helper hashes,
+    setup/seed and unrelated threads. Parent/phase samples overlap by design.
+    """
+    from research import hunter_binance_stream_store as market_store
+
+    original_loads, original_dumps = json.loads, json.dumps
+    freeze_code = market_store.Store.freeze.__code__
+
+    @wraps(original_loads)
+    def loads(value, *args, **kwargs):
+        state = measured.thread_state()
+        if state.depth == 0:
+            return original_loads(value, *args, **kwargs)
+        if 'Store._freeze_snapshot' in state.stack:
+            phase = 'revision_snapshot_decode'
+        elif 'Frozen.__init__' in state.stack:
+            phase = 'owned_snapshot_decode'
+        else:
+            # Store.freeze also loads instrument evidence. The stack alone
+            # cannot label those calls as bars: require the actual freeze
+            # caller and the identical raw row_json object, without scanning
+            # rows or retaining a frame reference after classification.
+            caller = sys._getframe(1)
+            try:
+                row = caller.f_locals.get('r') if caller.f_code is freeze_code else None
+                phase = ('bar_decode' if isinstance(row, dict) and value is row.get('row_json')
+                         else 'other_decode')
+            finally:
+                del caller
+        return measured.detail_call('JSON.loads:'+phase, original_loads, value, *args, **kwargs)
+
+    @wraps(original_dumps)
+    def dumps(value, *args, **kwargs):
+        state = measured.thread_state()
+        if state.depth == 0:
+            return original_dumps(value, *args, **kwargs)
+        if 'market.content_hash' in state.stack:
+            phase = 'canonical_hash_encoding'
+        elif 'consumer._encode_json_tree' in state.stack:
+            phase = 'owned_snapshot_encoding'
+        else:
+            phase = 'other_encoding'
+        return measured.detail_call('JSON.dumps:'+phase, original_dumps, value, *args, **kwargs)
+
+    with ExitStack() as stack:
+        for owner, name, label in (
+                (market_store.Store, '_freeze_snapshot', 'Store._freeze_snapshot'),
+                (market_store.Store, 'freeze', 'Store.freeze'),
+                (market_store, '_copy_revision_rows', 'revision_copy'),
+                (consumer.Frozen, '__init__', 'Frozen.__init__'),
+                (consumer.Frozen, '_validate_at', 'Frozen._validate_at'),
+                (consumer, '_encode_json_tree', 'consumer._encode_json_tree'),
+                (market_store, 'content_hash', 'market.content_hash')):
+            stack.enter_context(patch.object(owner, name,
+                measured.detail_wrap(label, getattr(owner, name))))
+        stack.enter_context(patch.object(json, 'loads', loads))
+        stack.enter_context(patch.object(json, 'dumps', dumps))
+        yield
 
 
 def run_consumer_cost_probe(market, *, stamp, scratch_root):
@@ -209,10 +324,44 @@ def run_consumer_cost_probe(market, *, stamp, scratch_root):
             'research.hunter_position_monitor.management_selection/check_cache_delivery',
             'research.hunter_binance_stream_consumer.management_inputs',
             'research.hunter_early_signals.rolling(1h)/rolling(4h)/micro/score_row'],
-        measurement_semantics=dict(unit='microseconds', percentile='EXACT_NEAREST_RANK_P99',
+        measurement_semantics=dict(unit='microseconds', percentile='EXACT_NEAREST_RANK',
+            percentiles=['p50', 'p95', 'p99'], maximum='OBSERVED_MAXIMUM',
             inclusive_nested_not_additive=True, thread_cpu='EXECUTING_THREAD_ONLY',
             worker_cpu='Frozen.rows/packet/check_delivery observations include worker threads',
-            instrumentation='transparent wrappers; fixed order; no warmup or repeated-load claim'))
+            instrumentation='transparent wrappers; fixed order; no warmup or repeated-load claim',
+            batches_per_segment_per_probe=1,
+            call_count_semantics='Each probe has its own main method records; nested wrappers are not SQL calls, external requests or independent batch samples',
+            monitor_total_methods=['consumer.management_inputs (includes initial consumer.read)',
+                'signals.rolling:1h', 'signals.rolling:4h', 'signals.micro',
+                'signals.score_row (sum for the selected batch)',
+                'monitor.check_cache_delivery:after_reads',
+                'monitor.check_cache_delivery:final_delivery'],
+            monitor_total_excludes=['seed', 'management_selection', 'fixture/scope setup',
+                'helper output validation/hashing', 'report construction',
+                'unmeasured full-Monitor work']),
+        detail_measurement_semantics=dict(
+            enabled_only='Executing thread is inside an existing main measured.call; nested detail records never change the main method count',
+            record_limit_per_container=20000,
+            inclusive_nested_not_additive=True,
+            thread_cpu='EXECUTING_THREAD_ONLY',
+            sql_engine_time_isolated=False,
+            phases={
+                'Store._freeze_snapshot':'SQLite read transaction/driver, copied metadata/readiness/revisions, and revision JSON decode/map assembly after the transaction',
+                'revision_copy':'Driver, schema probe, storage-type/text checks, native JSON aggregation or legacy row copying; not pure SQLite engine time',
+                'Store.freeze':'Snapshot plus bar/source/readiness validation, window construction, proofs and hashes',
+                'Frozen.__init__':'Owned snapshot construction, generation hash and initial validity checks',
+                'Frozen._validate_at':'Freshness/identity/proof checks and window hashes at construction or delivery',
+                'consumer._encode_json_tree':'Copy eligibility traversal and private JSON encoding',
+                'market.content_hash':'Canonical JSON encoding, UTF-8 encoding and SHA-256',
+                'JSON.loads:revision_snapshot_decode':'Packed revision payload decode while in the snapshot phase, after its transaction closes',
+                'JSON.loads:bar_decode':'Raw row_json decode, identified by freeze callsite/object identity; excludes valid_row and instrument-proof parsing',
+                'JSON.loads:owned_snapshot_decode':'Frozen constructor owned-copy decode',
+                'JSON.dumps:canonical_hash_encoding':'Only JSON encoding nested inside instrumented market.content_hash; excludes its UTF-8/SHA work',
+                'JSON.dumps:owned_snapshot_encoding':'JSON encoding inside _encode_json_tree',
+                'JSON.*:other':'Other JSON work inside actual measured production methods; not attributed to a narrower phase'},
+            exclusions=['seed/import/setup outside measured calls', 'helper output hashes and checks',
+                        'unrelated threads', 'per-SQLite-row timing'],
+            limitations='One batch per segment. Method-call percentiles are descriptive observations, not repeated-batch tail latency; wrappers add overhead.'))
     try:
         with _read_boundary({path, control_path}, results_root,
                             results_root/'hunter-shadow-rules.json', blocked):
@@ -288,6 +437,7 @@ def run_consumer_cost_probe(market, *, stamp, scratch_root):
                         (consumer.Frozen, 'check_delivery', 'Frozen.check_delivery')):
                     stack.enter_context(patch.object(owner, name,
                         measured.wrap(label, getattr(owner, name))))
+                stack.enter_context(_detail_measurements(measured, consumer))
 
                 measured.segment = 'research'
                 research_results = {}
@@ -343,6 +493,7 @@ def run_consumer_cost_probe(market, *, stamp, scratch_root):
                          'ACTUAL_READ_CALL_COUNT_CHANGED')
                 report['actual_read_scopes'] = read_scopes
                 _require(not any(call['error'] for call in measured.calls), 'SWALLOWED_METHOD_EXCEPTION')
+                _require(not any(call['error'] for call in measured.detail_calls), 'SWALLOWED_DETAIL_EXCEPTION')
                 _require(not blocked, 'BOUNDARY_VIOLATION')
                 report['status'] = 'PASSED_READ_SEGMENTS_ONLY'
     except BaseException as error:
@@ -353,5 +504,7 @@ def run_consumer_cost_probe(market, *, stamp, scratch_root):
     finally:
         report['measurements'] = measured.summary()
         report['calls'] = measured.calls
+        report['detail_measurements'] = measured.detail_summary()
+        report['detail_calls'] = measured.detail_calls
         report['blocked_events'] = blocked
     return report

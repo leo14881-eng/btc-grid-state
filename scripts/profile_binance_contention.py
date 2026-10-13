@@ -2,9 +2,9 @@
 
 One fresh scratch seed; both legs restore the SAME SQLite backups and clone the
 same in-memory Protocol receipt baseline. No HTTP, scheduler, sockets or child
-processes. An optional third full-reader leg probes interpreter scheduling on
-the same runner and restored seed. This is not the 32s/1h acceptance fixture or
-production evidence.
+processes. Optional full-reader legs compare revision copying, interpreter
+scheduling or owned-copy codecs on the same runner and restored seed. This is
+not the 32s/1h acceptance fixture or production evidence.
 """
 import sys
 sys.dont_write_bytecode = True
@@ -48,6 +48,8 @@ parser.add_argument('--probe-snapshot-codec', action='store_true',
                     help='Diagnostic-only owned-copy codec oracle and full-reader leg at the original interval')
 parser.add_argument('--probe-consumer-cost', action='store_true',
                     help='Measure actual Research/Monitor read segments on the initialized scratch cache')
+parser.add_argument('--probe-revision-copy', action='store_true',
+                    help='Compare the original row copier with the candidate on the same restored full-reader seed')
 args = parser.parse_args()
 repo = args.repo.resolve(strict=True)
 if sys.platform != 'linux':
@@ -62,6 +64,7 @@ sys.path.insert(0, str(repo))
 from research import hunter_binance_health as health
 from research import hunter_binance_stream as stream
 from research import hunter_binance_stream_consumer as consumer
+from research import hunter_binance_stream_store as market_store_module
 from research.hunter_binance_health_store import Store, payload_hash
 from research.hunter_binance_control import ControlError
 from research.hunter_binance_stream_store import split_topic
@@ -205,6 +208,16 @@ def phases(result):
 
 class QueueSaturated(RuntimeError):
     pass
+
+
+@contextmanager
+def original_revision_copy():
+    # Only row extraction from e8b0b8f5 changes. Both sides use the candidate's
+    # query/transaction and post-transaction map assembly/validation/fences.
+    # This does not replay the complete earlier freeze implementation.
+    with patch.object(market_store_module, '_copy_revision_rows',
+                      market_store_module._copy_revision_rows_legacy):
+        yield
 
 
 def run_leg(market, seed_root, with_reader):
@@ -570,10 +583,11 @@ def main():
         probe_switch_interval_seconds=args.probe_switch_interval,
         probe_snapshot_codec=args.probe_snapshot_codec,
         probe_consumer_cost=args.probe_consumer_cost,
+        probe_revision_copy=args.probe_revision_copy,
         checkout_source_head=args.source_head, source_file_sha256_before=source_hashes,
         fixed_market_stamp=STAMP, fixture_source_head=runtime.HEAD,
         fixture_manifest=runtime.MANIFEST, fixture_identity_is_synthetic=True,
-        comparison_limitations='Fixed no-reader then full-reader order, followed by optional scheduling/copy-codec probes; same runner/seed but OS page cache is not cooled; instrumented; neither diagnostic improvement nor copy speed alone establishes acceptance or a production change',
+        comparison_limitations='Fixed no-reader, optional original-revision-copy reader, then candidate full-reader order, followed by optional scheduling/copy-codec probes; same runner/seed but OS page cache is not cooled; instrumented; neither diagnostic improvement nor copy speed alone establishes acceptance',
         legs=[], fatal_errors=[])
     try:
         started = time.monotonic()
@@ -587,6 +601,19 @@ def main():
         initial = market.read(NAMES, STAMP+1)
         assert len(initial.generation['windows']) == 1228
         initial.check_delivery()
+        report['initialization_seconds_before_optional_probes'] = time.monotonic()-started
+        if args.probe_revision_copy:
+            with original_revision_copy():
+                original = market.read(NAMES, STAMP+1)
+                original.check_delivery()
+            assert original.generation == initial.generation, 'REVISION_COPY_GENERATION_CHANGED'
+            assert original.fence_sha256 == initial.fence_sha256, 'REVISION_COPY_FENCE_CHANGED'
+            report['revision_copy_probe'] = dict(
+                original_copy_head='e8b0b8f5f7aad66147a31164d5779810bb4ff909',
+                scope='REVISION_COPY_ONLY_SAME_QUERY_TRANSACTION_AND_VALIDATION',
+                shared_map_assembly='AFTER_READ_TRANSACTION_ON_BOTH_SIDES',
+                initial_generation_equal=True, initial_fence_equal=True,
+                generation_sha256=initial.generation['generation_sha256'])
         if args.probe_snapshot_codec:
             report['snapshot_codec_probe'] = codec_probe.run_codec_probe(initial.generation)
         if args.probe_consumer_cost:
@@ -605,18 +632,24 @@ def main():
                 assert db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0] == 0
             backup(source, seed_root/filename)
         report.update(seed_seconds=time.monotonic()-started, epoch=market.epoch,
+            seed_seconds_semantics='PRE_LOAD_SETUP_INCLUDING_OPTIONAL_PROBES_AND_BACKUP_NOT_PURE_INITIALIZATION',
             seed_file_sha256={name:hashlib.sha256((seed_root/name).read_bytes()).hexdigest()
                               for name in ('state.sqlite3', 'control.sqlite3')})
-        conditions = [(False, original_switch_interval, 'json'), (True, original_switch_interval, 'json')]
+        conditions = [(False, original_switch_interval, 'json', 'candidate')]
+        if args.probe_revision_copy:
+            conditions.append((True, original_switch_interval, 'json', 'original_rows'))
+        conditions.append((True, original_switch_interval, 'json', 'candidate'))
         if args.probe_switch_interval is not None:
-            conditions.append((True, args.probe_switch_interval, 'json'))
+            conditions.append((True, args.probe_switch_interval, 'json', 'candidate'))
         if args.probe_snapshot_codec:
-            conditions.append((True, original_switch_interval, 'marshal_owned_memory'))
-        for with_reader, switch_interval, codec in conditions:
+            conditions.append((True, original_switch_interval, 'marshal_owned_memory', 'candidate'))
+        for with_reader, switch_interval, codec, revision_copy in conditions:
             sys.setswitchinterval(switch_interval)
-            with (codec_probe.installed_codec() if codec != 'json' else nullcontext()):
+            with (codec_probe.installed_codec() if codec != 'json' else nullcontext()), \
+                    (original_revision_copy() if revision_copy == 'original_rows' else nullcontext()):
                 leg = run_leg(market, seed_root, with_reader)
             leg['snapshot_copy_codec'] = codec
+            leg['revision_copy'] = revision_copy
             report['legs'].append(leg)
             if leg.get('live_threads'):
                 report['fatal_errors'].append('LIVE_THREADS')
@@ -651,7 +684,8 @@ def main():
             report['fatal_errors'].append('SOURCE_CHANGED_DURING_PROFILE')
         if BLOCKED:
             report['fatal_errors'].append('AUDIT_GUARD_BLOCKED_SIDE_EFFECT')
-        if len(report['legs']) != 2+int(args.probe_switch_interval is not None)+int(args.probe_snapshot_codec):
+        if len(report['legs']) != (2+int(args.probe_switch_interval is not None)
+                                  +int(args.probe_snapshot_codec)+int(args.probe_revision_copy)):
             report['fatal_errors'].append('PAIR_INCOMPLETE')
         report['diagnostic_completed_without_fatal_error'] = not report['fatal_errors']
         target.write_text(json.dumps(report, sort_keys=True, indent=2), encoding='utf-8')
