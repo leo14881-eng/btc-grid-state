@@ -39,7 +39,7 @@ jobs:
         run: |
           python -I -B -X utf8 scripts/profile_binance_session_topology.py \
             > "$RUNNER_TEMP/binance-session-wal-diagnostic.log" 2>&1 || {
-              grep -E 'BINANCE_SESSION_TOPOLOGY_(LEG|FINAL)' "$RUNNER_TEMP/binance-session-wal-diagnostic.log" | cut -c1-2000 || true
+              grep -E 'SESSION_WAL_COMPACT|BINANCE_SESSION_TOPOLOGY_(LEG|FINAL)' "$RUNNER_TEMP/binance-session-wal-diagnostic.log" | cut -c1-2000 || true
               exit 1
             }
           grep -E 'BINANCE_SESSION_TOPOLOGY_FINAL' "$RUNNER_TEMP/binance-session-wal-diagnostic.log" | cut -c1-2000
