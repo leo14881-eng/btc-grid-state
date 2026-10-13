@@ -950,6 +950,14 @@ def main():
                 parent_problem=result.get('parent_error'),
                 load_succeeded=result.get('load_succeeded'),
                 started_reader=result.get('reader_started'),
+                recorded_errors=[dict(operation=e.get('operation'),type=e.get('type'),message=e.get('message')) for e in (result.get('errors') or [])[:3]],
+                reported_receipts=result.get('receipt_totals'),
+                actual_load_seconds=result.get('load_observed_seconds'),
+                producer_sent=result.get('producer_sent'),
+                session_final_received=result.get('session_final_received'),
+                health_samples_within_load=result.get('health_samples_within_load'),
+                native_sqlite_phase_errors=result.get('native_sqlite_phase_errors'),
+                first_reader_error=(result.get('reader') or {}).get('problem'),
                 market_commit_failures=len(failures),
                 first_commit_failure=failures[0].get('failed_commit') if failures else None)),flush=True)
         emit_bounded('BINANCE_SESSION_TOPOLOGY_LEG',result)
