@@ -161,6 +161,59 @@ class WalOfflineTests(unittest.TestCase):
         with self.assertRaisesRegex(wal.WalMigrationError,'CONTROL_PHASE_NOT_OFFLINE'):
             wal.migrate(self.state)
 
+
+    def test_long_reader_retains_snapshot_during_wal_writer_commits(self):
+        wal.migrate(self.state)
+        reader=sqlite3.connect(self.state.as_uri()+'?mode=ro',uri=True,timeout=.25)
+        try:
+            reader.execute('BEGIN')
+            self.assertEqual(reader.execute('SELECT COUNT(*) FROM revisions').fetchone()[0],1)
+            with closing(sqlite3.connect(self.state,timeout=.25)) as writer:
+                for i in range(4):
+                    writer.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?,?)',
+                                   ('btcusdt@kline_15m',i+1,'[1,2]',i+1,i+1,0,'test','test'))
+                    writer.commit()
+                checkpoint=tuple(writer.execute('PRAGMA wal_checkpoint(PASSIVE)').fetchone())
+                self.assertEqual(checkpoint[0],0)
+            self.assertEqual(reader.execute('SELECT COUNT(*) FROM revisions').fetchone()[0],1)
+        finally:
+            reader.rollback()
+            reader.close()
+        with closing(sqlite3.connect(self.state,timeout=.25)) as writer:
+            self.assertEqual(tuple(writer.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone())[0],0)
+            self.assertEqual(writer.execute('SELECT COUNT(*) FROM revisions').fetchone()[0],5)
+
+    def test_real_sigkill_after_durable_prepared_marker_fails_closed(self):
+        worker='''import sys,time
+from pathlib import Path
+from research import hunter_binance_market_wal as w
+original=w._phase
+def delayed(marker,value,*,create):
+    original(marker,value,create=create)
+    if create:
+        print('PREPARED_DURABLE',flush=True)
+        time.sleep(10)
+w._phase=delayed
+w.migrate(Path(sys.argv[1]))
+'''
+        proc=subprocess.Popen([sys.executable,'-c',worker,str(self.state)],
+                              cwd=str(Path(__file__).resolve().parents[1]),
+                              stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        try:
+            self.assertEqual(proc.stdout.readline().strip(),'PREPARED_DURABLE')
+            proc.kill()
+            proc.wait(timeout=3)
+            self.assertNotEqual(proc.returncode,0)
+            self.assertEqual(json.loads(self.marker().read_text())['status'],'PREPARED')
+            with self.assertRaisesRegex(wal.WalMigrationError,'UNVERIFIED_MIGRATION'):
+                Store.reader(self.state)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            proc.stdout.close()
+            proc.stderr.close()
+
     def test_symlink_database_refused(self):
         alias=self.directory/'alias.sqlite3'
         alias.symlink_to(self.state)
