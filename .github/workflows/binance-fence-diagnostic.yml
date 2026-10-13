@@ -1,0 +1,43 @@
+name: Binance fencing failure diagnosis
+
+on:
+  pull_request:
+    paths:
+      - tests/test_hunter_binance_coordinated_scheduler.py
+      - tests/test_hunter_binance_signal_use.py
+      - .github/workflows/binance-fence-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Assert exact checkout
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Repository-wide F2 health consumers audit (read-only)
+        run: |
+          git grep -n -F -e 'read_health(' -e 'data_status' -e 'collector_accepted' -e 'BINANCE_COLLECTOR_HEALTH' -- research scripts deploy .github/workflows || true
+          echo 'AUDIT_SEARCH_COMPLETED'
+      - name: Preserve original assertions and print bounded failure diagnostics
+        run: |
+          python -B -X utf8 -m unittest -v \
+            tests.test_hunter_binance_coordinated_scheduler.SchedulerTests.test_quiet_reverification_survives_fresh_websocket_removing_market_need \
+            tests.test_hunter_binance_coordinated_scheduler.SchedulerTests.test_repair_reverification_survives_websocket_resolving_gap_and_current_bar \
+            tests.test_hunter_binance_signal_use.SignalUseTests.test_identity_io_revocation_blocks_real_target_momentum_exit \
+            tests.test_hunter_binance_signal_use.SignalUseTests.test_identity_io_expiry_blocks_real_thesis_exit_and_recovery
