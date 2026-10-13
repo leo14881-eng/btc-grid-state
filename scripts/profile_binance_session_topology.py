@@ -940,6 +940,18 @@ def main():
             result = dict(leg=label,diagnostic_completed=False,load_succeeded=False,
                           problem=error_detail('parent.run_leg',error))
         write_json(scratch/(label+'.report.json'),result)
+        if os.environ.get('BINANCE_DIAGNOSTIC_MARKET_WAL') == '1':
+            c=result.get('collector') or {}
+            failures=result.get('sqlite_transaction_correlation',{}).get('commit_failures') or []
+            print('SESSION_WAL_COMPACT '+canonical(dict(leg=label,
+                collector_succeeded=c.get('session_succeeded'),
+                collector_problem=c.get('problem'),
+                collector_journal_override=c.get('journal_override'),
+                parent_problem=result.get('parent_error'),
+                load_succeeded=result.get('load_succeeded'),
+                started_reader=result.get('reader_started'),
+                market_commit_failures=len(failures),
+                first_commit_failure=failures[0].get('failed_commit') if failures else None)),flush=True)
         emit_bounded('BINANCE_SESSION_TOPOLOGY_LEG',result)
         results.append(result)
     after = {str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in audit_paths}
