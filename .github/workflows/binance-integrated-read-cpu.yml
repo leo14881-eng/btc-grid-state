@@ -1,0 +1,51 @@
+name: Binance integrated read CPU diagnosis
+
+on:
+  pull_request:
+    paths:
+      - research/hunter_binance_stream_store.py
+      - research/hunter_binance_stream_consumer.py
+      - scripts/profile_binance_contention.py
+      - .github/workflows/binance-integrated-read-cpu.yml
+
+permissions:
+  contents: read
+
+jobs:
+  paired-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Exact SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Scratch-only paired reader and write CPU profiling, original queue and scope
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          python -I -B -X utf8 scripts/profile_binance_contention.py \
+            --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
+            --probe-consumer-cost --probe-revision-copy \
+            | tee "$RUNNER_TEMP/binance-integrated-read-cpu.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-read-cpu-${{ matrix.python-version }}
+          path: |
+            ${{ runner.temp }}/binance-paired8-*/paired8-report.json
+            ${{ runner.temp }}/binance-integrated-read-cpu.log
+          if-no-files-found: warn
