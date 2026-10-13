@@ -158,7 +158,29 @@ class Store(MarketControlMixin, CoordinationStore):
               WHERE prior.topic=old.topic AND prior.start=old.start AND prior.observed<?)''',
             (name,end-HISTORY_MS,end-HISTORY_MS))
 
-    def _ingest_ws(self, db, epoch, message, received):
+    def _put(self, db, name, row, observed, source_time, confirmed, origin, epoch):
+        # Only these two fields decide replacement. Keep the shared store's
+        # revision and pruning semantics without materializing the prior bar.
+        previous = db.execute('SELECT source_time,confirmed FROM bars WHERE topic=? AND start=?',
+                              (name,int(row[0]))).fetchone()
+        if previous and (source_time <= previous['source_time']
+                         or (previous['confirmed'] and not confirmed)):
+            return False
+        values = (name,int(row[0]),json.dumps(row),observed,source_time,int(confirmed),origin,epoch)
+        db.execute('INSERT OR REPLACE INTO bars VALUES(?,?,?,?,?,?,?,?)',values)
+        db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?,?)',values)
+        db.execute('''DELETE FROM revisions WHERE topic=? AND start=? AND source_time NOT IN
+            (SELECT source_time FROM revisions WHERE topic=? AND start=? AND
+             (observed>=? OR source_time=(SELECT MAX(source_time) FROM revisions
+              WHERE topic=? AND start=? AND observed<?))
+             ORDER BY source_time DESC LIMIT ?)''',
+            (name,int(row[0]),name,int(row[0]),observed-HISTORY_MS,
+             name,int(row[0]),observed-HISTORY_MS,MAX_REVISIONS))
+        return True
+
+    def _ingest_ws(self, db, epoch, message, received, state=None):
+        # A supplied state belongs to this frame in this same write transaction.
+        # It must never be cached across frames, batches, or transactions.
         k = message['k']; name = topic(message['s'], k['i'])
         source = message['E']; step = STEPS[k['i']]
         if (message.get('e') != 'kline' or k.get('s') != message['s']
@@ -169,13 +191,14 @@ class Store(MarketControlMixin, CoordinationStore):
         if row[0] > source or (k['x'] and row[6] > source):
             raise ValueError('BINANCE_WS_CONFIRMATION_INVALID')
         self.check_epoch(db, epoch)
-        state = db.execute('SELECT * FROM topics WHERE topic=?',(name,)).fetchone()
+        if state is None:
+            state = db.execute('SELECT * FROM topics WHERE topic=?',(name,)).fetchone()
         if not state or not state['ack']: raise ValueError('BINANCE_TOPIC_NOT_ACKED')
         if source <= state['ws_ts']: return False
         changed = self._put(db,name,row,received,source,k['x'],WS_SOURCE,epoch)
         db.execute('UPDATE topics SET ws_rx=?,ws_ts=? WHERE topic=?',(received,source,name))
         self._trim(db,name,source)
-        bars = {r['start']:r for r in db.execute('SELECT * FROM bars WHERE topic=?',(name,))}
+        bars = {r['start']:r for r in db.execute('SELECT start,confirmed FROM bars WHERE topic=?',(name,))}
         anchor = max(bars)
         floor = db.execute('SELECT payload FROM metadata WHERE kind=?',('history_floor:'+name,)).fetchone()
         needed = {anchor-i*step for i in range(LIMITS[k['i']])

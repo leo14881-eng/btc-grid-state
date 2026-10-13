@@ -111,5 +111,25 @@ jobs:
         run: python -I -B -X utf8 scripts/check_binance_health_offline.py
       - name: Independent control, crash recovery, final fences and full-scope load
         run: python -I -B -X utf8 scripts/check_binance_coordinated_offline.py
+      - name: Same-load comparison against immutable prior cache hot paths
+        run: python -I -B -X utf8 scripts/check_binance_write_load.py --prior-cache
       - name: Deployment shell syntax only
         run: bash -n scripts/hunter_binance_preflight.sh scripts/hunter_binance_stage.sh
+  hour-load:
+    if: github.event.pull_request.number == 131
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned loopback WebSocket runtime
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: One real hour at full scope followed by real-process WS reconnect
+        run: python -I -B -X utf8 scripts/check_binance_write_load.py --seconds 3600

@@ -1,5 +1,6 @@
 """Binance market/control boundary. No network, strategy, or trading ledger writes."""
 import contextlib
+from bisect import bisect_left
 from collections import deque
 import json
 import math
@@ -16,6 +17,90 @@ MARKET_ADMISSION_SECONDS = 2
 _WRITERS = weakref.WeakValueDictionary()
 _WRITERS_LOCK = threading.Lock()
 _LOCAL_INIT_LOCK = threading.Lock()
+SQLITE_TIMING_BOUNDS_US = tuple(1 << power for power in range(31))
+
+
+def _phase_sample(metrics, key, elapsed_ns, error=None, context=None):
+    """Pure aggregation; caller owns only its own diagnostics lock."""
+    elapsed_ns = max(0,elapsed_ns)
+    elapsed = elapsed_ns//1000
+    item = metrics.setdefault(key,dict(count=0,max_us=0,total_us=0,errors={},
+        histogram=[0]*(len(SQLITE_TIMING_BOUNDS_US)+1)))
+    item['count'] += 1
+    item['max_us'] = max(item['max_us'],elapsed)
+    item['total_us'] += elapsed
+    item['histogram'][bisect_left(SQLITE_TIMING_BOUNDS_US,(elapsed_ns+999)//1000)] += 1
+    if error is not None:
+        # Retain the existing market error-key contract. The class-name fallback
+        # here is not an SQLite error name; sqlite_context never makes that claim.
+        code = getattr(error,'sqlite_errorcode',None)
+        name = getattr(error,'sqlite_errorname',type(error).__name__)
+        error_key = str(code)+':'+str(name)
+        item['errors'][error_key] = item['errors'].get(error_key,0)+1
+    if context is not None:
+        item['last_context'] = context
+        if error is not None:item['last_error_context'] = context
+
+
+def _timing_snapshot(metrics, observations):
+    result = json.loads(json.dumps(metrics))
+    for item in result.values():
+        rank = (99*item['count']+99)//100
+        cumulative = 0
+        item['p99_upper_bound_us'] = 'unknown'
+        for index,count in enumerate(item['histogram']):
+            cumulative += count
+            if cumulative >= rank:
+                if index < len(SQLITE_TIMING_BOUNDS_US):
+                    item['p99_upper_bound_us'] = SQLITE_TIMING_BOUNDS_US[index]
+                break
+    result['_timing'] = dict(scope='PER_INSTANCE_LIFETIME',unit='microseconds',
+        sample_resolution_us=1,totals_rounding='FLOOR',histogram_rounding='CEILING',
+        histogram_upper_bounds_us=list(SQLITE_TIMING_BOUNDS_US)+['overflow'],
+        percentile='P99_CEILING_RANK_BUCKET_UPPER_BOUND_NOT_EXACT',
+        overflow_percentile='unknown',reset=False)
+    result['connection_observations'] = json.loads(json.dumps(observations))
+    return result
+
+
+def _connection_context(connection, context, observation):
+    """Read-only probes on this connection; never open a second database."""
+    value = dict(context,observation=observation,busy_timeout_ms='unknown',
+                 journal_mode='unknown',probe_errors=[])
+    if connection is None:
+        value['observation'] = 'NO_CONNECTION'
+        return value
+    for pragma,field in (('busy_timeout','busy_timeout_ms'),('journal_mode','journal_mode')):
+        try:
+            row = connection.execute('PRAGMA '+pragma).fetchone()
+            if row is not None:value[field] = row[0]
+        except Exception as error:
+            value['probe_errors'].append(dict(pragma=pragma,type=type(error).__name__,
+                sqlite_errorcode=getattr(error,'sqlite_errorcode','unknown'),
+                sqlite_errorname=getattr(error,'sqlite_errorname','unknown')))
+    return value
+
+
+def _failure_context(connection, error, context, phase):
+    value = _connection_context(connection,dict(context,phase=phase),'AFTER_FAILURE_CLEANUP_SAME_CONNECTION')
+    value.update(error_type=type(error).__name__,
+        sqlite_errorcode=getattr(error,'sqlite_errorcode','unknown'),
+        sqlite_errorname=getattr(error,'sqlite_errorname','unknown'))
+    try:error.sqlite_context = value
+    except Exception:pass  # Diagnostics must not replace the original exception.
+    return value
+
+
+def _safe_measure(measure, *args, **kwargs):
+    try:measure(*args,**kwargs)
+    except Exception:pass  # Cleanup and its original error outrank diagnostics.
+
+
+def _record_failure(measure, connection, error, context, kind, phase, started, elapsed_ns):
+    try:
+        failure = _failure_context(connection,error,context,phase)
+        measure(kind,phase,started,error,context=failure,elapsed_ns=elapsed_ns)
+    except Exception:pass
 
 
 class MarketAdmissionTimeout(sqlite3.OperationalError):
@@ -83,23 +168,25 @@ class MarketControlMixin:
                 if not hasattr(self, '_market_local'):
                     self._market_metrics_lock = threading.Lock()
                     self._market_metrics = {}
+                    self._market_connection_observations = {}
                     self._market_writer = _writer_for(self.path)
                     self._market_local = threading.local()
         return self._market_local
 
-    def _measure(self, kind, phase, started, error=None):
-        elapsed = (time.perf_counter_ns()-started)//1000
-        code = getattr(error, 'sqlite_errorcode', None)
-        name = getattr(error, 'sqlite_errorname', type(error).__name__ if error else None)
+    def _measure(self, kind, phase, started, error=None, *, context=None, elapsed_ns=None):
+        elapsed_ns = time.perf_counter_ns()-started if elapsed_ns is None else elapsed_ns
         with self._market_metrics_lock:
-            item = self._market_metrics.setdefault(kind+':'+phase,
-                dict(count=0,max_us=0,total_us=0,errors={}))
-            item['count'] += 1
-            item['max_us'] = max(item['max_us'],elapsed)
-            item['total_us'] += elapsed
-            if error:
-                key = str(code)+':'+str(name)
-                item['errors'][key] = item['errors'].get(key,0)+1
+            _phase_sample(self._market_metrics,kind+':'+phase,elapsed_ns,error,context)
+
+    def _observe_connection(self, connection, kind, context):
+        with self._market_metrics_lock:
+            if kind in self._market_connection_observations:return
+            self._market_connection_observations[kind] = {'observation':'PENDING'}
+        started = time.perf_counter_ns()
+        value = _connection_context(connection,context,'FIRST_CONNECTION_FOR_KIND')
+        with self._market_metrics_lock:
+            self._market_connection_observations[kind] = value
+        self._measure(kind,'connection_probe',started,context=value)
 
     @contextlib.contextmanager
     def db(self, readonly=False, timeout=10, *, write_kind='market'):
@@ -122,6 +209,9 @@ class MarketControlMixin:
             admission_timeout = min(timeout,MARKET_ADMISSION_SECONDS)
             timeout = min(timeout,.25)
         kind = 'read' if readonly else write_kind
+        begin = 'BEGIN' if readonly else 'BEGIN IMMEDIATE'
+        context = dict(database='market',kind=kind,begin_statement=begin,
+                       connect_timeout_seconds=timeout)
         started = time.perf_counter_ns()
         connection = None
         ticket = None
@@ -129,37 +219,47 @@ class MarketControlMixin:
         try:
             if coordinated and not readonly:
                 ticket = self._market_writer.acquire(admission_timeout)
-                self._measure(kind,phase,started)
+                self._measure(kind,phase,started,context=context)
                 phase = 'connect'; started = time.perf_counter_ns()
             connection = sqlite3.connect(address,uri=existing,timeout=timeout)
             connection.row_factory = sqlite3.Row
-            self._measure(kind,phase,started)
+            self._measure(kind,phase,started,context=context)
+            self._observe_connection(connection,kind,context)
             phase = 'begin'; started = time.perf_counter_ns()
-            connection.execute('BEGIN' if readonly else 'BEGIN IMMEDIATE')
-            self._measure(kind,phase,started)
+            connection.execute(begin)
+            self._measure(kind,phase,started,context=context)
             phase = 'body'; started = time.perf_counter_ns()
             yield connection
-            self._measure(kind,phase,started)
+            self._measure(kind,phase,started,context=context)
             phase = 'commit'; started = time.perf_counter_ns()
             connection.commit()
-            self._measure(kind,phase,started)
+            self._measure(kind,phase,started,context=context)
         except BaseException as error:
+            elapsed = time.perf_counter_ns()-started
             error.market_phase = phase
-            self._measure(kind,phase,started,error)
-            if connection is not None:
-                rollback = time.perf_counter_ns()
-                try:
-                    connection.rollback()
-                except BaseException as rollback_error:
-                    self._measure(kind,'rollback',rollback,rollback_error)
-                    raise
-                else:
-                    self._measure(kind,'rollback',rollback)
+            try:
+                if connection is not None:
+                    rollback = time.perf_counter_ns()
+                    try:connection.rollback()
+                    except BaseException as rollback_error:
+                        rollback_elapsed = time.perf_counter_ns()-rollback
+                        _record_failure(self._measure,connection,rollback_error,context,
+                                        kind,'rollback',rollback,rollback_elapsed)
+                        raise
+                    else:_safe_measure(self._measure,kind,'rollback',rollback,context=context)
+            finally:
+                _record_failure(self._measure,connection,error,context,kind,phase,started,elapsed)
             raise
         finally:
             try:
                 if connection is not None:
-                    connection.close()
+                    closed = time.perf_counter_ns()
+                    try:connection.close()
+                    except BaseException as error:
+                        elapsed = time.perf_counter_ns()-closed
+                        _record_failure(self._measure,connection,error,context,kind,'close',closed,elapsed)
+                        raise
+                    else:_safe_measure(self._measure,kind,'close',closed,context=context)
             finally:
                 if ticket is not None:
                     self._market_writer.release(ticket)
@@ -167,7 +267,7 @@ class MarketControlMixin:
     def transaction_diagnostics(self):
         self._local()
         with self._market_metrics_lock:
-            result = json.loads(json.dumps(self._market_metrics))
+            result = _timing_snapshot(self._market_metrics,self._market_connection_observations)
         wal = Path(str(self.path)+'-wal')
         result['wal_bytes'] = wal.stat().st_size if wal.exists() else 0
         return result

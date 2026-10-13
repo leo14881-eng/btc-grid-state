@@ -1,6 +1,8 @@
 """Existing-only frozen Binance reads; explicit UNKNOWN and no network fallback."""
 import copy
 import datetime as dt
+import json
+import math
 import os
 import sys
 import time
@@ -34,12 +36,44 @@ class CacheReadError(ValueError):
         self.generation=copy.deepcopy(generation or {})
 
 
+def _encode_json_tree(value):
+    """Check once; preserve deepcopy semantics for every non-JSON graph.
+
+    JSON would coerce tuple/key/subclass types and duplicate aliased containers.
+    Those inputs retain the existing deepcopy path, as do cycles and nonfinite
+    numbers. Real cache generations contain plain, unaliased JSON containers.
+    """
+    pending=[value];seen=set()
+    while pending:
+        item=pending.pop();kind=type(item)
+        if kind is dict or kind is list:
+            identity=id(item)
+            if identity in seen:return None
+            seen.add(identity)
+            if kind is dict:
+                if any(type(key) is not str for key in item):return None
+                pending.extend(item.values())
+            else:pending.extend(item)
+        elif kind is float:
+            if not math.isfinite(item):return None
+        elif kind not in (str,int,bool,type(None)):
+            return None
+    try:
+        return json.dumps(value,ensure_ascii=True,allow_nan=False,separators=(',',':'))
+    except (TypeError,ValueError,OverflowError,RecursionError):
+        return None
+
+
 class Frozen:
     def __init__(self,generation,checked_at=None,*,reader=None,fence=None,names=None,
                  clock=lambda:time.time_ns()//1_000_000,started_at=None):
         if generation.get('status')!='READY':
             raise CacheReadError('BINANCE_CACHE_UNKNOWN:'+str(generation.get('reason','UNAVAILABLE')),generation)
-        self._generation=copy.deepcopy(generation)
+        # Private owned snapshot and separately owned exports. Cache the JSON
+        # encoding once so repeated exports do not traverse the Python tree.
+        self._snapshot_json=_encode_json_tree(generation)
+        self._generation=(json.loads(self._snapshot_json) if self._snapshot_json is not None
+                          else copy.deepcopy(generation))
         self._reader=reader;self._fence=copy.deepcopy(fence);self._clock=clock
         self._names=tuple(sorted(names if names is not None else generation['windows']))
         self._started_at=started_at
@@ -60,7 +94,8 @@ class Frozen:
     def generation(self):
         # Callers can inspect a snapshot, but cannot mutate the version used by
         # later rows/packet deliveries or the independent revocation fence.
-        return copy.deepcopy(self._generation)
+        return (json.loads(self._snapshot_json) if self._snapshot_json is not None
+                else copy.deepcopy(self._generation))
 
     @property
     def fence_sha256(self):

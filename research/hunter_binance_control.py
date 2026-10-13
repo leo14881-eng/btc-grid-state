@@ -17,6 +17,9 @@ import threading
 import time
 import uuid
 
+from research.hunter_binance_market_control import (
+    _connection_context, _phase_sample, _record_failure, _safe_measure, _timing_snapshot)
+
 FORMAT = 'binance_control_v1'
 MAX_BODY = 1024 * 1024
 MAX_WEIGHT_MINUTE = 600  # Existing 100 ms per weight pacing, now also window bounded.
@@ -112,6 +115,9 @@ class Control:
         self._owners, self._owners_lock = {}, threading.Lock()
         self._writer_lock = threading.RLock()
         self._admission_local = threading.local()
+        self._diagnostics_lock = threading.Lock()
+        self._transaction_metrics = {}
+        self._connection_observations = {}
         self._latched_guard = None
         self._read_latch()
         with self._db(readonly=True) as db:
@@ -227,6 +233,26 @@ class Control:
     def latch_stop(self,reason):
         return self.latch(reason)
 
+    def _measure(self, kind, phase, started, error=None, *, context=None, elapsed_ns=None):
+        elapsed_ns = time.perf_counter_ns()-started if elapsed_ns is None else elapsed_ns
+        with self._diagnostics_lock:
+            _phase_sample(self._transaction_metrics,kind+':'+phase,elapsed_ns,error,context)
+
+    def _observe_connection(self, connection, kind, context):
+        with self._diagnostics_lock:
+            if kind in self._connection_observations:return
+            self._connection_observations[kind] = {'observation':'PENDING'}
+        started = time.perf_counter_ns()
+        value = _connection_context(connection,context,'FIRST_CONNECTION_FOR_KIND')
+        with self._diagnostics_lock:
+            self._connection_observations[kind] = value
+        self._measure(kind,'CONNECTION_PROBE',started,context=value)
+
+    def transaction_diagnostics(self):
+        # This lock never encloses SQLite, native-owner checks or another DB.
+        with self._diagnostics_lock:
+            return _timing_snapshot(self._transaction_metrics,self._connection_observations)
+
     @contextlib.contextmanager
     def _db(self, readonly=False, timeout=.25):
         if self.readonly and not readonly:raise ControlError('CONTROL_READONLY_MUTATION')
@@ -234,29 +260,61 @@ class Control:
             raise ValueError('CONTROL_DB_TIMEOUT_INVALID')
         # Serialize the process's short writes before entering SQLite. This
         # lock never encloses market work, HTTP, callbacks or Future waits.
-        held=False;db=None;phase='SERIALIZE'
+        kind='read' if readonly else 'write'
+        begin='BEGIN' if readonly else 'BEGIN IMMEDIATE'
+        context=dict(database='control',kind=kind,begin_statement=begin,
+                     connect_timeout_seconds=min(timeout,.25))
+        held=False;db=None;phase='CONNECT' if readonly else 'SERIALIZE'
+        started=time.perf_counter_ns()
         try:
             if not readonly:
                 held=self._writer_lock.acquire(timeout=min(timeout,.25))
                 if not held:raise sqlite3.OperationalError('database is locked')
-            phase='CONNECT'
+                self._measure(kind,phase,started,context=context)
+            phase='CONNECT';started=time.perf_counter_ns()
             db = sqlite3.connect(self.path.as_uri()+('?mode=ro' if readonly else '?mode=rw'),
                                  uri=True, timeout=min(timeout,.25))
             db.row_factory = sqlite3.Row
-            phase='BEGIN'
-            db.execute('BEGIN' if readonly else 'BEGIN IMMEDIATE')
-            phase='BODY'
+            self._measure(kind,phase,started,context=context)
+            self._observe_connection(db,kind,context)
+            phase='BEGIN';started=time.perf_counter_ns()
+            db.execute(begin)
+            self._measure(kind,phase,started,context=context)
+            phase='BODY';started=time.perf_counter_ns()
             yield db
-            phase='COMMIT'
+            self._measure(kind,phase,started,context=context)
+            phase='COMMIT';started=time.perf_counter_ns()
             db.commit()
+            self._measure(kind,phase,started,context=context)
         except BaseException as error:
+            elapsed=time.perf_counter_ns()-started
             if isinstance(error,sqlite3.Error):
                 error.control_phase=phase
-            if db is not None:db.rollback()
+            try:
+                if db is not None:
+                    rollback=time.perf_counter_ns()
+                    try:db.rollback()
+                    except BaseException as rollback_error:
+                        rollback_elapsed=time.perf_counter_ns()-rollback
+                        _record_failure(self._measure,db,rollback_error,context,
+                                        kind,'ROLLBACK',rollback,rollback_elapsed)
+                        raise
+                    else:_safe_measure(self._measure,kind,'ROLLBACK',rollback,context=context)
+            finally:
+                _record_failure(self._measure,db,error,context,kind,phase,started,elapsed)
             raise
         finally:
-            if db is not None:db.close()
-            if held:self._writer_lock.release()
+            try:
+                if db is not None:
+                    closed=time.perf_counter_ns()
+                    try:db.close()
+                    except BaseException as error:
+                        elapsed=time.perf_counter_ns()-closed
+                        _record_failure(self._measure,db,error,context,kind,'CLOSE',closed,elapsed)
+                        raise
+                    else:_safe_measure(self._measure,kind,'CLOSE',closed,context=context)
+            finally:
+                if held:self._writer_lock.release()
 
     def _meta(self, db, epoch=None):
         meta = dict(db.execute('SELECT key,value FROM meta'))

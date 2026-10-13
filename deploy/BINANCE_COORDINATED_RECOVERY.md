@@ -32,6 +32,29 @@ publication's nested helpers bypass the queue. Diagnostics distinguish queue
 admission from SQLite begin/body/commit failures. This provides local writer
 ordering, not cross-process fairness or a two-second transaction-duration bound.
 
+The second full-load failure was queue exhaustion, with no corresponding BEGIN
+lock error. A paired scratch measurement isolated the effect of simultaneous
+whole-roster reads: generic snapshot `deepcopy` dominated the reader profile
+and write-body time increased while BEGIN remained below 1ms on average.
+The follow-up avoids unused bar columns and one repeated same-frame topic
+query, and uses a detached JSON snapshot copy for plain JSON trees. Unusual
+Python values retain the old deepcopy path. Public copies, proof/hash checks,
+delivery fences, per-frame savepoints, revision retention and receipt accounting
+remain intact. Neither queue capacity nor publication frequency is relaxed.
+
+Each database reports its own phase histogram, count, maximum and cumulative
+microseconds. P99 is explicitly a histogram bucket upper bound over the Store
+or Control instance lifetime, not an exact percentile or sliding window.
+Connection observations include configured timeout, BEGIN type, and measured
+`PRAGMA busy_timeout`/journal mode. Failures preserve the original extended
+SQLite error code/name where Python exposes them; missing values are unknown.
+The observed Linux starvation error was SQLITE_BUSY (5), not proof of
+SQLITE_BUSY_SNAPSHOT (517). A scratch-only stale-snapshot regression tests 517
+reporting without claiming it happened on the server. Python added the error
+attributes in 3.11; `Connection.setconfig` (3.12) is not an error-code switch.
+See the [Python exception attributes](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Error)
+and [connection configuration API](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Connection.setconfig).
+
 Market publication has three steps: durable intent and scope revocation;
 atomic market rows plus receipt; control reconciliation. Replaying a committed
 receipt is idempotent. A quiet-bar mismatch commits its corrective rows and
@@ -123,6 +146,10 @@ python -I -B -X utf8 scripts/check_binance_signal_use_regression.py
 python -I -B -X utf8 scripts/check_binance_public_transport.py
 python -I -B -X utf8 scripts/check_binance_health_offline.py
 python -I -B -X utf8 scripts/check_binance_coordinated_offline.py
+# Same fixture, with only three cache hot-path modules pinned to ec3d49b9:
+python -I -B -X utf8 scripts/check_binance_write_load.py --prior-cache
+# Separate one-hour wall-clock run; followed by the real WS process reconnect:
+python -I -B -X utf8 scripts/check_binance_write_load.py --seconds 3600
 ```
 
 The coordinated suite requires Linux and zero skips. It exercises real native
@@ -149,6 +176,24 @@ it must reconnect to a loopback WS server, reject the first epoch's frozen
 read, acknowledge and seed the second epoch, and close both sessions with
 conserved receipts and retired HTTP owners. Neither fixture establishes a
 natural UTC boundary or full-roster collector WS reconnection.
+
+Ordinary discovery keeps a 32-second load target. The one-hour command opts
+into 3,600 real elapsed seconds at the same 1,228-topic/0.8-second offered
+cadence, 4,096-entry queue, 100-frame batches and checkpoint pressure. It uses
+a declared fixed UTC origin plus real elapsed time, with explicit prior-bar
+WS closes across synthetic 15m/1h boundaries. It is not natural-clock evidence.
+Logs include periodic progress, failure-safe drain observations, all-sample
+receipt/batch latency histograms, quiet completion waits and per-topic receipt
+partitions. Reader rejections and non-READY durations remain visible; occasional
+READY reads must not be described as continuous readiness. The dedicated
+PR131 Linux job waits for the short acceptance jobs and uses the same head.
+
+The prior-cache comparison loads only the immutable ec3d49b9 stream store,
+health store and consumer modules. Candidate coordination, diagnostics and
+fixtures are retained to measure the same offered load. It is not a replay
+of the complete prior deployment. A queue-capacity failure is the expected
+comparison outcome; unrelated exceptions, missing tests or blocked effects
+cannot count as that reproduction. No benchmark result permits deployment.
 
 ## Offline provisioning and reviewed installation
 

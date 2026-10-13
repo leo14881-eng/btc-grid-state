@@ -210,11 +210,11 @@ class Store(BaseStore):
                         if prior[0]!=digest:raise ValueError('BINANCE_EVENT_KEY_CONFLICT')
                         db.execute('UPDATE bn_counts SET duplicate=duplicate+1 WHERE epoch=? AND topic=?',(epoch,name))
                         results.append('duplicate');continue
-                    state=db.execute('SELECT ws_ts FROM topics WHERE topic=?',(name,)).fetchone()
-                    if state is None or message['E']<=state[0]:raise ValueError('BINANCE_OLD_UNVERIFIABLE_EVENT')
+                    state=db.execute('SELECT ack,ws_ts FROM topics WHERE topic=?',(name,)).fetchone()
+                    if state is None or message['E']<=state['ws_ts']:raise ValueError('BINANCE_OLD_UNVERIFIABLE_EVENT')
                     # Roll back a semantically rejected observation, retaining its audit separately.
                     db.execute('SAVEPOINT observation')
-                    try:changed=super()._ingest_ws(db,epoch,message,received)
+                    try:changed=super()._ingest_ws(db,epoch,message,received,state=state)
                     except (ValueError,KeyError,TypeError,OverflowError):
                         db.execute('ROLLBACK TO observation');raise
                     finally:db.execute('RELEASE observation')

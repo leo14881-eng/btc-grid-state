@@ -6,7 +6,9 @@ Only Linux cases make literal loopback sockets; every child guards itself.
 """
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, closing
+from bisect import bisect_left
 import datetime as dt
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +18,7 @@ import subprocess
 import sys
 from threading import Event, Lock, Thread
 import time
+import traceback
 import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -36,14 +39,238 @@ topics = runtime_tests.topics
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT/'tests/fixtures/binance_ws_reconnect.py'
-LOAD_SECONDS = 32  # Leave startup/scheduling margin above the required 30s wall window.
+
+
+def soak_seconds(value):
+    if value not in ('32', '3600'):
+        raise ValueError('BINANCE_COORDINATED_SOAK_SECONDS_MUST_BE_32_OR_3600')
+    return int(value)
+
+
+# Explicit long-mode opt-in; ordinary unittest discovery remains 32 seconds.
+LOAD_SECONDS = soak_seconds(os.environ.get('BINANCE_COORDINATED_SOAK_SECONDS', '32'))
+
+
+class LatencyHistogram:
+    """All observations, fixed storage; p99 is a bucket upper bound, not exact."""
+    def __init__(self, unit):
+        self.unit = unit
+        self.bounds = (0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000,
+                       10000, 20000, 50000, 100000, 200000, 500000, 1000000,
+                       2000000, 5000000, 10000000, 30000000, 60000000)
+        self.buckets = [0]*(len(self.bounds)+1)
+        self.count = self.total = self.maximum = 0
+        self.lock = Lock()
+
+    def add(self, value):
+        if value < 0:
+            raise ValueError('SOAK_NEGATIVE_MONOTONIC_LATENCY')
+        with self.lock:
+            self.buckets[bisect_left(self.bounds, value)] += 1
+            self.count += 1
+            self.total += value
+            self.maximum = max(self.maximum, value)
+
+    def snapshot(self):
+        with self.lock:
+            target = (self.count*99+99)//100
+            cumulative = 0
+            upper = None
+            if target:
+                for bound, count in zip(self.bounds, self.buckets):
+                    cumulative += count
+                    if cumulative >= target:
+                        upper = bound
+                        break
+            return dict(unit=self.unit, count=self.count, total=self.total, maximum=self.maximum,
+                p99_upper=upper, p99_overflow=bool(target and upper is None),
+                bounds=list(self.bounds), buckets=list(self.buckets), all_observations=True)
+
+
+def fixture_rows(interval, stamp, count=None):
+    body = rows(interval, stamp, count)
+    if LOAD_SECONDS == 3600:
+        # The old short fixture varies a historical close by its index within
+        # the requested window. Long mode needs an immutable bar body across
+        # rolling REST windows and explicit WS close frames (close='101.0').
+        for row in body:
+            row[4] = '101.0'
+    return body
+
+
+def error_detail(operation, error):
+    return dict(operation=operation, type=type(error).__name__, message=str(error),
+        market_phase=getattr(error, 'market_phase', None),
+        control_phase=getattr(error, 'control_phase', None),
+        sqlite_errorcode=getattr(error, 'sqlite_errorcode', None),
+        sqlite_errorname=getattr(error, 'sqlite_errorname', None),
+        sqlite_context=getattr(error, 'sqlite_context', None),
+        traceback=''.join(traceback.format_exception(type(error), error, error.__traceback__)))
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+
+
+def audit_hash(value):
+    return hashlib.sha256(canonical(value).encode('ascii')).hexdigest()
+
+
+def emit_bounded(event, value):
+    """Bound every physical log line, including an unexpectedly large traceback."""
+    raw = canonical(value)
+    if len(event)+1+len(raw) <= 28000:
+        print(event+' '+raw, flush=True)
+        return
+    digest = hashlib.sha256(raw.encode('ascii')).hexdigest()
+    pieces = [raw[index:index+6000] for index in range(0, len(raw), 6000)]
+    for index, piece in enumerate(pieces):
+        print('BINANCE_SOAK_AUDIT_CHUNK '+canonical(dict(source_event=event,
+            sha256=digest, chunk=index, chunks=len(pieces), encoding='CANONICAL_JSON_TEXT_FRAGMENT',
+            json_fragment=piece)), flush=True)
+    print(event+' '+canonical(dict(fragmented=True, sha256=digest, chunks=len(pieces),
+        status=value.get('status'), phase=value.get('phase'), event=value.get('event'))), flush=True)
+
+
+def emit_pages(event, records, *, source_event, phase):
+    pages = [records[index:index+16] for index in range(0, len(records), 16)]
+    hashes = []
+    for index, page in enumerate(pages):
+        digest = audit_hash(page)
+        hashes.append(digest)
+        emit_bounded(event, dict(source_event=source_event, phase=phase, page=index,
+            pages=len(pages), records=page, page_sha256=digest))
+    return dict(records=len(records), pages=len(pages), page_sha256=hashes,
+                records_sha256=audit_hash(records))
+
+
+def emit_soak_report(report):
+    # The runner retains the complete unpaged report for strict assertions.
+    # Only this shallow rendering copy receives page manifests and field pops.
+    report = dict(report)
+    event = report['event']
+    for field, page_event in (('_topic_receipts', 'BINANCE_SOAK_TOPIC_RECEIPTS'),
+                              ('_quiet_jobs', 'BINANCE_SOAK_QUIET_JOBS')):
+        records = report.pop(field, None)
+        if records is not None:
+            report[field[1:]+'_audit'] = emit_pages(page_event, records, source_event=event, phase=report['phase'])
+    for field in ('market_transactions', 'control_transactions'):
+        values = report.pop(field, None)
+        if values is not None:
+            records = [dict(key=key, value=value) for key, value in sorted(values.items())]
+            report[field+'_audit'] = emit_pages('BINANCE_SOAK_TRANSACTION_METRICS', records,
+                source_event=event+':'+field, phase=report['phase'])
+    emit_bounded(event, report)
+
+
+def soak_drain_metrics(state, *, final=True):
+    """Failure-safe observations after the existing bounded drain; no DB writes."""
+    now = time.monotonic()
+    result = dict(event='BINANCE_SOAK_DRAIN_METRICS', phase=state.get('phase'),
+        status='FAILED' if state.get('error') else ('PASSED' if final else 'RUNNING'), error=state.get('error'),
+        load_target_seconds=LOAD_SECONDS, queue_capacity=4096, queue_put_timeout_seconds=.5,
+        topics_per_round=1228, minimum_round_interval_seconds=.8,
+        total_wall_seconds=now-state['wall_started'],
+        market_clock='FIXED_UTC_PLUS_REAL_ELAPSED', natural_utc_rollover_verified=False,
+        metrics=dict(state.get('metrics', {})), thread_errors=list(state.get('errors', [])),
+        thread_error_details=list(state.get('thread_error_details', [])),
+        read_rejections=dict(state.get('read_rejections', {})),
+        jobs_shutdown=state.get('work'), diagnostic_errors=[])
+    result['load_error'] = state.get('load_error')
+    result['latencies'] = {key: value.snapshot() for key, value in state.get('histograms', {}).items()}
+    if 'quiet_lock' in state:
+        with state['quiet_lock']:
+            quiet = {key: dict(value) for key, value in state['quiet_by_key'].items()}
+    else:
+        quiet = {}
+    result['quiet_jobs'] = dict(keys=len(quiet), keys_sha256=audit_hash(sorted(quiet)),
+        **{key:sum(value[key] for value in quiet.values()) for key in ('submitted','completed','failed','cancelled')},
+        pending=sum(value['submitted']-value['completed']-value['failed']-value['cancelled'] for value in quiet.values()),
+        max_submit_to_done_ms=max([value['max_submit_to_done_ms'] for value in quiet.values()]+[0]))
+    if final:
+        result['_quiet_jobs'] = [dict(job_key=key, **quiet[key]) for key in sorted(quiet)]
+    result['quiet_candidate_to_submit_max_ms'] = state.get('quiet_candidate_to_submit_max_ms', 0)
+    result['quiet_waiting_observed_max_ms'] = state.get('quiet_waiting_observed_max_ms', 0)
+    result['read_intervals_15m'] = {key: dict(value) for key, value in state.get('read_intervals', {}).items()}
+    attempts = result['metrics'].get('read_attempts', 0)
+    result['read_rejection_ratio'] = None if not attempts else result['metrics'].get('read_rejected', 0)/attempts
+    unresolved_unready = (0 if state.get('unready_since') is None else
+                          (state.get('load_finished') or now)-state['unready_since'])
+    result['max_observed_nonready_seconds'] = max(state.get('max_nonready_seconds', 0), unresolved_unready)
+    for key in ('seed_wall_seconds', 'initialized_topics', 'initialized_rows'):
+        result[key] = state.get(key)
+    for label, start, finish in (
+            ('load_wall_seconds', 'load_started', 'load_finished'),
+            ('receipt_drain_wall_seconds', 'drain_started', 'drain_finished'),
+            ('jobs_shutdown_wall_seconds', 'jobs_shutdown_started', 'jobs_shutdown_finished')):
+        result[label] = None if state.get(start) is None else (state.get(finish) or now)-state[start]
+    result['threads'] = [dict(name=t.name, started=t.ident is not None, alive=t.is_alive())
+                         for t in state.get('threads', [])]
+    observed = state.get('observed')
+    result.update(queue_depth=None if observed is None else observed.qsize(),
+                  queue_high_water=None if observed is None else observed.high_water)
+    checkpoint_rows = list(state.get('checkpoints', []))
+    result['checkpoints'] = dict(count=len(checkpoint_rows), last=checkpoint_rows[-1] if checkpoint_rows else None,
+        busy_results=sum(row[0] != 0 for row in checkpoint_rows),
+        max_log_pages=max([row[1] for row in checkpoint_rows]+[0]),
+        max_checkpointed_pages=max([row[2] for row in checkpoint_rows]+[0]))
+    market, jobs = state.get('market'), state.get('jobs')
+    for label, read in (
+            ('market_transactions', lambda: market.store.transaction_diagnostics()),
+            ('control_transactions', lambda: getattr(market.store.control, 'transaction_diagnostics',
+                lambda: dict(available=False, reason='CONTROL_DIAGNOSTICS_API_UNAVAILABLE'))()),
+            ('jobs_at_report', lambda: jobs.diagnostics(state['clock']()))):
+        if (label.endswith('_transactions') and market is None) or (label == 'jobs_at_report' and jobs is None):
+            result[label] = None
+            continue
+        try:
+            result[label] = read()
+        except BaseException as error:
+            result['diagnostic_errors'].append(error_detail(label, error))
+    result['session_finals'] = list(state.get('finals', []))
+    if final and market is not None:
+        try:
+            counts = market.store.counts(market.epoch)
+            with market.protocol.evidence.lock:
+                received = {key: dict(value) for key, value in market.protocol.evidence.topics.items()}
+            partition = []
+            for name in sorted(received):
+                row = dict(counts[name], received=received[name]['received'])
+                row['conserved'] = row['received'] == sum(row[key] for key in
+                    ('committed', 'duplicate', 'invalid', 'unprocessed_recorded'))
+                partition.append(row)
+            result['_topic_receipts'] = partition
+            result['topic_receipt_summary'] = dict(topics=len(partition), records_sha256=audit_hash(partition),
+                violation_count=sum(not row['conserved'] for row in partition),
+                violations=[row for row in partition if not row['conserved']][:16],
+                **{key:sum(row[key] for row in partition) for key in
+                   ('received','committed','duplicate','invalid','unprocessed_recorded')})
+            result['all_topic_receipts_conserved'] = all(row['conserved'] for row in partition)
+            result['partition_after_all_workers_stopped'] = (not any(t.is_alive() for t in state.get('threads', []))
+                and bool(state.get('work', {}).get('complete')))
+        except BaseException as error:
+            result['diagnostic_errors'].append(error_detail('topic_receipt_partition', error))
+        try:
+            with market.store.control._db(readonly=True, timeout=.05) as db:
+                result['control_terminal_counts'] = dict(
+                    owners=db.execute('SELECT COUNT(*) FROM owners').fetchone()[0],
+                    requests=db.execute('SELECT COUNT(*) FROM requests').fetchone()[0],
+                    calls=db.execute('SELECT COUNT(*) FROM calls').fetchone()[0],
+                    terminal_calls=db.execute('SELECT COUNT(terminal) FROM calls').fetchone()[0],
+                    attempts=db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0],
+                    retired_attempts=db.execute("SELECT COUNT(*) FROM attempts WHERE terminal='RETIRED'").fetchone()[0])
+        except BaseException as error:
+            result['diagnostic_errors'].append(error_detail('control_terminal_counts', error))
+    if final and result['diagnostic_errors']:
+        result['status'] = 'FAILED'
+    return result
 
 
 def body_for(path, params):
     if path == '/api/v3/exchangeInfo':
         return directory([topic(symbol, '15m') for symbol in json.loads(params['symbols'])])
     if path == '/api/v3/klines':
-        return rows(params['interval'], int(params['endTime']), int(params['limit']))
+        return fixture_rows(params['interval'], int(params['endTime']), int(params['limit']))
     raise ValueError('FIXTURE_PUBLIC_ENDPOINT_NOT_ALLOWED')
 
 
@@ -116,19 +343,45 @@ class WholeRosterSoak(unittest.TestCase):
     market = runtime_tests.DataCases.market
 
     def test_complete_1228_topics_during_continuous_wall_load(self):
+        state = dict(wall_started=time.monotonic(), phase='PREPARATION')
+        try:
+            self._complete_1228_topics_during_continuous_wall_load(state)
+        except BaseException as error:
+            state['error'] = error_detail(state['phase'], error)
+            raise
+        finally:
+            # This runs after post-drain assertions as well as early exceptions.
+            # A diagnostic error must never replace the primary test failure.
+            try:
+                report = soak_drain_metrics(state)
+                self.soak_report = report
+                emit_soak_report(report)
+                if not state.get('error'):
+                    self.assertEqual(report['diagnostic_errors'], [], 'soak final evidence incomplete')
+            except BaseException as error:
+                emit_bounded('BINANCE_SOAK_DIAGNOSTIC_FAILED', error_detail('drain_report', error))
+                if not state.get('error'):
+                    raise
+
+    def _complete_1228_topics_during_continuous_wall_load(self, state):
         names = topics(['BTCUSDT']+['S%03dUSDT' % i for i in range(408)])
         self.assertEqual(len(names), 1228)
-        wall_started = time.monotonic()
+        wall_started = state['wall_started']
         clock = lambda: MIDNIGHT+120000+int((time.monotonic()-wall_started)*1000)
         market = self.market('whole-roster', names=names, stamp=clock())
+        state.update(market=market, clock=clock)
         with closing(sqlite3.connect(market.path)) as db:
             self.assertEqual(db.execute('PRAGMA journal_mode=WAL').fetchone()[0], 'wal')
         # Complete history is initialized through real control intents and real
         # market transactions. Fixture bodies have no HTTP admission claim.
         market.apply('directory', names, directory(names), clock())
+        state.update(phase='HISTORY_FIXTURE_SEED', initialized_topics=0, initialized_rows=0)
         for name in names:
             stamp = clock()
-            market.apply('seed', [name], rows(split_topic(name)[1], stamp), stamp)
+            market.apply('seed', [name], fixture_rows(split_topic(name)[1], stamp), stamp)
+            state['initialized_topics'] += 1
+            state['initialized_rows'] += LIMITS[split_topic(name)[1]]
+        state['phase'] = 'INITIAL_FULL_SCOPE_READ'
         market.frames(names, clock())
         def whole_read():
             now = dt.datetime.fromtimestamp(clock()/1000, dt.timezone.utc)
@@ -138,20 +391,60 @@ class WholeRosterSoak(unittest.TestCase):
         expected_rows = sum(LIMITS[split_topic(n)[1]] for n in names)
         self.assertEqual(sum(len(w['rows']) for w in seeded.generation['windows'].values()), expected_rows)
         seed_seconds = time.monotonic()-wall_started
+        state['seed_wall_seconds'] = seed_seconds
         self.assertLess(seed_seconds, 75, 'seed fixture exceeded freshness/CI preparation budget')
         stopped, producer_done = Event(), Event()
         observed = stream.ObservedQueue(4096)
-        errors, checkpoints, read_rejections, finals = [], [], {}, []
+        errors, checkpoints, read_rejections, finals, thread_error_details = [], [], {}, [], []
         metrics = dict(rounds=0, queued=0, processed=0, max_ws_delay_ms=0, cumulative_ws_delay_ms=0,
-                       full_ready_reads=0, reader_scope_size=1228)
+                       full_ready_reads=0, reader_scope_size=1228, explicit_close_frames=0,
+                       read_attempts=0, read_rejected=0,
+                       crossed_boundaries={interval: 0 for interval in STEPS})
+        histograms = dict(receipt_to_commit=LatencyHistogram('ms'),
+                          receive_batch_wall=LatencyHistogram('us'), quiet_submit_to_done=LatencyHistogram('ms'))
+        receipt_started, quiet_by_key, quiet_lock = {}, {}, Lock()
         load_started = time.monotonic()
         deadline = load_started+LOAD_SECONDS
         pool = ThreadPoolExecutor(max_workers=4)
         jobs = health.CoordinatedJobs(market.store, market.protocol, names, pool, clock,
                                      stopped.is_set, public.Client if sys.platform == 'linux' else BodyClient)
         jobs.seeded = set(names)
+        state.update(metrics=metrics, errors=errors, thread_error_details=thread_error_details,
+            checkpoints=checkpoints, read_rejections=read_rejections, finals=finals,
+            observed=observed, jobs=jobs, load_started=load_started, histograms=histograms,
+            quiet_by_key=quiet_by_key, quiet_lock=quiet_lock)
+        state.update(read_intervals={}, unready_since=load_started, max_nonready_seconds=0)
+        original_submit = jobs.submit
+
+        def measured_submit(key, kind, scope):
+            submitted = time.perf_counter_ns()
+            queued_since = jobs.waiting.get(key)
+            accepted = original_submit(key, kind, scope)
+            if accepted and kind == 'quiet':
+                if queued_since is not None:
+                    state['quiet_candidate_to_submit_max_ms'] = max(state.get('quiet_candidate_to_submit_max_ms', 0),
+                        clock()-queued_since)
+                label = str(key)
+                with quiet_lock:
+                    summary = quiet_by_key.setdefault(label, dict(submitted=0, completed=0,
+                        failed=0, cancelled=0, max_submit_to_done_ms=0))
+                    summary['submitted'] += 1
+
+                def completed(future):
+                    elapsed = (time.perf_counter_ns()-submitted)//1000000
+                    histograms['quiet_submit_to_done'].add(elapsed)
+                    outcome = 'cancelled' if future.cancelled() else ('failed' if future.exception() else 'completed')
+                    with quiet_lock:
+                        summary[outcome] += 1
+                        summary['max_submit_to_done_ms'] = max(summary['max_submit_to_done_ms'], elapsed)
+
+                jobs.active[key][2].add_done_callback(completed)
+            return accepted
+
+        jobs.submit = measured_submit
 
         def producer():
+            previous = {}
             try:
                 while not stopped.is_set() and time.monotonic() < deadline:
                     round_started = time.monotonic()
@@ -162,20 +455,31 @@ class WholeRosterSoak(unittest.TestCase):
                             break
                         symbol, interval = split_topic(name)
                         shard = market.protocol.topic_shards[name]
-                        value = message(symbol, interval, stamp)
-                        market.protocol.arrived(shard, json.dumps(value), stamp)
-                        try:
-                            observed.put((shard, value, stamp), timeout=.5)
-                        except queue.Full:
-                            market.store.unprocessed(market.epoch, [(value, stamp)], 'SOAK_QUEUE_FULL')
-                            raise AssertionError('SOAK_QUEUE_FULL')
-                        metrics['queued'] += 1
+                        start = stamp//STEPS[interval]*STEPS[interval]
+                        frames = []
+                        if name in previous and previous[name] != start:
+                            frames.append(message(symbol, interval, stamp-1, start=previous[name], closed=True))
+                            metrics['explicit_close_frames'] += 1
+                            metrics['crossed_boundaries'][interval] += 1
+                        frames.append(message(symbol, interval, stamp))
+                        for value in frames:
+                            receipt_started[id(value)] = time.perf_counter_ns()
+                            market.protocol.arrived(shard, json.dumps(value), stamp)
+                            try:
+                                observed.put((shard, value, stamp), timeout=.5)
+                            except queue.Full:
+                                receipt_started.pop(id(value), None)
+                                market.store.unprocessed(market.epoch, [(value, stamp)], 'SOAK_QUEUE_FULL')
+                                raise AssertionError('SOAK_QUEUE_FULL')
+                            metrics['queued'] += 1
+                        previous[name] = start
                         in_round += 1
                     if in_round == len(names):
                         metrics['rounds'] += 1
                     stopped.wait(max(0, .8-(time.monotonic()-round_started)))
             except BaseException as error:
                 errors.append(('producer', type(error).__name__, str(error)))
+                thread_error_details.append(error_detail('producer', error))
                 stopped.set()
             finally:
                 producer_done.set()
@@ -192,7 +496,12 @@ class WholeRosterSoak(unittest.TestCase):
                             batch.append(observed.get_nowait())
                         except queue.Empty:
                             break
+                    batch_started = time.perf_counter_ns()
                     market.protocol.receive_batch(batch)
+                    committed = time.perf_counter_ns()
+                    histograms['receive_batch_wall'].add((committed-batch_started)//1000)
+                    for _, value, _ in batch:
+                        histograms['receipt_to_commit'].add((committed-receipt_started.pop(id(value)))//1000000)
                     finished = clock()
                     delays = [finished-value[2] for value in batch]
                     metrics['processed'] += len(batch)
@@ -200,6 +509,7 @@ class WholeRosterSoak(unittest.TestCase):
                     metrics['cumulative_ws_delay_ms'] += sum(delays)
             except BaseException as error:
                 errors.append(('writer', type(error).__name__, str(error)))
+                thread_error_details.append(error_detail('writer', error))
                 stopped.set()
 
         def checkpoint():
@@ -209,10 +519,14 @@ class WholeRosterSoak(unittest.TestCase):
                         checkpoints.append(tuple(db.execute('PRAGMA wal_checkpoint(PASSIVE)').fetchone()))
             except BaseException as error:
                 errors.append(('checkpoint', type(error).__name__, str(error)))
+                thread_error_details.append(error_detail('checkpoint', error))
                 stopped.set()
 
-        threads = [Thread(target=producer), Thread(target=writer), Thread(target=checkpoint)]
+        threads = [Thread(target=producer, name='soak-producer'), Thread(target=writer, name='soak-writer'),
+                   Thread(target=checkpoint, name='soak-checkpoint')]
+        state['threads'] = threads
         next_work = 0
+        next_heartbeat = load_started+60
         http = None
         load_finished = None
         with ExitStack() as stack:
@@ -225,46 +539,73 @@ class WholeRosterSoak(unittest.TestCase):
                     str(os.getpid()), str(http.port), str(market.path.parent)]
                 stack.enter_context(patch.object(public, 'worker_command', command))
             try:
+                state['phase'] = 'CONTINUOUS_LOAD'
                 for thread in threads:
                     thread.start()
                 while time.monotonic() < deadline and not stopped.is_set():
                     now = clock()
                     jobs.tick(now)
+                    quiet_waits = [now-started for key, started in jobs.waiting.items() if key[0] == 'quiet']
+                    state['quiet_waiting_observed_max_ms'] = max([state.get('quiet_waiting_observed_max_ms', 0)]+quiet_waits)
                     elapsed = time.monotonic()-load_started
                     if elapsed >= next_work and len(jobs.active) < 4:
                         # Exercise real quiet/history publication alongside the
                         # runtime's directory round robin, without weakening its
                         # admission, 90s gate, source labels, or topic mutex.
-                        name = topic('S%03dUSDT' % int(next_work//5), '1d')
+                        name = topic('S%03dUSDT' % (int(next_work//5) % 408), '1d')
                         kind = 'quiet' if int(next_work//5) % 2 == 0 else 'repair'
                         if not any((k, name) in jobs.active for k in ('seed', 'repair', 'quiet')):
                             jobs.submit((kind, name), kind, [name])
                         next_work += 5
                     try:
+                        read_started = time.monotonic()
+                        period = str(clock()//STEPS['15m']*STEPS['15m'])
+                        interval_read = state['read_intervals'].setdefault(period, dict(attempts=0, ready=0, rejected=0))
+                        interval_read['attempts'] += 1
+                        metrics['read_attempts'] += 1
                         frozen = whole_read()
                         self.assertEqual(set(frozen.generation['windows']), set(names))
                         frozen.check_delivery()
                         metrics['full_ready_reads'] += 1
+                        interval_read['ready'] += 1
+                        if state['unready_since'] is not None:
+                            state['max_nonready_seconds'] = max(state['max_nonready_seconds'],
+                                time.monotonic()-state['unready_since'])
+                            state['unready_since'] = None
                     except (ValueError, ControlError) as error:
                         key = str(error).split(':', 1)[0]
                         read_rejections[key] = read_rejections.get(key, 0)+1
-                    if time.monotonic()-wall_started > 135:
+                        metrics['read_rejected'] += 1
+                        interval_read['rejected'] += 1
+                        if state['unready_since'] is None:
+                            state['unready_since'] = read_started
+                    if time.monotonic() >= next_heartbeat:
+                        report = soak_drain_metrics(state, final=False)
+                        report['event'] = 'BINANCE_SOAK_HEARTBEAT'
+                        emit_soak_report(report)
+                        next_heartbeat += 60
+                    if time.monotonic()-wall_started > LOAD_SECONDS+103:
                         raise AssertionError('SOAK_TOTAL_WALL_BUDGET')
                 load_finished = time.monotonic()
             except BaseException as error:
-                print('BINANCE_SOAK_INTERRUPTED '+json.dumps(dict(metrics,
+                state['load_error'] = error_detail(state['phase'], error)
+                emit_bounded('BINANCE_SOAK_INTERRUPTED', dict(metrics,
                     seed_wall_seconds=seed_seconds, load_wall_seconds=time.monotonic()-load_started,
                     error_type=type(error).__name__, error=str(error),
                     control_phase=getattr(error, 'control_phase', None),
                     queue_depth=observed.qsize(), queue_high_water=observed.high_water,
-                    thread_errors=errors, market_transactions=market.store.transaction_diagnostics()), sort_keys=True))
+                    thread_errors=errors, load_error=state['load_error']))
                 raise
             finally:
+                state.update(load_finished=time.monotonic(), phase='RECEIPT_DRAIN', drain_started=time.monotonic())
                 stopped.set()
                 for thread in threads:
                     if thread.ident is not None:
                         thread.join(12)
+                state.update(drain_finished=time.monotonic(), phase='JOBS_SHUTDOWN', jobs_shutdown_started=time.monotonic())
                 work = jobs.shutdown(time.monotonic()+35)
+                state.update(work=work, jobs_shutdown_finished=time.monotonic())
+            state['phase'] = 'POST_DRAIN_ASSERTIONS'
             self.assertFalse(any(thread.is_alive() for thread in threads), 'soak thread did not stop')
             self.assertEqual(errors, [])
             self.assertTrue(work['complete'])
@@ -275,9 +616,19 @@ class WholeRosterSoak(unittest.TestCase):
             self.assertGreaterEqual(metrics['rounds'], 3)
             self.assertGreater(metrics['full_ready_reads'], 0)
             self.assertTrue(checkpoints)
+            self.assertEqual(histograms['receipt_to_commit'].snapshot()['count'], metrics['processed'])
+            self.assertTrue(callable(getattr(market.store.control, 'transaction_diagnostics', None)),
+                            'candidate requires real Control transaction diagnostics')
+            if LOAD_SECONDS == 3600:
+                self.assertGreaterEqual(metrics['crossed_boundaries']['15m'], 4*409)
+                self.assertGreaterEqual(metrics['crossed_boundaries']['1h'], 409)
+                self.assertGreaterEqual(len(state['read_intervals']), 5)
+                self.assertTrue(all(value['ready'] > 0 for value in state['read_intervals'].values()),
+                                'whole scope never recovered READY within a sampled 15m interval')
             # Final whole-scope proof is made after every writer/job has ended.
             # Refresh all directory evidence and only then take another complete
             # WS round, preserving the same original 1228-topic scope.
+            state['phase'] = 'FINAL_FULL_SCOPE_READ'
             market.apply('directory', names, directory(names), clock())
             market.frames(names, clock())
             final_read = whole_read()
@@ -318,6 +669,7 @@ class WholeRosterSoak(unittest.TestCase):
             self.assertTrue(final['complete'])
             self.assertEqual(final['received'], final['committed']+final['duplicate']+
                              final['invalid']+final['unprocessed_recorded'])
+        state['phase'] = 'COMPLETE'
         metrics.update(seed_wall_seconds=seed_seconds, load_wall_seconds=load_finished-load_started,
             total_wall_seconds=time.monotonic()-wall_started, initialized_topics=1228,
             initialized_rows=expected_rows, final_ready_topics=len(generation['windows']),
@@ -328,7 +680,7 @@ class WholeRosterSoak(unittest.TestCase):
             attempts=attempts, retired=retired, charged_total=charged,
             real_http_child_verified=http is not None, market_clock='FIXED_UTC_PLUS_REAL_ELAPSED',
             natural_utc_rollover_verified=False, receipt_conserved=final['complete'])
-        print('BINANCE_COMPLETE_ROSTER_WALL_SOAK '+json.dumps(metrics, sort_keys=True))
+        print('BINANCE_COMPLETE_ROSTER_WALL_SOAK '+json.dumps(metrics, sort_keys=True), flush=True)
 
 
 @unittest.skipUnless(sys.platform == 'linux', 'LINUX_PROCESS_ACCEPTANCE_REQUIRED_NOT_VERIFIED_ON_THIS_HOST')
