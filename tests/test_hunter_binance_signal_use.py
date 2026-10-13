@@ -66,6 +66,7 @@ class SignalUseTests(unittest.TestCase):
 
     def test_identity_io_revocation_blocks_real_target_momentum_exit(self):
         saved,_,refresh=self.execute(self.fixture(),identity=self.revoke)
+        print('BINANCE_FENCE_DIAG_USE',repr(dict(case='revoke',exit_reasons=[p.get('exit_reason') for p in saved['closed_positions']],refresh_failures=refresh.get('failures'),health_phase=self.store.metadata().get('health_phase'),event_types=[x.get('type') for x in saved['events']])),flush=True)
         self.assertEqual(saved['closed_positions'],[], 'pre-I/O signal authorized a post-revocation EXIT')
         self.assertFalse(any(e['type'].endswith('_SELL') for e in saved['events']))
         self.assertIn('ETH',refresh['failures'])
@@ -93,6 +94,7 @@ class SignalUseTests(unittest.TestCase):
         pos.update(degraded_cycles=monitor.eng.DEGRADE_CONFIRM_CYCLES-1,last_health_evidence_id='prior',
                    last_health_generation_id='prior',health_state='DEGRADED')
         saved,_,refresh=self.execute(fixture,identity=self.expire)
+        print('BINANCE_FENCE_DIAG_USE',repr(dict(case='expire',exit_reasons=[p.get('exit_reason') for p in saved['closed_positions']],refresh_failures=refresh.get('failures'),clock=self.time,event_types=[x.get('type') for x in saved['events']])),flush=True)
         self.assertEqual(saved['closed_positions'],[])
         self.assertNotIn('recovery_generation_id',saved['open_positions'][0])
         self.assertIn('ETH',refresh['failures'])
