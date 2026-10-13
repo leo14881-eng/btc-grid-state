@@ -31,12 +31,16 @@ def main():
     hist = {key: LatencyHistogram('us') for key in ('wall', 'thread_cpu')}
     timeline = SQLiteTimeline(scratch,'reader'); timeline.install()
     reader = Store.reader(scratch/'state.sqlite3')
+    caught_freeze=[]
+    if os.environ.get('BINANCE_DIAGNOSTIC_CACHE_FAILURE')=='1':
+        reader._freeze_error_probe=lambda kind,message,code,name: caught_freeze.append(
+            dict(type=kind,message=message,sqlite_errorcode=code,sqlite_errorname=name))
     transient = {'CONTROL_PUBLICATION_PENDING','CONTROL_READ_FENCE_CHANGED',
         'BINANCE_FINAL_READ_REVOKED','BINANCE_FINAL_TOPIC_REVOKED',
         'BINANCE_CACHE_UNKNOWN:BINANCE_TOPIC_STALE_OR_NOT_READY',
         'BINANCE_CACHE_UNKNOWN:BINANCE_CURRENT_WS_REQUIRED'}
     result = dict(scope='CONTINUOUS_1228_TOPIC_PRESSURE_NOT_MONITOR', topics=len(names),pid=os.getpid(),
-        attempts=0, ready=0, rejected={}, errors=[], blocked_effects=blocked,completed_after_load=0,
+        attempts=0, ready=0, rejected={}, errors=[], caught_freeze=caught_freeze, blocked_effects=blocked,completed_after_load=0,
         transient_reasons=sorted(transient),timing_scope='CALL_START_IN_LOAD_INCLUSIVE_LAST_CALL_MAY_FINISH_AFTER')
     (scratch/'reader.ready').write_text('ready', encoding='utf-8')
     try:
