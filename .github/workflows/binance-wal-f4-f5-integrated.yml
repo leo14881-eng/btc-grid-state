@@ -1,0 +1,48 @@
+name: Binance WAL F4 F5 integrated gate
+# Exact-head read-only integration; this revision also runs real-session WAL diagnostics.
+
+on:
+  pull_request:
+    paths:
+      - research/hunter_binance_market_wal.py
+      - research/hunter_binance_stream_store.py
+      - research/hunter_binance_health_store.py
+      - tests/test_hunter_binance_market_wal_offline.py
+      - tests/test_hunter_binance_ingest_equivalence.py
+      - tests/test_hunter_binance_readiness_point_lookup.py
+      - .github/workflows/binance-wal-f4-f5-integrated.yml
+
+permissions:
+  contents: read
+
+jobs:
+  integrated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Assert exact integrated SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Integrated WAL, epoch, readiness, revision and snapshot tests
+        run: |
+          python -B -X utf8 -m unittest -v \
+            tests.test_hunter_binance_market_wal_offline \
+            tests.test_hunter_binance_ingest_equivalence \
+            tests.test_hunter_binance_readiness_point_lookup \
+            tests.test_hunter_binance_revision_copy \
+            tests.test_hunter_binance_snapshot_copy \
+            tests.test_hunter_binance_consumer_fence \
+            tests.test_hunter_binance_coordinated_scheduler \
+            tests.test_hunter_binance_signal_use

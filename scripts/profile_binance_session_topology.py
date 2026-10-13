@@ -643,6 +643,15 @@ def collector(scratch):
     start = time.monotonic()
     try:
         store = TimedStore(scratch/'state.sqlite3')
+        # Scratch diagnostic ONLY: compare real health.session under WAL and DELETE.
+        # No production provisioning, existing SQLite safety approval, or runtime switch.
+        diagnostic_wal = os.environ.get('BINANCE_DIAGNOSTIC_MARKET_WAL') == '1'
+        if diagnostic_wal:
+            with contextlib.closing(sqlite3.connect(store.path.as_uri()+'?mode=rw',
+                                                   uri=True,timeout=.25,isolation_level=None)) as mode_db:
+                actual_mode = mode_db.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+                if actual_mode.upper() != 'WAL':
+                    raise AssertionError('DIAGNOSTIC_WAL_SWITCH_FAILED')
         Control.provision(scratch/'control.sqlite3',store.path)
         store.enable_control()
         with patch.object(health,'Protocol',MeasuredProtocol), patch.object(health,'CoordinatedJobs',BootstrapJobs), \
@@ -673,7 +682,8 @@ def collector(scratch):
                 'public.worker_command:guarded_loopback_HTTP_child',
                 'sqlite3.connect:Connection/Cursor_subclass_actual_call_timeline',
                 '_connection_context:FIRST_CONNECTION_FOR_KIND_same_connection_read_PRAGMA_locking_mode'],
-            journal_override=False, queue_capacity=4096, batch_limit=100,
+            journal_override=bool(os.environ.get('BINANCE_DIAGNOSTIC_MARKET_WAL') == '1'),
+            diagnostic_only_wal_override=True, queue_capacity=4096, batch_limit=100,
             samples=samples, failures=failures, blocked_effects=blocked,
             source_audit=audit,stage_partitions=partitions,load_cutoff=state.get('load_cutoff'),
             receipt_timing_origin='ARRIVED_RETURN_AFTER_JSON_AND_INGRESS_ACCOUNTING',
@@ -779,7 +789,7 @@ def run_leg(scratch, with_reader, ports, head, source):
         out = (scratch/(name+'.stdout')).open('wb'); err = (scratch/(name+'.stderr')).open('wb')
         handles.extend([out,err])
         child = subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=out,stderr=err,
-            env={k:os.environ[k] for k in ('PATH','LANG','SYSTEMROOT') if k in os.environ})
+            env={k:os.environ[k] for k in ('PATH','LANG','SYSTEMROOT','BINANCE_DIAGNOSTIC_MARKET_WAL','BINANCE_DIAGNOSTIC_CACHE_FAILURE') if k in os.environ})
         processes[name] = child
         return child
 
@@ -930,6 +940,43 @@ def main():
             result = dict(leg=label,diagnostic_completed=False,load_succeeded=False,
                           problem=error_detail('parent.run_leg',error))
         write_json(scratch/(label+'.report.json'),result)
+        if os.environ.get('BINANCE_DIAGNOSTIC_MARKET_WAL') == '1':
+            c=result.get('collector') or {}
+            failures=result.get('sqlite_transaction_correlation',{}).get('commit_failures') or []
+            print('SESSION_WAL_COMPACT '+canonical(dict(leg=label,
+                collector_succeeded=c.get('session_succeeded'),
+                collector_problem=c.get('problem'),
+                collector_journal_override=c.get('journal_override'),
+                parent_problem=result.get('parent_error'),
+                load_succeeded=result.get('load_succeeded'),
+                started_reader=result.get('reader_started'),
+                recorded_errors=[dict(operation=e.get('operation'),type=e.get('type'),message=e.get('message')) for e in (result.get('errors') or [])[:3]],
+                reported_receipts=result.get('receipt_totals'),
+                actual_load_seconds=result.get('load_observed_seconds'),
+                producer_sent=result.get('producer_sent'),
+                session_final_received=result.get('session_final_received'),
+                health_samples_within_load=result.get('health_samples_within_load'),
+                native_sqlite_phase_errors=result.get('native_sqlite_phase_errors'),
+                first_reader_error=(result.get('reader') or {}).get('problem'),
+                reader_ready_count=(result.get('reader') or {}).get('ready'),
+                reader_status=(result.get('reader') or {}).get('status'),
+                reader_result_keys=sorted((result.get('reader') or {}).keys())[:25],
+                reader_distinct_process=result.get('reader_is_separate_process'),
+                load_cutoff_consistent=result.get('load_cutoff_matches_load_counter'),
+                partition_valid=result.get('session_final_partition_valid'),
+                stage_partition_consistent=result.get('stage_partition_matches_durable_final'),
+                raw_files_count=len(result.get('raw_files') or {}),
+                phase_timings={key:{'count':value.get('count'),
+                                    'total_us':value.get('total'),
+                                    'max_us':value.get('maximum'),
+                                    'p99_upper_us':value.get('p99_upper')}
+                               for key,value in (c.get('timings') or {}).items()
+                               if any(key.endswith('.'+part+'.wall') for part in
+                                      ('sample','freeze','jobs_tick','protocol_tick','receive_batch'))},
+                queue_high_water=c.get('queue_high_water'),
+                load_committed_per_target_second=c.get('load_committed_per_target_second'),
+                market_commit_failures=len(failures),
+                first_commit_failure=failures[0].get('failed_commit') if failures else None)),flush=True)
         emit_bounded('BINANCE_SESSION_TOPOLOGY_LEG',result)
         results.append(result)
     after = {str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in audit_paths}

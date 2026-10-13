@@ -1,0 +1,51 @@
+name: Binance revision point scratch performance
+
+on:
+  pull_request:
+    paths:
+      - scripts/profile_binance_contention.py
+      - tests/fixtures/binance_revision_point_probe.py
+      - .github/workflows/binance-revision-point-profile.yml
+
+permissions:
+  contents: read
+
+jobs:
+  point-versus-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Exact SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Scratch-only full snapshot oracle and matched continuous 8s load
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python -I -B -X utf8 scripts/profile_binance_contention.py \
+            --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
+            --probe-revision-point > "$RUNNER_TEMP/revision-point-profile.log" 2>&1 || {
+              grep -E 'PAIRED8_(END|REPORT)' "$RUNNER_TEMP/revision-point-profile.log" || true
+              exit 1
+            }
+          grep -E 'PAIRED8_(END|REPORT)' "$RUNNER_TEMP/revision-point-profile.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: revision-point-${{ matrix.python-version }}
+          path: |
+            ${{ runner.temp }}/binance-paired8-*/paired8-report.json
+            ${{ runner.temp }}/revision-point-profile.log
+          if-no-files-found: warn
