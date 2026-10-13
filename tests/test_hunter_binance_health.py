@@ -20,6 +20,7 @@ from research.hunter_binance_stream_store import topic,split_topic,STEPS,LIMITS,
 from research.hunter_binance_stream_consumer import Frozen
 from research.hunter_binance_http_child import allowed
 from scripts.hunter_binance_health_check import Window,read_sample
+from scripts import hunter_binance_health_check as checker
 from test_hunter_binance_cache import rows as old_rows,message as old_message
 
 NOW=1791858000000
@@ -281,6 +282,22 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(value['reason'],'VERIFICATION_EXPIRED_OR_NATIVE_BOUNDARY')
         with self.store.db(readonly=True) as db:
             self.assertIsNotNone(db.execute('SELECT 1 FROM metadata WHERE kind=?',('quiet_reverify:'+name,)).fetchone())
+
+    def test_health_completion_clock_is_after_final_snapshot_reads(self):
+        self.status();self.seed();self.fake_health();finished=[NOW+2]
+        def final_request_gate(store,db):finished[0]=NOW+31003;return None
+        with patch.object(checker,'request_gate',side_effect=final_request_gate):
+            value=read_sample(self.store,self.names,'a'*64,HEAD,NOW+2,clock=lambda:finished[0])
+        self.assertFalse(value.get('health_verified',False))
+        self.assertEqual(value['reason'],'HEALTH_READ_CHANGED_OR_EXPIRED')
+
+    def test_health_acceptance_reports_data_expiring_during_read_as_unknown(self):
+        self.status();self.seed()
+        for name in self.names:self.frame(name,stamp=NOW+80000)
+        self.assertEqual(self.fake_health(NOW+89999)['data_status'],'READY')
+        value=read_sample(self.store,self.names,'a'*64,HEAD,NOW+89999,clock=lambda:NOW+90001)
+        self.assertTrue(value['health_verified'])
+        self.assertEqual((value['service_status'],value['data_status']),('DEGRADED','UNKNOWN'))
 
     def test_kline_validity_expiry_and_wrong_kind_rejected_by_consumer(self):
         self.status();self.seed();name=self.names[1];self.frame(name)

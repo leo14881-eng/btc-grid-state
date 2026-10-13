@@ -9,6 +9,8 @@ import time
 from research.hunter_binance_stream_store import Budget, FRESH_MS, STATE_PATH, roster, roster_hash, content_hash
 from research.hunter_binance_health_store import Store, CONTRACT, valid_proof
 from research.hunter_binance_stream import SHARD_SIZE
+from research.hunter_binance_stream_consumer import Frozen
+from research.hunter_bybit_stream_store import budget_state,request_gate
 
 
 def read_sample(store,names,manifest,head,now,clock=None):
@@ -55,23 +57,33 @@ def read_sample(store,names,manifest,head,now,clock=None):
         if any(frozen.get(k)!=expected[k] for k in ('epoch','roster_hash','manifest_sha256')):
             raise ValueError('HEALTH_FREEZE_BINDING_CHANGED')
         # Finish fence catches reconnect, shutdown and stop changes during the read.
-        finished=clock() if clock is not None else now
         with store.db(readonly=True) as db:
             final_meta=dict(db.execute('SELECT key,value FROM meta'))
             current=json.loads(db.execute('SELECT payload FROM metadata WHERE kind=?',(CONTRACT,)).fetchone()[0])
             if (any(final_meta.get(k)!=meta.get(k) for k in ('epoch','health_epoch','scope_hash','roster_hash','health_epoch_started'))
                     or final_meta.get('connected')!='1' or final_meta.get('health_phase')!='ACTIVE'
-                    or current.get('epoch')!=meta['epoch'] or current.get('service_status') not in ('HEALTHY','DEGRADED')
-                    or not now<=finished<=value['observed_at']+30000):
+                    or current.get('epoch')!=meta['epoch'] or current.get('service_status') not in ('HEALTHY','DEGRADED')):
                 raise ValueError('HEALTH_READ_CHANGED_OR_EXPIRED')
             connections={r[0]:json.loads(r[1]) for r in db.execute("SELECT topic,payload FROM bn_validity WHERE kind='connection'")}
-            if set(connections)!=set(names) or any(not valid_proof(connections[n],'connection',n,final_meta,finished) for n in names):
-                raise ValueError('HEALTH_CONNECTION_PROOF_INVALID')
-        final_budget=Budget(store).status()
+            final_budget=budget_state(db)
+            final_budget['halt']=final_budget['halt'] or request_gate(store,db)
+        finished=clock() if clock is not None else now
+        if (not now<=finished<=value['observed_at']+30000
+                or finished-value['queue_progress_at']>30000
+                or value['oldest_active_ms']+finished-value['observed_at']>45000):
+            raise ValueError('HEALTH_READ_CHANGED_OR_EXPIRED')
+        if (set(connections)!=set(names)
+                or any(not valid_proof(connections[n],'connection',n,final_meta,finished) for n in names)
+                or any(not 0<=finished-s['observed_at']<=FRESH_MS for s in shards)):
+            raise ValueError('HEALTH_CONNECTION_PROOF_INVALID')
         if final_budget['halt'] or finished<final_budget['cooldown_ms']:raise ValueError('HEALTH_GLOBAL_STOP')
+        if frozen['status']=='READY':
+            try:Frozen(frozen,checked_at=finished)
+            except ValueError:frozen=dict(frozen,status='UNKNOWN',reason='BINANCE_DATA_EXPIRED_DURING_HEALTH_READ')
         result.update(value,collector_accepted=False,data_status=frozen['status'],
                       data_reason=frozen.get('reason'),data_failed_topic=frozen.get('failed_topic'),
                       generation_end_ms=now,publication_verified=False,health_verified=True,health_verified_at=finished)
+        if frozen['status']!='READY':result['service_status']='DEGRADED'
         return result
     except Exception as error:
         return dict(result,reason=str(error) if isinstance(error,ValueError) else 'HEALTH_READ_FAILED')
