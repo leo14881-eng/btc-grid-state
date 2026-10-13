@@ -329,9 +329,16 @@ class Store(MarketControlMixin, CoordinationStore):
             # and all share this one consistent read transaction.
             for offset in range(0,len(names),400):
                 group=names[offset:offset+400];marks=','.join('?' for _ in group)
-                readiness.update({r['topic']:dict(r) for r in db.execute('''SELECT * FROM (
-                    SELECT *,ROW_NUMBER() OVER (PARTITION BY topic ORDER BY observed DESC,id DESC) AS chosen
-                    FROM readiness WHERE observed<=? AND topic IN ('''+marks+')) WHERE chosen=1',(cut,*group))})
+                # Query only the latest qualifying row for each requested topic,
+                # using readiness_topic(topic, observed) rather than scanning and
+                # sorting every historical readiness row in the time window.
+                # The chosen=1 projection preserves the legacy copied-row schema.
+                values=','.join('( ? )' for _ in group)
+                readiness_query=('WITH requested(topic) AS (VALUES '+values+') '
+                    'SELECT r.*,1 AS chosen FROM requested JOIN readiness r ON r.id = ('
+                    'SELECT prior.id FROM readiness prior WHERE prior.topic=requested.topic '
+                    'AND prior.observed<=? ORDER BY prior.observed DESC,prior.id DESC LIMIT 1)')
+                readiness.update({r['topic']:dict(r) for r in db.execute(readiness_query,(*group,cut))})
                 revision_query='''SELECT r.* FROM revisions r
                     JOIN (SELECT topic,start,MAX(source_time) AS latest FROM revisions
                           WHERE observed<=? AND source_time<=? AND topic IN ('''+marks+''') GROUP BY topic,start) chosen
