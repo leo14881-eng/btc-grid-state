@@ -279,7 +279,7 @@ def run_leg(market, seed_root, with_reader):
                     raise RuntimeError('PROC_THREAD_ID_RECYCLED')
                 result[name] = dict(status='proc_ticks', cpu_us=int(
                     (ticks-state['proc_ticks_at_registration'])*1_000_000/TICKS_PER_SECOND))
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 # Exit can race this read. Never report a missing thread as zero.
                 with metrics:
                     final = dict(thread_states[name])
@@ -395,8 +395,13 @@ def run_leg(market, seed_root, with_reader):
                 # Structured fail-closed read outcomes are evidence, not successful
                 # delivery. All other errors (including invariant failures) are fatal.
                 with metrics:
-                    capacity_revoked = reason == 'BINANCE_FINAL_TOPIC_REVOKED' and bool(capacity_refusals)
-                if not (capacity_revoked or reason.startswith('BINANCE_CACHE_UNKNOWN:') or reason in
+                    capacity_revoked = reason in (
+                        'BINANCE_FINAL_TOPIC_REVOKED',
+                        'BINANCE_CACHE_UNKNOWN:BINANCE_UNRECONCILED_RECEIPT') and bool(capacity_refusals)
+                # freeze() can convert SQLite errors into UNKNOWN. Only the
+                # exact receipt denial caused by this leg's capacity refusal
+                # is expected here; generic UNAVAILABLE/CORRUPT remains fatal.
+                if not (capacity_revoked or reason in
                         ('CONTROL_PUBLICATION_PENDING', 'CONTROL_READ_FENCE_CHANGED')):
                     raise
                 read_rejections[reason] = read_rejections.get(reason, 0)+1
