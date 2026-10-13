@@ -157,17 +157,17 @@ def migrate(state):
                 raise WalMigrationError('MARKET_WAL_CHECKPOINT_BUSY')
         # Persist the mode-commit boundary independently from final verification.
         # A crash at either stage stays non-operational until manual review.
-        _phase(marker, dict(prepared, status='MODE_COMMITTED',
-                            checkpoint=list(checkpoint), mode_committed_at_ns=time.time_ns()),
-               create=False)
+        committed = dict(prepared, status='MODE_COMMITTED',
+                         checkpoint=list(checkpoint), mode_committed_at_ns=time.time_ns())
+        _phase(marker, committed, create=False)
         with contextlib.closing(sqlite3.connect(state.as_uri() + '?mode=ro', uri=True, timeout=.25)) as db:
             verified = db.execute('PRAGMA journal_mode').fetchone()[0].upper()
             if verified != 'WAL':
                 raise WalMigrationError('MARKET_WAL_REOPEN_VERIFY_FAILED:' + verified)
         if (state.stat().st_dev, state.stat().st_ino) != (identity.st_dev, identity.st_ino):
             raise WalMigrationError('MARKET_WAL_DATABASE_IDENTITY_CHANGED')
-        result = dict(prepared, status='VERIFIED', verified_mode='WAL',
-                      checkpoint=list(checkpoint), verified_at_ns=time.time_ns())
+        result = dict(committed, status='VERIFIED', verified_mode='WAL',
+                      verified_at_ns=time.time_ns())
         _phase(marker, result, create=False)
         return result
     finally:
