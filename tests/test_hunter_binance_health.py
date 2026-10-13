@@ -273,7 +273,7 @@ class StoreTests(unittest.TestCase):
 
     def test_quiet_http_crossing_boundary_cannot_clear_mismatch_obligation(self):
         name=topic('BTCUSDT','5m');stamp=NOW+STEPS['5m']-1000
-        self.status(stamp=stamp);self.seed(stamp=stamp)
+        self.status(stamp=stamp);self.seed(stamp=stamp-1)
         changed=rows('5m',stamp);changed[-2][4]='102'
         self.store.verify_quiet(self.epoch,name,changed,stamp,stamp)
         value=self.store.verify_quiet(self.epoch,name,changed,stamp+999,stamp+1001)
