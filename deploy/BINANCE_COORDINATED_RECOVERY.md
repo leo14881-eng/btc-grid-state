@@ -245,6 +245,12 @@ fixed no-reader-first order does not establish GIL causation. Source hashes
 and the real checkout SHA are separate from synthetic fixture identities.
 Use this evidence to select the next bounded experiment; do not relax the
 full-load gate or infer production behavior from the diagnostic.
+The optional `--probe-switch-interval 0.0005` adds one full-reader leg in the
+same process, restoring the same seed and changing only Python's diagnostic
+thread-switch interval. The original interval is restored in `finally`; both
+actual values are recorded. This tests scheduling sensitivity without
+changing production settings. Improvement cannot establish GIL as the only
+cause; absence of improvement cannot exclude long C operations holding it.
 
 ## Offline provisioning and reviewed installation
 

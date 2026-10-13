@@ -2,7 +2,9 @@
 
 One fresh scratch seed; both legs restore the SAME SQLite backups and clone the
 same in-memory Protocol receipt baseline. No HTTP, scheduler, sockets or child
-processes. This is not the 32s/1h acceptance fixture or production evidence.
+processes. An optional third full-reader leg probes interpreter scheduling on
+the same runner and restored seed. This is not the 32s/1h acceptance fixture or
+production evidence.
 """
 import sys
 sys.dont_write_bytecode = True
@@ -40,6 +42,8 @@ sys.addaudithook(audit)
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--repo', required=True, type=Path)
 parser.add_argument('--source-head', required=True, help='Caller-verified Git HEAD label; file hashes also recorded')
+parser.add_argument('--probe-switch-interval', type=float, choices=(.0005,),
+                    help='Diagnostic-only third full-reader leg; restores the original interval on exit')
 args = parser.parse_args()
 repo = args.repo.resolve(strict=True)
 if sys.platform != 'linux':
@@ -490,6 +494,7 @@ def run_leg(market, seed_root, with_reader):
     per_thread = {name: dict(thread_states.get(name, {'status':'not_started'}))
                   for name in ('producer', 'writer', 'checkpoint', 'reader')}
     report = dict(with_full_reader=with_reader, target_seconds=SECONDS,
+        switch_interval_seconds=sys.getswitchinterval(),
         load_seconds=load_finished-started, reached_target_seconds=load_finished >= deadline,
         total_seconds=time.monotonic()-started, epoch=protocol.epoch, totals=totals,
         process_cpu_load_us=load_process_cpu//1000,
@@ -525,6 +530,7 @@ def run_leg(market, seed_root, with_reader):
 
 
 def main():
+    original_switch_interval = sys.getswitchinterval()
     scratch = Path(tempfile.mkdtemp(prefix='binance-paired8-')).resolve()
     scratch_guard(scratch)
     active = scratch/'active'; seed_root = scratch/'seed'
@@ -550,11 +556,12 @@ def main():
         source_file_count=len(source_hashes), scope='DIAGNOSTIC_NO_HTTP_NO_SCHEDULER_NOT_ACCEPTANCE',
         fixed_market_stamp=STAMP)), flush=True)
     report = dict(scope='DIAGNOSTIC_NO_HTTP_NO_SCHEDULER_NOT_ACCEPTANCE', python=sys.version,
-        sqlite=sqlite3.sqlite_version, switch_interval_seconds=sys.getswitchinterval(),
+        sqlite=sqlite3.sqlite_version, switch_interval_seconds=original_switch_interval,
+        probe_switch_interval_seconds=args.probe_switch_interval,
         checkout_source_head=args.source_head, source_file_sha256_before=source_hashes,
         fixed_market_stamp=STAMP, fixture_source_head=runtime.HEAD,
         fixture_manifest=runtime.MANIFEST, fixture_identity_is_synthetic=True,
-        comparison_limitations='One pair, fixed no-reader then full-reader order; OS page cache is not cooled; instrumented; cannot alone establish GIL causation or acceptance',
+        comparison_limitations='Fixed no-reader then full-reader order, followed by optional smaller-interval full-reader probe; same runner/seed but OS page cache is not cooled; instrumented; scheduling sensitivity is not sole GIL causation, a production setting, or acceptance',
         legs=[], fatal_errors=[])
     try:
         started = time.monotonic()
@@ -576,7 +583,11 @@ def main():
         report.update(seed_seconds=time.monotonic()-started, epoch=market.epoch,
             seed_file_sha256={name:hashlib.sha256((seed_root/name).read_bytes()).hexdigest()
                               for name in ('state.sqlite3', 'control.sqlite3')})
-        for with_reader in (False, True):
+        conditions = [(False, original_switch_interval), (True, original_switch_interval)]
+        if args.probe_switch_interval is not None:
+            conditions.append((True, args.probe_switch_interval))
+        for with_reader, switch_interval in conditions:
+            sys.setswitchinterval(switch_interval)
             leg = run_leg(market, seed_root, with_reader)
             report['legs'].append(leg)
             if leg.get('live_threads'):
@@ -601,6 +612,8 @@ def main():
         report['fatal_errors'].append(dict(type=type(error).__name__, message=str(error),
             traceback=''.join(traceback.format_exception(type(error), error, error.__traceback__))))
     finally:
+        sys.setswitchinterval(original_switch_interval)
+        report['restored_switch_interval_seconds'] = sys.getswitchinterval()
         report['source_file_sha256_after'] = hashes()
         report['source_files_unchanged'] = source_hashes == report['source_file_sha256_after']
         report['blocked_audit_events'] = list(BLOCKED)
@@ -608,7 +621,7 @@ def main():
             report['fatal_errors'].append('SOURCE_CHANGED_DURING_PROFILE')
         if BLOCKED:
             report['fatal_errors'].append('AUDIT_GUARD_BLOCKED_SIDE_EFFECT')
-        if len(report['legs']) != 2:
+        if len(report['legs']) != 2+int(args.probe_switch_interval is not None):
             report['fatal_errors'].append('PAIR_INCOMPLETE')
         report['diagnostic_completed_without_fatal_error'] = not report['fatal_errors']
         target.write_text(json.dumps(report, sort_keys=True, indent=2), encoding='utf-8')

@@ -144,6 +144,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CHECKOUT_SHA"
           python -I -B -X utf8 scripts/profile_binance_contention.py \
             --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
+            --probe-switch-interval 0.0005 \
             | tee "$RUNNER_TEMP/binance-contention.log"
       - uses: actions/upload-artifact@v4
         if: always()
