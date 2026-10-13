@@ -196,6 +196,8 @@ class WalOfflineTests(unittest.TestCase):
         worker='''import sys,time
 from pathlib import Path
 from research import hunter_binance_market_wal as w
+# SCRATCH TEST ONLY: native CI SQLite may predate the WAL-reset fix.
+w._wal_reset_fixed=lambda _: True
 original=w._phase
 def delayed(marker,value,*,create):
     original(marker,value,create=create)
