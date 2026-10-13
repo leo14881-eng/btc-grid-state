@@ -155,6 +155,11 @@ def migrate(state):
             checkpoint = tuple(db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone())
             if checkpoint[0] != 0:
                 raise WalMigrationError('MARKET_WAL_CHECKPOINT_BUSY')
+        # Persist the mode-commit boundary independently from final verification.
+        # A crash at either stage stays non-operational until manual review.
+        _phase(marker, dict(prepared, status='MODE_COMMITTED',
+                            checkpoint=list(checkpoint), mode_committed_at_ns=time.time_ns()),
+               create=False)
         with contextlib.closing(sqlite3.connect(state.as_uri() + '?mode=ro', uri=True, timeout=.25)) as db:
             verified = db.execute('PRAGMA journal_mode').fetchone()[0].upper()
             if verified != 'WAL':
