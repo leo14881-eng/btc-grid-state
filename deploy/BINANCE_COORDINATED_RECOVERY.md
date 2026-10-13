@@ -267,6 +267,13 @@ by the harness. It excludes external enrichment/order books, ledger access
 and publication. These isolated segment timings are not whole-job timings,
 concurrent-writer measurements or multiple-user capacity acceptance. The
 continuous full-reader pair and strict acceptance remain separate and unchanged.
+It now compares the two original full-table delivery-query algorithms from
+`6a5c8590ea6b38e7f9d1fd3fb1c7573b334db887` with the requested-scope SQL
+projection in the same process and seeded databases. All other production
+logic is the candidate's in both legs. Outputs, scopes, generation hashes and
+method counts must match exactly; measured non-overlapping Research and
+Monitor segment wall costs must not increase. This fixed-order single pair
+is not an exact old-deployment replay or statistical tail benchmark.
 
 ## Performance and multiple-user boundary
 
@@ -279,6 +286,24 @@ read maximum was 2118.628/1233.193 ms (P99 upper bound 5000/2000 ms). Both
 subsequent real-process reconnects completed two READY epochs and retired all
 eight attempts with no recorded SQLite error. The hour gate was skipped.
 See [exact-head CI](https://github.com/leo14881-eng/btc-grid-state/actions/runs/38429609562).
+
+At the subsequent unmodified-production head `6a5c8590`, the real 25-asset
+Research regular-rotation segment took 0.728/0.765 seconds on Python 3.10/3.12.
+The 80-pair/160-topic Monitor segment took 58.542/59.481 seconds across its
+non-overlapping top-level calls, although its initial read took only
+0.146/0.136 seconds. Its original 64-thread formula stages repeatedly read
+the entire roster for each delivery fence. These are isolated read segments,
+not the full Research/Early pipeline or complete Monitor job.
+
+The candidate queries only each delivery's original complete requested set
+for market topic state and control versions, using at most 400 parameters per
+query inside the same existing transaction. It projects only used market
+columns and retains the original Python truthiness/identity checks. Every
+delivery still checks every originally requested topic, global state, owner,
+pending publication, quarantine, revocation and proof expiry. No fence result
+is cached; the initial freeze still verifies the complete stored roster.
+This addresses measured delivery overhead, but its performance result and the
+unchanged continuous full-reader acceptance must be checked independently.
 
 The paired scheduling probe at `e2b52ab788cabb3cdd2d7669a2081547955d683a`
 did not solve the backlog: changing only the diagnostic switch interval from

@@ -411,6 +411,16 @@ class Control:
                 blocked.append(o['token'])
         return blocked
 
+    @staticmethod
+    def _fence_versions(db, scope):
+        # Scope is unchanged; unrelated version rows are not part of this
+        # fence. Retain one snapshot across SQLite-safe chunks.
+        rows = {}
+        for offset in range(0,len(scope),400):
+            group=scope[offset:offset+400];marks=','.join('?' for _ in group)
+            rows.update(db.execute('SELECT topic,version FROM versions WHERE topic IN ('+marks+')',group))
+        return rows
+
     def fence(self, names, epoch=None):
         scope = self._scope(names)
         self._read_latch()
@@ -428,7 +438,7 @@ class Control:
                     "SELECT scope FROM quarantines WHERE epoch=? AND state!='RESOLVED'",(meta['epoch'],))]
                 retiring=[(r[0],r[1]) for r in db.execute(
                     "SELECT scope,retire_deadline_ns FROM owners WHERE state='RETIRING'")]
-                rows = dict(db.execute('SELECT topic,version FROM versions'))
+                rows = self._fence_versions(db,scope)
                 publications=[r[0] for r in db.execute(
                     "SELECT scope FROM publications WHERE epoch=? AND state IN ('PREPARED','FAILED')",(meta['epoch'],))]
             # All rows above belong to one SQLite snapshot. Decode the copied

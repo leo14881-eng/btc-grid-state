@@ -306,6 +306,18 @@ class MarketControlMixin:
                     roster_hash=meta.get('roster_hash'),health_contract=meta.get('health_contract'),
                     control=token)
 
+    @staticmethod
+    def _delivery_states(db, requested):
+        current={};ordered=sorted(requested)
+        # Every delivery still checks its ENTIRE original scope. Fetch only
+        # those rows/columns instead of copying the whole collector roster
+        # for each rows()/packet() call. All chunks share this transaction.
+        for offset in range(0,len(ordered),400):
+            group=ordered[offset:offset+400];marks=','.join('?' for _ in group)
+            current.update({r['topic']:dict(r) for r in db.execute(
+                'SELECT topic,ack,gap,epoch FROM topics WHERE topic IN ('+marks+')',group)})
+        return current
+
     def finish_read(self, generation, names, checked_at, fence):
         from research.hunter_binance_stream_store import FRESH_MS, budget_state, request_gate
         if not fence or not 0 <= checked_at-generation['generation_end_ms'] <= FRESH_MS:
@@ -314,7 +326,7 @@ class MarketControlMixin:
         with self.db(readonly=True) as db:
             meta = dict(db.execute('SELECT key,value FROM meta'))
             requested=set(names)
-            current={r['topic']:dict(r) for r in db.execute('SELECT * FROM topics') if r['topic'] in requested}
+            current=self._delivery_states(db,requested)
             if (set(current)!=requested or any(not row['ack'] or row['gap']
                     or row['epoch']!=generation.get('epoch') for row in current.values())):
                 raise ValueError('BINANCE_FINAL_TOPIC_REVOKED')

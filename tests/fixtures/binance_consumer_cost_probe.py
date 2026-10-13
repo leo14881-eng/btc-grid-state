@@ -38,6 +38,56 @@ def _require(condition, reason):
 
 
 @contextmanager
+def original_delivery_queries():
+    """Only the two original query algorithms from immutable 6a5c8590.
+
+    The rest of the reader, formulas, scope, checks and fixture are identical.
+    This is not a replay of an entire old deployment or a production fallback.
+    """
+    from research.hunter_binance_market_control import MarketControlMixin
+    from research.hunter_binance_control import Control
+
+    def states(db, requested):
+        return {r['topic']: dict(r) for r in db.execute('SELECT * FROM topics')
+                if r['topic'] in requested}
+
+    def versions(db, scope):
+        return dict(db.execute('SELECT topic,version FROM versions'))
+
+    with patch.object(MarketControlMixin, '_delivery_states', staticmethod(states)), \
+            patch.object(Control, '_fence_versions', staticmethod(versions)):
+        yield
+
+
+def compare_delivery_cost(baseline, candidate):
+    """Exact outputs/call volume, plus non-overlapping measured segment costs."""
+    for field in ('research_scope', 'monitor_scope', 'research_output',
+                  'monitor_output', 'actual_read_scopes'):
+        _require(baseline[field] == candidate[field], 'PROJECTION_CHANGED_'+field.upper())
+    for key, value in baseline['measurements'].items():
+        other = candidate['measurements'].get(key)
+        _require(other is not None and value['count'] == other['count'] and
+                 value['errors'] == other['errors'] == 0, 'PROJECTION_CALL_VOLUME_OR_FAILURE')
+    _require(set(baseline['measurements']) == set(candidate['measurements']), 'PROJECTION_METHOD_SET')
+    top = dict(research=['research:research.research_one'], monitor=[
+        'monitor:consumer.management_inputs', 'monitor:signals.rolling:1h',
+        'monitor:signals.rolling:4h', 'monitor:signals.micro', 'monitor:signals.score_row',
+        'monitor:monitor.check_cache_delivery:after_reads',
+        'monitor:monitor.check_cache_delivery:final_delivery'])
+    costs = {}
+    for segment, names in top.items():
+        old = sum(baseline['measurements'][key]['wall_us']['total'] for key in names)
+        new = sum(candidate['measurements'][key]['wall_us']['total'] for key in names)
+        costs[segment] = dict(baseline_wall_us=old, candidate_wall_us=new,
+                             candidate_over_baseline=new/old, non_regression=new <= old)
+    return dict(prior_query_head='6a5c8590ea6b38e7f9d1fd3fb1c7573b334db887',
+        scope='TWO_QUERY_ALGORITHMS_ONLY_SAME_PROCESS_SEED_NO_WRITER',
+        exact_outputs_and_call_volume_equal=True, segment_costs=costs,
+        measured_segments_not_slower=all(item['non_regression'] for item in costs.values()),
+        limitations='One fixed-order instrumented baseline/candidate pair; not a statistical tail benchmark, whole-job cost or concurrent-writer acceptance')
+
+
+@contextmanager
 def _read_boundary(paths, results_root, policy_path, blocked):
     active = True
 
