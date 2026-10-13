@@ -2,6 +2,7 @@
 """Hunter v4 PRE_MOVE funnel: multi-horizon volume/structure/BTC-relative signals; research only."""
 import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
 from concurrent.futures import ThreadPoolExecutor,as_completed
+from contextlib import nullcontext
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research.hunter_signal_provenance import capture as capture_source
@@ -23,6 +24,12 @@ def finite(v):
     try:
         x=float(v);return x if math.isfinite(x) else None
     except (TypeError,ValueError,OverflowError):return None
+
+def _formula_cache(cache):
+    # Existing pre-control readers and REST retain their original interfaces.
+    # Each formula owns its own joined-worker/final-fence boundary.
+    return cache._formula() if callable(getattr(type(cache),'_formula',None)) else nullcontext(cache)
+
 def rolling(symbols,window,cache=None):
     """Derive 1h/4h return from Binance spot klines with bounded concurrency."""
     interval="1h";bars=2 if window=="1h" else 5
@@ -36,15 +43,16 @@ def rolling(symbols,window,cache=None):
                    "source_provenance":cache.packet(sym,interval,bars) if cache else capture_source(rows,sym,interval,dt.datetime.now(dt.timezone.utc)),
                    "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
     out={}
-    with ThreadPoolExecutor(max_workers=64) as ex:
-        futs={ex.submit(one,s):s for s in symbols}
-        for fut in as_completed(futs):
-            try:
-                row=fut.result()
-                if row:out[row[0]]=row[1]
-            except Exception:
-                continue
-    if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
+    with _formula_cache(cache) as cache:
+        with ThreadPoolExecutor(max_workers=64) as ex:
+            futs={ex.submit(one,s):s for s in symbols}
+            for fut in as_completed(futs):
+                try:
+                    row=fut.result()
+                    if row:out[row[0]]=row[1]
+                except Exception:
+                    continue
+        if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
     return out
 
 def micro(symbols,cache=None):
@@ -71,13 +79,14 @@ def micro(symbols,cache=None):
                     "source_provenance":cache.packet(sym,"15m",25) if cache else capture_source(rows,sym,"15m",dt.datetime.now(dt.timezone.utc)),
                     "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos}
     out={}
-    with ThreadPoolExecutor(max_workers=64) as ex:
-        futs={ex.submit(one,s):s for s in symbols}
-        for fut in as_completed(futs):
-            try:
-                row=fut.result()
-                if row:out[row[0]]=row[1]
-            except Exception:continue
+    with _formula_cache(cache) as cache:
+        with ThreadPoolExecutor(max_workers=64) as ex:
+            futs={ex.submit(one,s):s for s in symbols}
+            for fut in as_completed(futs):
+                try:
+                    row=fut.result()
+                    if row:out[row[0]]=row[1]
+                except Exception:continue
     return out
 
 def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):

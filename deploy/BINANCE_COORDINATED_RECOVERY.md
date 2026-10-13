@@ -446,6 +446,57 @@ risk authorization and a current-price check. None of that future protocol,
 cross-service deduplication or real execution has been implemented or accepted
 here; shadow mode, strategy and capital limits remain unchanged.
 
+## Third-party review boundaries and pending evidence
+
+The third-party review used `e8b0b8f5`, not the later revision-copy candidate
+`cb820829`. On that latter exact head, Linux Python 3.12 passed all 197 strict
+cases and its 32.506-second short load; Python 3.10 still failed only
+`SOAK_QUEUE_FULL` after 7.764 seconds. The hour job was skipped. Both real
+reconnect checks reached two READY epochs and retired all eight HTTP calls.
+These are prior-head facts, not acceptance of subsequent formula changes.
+
+The cb820829 no-reader diagnostic committed 12,280 frames in 8.000360 seconds
+on Python 3.10 (1534.93 frames/s), and in 8.000145 seconds on Python 3.12
+(1534.97 frames/s), with zero rejected frames and zero pending frames at load
+stop. This offered-load-limited, eight-second synthetic experiment establishes
+neither maximum capacity nor the production arrival rate. The suggested
+614 frames/s is a nominal schedule calculation, not a measured peak. A future
+approved log export must retain per-second arrival bins, maximum bursts,
+ordinary/close/UTC-00 boundaries and reconnect bursts, with source and time
+range. No production rate estimate is substituted for the unchanged load gate.
+
+The current narrow formula change keeps public `Frozen.rows/packet` delivery
+checks intact. Only `rolling/micro` use an internal calculation view, with
+owned copies, packet validation, per-use immutable proof/hash and freshness
+checks. After all workers join, each formula checks the complete original
+scope before returning. A swallowed local validity failure stays latched for
+that formula. Existing Early publication checks and Monitor management,
+decision, exit and add guards remain. Research and TailRisk keep the public
+interface. This change targets actual formula cost; the continuous full-reader
+writer load does not call these formulas and cannot be declared fixed by it.
+
+The remaining suggestions require these proofs before implementation:
+
+| Suggestion | Current finding and boundary |
+| --- | --- |
+| Remove the in-session health freeze | `sample` uses it to publish data status and downgrade HEALTHY to DEGRADED. The external checker independently freezes and fences, but currently only downgrades. A safe removal must explicitly publish unverified data as UNKNOWN and let the checker derive its own status; simply deleting the freeze changes health semantics. The collector's current freeze/tick/sample remain in place for the topology diagnostic. |
+| Separate writer and supervisor | Measure the real `health.session` call chain and a separate reader process first. Preserve the original same-process full-reader gate. A fixture seed, loopback transport and synthetic frequency are not production deployment evidence. Thread/process lifecycle and stale-result rejection would need separate proofs. |
+| Remove repeated epoch checks or move trimming | Prove every persistent table, receipt, malformed/rejected frame and out-of-order input equivalent, including failure boundaries. Moving trimming can change what a later frame in the same batch observes. No production change is made here. |
+| Replace readiness/grouped revision queries or add indexes | Need cut, ordering, missing-row, duplicate/revision and retention equivalence, plus actual query-plan/cost evidence. Metadata LIKE rewriting also needs exact escaping/collation semantics. Not implemented. |
+| Persist an in-memory overflow record in a later batch | Same-transaction publication proves only simultaneous visibility after commit. It does not revoke readers before commit and SIGKILL can lose the in-memory audit. This proposal remains unproven and is not implemented. |
+| Check only revocation before push, then mark TAINTED | This leaves a check-to-push race and omits decision age. Archiving a historical decision is not fresh execution authorization. Existing use-time freshness stays unchanged; a 240-second job timeout is not permission to extend it. Not implemented. |
+| Change CPUWeight or add cross-call caching | No machine evidence supports scheduler changes. Short-lived consumers may not benefit from cross-call caching; complete identity and current expiry/revocation remain required. Neither change is implemented. |
+
+The process-death diagnostic distinguishes a queued normal frame, the current
+durably recorded queue refusal, and an explicitly hypothetical memory-only
+overflow marker. It also separates an active HTTP owner from an epoch with no
+such owner. A collector `flock` release is not itself a reader check; an orphan
+HTTP owner can be rejected by the control fence earlier than proof expiry.
+Tests use an actual SIGKILL and reap, then explicit injected millisecond times
+to inspect expiry boundaries. They do not wait 90 real seconds or prove that
+all failures wait exactly 90 seconds. Test success means the observed behavior
+is accounted for, not that losing uncommitted queue frames is crash-safe.
+
 ## Offline provisioning and reviewed installation
 
 These are reviewable commands for a **future authorized deployment**, not

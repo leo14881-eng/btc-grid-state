@@ -617,6 +617,9 @@ def main():
         if args.probe_snapshot_codec:
             report['snapshot_codec_probe'] = codec_probe.run_codec_probe(initial.generation)
         if args.probe_consumer_cost:
+            with consumer_probe.original_formula_delivery():
+                report['formula_cost_baseline'] = consumer_probe.run_consumer_cost_probe(
+                    market, stamp=STAMP+1, scratch_root=scratch)
             with consumer_probe.original_delivery_queries():
                 report['consumer_cost_baseline'] = consumer_probe.run_consumer_cost_probe(
                     market, stamp=STAMP+1, scratch_root=scratch)
@@ -624,6 +627,8 @@ def main():
                 market, stamp=STAMP+1, scratch_root=scratch)
             report['delivery_query_comparison'] = consumer_probe.compare_delivery_cost(
                 report['consumer_cost_baseline'], report['consumer_cost_probe'])
+            report['formula_boundary_comparison'] = consumer_probe.compare_formula_cost(
+                report['formula_cost_baseline'], report['consumer_cost_probe'])
             if not report['delivery_query_comparison']['measured_segments_not_slower']:
                 report['fatal_errors'].append('MEASURED_CONSUMER_SEGMENT_PERFORMANCE_REGRESSION')
         for filename in ('state.sqlite3', 'control.sqlite3'):

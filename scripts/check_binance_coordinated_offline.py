@@ -14,6 +14,8 @@ PATTERNS = ('test_hunter_binance_control.py',
             'test_hunter_binance_coordinated_scheduler.py',
             'test_hunter_binance_coordinated_runtime.py',
             'test_hunter_binance_consumer_fence.py',
+            'test_hunter_binance_formula_boundary.py',
+            'test_hunter_binance_process_death.py',
             'test_hunter_binance_signal_use.py',
             'test_hunter_binance_market_admission.py',
             'test_hunter_binance_sqlite_diagnostics.py',
@@ -28,6 +30,7 @@ if __name__=='__main__':
         raise SystemExit('LINUX_REQUIRED: do not count platform skips as acceptance')
     print('COORDINATED_RUNTIME',dict(python=sys.version,sqlite=sqlite3.sqlite_version))
     # Exact count is deliberately maintained with the candidate test suite.
-    raise SystemExit(main(patterns=PATTERNS,expected=197,
+    raise SystemExit(main(patterns=PATTERNS,expected=214,
         extra_helpers=('tests/fixtures/binance_coordinated_crash.py',
+                       'tests/fixtures/binance_process_death.py',
                        'tests/fixtures/binance_ws_reconnect.py')))

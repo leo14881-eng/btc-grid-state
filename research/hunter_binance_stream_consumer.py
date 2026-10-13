@@ -6,6 +6,8 @@ import math
 import os
 import sys
 import time
+from contextlib import contextmanager
+from threading import Lock
 
 try:
     from research.hunter_binance_stream_store import Store,topic,roster,roster_hash,CACHE_SOURCE,FRESH_MS
@@ -160,14 +162,12 @@ class Frozen:
         except (ValueError,RuntimeError) as error:
             raise CacheReadError._from_frozen(str(error),self) from error
 
-    def rows(self,symbol,interval,count=None):
+    def _rows(self,symbol,interval,count=None):
         name=topic(symbol,interval)
         rows=self._generation['windows'][name]['rows']
-        out=copy.deepcopy(rows if count is None else rows[-count:])
-        self.check_delivery([name])
-        return out
+        return copy.deepcopy(rows if count is None else rows[-count:])
 
-    def packet(self,symbol,interval,count=None):
+    def _packet(self,symbol,interval,count=None):
         name=topic(symbol,interval);g=self._generation;window=g['windows'][name]
         rows=copy.deepcopy(window['rows'] if count is None else window['rows'][-count:])
         end=dt.datetime.fromtimestamp(g['generation_end_ms']/1000,dt.timezone.utc)
@@ -177,8 +177,78 @@ class Frozen:
         for bar,transport in zip(out['bars'],out['transport']): bar['confirmed']=transport['confirm']
         out['content_hash']=hash_value(out['bars'])
         validate_cache_packet(out,symbol,interval,len(rows))
-        self.check_delivery([name])
         return out
+
+    def rows(self,symbol,interval,count=None):
+        out=self._rows(symbol,interval,count)
+        self.check_delivery([topic(symbol,interval)])
+        return out
+
+    def packet(self,symbol,interval,count=None):
+        out=self._packet(symbol,interval,count)
+        self.check_delivery([topic(symbol,interval)])
+        return out
+
+    @contextmanager
+    def _formula(self):
+        """Private joined-worker scope; no result may escape before its fence.
+
+        Only rolling/micro use this scope. Public rows/packet retain their own
+        full delivery fence. Immutable local copies still check proof/hash and
+        usage-time expiry; the complete original scope is fenced after workers
+        join and before the formula returns. Monitor use guards remain separate.
+        """
+        if self._reader is None:
+            yield self
+            return
+        view=_FormulaView(self)
+        try:
+            yield view
+            view.finish()
+        finally:
+            view.close()
+
+
+class _FormulaView:
+    """An internal calculation view, never a consumer delivery interface."""
+    def __init__(self,frozen):
+        self._frozen=frozen;self._lock=Lock();self._active=True;self._failure=None
+
+    def close(self):
+        with self._lock:self._active=False
+
+    def _deliver(self,prepare,symbol,interval,count):
+        with self._lock:
+            if not self._active:raise ValueError('BINANCE_FORMULA_SCOPE_CLOSED')
+            if self._failure is not None:raise self._failure
+        frozen=self._frozen;started=frozen._clock()
+        try:
+            out=prepare(symbol,interval,count)
+            finished=frozen._clock()
+            if finished<started:raise ValueError('BINANCE_CACHE_READ_FINISHED_STALE_OR_CLOCK_ROLLBACK')
+            frozen._validate_at(finished,[topic(symbol,interval)])
+            return out
+        except (ValueError,RuntimeError) as error:
+            # Formula workers deliberately catch errors. Keep invalid cache
+            # evidence sticky so that they cannot turn a failed check into a
+            # partial successful result, even if a later clock moves back.
+            failure=CacheReadError._from_frozen(str(error),frozen)
+            with self._lock:
+                if self._failure is None:self._failure=failure
+                failure=self._failure
+            raise failure from error
+
+    def rows(self,symbol,interval,count=None):
+        return self._deliver(self._frozen._rows,symbol,interval,count)
+
+    def packet(self,symbol,interval,count=None):
+        return self._deliver(self._frozen._packet,symbol,interval,count)
+
+    def finish(self):
+        with self._lock:
+            self._active=False;failure=self._failure
+        if failure is not None:raise failure
+        self._frozen.check_delivery()
 
 
 def read(names,now,reader=None,clock=lambda:time.time_ns()//1_000_000,expected_roster=None):

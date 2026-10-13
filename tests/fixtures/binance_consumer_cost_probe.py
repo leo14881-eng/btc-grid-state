@@ -88,6 +88,42 @@ def compare_delivery_cost(baseline, candidate):
 
 
 @contextmanager
+def original_formula_delivery():
+    """Only cb820829's per-rows/packet formula delivery; same current queries."""
+    from research.hunter_binance_stream_consumer import Frozen
+    with patch.object(Frozen, '_formula', None):
+        yield
+
+
+def compare_formula_cost(baseline, candidate):
+    for field in ('research_scope', 'monitor_scope', 'research_output',
+                  'monitor_output', 'actual_read_scopes'):
+        _require(baseline[field] == candidate[field], 'FORMULA_CHANGED_'+field.upper())
+    for report in (baseline, candidate):
+        _require(not any(call['error'] for call in report['calls']), 'FORMULA_CALL_FAILURE')
+    def count(report, method):
+        return report['measurements'].get('monitor:'+method, {}).get('count', 0)
+    for method in ('rows', 'packet'):
+        _require(count(baseline, 'Frozen.'+method) == 240 and
+                 count(candidate, 'FormulaView.'+method) == 240 and
+                 count(candidate, 'Frozen.'+method) == 0, 'FORMULA_COPY_SCOPE_CHANGED')
+    _require(count(baseline, 'Frozen.check_delivery') == 483 and
+             count(candidate, 'Frozen.check_delivery') == 6, 'FORMULA_FENCE_COUNT_CHANGED')
+    stages = ['consumer.management_inputs', 'signals.rolling:1h', 'signals.rolling:4h',
+              'signals.micro', 'signals.score_row', 'monitor.check_cache_delivery:after_reads',
+              'monitor.check_cache_delivery:final_delivery']
+    totals = [sum(value['measurements']['monitor:'+key]['wall_us']['total'] for key in stages)
+              for value in (baseline, candidate)]
+    return dict(prior_formula_head='cb820829ee32131700ffdb4f485a96c71c5084c0',
+        scope='FORMULA_DELIVERY_BOUNDARY_ONLY_CURRENT_QUERIES_SAME_SEED_NO_WRITER',
+        exact_outputs_and_scopes_equal=True, copies_per_algorithm=480,
+        full_scope_fences_before=483, full_scope_fences_after=6,
+        baseline_wall_us=totals[0], candidate_wall_us=totals[1],
+        candidate_over_baseline=totals[1]/totals[0],
+        limitations='One instrumented 80-pair batch per algorithm, fixed order; original per-use management guards remain outside this measured segment; not writer acceptance')
+
+
+@contextmanager
 def _read_boundary(paths, results_root, policy_path, blocked):
     active = True
 
@@ -327,7 +363,7 @@ def run_consumer_cost_probe(market, *, stamp, scratch_root):
         measurement_semantics=dict(unit='microseconds', percentile='EXACT_NEAREST_RANK',
             percentiles=['p50', 'p95', 'p99'], maximum='OBSERVED_MAXIMUM',
             inclusive_nested_not_additive=True, thread_cpu='EXECUTING_THREAD_ONLY',
-            worker_cpu='Frozen.rows/packet/check_delivery observations include worker threads',
+            worker_cpu='Frozen or FormulaView rows/packet observations include worker threads; final fences execute on the joined formula caller',
             instrumentation='transparent wrappers; fixed order; no warmup or repeated-load claim',
             batches_per_segment_per_probe=1,
             call_count_semantics='Each probe has its own main method records; nested wrappers are not SQL calls, external requests or independent batch samples',
@@ -434,6 +470,8 @@ def run_consumer_cost_probe(market, *, stamp, scratch_root):
                         (consumer, 'management_inputs', 'consumer.management_inputs'),
                         (consumer.Frozen, 'rows', 'Frozen.rows'),
                         (consumer.Frozen, 'packet', 'Frozen.packet'),
+                        (consumer._FormulaView, 'rows', 'FormulaView.rows'),
+                        (consumer._FormulaView, 'packet', 'FormulaView.packet'),
                         (consumer.Frozen, 'check_delivery', 'Frozen.check_delivery')):
                     stack.enter_context(patch.object(owner, name,
                         measured.wrap(label, getattr(owner, name))))
