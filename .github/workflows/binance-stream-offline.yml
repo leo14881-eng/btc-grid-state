@@ -9,6 +9,7 @@ on:
       - 'research/hunter_signal_provenance.py'
       - 'tests/test_hunter_binance*.py'
       - 'tests/fixtures/binance_http_child.py'
+      - 'tests/fixtures/binance_coordinated_crash.py'
       - 'scripts/*binance*'
       - 'deploy/*binance*'
       - 'deploy/systemd/*binance*'
@@ -101,5 +102,7 @@ jobs:
         run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
       - name: Guarded collector health, consumer validity and shutdown partition
         run: python -I -B -X utf8 scripts/check_binance_health_offline.py
+      - name: Independent control, crash recovery, final fences and full-scope load
+        run: python -I -B -X utf8 scripts/check_binance_coordinated_offline.py
       - name: Deployment shell syntax only
         run: bash -n scripts/hunter_binance_preflight.sh scripts/hunter_binance_stage.sh

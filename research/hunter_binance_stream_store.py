@@ -8,11 +8,13 @@ import sqlite3
 import uuid
 
 try:
+    from research.hunter_binance_market_control import MarketControlMixin, HEALTH_CONTROL_CONTRACT, CONTROL_CONTRACT
     from research.hunter_bybit_stream_store import (
         Store as CoordinationStore, Budget as SharedBudget, budget_state, budget_time, request_gate, content_hash,
         FRESH_MS, HISTORY_MS, MAX_REVISIONS)
 except ModuleNotFoundError as exc:
     if exc.name != 'research': raise
+    from hunter_binance_market_control import MarketControlMixin, HEALTH_CONTROL_CONTRACT, CONTROL_CONTRACT
     from hunter_bybit_stream_store import (
         Store as CoordinationStore, Budget as SharedBudget, budget_state, budget_time, request_gate, content_hash,
         FRESH_MS, HISTORY_MS, MAX_REVISIONS)
@@ -29,6 +31,8 @@ SCHEMA = 'binance_stream_generation_v1'
 class Budget(SharedBudget):
     """Same four owners; directory weight consumes proportionally more spacing."""
     def acquire(self,now_ms=None,timeout=10,*,weight=2):
+        if getattr(self.store,'control',None) is not None:
+            raise ValueError('BINANCE_CONTROL_ADMISSION_REQUIRES_IDENTITY')
         if type(weight) is not int or weight not in (2,20):raise ValueError('BINANCE_WEIGHT_INVALID')
         with self.store.db(timeout=timeout) as db:
             b=db.execute('SELECT * FROM budget WHERE id=1').fetchone()
@@ -44,6 +48,16 @@ class Budget(SharedBudget):
             db.execute('INSERT INTO leases VALUES(?,?)',(token,now_ms))
             db.execute('UPDATE budget SET next_ms=? WHERE id=1',(now_ms+100*weight,))
             return token
+
+    def status(self,timeout=10):
+        control=getattr(self.store,'control',None)
+        return control.status(timeout=min(timeout,.25)) if control else super().status(timeout=timeout)
+
+    def failure(self,status,text,now_ms=None,retry_after=1,timeout=10):
+        control=getattr(self.store,'control',None)
+        if control:
+            return control.failure(status,text,retry_after=retry_after)
+        return super().failure(status,text,now_ms,retry_after,timeout)
 
 
 def topic(symbol, interval):
@@ -101,7 +115,7 @@ def valid_row(row, interval):
     return list(row)
 
 
-class Store(CoordinationStore):
+class Store(MarketControlMixin, CoordinationStore):
     def __init__(self, path=STATE_PATH):
         super().__init__(path)
 
@@ -114,6 +128,10 @@ class Store(CoordinationStore):
         if not re.fullmatch('[a-f0-9]{64}', manifest):
             raise ValueError('BINANCE_MANIFEST_HASH_INVALID')
         epoch = uuid.uuid4().hex
+        control=getattr(self,'control',None)
+        if control:
+            control.begin_epoch(epoch,self._control_source_head,digest,
+                                manifest_sha256=manifest,names=names)
         with self.db() as db:
             db.execute('DELETE FROM topics')
             db.execute('DELETE FROM readiness')
@@ -123,6 +141,12 @@ class Store(CoordinationStore):
             db.execute('DELETE FROM bars WHERE topic NOT IN (SELECT topic FROM topics)')
             db.execute('DELETE FROM revisions WHERE topic NOT IN (SELECT topic FROM topics)')
         return epoch
+
+    def disconnect(self,epoch):
+        control=getattr(self,'control',None)
+        if control:
+            control.end_epoch(epoch,'DISCONNECTED')
+        return super().disconnect(epoch)
 
     def _trim(self, db, name, end):
         _, interval = split_topic(name)
@@ -196,82 +220,111 @@ class Store(CoordinationStore):
             db.execute('UPDATE topics SET gap=0,error=NULL WHERE topic=?',(name,))
             self._record_readiness(db,name,received)
 
+    def _freeze_snapshot(self, cut, names):
+        # Copy rows under one short snapshot. JSON validation and hashing happen
+        # after this read transaction closes, so they cannot pin a WAL snapshot.
+        with self.db(readonly=True) as db:
+            meta = dict(db.execute('SELECT key,value FROM meta'))
+            states = {r['topic']:dict(r) for r in db.execute('SELECT * FROM topics')}
+            readiness={};revisions={}
+            # Keep the complete roster binding, but only copy history needed by
+            # this consumer. Chunks stay below SQLite's older 999-variable cap
+            # and all share this one consistent read transaction.
+            for offset in range(0,len(names),400):
+                group=names[offset:offset+400];marks=','.join('?' for _ in group)
+                readiness.update({r['topic']:dict(r) for r in db.execute('''SELECT * FROM (
+                    SELECT *,ROW_NUMBER() OVER (PARTITION BY topic ORDER BY observed DESC,id DESC) AS chosen
+                    FROM readiness WHERE observed<=? AND topic IN ('''+marks+')) WHERE chosen=1',(cut,*group))})
+                revisions.update({(r['topic'],r['start']):dict(r) for r in db.execute('''SELECT r.* FROM revisions r
+                    JOIN (SELECT topic,start,MAX(source_time) AS latest FROM revisions
+                          WHERE observed<=? AND source_time<=? AND topic IN ('''+marks+''') GROUP BY topic,start) chosen
+                    ON r.topic=chosen.topic AND r.start=chosen.start AND r.source_time=chosen.latest''',(cut,cut,*group))})
+            instruments={};unresolved=set();reverify=set()
+            if meta.get('health_contract'):
+                instruments = dict(db.execute("SELECT topic,payload FROM bn_validity WHERE kind='instrument'"))
+                unresolved = {r[0] for r in db.execute('SELECT DISTINCT topic FROM bn_unprocessed WHERE resolved_at IS NULL')}
+                reverify = {r[0].split(':',1)[1] for r in db.execute("SELECT kind FROM metadata WHERE kind LIKE 'quiet_reverify:%'")}
+            # Legacy readers retain their exact governor. Coordinated readers
+            # check the independent control file after closing this transaction.
+            if meta.get('health_contract')==HEALTH_CONTROL_CONTRACT:
+                budget={'halt':None,'cooldown_ms':0};legacy_gate=None
+            else:
+                budget=dict(budget_state(db));legacy_gate=request_gate(self,db)
+        return meta,states,readiness,revisions,instruments,unresolved,reverify,budget,legacy_gate
+
     def freeze(self, names, cut, read_at, expected_roster=None):
         out = dict(schema=SCHEMA,status='UNKNOWN',generation_end_ms=cut,windows={})
         try:
             roster_hash(names)
             if type(cut) is not int or type(read_at) is not int or not 0 <= read_at-cut <= FRESH_MS:
                 return dict(out,reason='BINANCE_GENERATION_STALE_OR_FUTURE')
-            with self.db(readonly=True) as db:
-                meta = dict(db.execute('SELECT key,value FROM meta'))
-                states = {r['topic']:r for r in db.execute('SELECT * FROM topics')}
-                digest = roster_hash(list(states))
-                out.update(roster_hash=digest,manifest_sha256=meta.get('scope_hash'),epoch=meta.get('epoch'))
-                if (digest != meta.get('roster_hash') or (expected_roster and digest != expected_roster)
-                        or not set(names) <= states.keys()
-                        or not re.fullmatch('[0-9a-f]{64}',meta.get('scope_hash',''))):
-                    return dict(out,reason='BINANCE_ROSTER_MISMATCH')
-                budget = budget_state(db)
-                if (meta.get('connected') != '1' or budget['halt'] or request_gate(self,db)
-                        or read_at < budget['cooldown_ms']):
-                    return dict(out,reason='BINANCE_DISCONNECTED_OR_GLOBAL_STOP')
-                windows = {}
-                for name in sorted(names):
-                    if meta.get('health_contract'):
-                        from research.hunter_binance_health_store import topic_gate
-                        denial=topic_gate(db,name,cut,meta)
-                        if denial:return dict(out,reason=denial,failed_topic=name)
-                    current = states[name]
-                    state = db.execute('''SELECT * FROM readiness WHERE topic=? AND observed<=?
-                        ORDER BY observed DESC,id DESC LIMIT 1''',(name,cut)).fetchone()
-                    if (not current['ack'] or current['gap'] or not state or not state['ack'] or state['gap']
-                            or state['epoch'] != meta['epoch']
-                            or any(not 0 <= cut-state[k] <= FRESH_MS for k in ('ws_rx','ws_ts'))):
-                        return dict(out,reason='BINANCE_TOPIC_STALE_OR_NOT_READY',failed_topic=name)
-                    _, interval = split_topic(name); step = STEPS[interval]
-                    chosen = []
-                    for start in sorted((cut//step-i)*step for i in range(LIMITS[interval])):
-                        r = db.execute('''SELECT * FROM revisions WHERE topic=? AND start=?
-                            AND observed<=? AND source_time<=? ORDER BY source_time DESC LIMIT 1''',
-                            (name,start,cut,cut)).fetchone()
-                        if r is None:
-                            # Existing daily research accepts 15..35 candles for
-                            # newly listed assets; only an oldest prefix may be absent.
-                            if interval == '1d' and not chosen: continue
-                            return dict(out,reason='BINANCE_HISTORY_MISSING',failed_topic=name)
-                        row = valid_row(json.loads(r['row_json']),interval)
-                        if (row[0] != start or r['origin'] not in (WS_SOURCE,REST_SOURCE) or r['confirmed'] not in (0,1)
-                                or not start <= r['source_time'] <= r['observed'] <= cut
-                                or not re.fullmatch('[0-9a-f]{32}',r['epoch'])
-                                or (r['confirmed'] and row[6] > r['source_time'])
-                                or (row[6] < cut and not r['confirmed'])
-                                or (r['origin']==REST_SOURCE and bool(r['confirmed']) != (row[6]<r['source_time']))):
-                            return dict(out,reason='BINANCE_CLOSE_OR_SOURCE_INVALID',failed_topic=name)
-                        chosen.append((r,row))
-                    if len(chosen) < (15 if interval == '1d' else LIMITS[interval]):
-                        return dict(out,reason='BINANCE_HISTORY_INSUFFICIENT',failed_topic=name)
-                    # A repair alone never qualifies a current market observation.
-                    last = chosen[-1][0]
-                    if (last['origin'] != WS_SOURCE or last['epoch'] != meta['epoch']
-                            or any(not 0 <= cut-last[k] <= FRESH_MS for k in ('observed','source_time'))):
-                        return dict(out,reason='BINANCE_CURRENT_WS_REQUIRED',failed_topic=name)
-                    windows[name] = dict(rows=[r for _,r in chosen],transport=[dict(
-                        source=r['origin'],source_time_ms=r['source_time'],received_at_ms=r['observed'],
-                        source_clock='EXCHANGE_EVENT' if r['origin']==WS_SOURCE else 'LOCAL_REQUEST_CUTOFF',
-                        confirm=bool(r['confirmed']),confirmation='WS_EXPLICIT' if r['origin']==WS_SOURCE else 'REST_INFERRED',
-                        session=r['epoch']) for r,_ in chosen])
-                    if meta.get('health_contract'):
-                        from research.hunter_binance_health_store import proof
-                        window=windows[name]
-                        window['instrument_validity']=json.loads(db.execute(
-                            "SELECT payload FROM bn_validity WHERE kind='instrument' AND topic=?",(name,)).fetchone()[0])
-                        window['validity']=proof('kline',name,meta,WS_SOURCE,last['observed'],cut,
-                            min(min(last['observed'],last['source_time'])+FRESH_MS,window['instrument_validity']['expires_at']),'VALID',None,
-                            generation_end_ms=cut,ws_event_time=last['source_time'],window_sha256=content_hash(window))
-                out.update(status='READY',windows=windows)
+            meta,states,readiness,revisions,instruments,unresolved,reverify,budget,legacy_gate = self._freeze_snapshot(cut,names)
+            digest = roster_hash(list(states))
+            out.update(roster_hash=digest,manifest_sha256=meta.get('scope_hash'),epoch=meta.get('epoch'))
+            if (digest != meta.get('roster_hash') or (expected_roster and digest != expected_roster)
+                    or not set(names) <= states.keys()
+                    or not re.fullmatch('[0-9a-f]{64}',meta.get('scope_hash',''))):
+                return dict(out,reason='BINANCE_ROSTER_MISMATCH')
+            if (meta.get('connected') != '1' or budget['halt'] or legacy_gate
+                    or read_at < budget['cooldown_ms']):
+                return dict(out,reason='BINANCE_DISCONNECTED_OR_GLOBAL_STOP')
+            windows = {}
+            for name in sorted(names):
                 if meta.get('health_contract'):
-                    out.update(health_contract=meta['health_contract'],epoch_started_ms=int(meta['health_epoch_started']))
-                out['generation_sha256'] = content_hash(out)
-                return out
+                    from research.hunter_binance_health_store import topic_gate_values
+                    denial=topic_gate_values(name,cut,meta,instruments.get(name),name in unresolved,name in reverify)
+                    if denial:return dict(out,reason=denial,failed_topic=name)
+                current = states[name]
+                state = readiness.get(name)
+                if (not current['ack'] or current['gap'] or not state or not state['ack'] or state['gap']
+                        or state['epoch'] != meta['epoch']
+                        or any(not 0 <= cut-state[k] <= FRESH_MS for k in ('ws_rx','ws_ts'))):
+                    return dict(out,reason='BINANCE_TOPIC_STALE_OR_NOT_READY',failed_topic=name)
+                _, interval = split_topic(name); step = STEPS[interval]
+                chosen = []
+                for start in sorted((cut//step-i)*step for i in range(LIMITS[interval])):
+                    r = revisions.get((name,start))
+                    if r is None:
+                        # Existing daily research accepts 15..35 candles for
+                        # newly listed assets; only an oldest prefix may be absent.
+                        if interval == '1d' and not chosen: continue
+                        return dict(out,reason='BINANCE_HISTORY_MISSING',failed_topic=name)
+                    row = valid_row(json.loads(r['row_json']),interval)
+                    if (row[0] != start or r['origin'] not in (WS_SOURCE,REST_SOURCE) or r['confirmed'] not in (0,1)
+                            or not start <= r['source_time'] <= r['observed'] <= cut
+                            or not re.fullmatch('[0-9a-f]{32}',r['epoch'])
+                            or (r['confirmed'] and row[6] > r['source_time'])
+                            or (row[6] < cut and not r['confirmed'])
+                            or (r['origin']==REST_SOURCE and bool(r['confirmed']) != (row[6]<r['source_time']))):
+                        return dict(out,reason='BINANCE_CLOSE_OR_SOURCE_INVALID',failed_topic=name)
+                    chosen.append((r,row))
+                if len(chosen) < (15 if interval == '1d' else LIMITS[interval]):
+                    return dict(out,reason='BINANCE_HISTORY_INSUFFICIENT',failed_topic=name)
+                # A repair alone never qualifies a current market observation.
+                last = chosen[-1][0]
+                if (last['origin'] != WS_SOURCE or last['epoch'] != meta['epoch']
+                        or any(not 0 <= cut-last[k] <= FRESH_MS for k in ('observed','source_time'))):
+                    return dict(out,reason='BINANCE_CURRENT_WS_REQUIRED',failed_topic=name)
+                windows[name] = dict(rows=[r for _,r in chosen],transport=[dict(
+                    source=r['origin'],source_time_ms=r['source_time'],received_at_ms=r['observed'],
+                    source_clock='EXCHANGE_EVENT' if r['origin']==WS_SOURCE else 'LOCAL_REQUEST_CUTOFF',
+                    confirm=bool(r['confirmed']),confirmation='WS_EXPLICIT' if r['origin']==WS_SOURCE else 'REST_INFERRED',
+                    session=r['epoch']) for r,_ in chosen])
+                if meta.get('health_contract'):
+                    from research.hunter_binance_health_store import proof
+                    window=windows[name]
+                    window['instrument_validity']=json.loads(instruments[name])
+                    window['validity']=proof('kline',name,meta,WS_SOURCE,last['observed'],cut,
+                        min(min(last['observed'],last['source_time'])+FRESH_MS,window['instrument_validity']['expires_at']),'VALID',None,
+                        generation_end_ms=cut,ws_event_time=last['source_time'],window_sha256=content_hash(window))
+            out.update(status='READY',windows=windows)
+            if meta.get('health_contract'):
+                out.update(health_contract=meta['health_contract'],epoch_started_ms=int(meta['health_epoch_started']))
+            if meta.get('health_contract')==HEALTH_CONTROL_CONTRACT:
+                out['control_contract']=CONTROL_CONTRACT
+                control=self._control_for_meta(meta)
+                control.fence(names,epoch=meta['epoch'])
+            out['generation_sha256'] = content_hash(out)
+            return out
         except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,AttributeError,OverflowError):
             return dict(out,status='UNKNOWN',windows={},reason='BINANCE_CACHE_UNAVAILABLE_OR_CORRUPT')

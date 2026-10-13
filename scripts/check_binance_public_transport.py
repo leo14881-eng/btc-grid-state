@@ -11,10 +11,11 @@ sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
 sys.dont_write_bytecode=True
 
 
-def main(pattern='test_hunter_binance_transport*.py',expected=36,expected_failures=0):
+def main(pattern='test_hunter_binance_transport*.py',expected=36,expected_failures=0,*,patterns=None,extra_helpers=()):
     with tempfile.TemporaryDirectory(prefix='public-http-offline-') as directory:
         scratch=Path(directory).resolve();tempfile.tempdir=str(scratch)
         helper=(ROOT/'tests/fixtures/binance_http_child.py').resolve()
+        helpers={helper,*[(ROOT/name).resolve() for name in extra_helpers]}
         blocked=[]
         def reject(message):blocked.append(message);raise RuntimeError(message)
         def inside(path,dir_fd=None):
@@ -35,7 +36,7 @@ def main(pattern='test_hunter_binance_transport*.py',expected=36,expected_failur
                 reject('NETWORK_OR_EXEC_FORBIDDEN')
             if event=='subprocess.Popen':
                 command=args[1]
-                if len(command)<3 or command[0]!=sys.executable or command[1]!='-B' or Path(command[2]).resolve()!=helper:
+                if len(command)<3 or command[0]!=sys.executable or command[1]!='-B' or Path(command[2]).resolve() not in helpers:
                     reject('UNAPPROVED_TRANSPORT_CHILD')
             if event=='sqlite3.connect':inside(args[0])
             if event=='open':
@@ -48,7 +49,8 @@ def main(pattern='test_hunter_binance_transport*.py',expected=36,expected_failur
             if event=='os.rename':inside(args[0]);inside(args[1])
             if event in ('os.symlink','os.link'):reject('LINK_FORBIDDEN')
         sys.addaudithook(guard)
-        suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern=pattern)
+        suite=unittest.TestSuite(unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern=p)
+                                for p in (patterns or [pattern]))
         result=unittest.TextTestRunner(verbosity=2).run(suite)
         good=(result.wasSuccessful() and result.testsRun==expected and not result.skipped and not blocked
               and len(result.expectedFailures)==expected_failures)

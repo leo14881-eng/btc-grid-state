@@ -145,7 +145,7 @@ def management_selection(states,cursor,budget):
  selected=priority+[ordinary[(cursor+i)%len(ordinary)] for i in range(count)] if ordinary else priority
  return selected,(cursor+count)%len(ordinary) if ordinary else 0
 
-def refresh_management_evidence(states,market,review,liq,now):
+def refresh_management_evidence(states,market,review,liq,now,guard_sink=None):
  """Refresh bounded rotating holdings, including names no longer EARLY. No entry path."""
  import copy
  review=copy.deepcopy(review);liq=copy.deepcopy(liq)
@@ -159,6 +159,9 @@ def refresh_management_evidence(states,market,review,liq,now):
   cached=binance_cache.management_inputs(pairs,now)
   cache_args=() if cached is None else (cached,)
   r1=timed("evidence_1h",signals.rolling,pairs,"1h",*cache_args);r4=timed("evidence_4h",signals.rolling,pairs,"4h",*cache_args);micro=timed("evidence_micro",signals.micro,pairs,*cache_args)
+  if cached is not None:
+   cached.check_delivery()
+   if guard_sink is not None:guard_sink.append((cached,tuple(selected)))
   for a in selected:
    row=signals.score_row(a+"USDT",a,r1,r4,r1.get("BTCUSDT"),r4.get("BTCUSDT"),micro)
    if row:current[a]=row
@@ -196,6 +199,19 @@ def refresh_management_evidence(states,market,review,liq,now):
                    "observed_raw_books":raw_books,
                    "evidence_refresh_cursor":next_cursor,"policy_version":VERSION}
 
+def revalidate_management_evidence(guards,review,refresh):
+ """Revoke only the original signal evidence before a lane consumes it."""
+ for cached,selected in guards:
+  try:cached.check_delivery()
+  except Exception as exc:
+   reason="SIGNAL_REFRESH_FAILED:"+type(exc).__name__
+   by={row.get('asset'):row for row in review.get('candidates') or []}
+   for asset in selected:
+    row=by.setdefault(asset,{'asset':asset,'blockers':[]})
+    row['signal_evidence']={};row['management_refresh_error']=reason
+    refresh.setdefault('failures',{})[asset]=reason
+   review['candidates']=list(by.values())
+
 def main():
  TIMINGS.clear();monitor_started=time.perf_counter()
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
@@ -213,7 +229,8 @@ def main():
  observation_missing=sorted(set(assets(binance_states))-required-set(market))
  observation_market_data={'status':'MARKET_DATA_MISSING' if observation_missing else 'AVAILABLE','missing_assets':observation_missing,'scope':'CLOSED_OBSERVATIONS_ONLY'}
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
- review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now)
+ cache_guards=[]
+ review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now,cache_guards)
  persisted_universe=load(UNIVERSE)
  regime_scan={"schema":"hunter_monitor_market_snapshot_v1","generation_id":refresh["generation_id"],"as_of_utc":now.isoformat(),"coins":market,"binance_complete":True}
  from research.hunter_bybit_management import collect as collect_bybit_management
@@ -258,7 +275,10 @@ def main():
  # Evaluate after acquisitions finish: a just-fetched book must not appear to
  # come from the future relative to the scan's initial clock snapshot.
  evaluated_at=dt.datetime.now(dt.timezone.utc)
- results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence)]
+ revalidate_management_evidence(cache_guards,review,refresh)
+ results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence)]
+ revalidate_management_evidence(cache_guards,review,refresh)
+ results.append(timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence))
  TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
  # Observe subscription drift after authoritative lifecycle updates. The resident
  # stream owns its 30-second subscription self-healing; this never writes its state.

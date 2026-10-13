@@ -1,0 +1,9 @@
+# REVIEW CANDIDATE ONLY. Requires offline control provisioning and matched readers.
+# No permission changes, automatic migration, lease cleanup or enable command.
+[Service]
+ExecStart=
+ExecStart=/opt/hunter-binance-stream/venv/bin/python -B -m research.hunter_binance_stream --manifest /var/lib/hunter-binance-stream/manifest.json --source-head-file /opt/hunter-binance-stream/release-head --collect --health-supervision --coordinated-control
+Restart=no
+KillMode=control-group
+TimeoutStopSec=90
+SendSIGKILL=yes

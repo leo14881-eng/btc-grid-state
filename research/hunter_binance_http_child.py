@@ -5,6 +5,7 @@ Linux parent-death signalling prevents an orphan HTTP socket after a crash.
 """
 import base64
 import ctypes
+import email.utils
 import http.client
 import json
 import os
@@ -68,7 +69,19 @@ def exchange(url, send=emit):
     except urllib.error.HTTPError as error:
         response = error
     status = response.code
-    send(dict(kind='headers',status=status))  # Known denial precedes body parsing.
+    header=dict(kind='headers',status=status)
+    used=response.headers.get('X-MBX-USED-WEIGHT-1M')
+    date=response.headers.get('Date')
+    # Only a complete, bounded, server-window attribution can calibrate the
+    # governor. Missing or malformed optional headers never invent a window.
+    if used and used.isdigit() and len(used)<=9 and date:
+        try:
+            stamp=email.utils.parsedate_to_datetime(date)
+            if stamp.tzinfo is not None:
+                header.update(weight_used=int(used),weight_window_ms=int(stamp.timestamp())//60*60000)
+        except (ValueError,TypeError,OverflowError):
+            pass
+    send(header)  # Known denial precedes body parsing.
     try:
         with response:
             payload = response.read(MAX_BODY+1)

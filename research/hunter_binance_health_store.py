@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 from decimal import Decimal
+from research.hunter_binance_market_control import HEALTH_CONTROL_CONTRACT
 
 from research.hunter_binance_stream_store import (
     Store as BaseStore, topic, split_topic, roster_hash, valid_row,
@@ -61,19 +62,25 @@ def valid_proof(value,kind,name,meta,now):
     except (KeyError,TypeError,ValueError):return False
 
 
-def topic_gate(db,name,cut,meta):
+def topic_gate_values(name,cut,meta,instrument,unresolved,reverify):
     """Extra fail-closed gates only for the explicitly selected health contract."""
-    if meta.get('health_contract')!=CONTRACT:return 'BINANCE_HEALTH_CONTRACT_INVALID'
+    if meta.get('health_contract') not in (CONTRACT,HEALTH_CONTROL_CONTRACT):return 'BINANCE_HEALTH_CONTRACT_INVALID'
     if meta.get('health_epoch')!=meta.get('epoch'):return 'BINANCE_HEALTH_EPOCH_REQUIRED'
     if meta.get('health_phase')!='ACTIVE':return 'BINANCE_HEALTH_DRAINING_OR_STOPPED'
-    row=db.execute('SELECT payload FROM bn_validity WHERE kind=? AND topic=?',('instrument',name)).fetchone()
-    if not row or not valid_proof(json.loads(row[0]),'instrument',name,meta,cut):
+    if not instrument or not valid_proof(json.loads(instrument),'instrument',name,meta,cut):
         return 'BINANCE_TRADING_STATUS_UNKNOWN_OR_INVALID'
-    if db.execute('SELECT 1 FROM bn_unprocessed WHERE topic=? AND resolved_at IS NULL LIMIT 1',(name,)).fetchone():
+    if unresolved:
         return 'BINANCE_UNRECONCILED_RECEIPT'
-    if db.execute('SELECT 1 FROM metadata WHERE kind=?',('quiet_reverify:'+name,)).fetchone():
+    if reverify:
         return 'BINANCE_QUIET_REVERIFICATION_REQUIRED'
     return None
+
+
+def topic_gate(db,name,cut,meta):
+    row=db.execute('SELECT payload FROM bn_validity WHERE kind=? AND topic=?',('instrument',name)).fetchone()
+    return topic_gate_values(name,cut,meta,row[0] if row else None,
+        bool(db.execute('SELECT 1 FROM bn_unprocessed WHERE topic=? AND resolved_at IS NULL LIMIT 1',(name,)).fetchone()),
+        bool(db.execute('SELECT 1 FROM metadata WHERE kind=?',('quiet_reverify:'+name,)).fetchone()))
 
 
 class Store(BaseStore):
@@ -91,10 +98,15 @@ class Store(BaseStore):
                 received_at INTEGER,open_time INTEGER,event_time INTEGER,payload_sha256 TEXT,reason TEXT,category TEXT,resolved_at INTEGER);
               CREATE TABLE IF NOT EXISTS bn_protocol_invalid(id INTEGER PRIMARY KEY,epoch TEXT,
                 received_at INTEGER,payload_sha256 TEXT,reason TEXT);
+              CREATE TABLE IF NOT EXISTS bn_publications(intent_id TEXT PRIMARY KEY,epoch TEXT,
+                payload_hash TEXT,scope_hash TEXT,outcome TEXT NOT NULL);
             ''')
             if 'event_time' not in {r[1] for r in db.execute('PRAGMA table_info(bn_unprocessed)')}:
                 db.execute('ALTER TABLE bn_unprocessed ADD COLUMN event_time INTEGER')
-            db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)',('health_contract',CONTRACT))
+            if 'outcome' not in {r[1] for r in db.execute('PRAGMA table_info(bn_publications)')}:
+                db.execute("ALTER TABLE bn_publications ADD COLUMN outcome TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            contract=HEALTH_CONTROL_CONTRACT if getattr(self,'control',None) else CONTRACT
+            db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)',('health_contract',contract))
 
     def begin_health(self,epoch,names,started):
         with self.db() as db:
@@ -132,14 +144,32 @@ class Store(BaseStore):
             symbols[symbol]=row
         expected={split_topic(n)[0] for n in names}
         if set(symbols)!=expected:raise ValueError('BINANCE_EXCHANGE_INFO_SCOPE')
+        values=[]
         for name in names:
             symbol,_=split_topic(name);row=symbols[symbol]
             if (row.get('baseAsset')+'USDT'!=symbol or row.get('quoteAsset')!='USDT'
                     or row.get('symbol')!=symbol):raise ValueError('BINANCE_METADATA_IDENTITY')
             good=row.get('status')=='TRADING' and row.get('isSpotTradingAllowed') is True
-            self.save_proof(proof('instrument',name,meta,'OFFICIAL_BINANCE_SPOT_REST_EXCHANGE_INFO',
+            if getattr(self,'control',None) is not None:
+                filters=row.get('filters')
+                if (not isinstance(filters,list) or not filters
+                        or any(not isinstance(f,dict) or not isinstance(f.get('filterType'),str) for f in filters)
+                        or len({f['filterType'] for f in filters})!=len(filters)):
+                    raise ValueError('BINANCE_METADATA_FILTERS_INVALID')
+                # Preserve exchange filter values verbatim in the evidence
+                # digest; do not invent or change trading thresholds.
+                required={'PRICE_FILTER','LOT_SIZE'}
+                kinds={f['filterType'] for f in filters}
+                if not required<=kinds or not kinds & {'MIN_NOTIONAL','NOTIONAL'}:
+                    raise ValueError('BINANCE_METADATA_FILTERS_INCOMPLETE')
+            values.append(proof('instrument',name,meta,'OFFICIAL_BINANCE_SPOT_REST_EXCHANGE_INFO',
                 requested,received,requested+FRESH_MS,'VALID' if good else 'INVALID',
-                None if good else 'SYMBOL_NOT_TRADING_SPOT',trading_status=row.get('status')))
+                None if good else 'SYMBOL_NOT_TRADING_SPOT',trading_status=row.get('status'),
+                instrument_sha256=payload_hash(row)))
+        with self.db(write_kind='directory_proof') as db:
+            self.check_epoch(db,epoch)
+            db.executemany('INSERT OR REPLACE INTO bn_validity VALUES(?,?,?)',
+                [('instrument',topic(v['symbol'],v['interval']),json.dumps(v,sort_keys=True)) for v in values])
 
     @staticmethod
     def _times(meta,requested,received):
@@ -158,7 +188,7 @@ class Store(BaseStore):
         db.execute('UPDATE bn_counts SET '+category+'='+category+'+1 WHERE epoch=? AND topic=?',(epoch,name))
 
     def unprocessed(self,epoch,observations,reason):
-        with self.db() as db:
+        with self.db(write_kind='ws_receipts') as db:
             self.check_epoch(db,epoch)
             for message,received in observations:
                 name=topic(message['s'],message['k']['i'])
@@ -167,7 +197,7 @@ class Store(BaseStore):
     def ingest_accounted(self,epoch,observations):
         """Exactly one durable outcome per market frame; control frames are excluded."""
         results=[]
-        with self.db() as db:
+        with self.db(write_kind='ws_receipts') as db:
             self.check_epoch(db,epoch)
             for message,received in observations:
                 name=topic(message['s'],message['k']['i']);k=message['k']
@@ -221,7 +251,10 @@ class Store(BaseStore):
         if meta['epoch']!=epoch:raise ValueError('BINANCE_QUIET_EPOCH')
         _,interval=split_topic(name);step=STEPS[interval]
         rows=[valid_row(row,interval) for row in rows]
-        expected=sorted((requested//step-i)*step for i in range(LIMITS[interval]))
+        count=len(rows)
+        minimum=15 if interval=='1d' else LIMITS[interval]
+        if not minimum<=count<=LIMITS[interval]:raise ValueError('BINANCE_QUIET_WINDOW_INVALID')
+        expected=sorted((requested//step-i)*step for i in range(count))
         if [row[0] for row in rows]!=expected:raise ValueError('BINANCE_QUIET_WINDOW_INVALID')
         closed=(requested//step-1)*step
         remote=next(row for row in rows if row[0]==closed)
@@ -268,7 +301,15 @@ class Store(BaseStore):
     def start_draining(self,epoch):
         # Revoke publication atomically before socket/HTTP cleanup. Keep the
         # epoch writable only to finish bounded receipt accounting, then disconnect.
-        with self.db() as db:
+        control=getattr(self,'control',None)
+        if control:
+            try:control.begin_draining(epoch)
+            except Exception:
+                # Do not leave old ACTIVE reads available for the socket/HTTP
+                # shutdown deadline when the revocation write cannot commit.
+                control.latch_stop('CONTROL_DRAINING_UNCONFIRMED')
+                raise
+        with self.db(write_kind='draining') as db:
             self.check_epoch(db,epoch)
             db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)',('health_phase','DRAINING'))
             db.execute('DELETE FROM bn_validity')

@@ -28,6 +28,17 @@ except ModuleNotFoundError as error:
 # Deliberately shares the proven coordinator and error types, never a DB path.
 from research.hunter_bybit_public import (coordinate, DurableStopError,
     UnreapedRequestError, UncertainRequestError, NotSentError)
+from research.hunter_binance_control import ControlError, AdmissionClosed
+
+RETIRE_GRACE_SECONDS = 1
+CLEANUP_RETRY_SECONDS = 2
+
+
+class QuarantinedRequestError(RuntimeError):
+    """HTTP result discarded; original owner retired; one recovery is queued."""
+    def __init__(self, requeue_id):
+        super().__init__('BINANCE_RESULT_QUARANTINED_REVERIFY_REQUIRED')
+        self.requeue_id = requeue_id
 
 
 def safe_observer(observer):
@@ -80,6 +91,11 @@ def exchange(url, deadline, cancelled, on_denial, before_go=lambda:None, *, drai
                     raise ValueError('PUBLIC_HTTP_STATUS_INVALID')
                 observe('HEADERS',status=header)
                 if header in (403,418): on_denial()
+                used, window = item.get('weight_used'),item.get('weight_window_ms')
+                if used is not None or window is not None:
+                    if type(used) is not int or used<0 or type(window) is not int or window%60000:
+                        raise ValueError('PUBLIC_HTTP_WEIGHT_HEADER_INVALID')
+                    observe('WEIGHT',used=used,window_ms=window)
             elif item.get('kind') == 'response' and sent and result is None and item.get('status') == header:
                 payload = base64.b64decode(item['payload'], validate=True)
                 retry = item.get('retry')
@@ -185,7 +201,180 @@ class Client:
         self.transport = transport
         self.now = clock or (lambda:dt.datetime.now(dt.timezone.utc))
 
-    def request(self, path, params=None, *, timeout=30, cancelled=lambda:False, drain_on_cancel=False, observe=None):
+    def request(self, path, params=None, *, timeout=30, cancelled=lambda:False,
+                drain_on_cancel=False, observe=None, context=None):
+        control=getattr(self.store,'control',None)
+        if control is not None:
+            return self._coordinated_request(control,path,params,timeout=timeout,cancelled=cancelled,
+                drain_on_cancel=drain_on_cancel,observe=observe,context=context)
+        return self._legacy_request(path,params,timeout=timeout,cancelled=cancelled,
+            drain_on_cancel=drain_on_cancel,observe=observe)
+
+    def _retire_controlled(self,control,owner,observe):
+        deadline=time.monotonic()+RETIRE_GRACE_SECONDS
+        def retire():
+            owner.cleanup_attempts+=1
+            try:return control.retire(owner)
+            except sqlite3.Error as error:
+                owner.cleanup_errors.append(dict(phase=getattr(error,'control_phase','UNKNOWN'),
+                    sqlite_code=getattr(error,'sqlite_errorcode',None),
+                    sqlite_name=getattr(error,'sqlite_errorname',None),message=str(error)))
+                owner.cleanup_errors[:]=owner.cleanup_errors[-16:]
+                raise
+        try:
+            coordinate(lambda:control.prepare_retire(owner,deadline),deadline)
+        except BaseException as error:
+            # Without a durable prearmed deadline readers could not detect a
+            # stalled cleanup. This case is a global stop, never local recovery.
+            try:control.latch_stop('CONTROL_RETIRE_ARM_UNCONFIRMED')
+            except ControlError:pass
+            raise DurableStopError('CONTROL_RETIRE_ARM_UNCONFIRMED') from error
+        try:
+            coordinate(retire,deadline)
+        except TimeoutError:
+            recovery_deadline=time.monotonic()+CLEANUP_RETRY_SECONDS
+            try:
+                # The prearmed expired deadline already blocks this scope.
+                # Keep the same lock and slot until both deletes commit.
+                identity=coordinate(lambda:control.quarantine(owner,'OWNER_RETIRE_CONTENTION'),recovery_deadline)
+                coordinate(retire,recovery_deadline)
+            except BaseException as error:
+                raise DurableStopError('CONTROL_QUARANTINE_RETIRE_UNCONFIRMED') from error
+            observe('RETIRED')
+            if owner.context.get('requeue_id'):
+                try:control.latch_stop('CONTROL_REVERIFY_RETIRE_FAILED')
+                except ControlError:pass
+                raise DurableStopError('CONTROL_REVERIFY_RETIRE_FAILED')
+            raise QuarantinedRequestError(identity)
+        observe('RETIRED')
+
+    def _coordinated_request(self,control,path,params,*,timeout,cancelled,
+                             drain_on_cancel,observe,context):
+        observe=safe_observer(observe)
+        request_id=None;terminal='NOT_ADMITTED';failure=None
+        try:
+            params=params or {}
+            url='https://data-api.binance.vision'+path+'?'+urllib.parse.urlencode(params)
+            allowed(url)
+            if not math.isfinite(timeout) or not 0<timeout<=600:
+                raise ValueError('PUBLIC_DEADLINE_INVALID')
+            if not isinstance(context,dict) or not {'epoch','job_key','scope','kind'}<=context.keys():
+                raise ValueError('CONTROL_REQUEST_CONTEXT_REQUIRED')
+            deadline=time.monotonic()+timeout
+            # Cancellation is itself a terminal disposition: allocate the
+            # logical call before testing it, without ever admitting HTTP.
+            request_id=coordinate(lambda:control.begin_call(context),deadline)
+            directory=path=='/api/v3/exchangeInfo'
+            if (control.request_scope(path,params)!=sorted(set(context['scope']))
+                    or directory!=(context['kind']=='directory')):
+                raise ControlError('CONTROL_REQUEST_SCOPE_IDENTITY_MISMATCH')
+            # Official exchangeInfo weight is 20 (including symbols batches).
+            # Preserve the verified endpoint cost; never refund it from a
+            # later, potentially reordered, response header.
+            weight=20 if directory else 2
+            def check():
+                if cancelled() or time.monotonic()>=deadline:
+                    raise NotSentError('PUBLIC_REQUEST_NOT_SENT')
+            for attempt in range(1,4):
+                owner=None;status=0;retry=1;not_sent=None;headers=[]
+                while owner is None:
+                    check()
+                    try:
+                        owner=coordinate(lambda:control.admit(context,request_id,attempt,path,weight,deadline),deadline,cancelled)
+                    except AdmissionClosed as error:
+                        raise NotSentError('CONTROL_ADMISSION_CLOSED_NOT_SENT') from error
+                    if owner is None:time.sleep(min(control.admission_delay(),max(0,deadline-time.monotonic())))
+                observe('ATTEMPT',attempt=attempt)
+                def event(kind,**fields):
+                    # Transport observers cannot fail admission. Only in-memory
+                    # facts are captured here; control writes happen afterward.
+                    if kind=='WEIGHT':headers.append((fields['used'],fields['window_ms']))
+                    else:control.observe(owner,kind,**fields)
+                    observe(kind,**fields)
+                def before_go():
+                    control.before_go(owner);check()
+                def denial():
+                    try:
+                        control.failure(403,'Binance denial requires manual review',timeout=0)
+                    except BaseException as error:
+                        try:control.latch_stop('CONTROL_DENIAL_NOT_DURABLE')
+                        except ControlError:pass
+                        raise DurableStopError('CONTROL_DENIAL_NOT_DURABLE') from error
+                try:
+                    try:
+                        check()
+                        options={'observe':event}
+                        if drain_on_cancel:options['drain_on_cancel']=True
+                        status,payload,retry=self.transport(url,deadline,cancelled,denial,before_go,**options)
+                        # A custom transport must supply the same independent
+                        # completion/reap observations as the real child.
+                        if not owner.complete or not owner.reaped:
+                            raise UncertainRequestError('CONTROL_TRANSPORT_PROOF_MISSING')
+                    except NotSentError as error:
+                        if owner.go:
+                            raise UncertainRequestError('CONTROL_NOT_SENT_CONTRADICTS_GO') from error
+                        owner.not_sent=True;not_sent=error
+                    for used,window in headers:control.calibrate(used,window)
+                    if not_sent is None and status==200:
+                        body=json.loads(payload)
+                        if not isinstance(body,dict if directory else list):
+                            raise ValueError('BINANCE_PUBLIC_RESPONSE_SHAPE_INVALID')
+                    elif not_sent is None:
+                        decision=control.failure(status,'',retry_after=max(retry,2**(attempt-1)))
+                    self._retire_controlled(control,owner,observe)
+                    if not_sent is not None:raise not_sent
+                    if status==200:
+                        # Retire safe resources before rejecting old/cancelled
+                        # data. A discarded result is never replayed as valid.
+                        if cancelled() or time.monotonic()>=deadline:
+                            raise TimeoutError('PUBLIC_RESPONSE_FINISHED_AFTER_DEADLINE')
+                        terminal='COMPLETED_RETIRED'
+                        return body
+                    if status in (403,418) or decision!='BOUNDED_RETRY':
+                        raise DurableStopError(decision) if status in (403,418) else RuntimeError(decision)
+                except QuarantinedRequestError:
+                    observe('ERROR',error_type='QuarantinedRequestError')
+                    terminal='QUARANTINED_RETIRED';raise
+                except BaseException as error:
+                    observe('ERROR',error_type=type(error).__name__)
+                    if not owner.retired:
+                        try:control.retain(owner,str(error))
+                        except ControlError as retained:
+                            raise DurableStopError('CONTROL_OWNER_RETAIN_UNCONFIRMED') from retained
+                        terminal='RETAINED_MANUAL_REVIEW'
+                        if not isinstance(error,(DurableStopError,UncertainRequestError,UnreapedRequestError)):
+                            raise DurableStopError('CONTROL_REQUEST_STOP_MANUAL_REVIEW') from error
+                    else:terminal='RETIRED_REJECTED'
+                    raise
+                finally:
+                    observe('END')
+            raise RuntimeError('PUBLIC_RETRY_BUDGET_EXHAUSTED')
+        except BaseException as error:
+            failure=type(error).__name__
+            if isinstance(error,AdmissionClosed):
+                raise NotSentError('CONTROL_ADMISSION_CLOSED_NOT_SENT') from error
+            if request_id is None and isinstance(error,(sqlite3.Error,ControlError)):
+                try:control.latch_stop('CONTROL_CALL_ALLOCATION_UNCONFIRMED')
+                except ControlError:pass
+                raise DurableStopError('CONTROL_CALL_ALLOCATION_UNCONFIRMED') from error
+            if isinstance(error,ControlError):
+                try:control.latch_stop('CONTROL_REQUEST_STATE_UNCONFIRMED')
+                except ControlError:pass
+                raise DurableStopError('CONTROL_REQUEST_STATE_UNCONFIRMED') from error
+            raise
+        finally:
+            evidence=dict(error_type=failure,terminal=terminal)
+            try:
+                if request_id is not None:
+                    try:control.end_call(request_id,terminal,evidence)
+                    except BaseException as error:
+                        try:control.latch_stop('CONTROL_CALL_TERMINAL_UNCONFIRMED')
+                        except ControlError:pass
+                        raise DurableStopError('CONTROL_CALL_TERMINAL_UNCONFIRMED') from error
+            finally:
+                observe('REQUEST_END',request_id=request_id,terminal=terminal,error_type=failure)
+
+    def _legacy_request(self, path, params=None, *, timeout=30, cancelled=lambda:False, drain_on_cancel=False, observe=None):
         if observe is not None:observe=safe_observer(observe)
         params = params or {}
         url = 'https://data-api.binance.vision'+path+'?'+urllib.parse.urlencode(params)

@@ -161,6 +161,7 @@ def main():
         r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
     else:
         r1=rolling(symbols,"1h",cached);r4=rolling(symbols,"4h",cached);microdata=micro(symbols,cached)
+        cached.check_delivery()
     regional_signals={}
     if scan.get("bybit_complete"):
         expected_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")
@@ -187,7 +188,9 @@ def main():
         if 0 <= (dt.datetime.now(dt.timezone.utc)-captured).total_seconds() <= 900:
             regional_signals=snapshot.get("early_signals") or {}
     report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc),regional_signals)
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
+    payload=json.dumps(report,ensure_ascii=False,indent=2)+"\n"
+    if cached is not None:cached.check_delivery()
+    OUT.write_text(payload)
     persist_first_early(report)
     print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]}))
 if __name__=="__main__":main()

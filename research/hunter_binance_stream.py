@@ -50,6 +50,7 @@ class SessionEvidence:
                      for name in names}
         self.batches=0; self.batch_max_us=0; self.receipt_to_processing_max_ms=0
         self.receipt_clock_anomalies=0; self.acked_batches=0
+        self.http_pending={}; self.http_terminals=0; self.http_allocated=0
 
     def received(self, name, received):
         with self.lock:
@@ -71,22 +72,56 @@ class SessionEvidence:
         emit(dict(event='BINANCE_ACK_COMMITTED',epoch=self.epoch,shard=shard,
                   subscribe_batch=batch,received=received))
 
-    def request_observer(self, name):
-        with self.lock:self.serial+=1; serial=self.serial
-        row={}
+    def request_observer(self, name, *, kind=None, endpoint=None, scope=None):
+        # A request number identifies one logical call, not its topic label or
+        # each retry attempt. Allocate before submitting work so queued work
+        # cancelled before admission still has exactly one terminal record.
+        with self.lock:
+            self.serial+=1; serial=self.serial
+            identity=dict(epoch=self.epoch,request_number=serial,topic=name)
+            if kind is not None:identity['kind']=kind
+            if endpoint is not None:identity['endpoint']=endpoint
+            if scope is not None:
+                identity.update(scope_topic_count=len(scope),scope_sha256=content_hash(sorted(scope)))
+            tracked=kind is not None or scope is not None
+            if tracked:
+                self.http_pending[serial]=identity;self.http_allocated+=1
+        row=dict(attempt=0,go=False,response_complete=False,process_reaped=False,owner_retired=False)
+        ended=False; row_lock=Lock()
         def observe(event, **fields):
-            if event=='ATTEMPT':row.clear();row.update(attempt=fields['attempt'],go=False,
-                response_complete=False,process_reaped=False,owner_retired=False)
-            elif event=='GO':row['go']=True
-            elif event=='HEADERS':row['http_status']=fields['status']
-            elif event=='RESPONSE':row.update(response_complete=True,http_status=fields['status'])
-            elif event=='REAPED':row['process_reaped']=True
-            elif event=='RETIRED':row['owner_retired']=True
-            elif event=='ERROR':row['error_type']=fields['error_type']
-            elif event=='END':
-                emit(dict(event='BINANCE_HTTP_LIFECYCLE',epoch=self.epoch,request_number=serial,
-                          topic=name,**row))
+            nonlocal ended
+            with row_lock:
+                if event=='REQUEST_END':
+                    if ended:return
+                    ended=True
+                    with self.lock:
+                        if tracked:
+                            self.http_pending.pop(serial,None);self.http_terminals+=1
+                    emit(dict(event='BINANCE_HTTP_REQUEST_FINAL',**identity,**row,
+                              terminal=fields.get('terminal','CALL_FINISHED'),
+                              terminal_error_type=fields.get('error_type'),
+                              request_id=fields.get('request_id')))
+                    return
+                if ended:return
+                if event=='ATTEMPT':row.clear();row.update(attempt=fields['attempt'],go=False,
+                    response_complete=False,process_reaped=False,owner_retired=False)
+                elif event=='GO':row['go']=True
+                elif event=='HEADERS':row['http_status']=fields['status']
+                elif event=='RESPONSE':row.update(response_complete=True,http_status=fields['status'])
+                elif event=='REAPED':row['process_reaped']=True
+                elif event=='RETIRED':row['owner_retired']=True
+                elif event=='ERROR':row['error_type']=fields['error_type']
+                elif event=='END':
+                    emit(dict(event='BINANCE_HTTP_LIFECYCLE',**identity,**row))
+        observe.request_number=serial
         return observe
+
+    def http_summary(self):
+        with self.lock:
+            pending=[dict(v) for v in self.http_pending.values()]
+            return dict(requests_allocated=self.http_allocated,requests_terminal=self.http_terminals,
+                        requests_pending=len(pending),pending_requests=pending,
+                        requests_conserved=self.http_allocated==self.http_terminals+len(pending))
 
     def snapshot(self, messages, active_repairs, *, final=False):
         with self.lock:
@@ -484,7 +519,11 @@ def main():
     parser.add_argument('--collect',action='store_true')
     parser.add_argument('--health-supervision',action='store_true',
                         help='Opt-in health contract; never grants consumer data READY')
+    parser.add_argument('--coordinated-control',action='store_true',
+                        help='Opt-in provisioned control ledger; requires health supervision')
     args=parser.parse_args()
+    if args.coordinated_control and not args.health_supervision:
+        parser.error('--coordinated-control requires --health-supervision')
     scan=json.loads(args.manifest.read_text(encoding='utf-8'))
     names=roster(scan,dt.datetime.now(dt.timezone.utc))
     emit(plan(names))
@@ -499,7 +538,9 @@ def main():
         if args.health_supervision:
             from research.hunter_binance_health import collect as collect_health
             from research.hunter_binance_health_store import Store as HealthStore
-            collect_health(HealthStore.reader(),names,content_hash(scan),source,stop.is_set)
+            store=HealthStore.reader()
+            if args.coordinated_control:store.enable_control()
+            collect_health(store,names,content_hash(scan),source,stop.is_set,coordinated=args.coordinated_control)
         else:
             collect(Store.reader(),names,content_hash(scan),source,stop.is_set)
 
