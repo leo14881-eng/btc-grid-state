@@ -69,7 +69,12 @@ def _encode_json_tree(value):
         elif kind not in (str,int,bool,type(None)):
             return None
     try:
-        return json.dumps(value,ensure_ascii=True,allow_nan=False,separators=(',',':'))
+        # The explicit walk above has already rejected cycles, aliased
+        # containers, non-JSON types and nonfinite floats. Avoid making the
+        # JSON C encoder repeat the circular-container check for every node.
+        # Output bytes, ownership, proof hashes and delivery fences stay intact.
+        return json.dumps(value,ensure_ascii=True,allow_nan=False,
+                          separators=(',',':'),check_circular=False)
     except (TypeError,ValueError,OverflowError,RecursionError):
         return None
 
