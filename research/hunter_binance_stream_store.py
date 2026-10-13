@@ -456,5 +456,14 @@ class Store(MarketControlMixin, CoordinationStore):
                 control.fence(names,epoch=meta['epoch'])
             out['generation_sha256'] = content_hash(out)
             return out
-        except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,AttributeError,OverflowError):
+        except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,AttributeError,OverflowError) as error:
+            # Optional scratch-only observer; no public exception detail and no
+            # relaxation of the existing fail-closed UNKNOWN behavior. Never
+            # set by regular Store/reader construction or production services.
+            probe=getattr(self,'_freeze_error_probe',None)
+            if probe is not None:
+                try:probe(type(error).__name__,str(error)[:160],
+                          getattr(error,'sqlite_errorcode',None),
+                          getattr(error,'sqlite_errorname',None))
+                except Exception:pass  # Diagnostic failure cannot widen delivery.
             return dict(out,status='UNKNOWN',windows={},reason='BINANCE_CACHE_UNAVAILABLE_OR_CORRUPT')
