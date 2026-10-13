@@ -966,6 +966,15 @@ def main():
                 partition_valid=result.get('session_final_partition_valid'),
                 stage_partition_consistent=result.get('stage_partition_matches_durable_final'),
                 raw_files_count=len(result.get('raw_files') or {}),
+                phase_timings={key:{'count':value.get('count'),
+                                    'total_us':value.get('total'),
+                                    'max_us':value.get('maximum'),
+                                    'p99_upper_us':value.get('p99_upper')}
+                               for key,value in (c.get('timings') or {}).items()
+                               if any(key.endswith('.'+part+'.wall') for part in
+                                      ('sample','freeze','jobs_tick','protocol_tick','receive_batch'))},
+                queue_high_water=c.get('queue_high_water'),
+                load_committed_per_target_second=c.get('load_committed_per_target_second'),
                 market_commit_failures=len(failures),
                 first_commit_failure=failures[0].get('failed_commit') if failures else None)),flush=True)
         emit_bounded('BINANCE_SESSION_TOPOLOGY_LEG',result)
