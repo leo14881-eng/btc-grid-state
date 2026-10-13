@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install pinned public stream test dependencies
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt -r deploy/hunter-fast-watch-requirements.txt
       - name: Complete Hunter regression including CAS, generation, locks and boundary states
         env:
           PYTHONDONTWRITEBYTECODE: '1'
