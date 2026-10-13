@@ -11,7 +11,7 @@ sys.dont_write_bytecode = True
 import argparse
 import copy
 import datetime as dt
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager, nullcontext
 from functools import wraps
 import hashlib
 import json
@@ -44,6 +44,8 @@ parser.add_argument('--repo', required=True, type=Path)
 parser.add_argument('--source-head', required=True, help='Caller-verified Git HEAD label; file hashes also recorded')
 parser.add_argument('--probe-switch-interval', type=float, choices=(.0005,),
                     help='Diagnostic-only third full-reader leg; restores the original interval on exit')
+parser.add_argument('--probe-snapshot-codec', action='store_true',
+                    help='Diagnostic-only owned-copy codec oracle and full-reader leg at the original interval')
 args = parser.parse_args()
 repo = args.repo.resolve(strict=True)
 if sys.platform != 'linux':
@@ -63,6 +65,8 @@ from research.hunter_binance_control import ControlError
 from research.hunter_binance_stream_store import split_topic
 from tests import test_hunter_binance_coordinated_runtime as runtime
 from tests.test_hunter_binance_cache import rows, message
+if args.probe_snapshot_codec:
+    from tests.fixtures import binance_snapshot_codec_probe as codec_probe
 
 SECONDS = 8
 STAMP = runtime.MIDNIGHT + 120000
@@ -558,10 +562,11 @@ def main():
     report = dict(scope='DIAGNOSTIC_NO_HTTP_NO_SCHEDULER_NOT_ACCEPTANCE', python=sys.version,
         sqlite=sqlite3.sqlite_version, switch_interval_seconds=original_switch_interval,
         probe_switch_interval_seconds=args.probe_switch_interval,
+        probe_snapshot_codec=args.probe_snapshot_codec,
         checkout_source_head=args.source_head, source_file_sha256_before=source_hashes,
         fixed_market_stamp=STAMP, fixture_source_head=runtime.HEAD,
         fixture_manifest=runtime.MANIFEST, fixture_identity_is_synthetic=True,
-        comparison_limitations='Fixed no-reader then full-reader order, followed by optional smaller-interval full-reader probe; same runner/seed but OS page cache is not cooled; instrumented; scheduling sensitivity is not sole GIL causation, a production setting, or acceptance',
+        comparison_limitations='Fixed no-reader then full-reader order, followed by optional scheduling/copy-codec probes; same runner/seed but OS page cache is not cooled; instrumented; neither diagnostic improvement nor copy speed alone establishes acceptance or a production change',
         legs=[], fatal_errors=[])
     try:
         started = time.monotonic()
@@ -575,6 +580,8 @@ def main():
         initial = market.read(NAMES, STAMP+1)
         assert len(initial.generation['windows']) == 1228
         initial.check_delivery()
+        if args.probe_snapshot_codec:
+            report['snapshot_codec_probe'] = codec_probe.run_codec_probe(initial.generation)
         for filename in ('state.sqlite3', 'control.sqlite3'):
             source = active/filename
             with closing(sqlite3.connect(source)) as db:
@@ -583,12 +590,16 @@ def main():
         report.update(seed_seconds=time.monotonic()-started, epoch=market.epoch,
             seed_file_sha256={name:hashlib.sha256((seed_root/name).read_bytes()).hexdigest()
                               for name in ('state.sqlite3', 'control.sqlite3')})
-        conditions = [(False, original_switch_interval), (True, original_switch_interval)]
+        conditions = [(False, original_switch_interval, 'json'), (True, original_switch_interval, 'json')]
         if args.probe_switch_interval is not None:
-            conditions.append((True, args.probe_switch_interval))
-        for with_reader, switch_interval in conditions:
+            conditions.append((True, args.probe_switch_interval, 'json'))
+        if args.probe_snapshot_codec:
+            conditions.append((True, original_switch_interval, 'marshal_owned_memory'))
+        for with_reader, switch_interval, codec in conditions:
             sys.setswitchinterval(switch_interval)
-            leg = run_leg(market, seed_root, with_reader)
+            with (codec_probe.installed_codec() if codec != 'json' else nullcontext()):
+                leg = run_leg(market, seed_root, with_reader)
+            leg['snapshot_copy_codec'] = codec
             report['legs'].append(leg)
             if leg.get('live_threads'):
                 report['fatal_errors'].append('LIVE_THREADS')
@@ -621,7 +632,7 @@ def main():
             report['fatal_errors'].append('SOURCE_CHANGED_DURING_PROFILE')
         if BLOCKED:
             report['fatal_errors'].append('AUDIT_GUARD_BLOCKED_SIDE_EFFECT')
-        if len(report['legs']) != 2+int(args.probe_switch_interval is not None):
+        if len(report['legs']) != 2+int(args.probe_switch_interval is not None)+int(args.probe_snapshot_codec):
             report['fatal_errors'].append('PAIR_INCOMPLETE')
         report['diagnostic_completed_without_fatal_error'] = not report['fatal_errors']
         target.write_text(json.dumps(report, sort_keys=True, indent=2), encoding='utf-8')

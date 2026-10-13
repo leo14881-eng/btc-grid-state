@@ -251,6 +251,14 @@ thread-switch interval. The original interval is restored in `finally`; both
 actual values are recorded. This tests scheduling sensitivity without
 changing production settings. Improvement cannot establish GIL as the only
 cause; absence of improvement cannot exclude long C operations holding it.
+The separate `--probe-snapshot-codec` option checks copy compatibility and
+measures a private, in-memory binary-copy candidate against the existing JSON
+copy using the same generation. It adds a full-reader leg at the original
+switch interval. Only bytes produced from the accepted plain-tree input in
+that process are decoded; no binary cache is loaded from a file or network.
+All generation/window hashes, proof, time and delivery fence checks remain.
+The candidate is applied only within this diagnostic and restored afterwards;
+faster copying alone does not establish sustainable writer throughput.
 
 ## Offline provisioning and reviewed installation
 
