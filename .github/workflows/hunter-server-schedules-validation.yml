@@ -46,7 +46,7 @@ jobs:
           node-version: '22'
       - name: Complete Hunter and routing regressions
         run: |
-          python -m pip install -r deploy/hunter-fast-watch-requirements.txt
+          python -m pip install -r deploy/hunter-fast-watch-requirements.txt -r deploy/hunter-binance-stream-requirements.txt
           python -m py_compile scripts/hunter_job_runner.py scripts/hunter_runtime_gate.py scripts/hunter_research_rebind.py
           bash -n scripts/hunter_scheduled_job.sh
           bash -n scripts/hunter_monitor_runner.sh
