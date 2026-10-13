@@ -15,8 +15,8 @@ from scripts import hunter_binance_recover_three_once as recovery
 class SupervisionTests(unittest.TestCase):
     def run_case(self,status='READY',*,halt=None,changed_epoch=False,journal_failed=False,write_failed=False,
                  stop_failed=False,quiet_failed=False,first_ready_at=0,slow_sample=False,slow_journal=False,
-                 runtime_gap_at=0):
-        clock=[0];samples=[0];output=io.StringIO();saved={};commands=[]
+                 runtime_gap_at=0,final_journal_bad=None):
+        clock=[0];samples=[0];output=io.StringIO();saved={};commands=[];journal_calls=[0]
         upgrade=Mock();upgrade.write_new.side_effect=lambda path,data,*args:saved.setdefault(Path(path).as_posix(),json.loads(data))
         if write_failed:upgrade.write_new.side_effect=OSError('disk')
         if quiet_failed:upgrade.quiet.side_effect=RuntimeError('still running')
@@ -33,6 +33,9 @@ class SupervisionTests(unittest.TestCase):
             return subprocess.CompletedProcess(args,0,b'',b'')
         prepared=dict(snapshot_sha256='f'*64,roster_hash='e'*64)
         def journal(*args,**kwargs):
+            journal_calls[0]+=1
+            if journal_calls[0]>1 and final_journal_bad=='error':raise OSError('final journal unavailable')
+            if journal_calls[0]>1 and final_journal_bad=='interrupt':raise KeyboardInterrupt()
             if journal_failed:raise RuntimeError('journal unavailable')
             if slow_journal:clock[0]+=901
             observed=10**12+int(clock[0]*1000)
@@ -42,7 +45,7 @@ class SupervisionTests(unittest.TestCase):
                 manifest_sha256=prepared['snapshot_sha256'],roster_hash=prepared['roster_hash'],
                 shadow_only=True,real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY',
                 epoch=('b' if changed_epoch and samples[0]>10 else 'a')*32,status='READY')
-            return dict(at_limit=False,records=[dict(evidence=dict(event='BINANCE_SESSION_METRICS',audit_output_failures=0)),
+            return dict(at_limit=False,complete=not (journal_calls[0]>1 and final_journal_bad=='incomplete'),records=[dict(evidence=dict(event='BINANCE_SESSION_METRICS',audit_output_failures=0)),
                 dict(journal_us=str(observed*1000),evidence=audit)])
         with patch.object(recovery.time,'monotonic',side_effect=lambda:clock[0]),\
              patch.object(recovery.time,'time_ns',side_effect=lambda:(10**12+int(clock[0]*1000))*1000000),\
@@ -84,6 +87,23 @@ class SupervisionTests(unittest.TestCase):
         self.assertEqual(result,1);self.assertEqual(commands[-1][1],'stop')
         self.assertIn('journal_error_type',saved['fixture/recovery-report.json'])
 
+    def test_final_evidence_missing_pages_revokes_acceptance_and_stops(self):
+        result,commands,saved,_=self.run_case(final_journal_bad='incomplete')
+        self.assertEqual(result,1);self.assertEqual(commands[-1][1],'stop')
+        report=saved['fixture/recovery-report.json']
+        self.assertEqual(report['error_code'],'OBSERVATION_INCOMPLETE_STOPPED')
+        self.assertTrue(report['stopped_verified']);self.assertFalse(report['journal']['complete'])
+
+    def test_final_evidence_read_error_revokes_acceptance_and_stops(self):
+        result,commands,saved,_=self.run_case(final_journal_bad='error')
+        self.assertEqual(result,1);self.assertEqual(commands[-1][1],'stop')
+        self.assertEqual(saved['fixture/recovery-report.json']['error_code'],'OBSERVATION_INCOMPLETE_STOPPED')
+
+    def test_final_evidence_interrupt_revokes_acceptance_and_stops(self):
+        result,commands,saved,_=self.run_case(final_journal_bad='interrupt')
+        self.assertEqual(result,1);self.assertEqual(commands[-1][1],'stop')
+        self.assertEqual(saved['fixture/recovery-report.json']['error_code'],'OBSERVATION_INCOMPLETE_STOPPED')
+
     def test_cannot_keep_running_if_acceptance_report_is_not_durable(self):
         result,commands,saved,_=self.run_case(write_failed=True,stop_failed=True)
         self.assertEqual(result,1);self.assertEqual(commands[-1][1],'stop')
@@ -124,7 +144,7 @@ class SupervisionTests(unittest.TestCase):
             source_head=recovery.NEW,manifest_sha256='f'*64,roster_hash='e'*64,epoch='a'*32,
             status='READY',shadow_only=True,real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY')
         def evidence(value,extra=None):
-            return dict(at_limit=False,records=[dict(evidence=dict(event='BINANCE_SESSION_METRICS',audit_output_failures=0)),
+            return dict(at_limit=False,complete=True,records=[dict(evidence=dict(event='BINANCE_SESSION_METRICS',audit_output_failures=0)),
                 dict(journal_us='400000000',evidence=value)]+([] if extra is None else [dict(journal_us='400000000',evidence=extra)]))
         with patch.object(recovery.time,'time_ns',return_value=400000*1000000):
             self.assertTrue(recovery.continuous_ready(evidence(audit),sample,prepared,0))

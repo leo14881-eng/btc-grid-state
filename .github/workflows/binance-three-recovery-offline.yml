@@ -6,6 +6,7 @@ on:
       - 'tests/test_binance_three_recovery_package.py'
       - 'tests/test_binance_three_recovery_plan.py'
       - 'tests/test_binance_three_recovery_reentry.py'
+      - 'tests/test_binance_journal_evidence.py'
       - '.github/workflows/binance-three-recovery-offline.yml'
 permissions:
   contents: read
@@ -71,6 +72,8 @@ jobs:
           PY
       - name: One-start deadline and report-durability supervision
         run: python -B -m unittest discover -s tests -p test_binance_three_recovery_plan.py -v
+      - name: Complete bounded journal export including null and missing-page failures
+        run: python -B -m unittest discover -s tests -p test_binance_journal_evidence.py -v
       - name: Repeated preflight failures then one recovery with real exclusive report files
         run: |
           python -B - <<'PY'

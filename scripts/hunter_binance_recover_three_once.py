@@ -353,9 +353,9 @@ def service_state(timeout=60):
     return dict(line.split('=',1) for line in data.decode().splitlines())
 
 
-def journal_evidence(since,timeout=30):
+def journal_evidence(since,timeout=30,*,require_final=False):
     import re
-    raw=command(['journalctl','--utc','--no-pager','-u',SERVICE,'--since',since,
+    raw=command(['journalctl','--utc','--no-pager','--all','--output-fields=MESSAGE','-u',SERVICE,'--since',since,
                  '-n','10000','-o','json'],timeout=timeout).stdout
     allowed={'event','epoch','topic','shard','subscribe_batch','received','processed','changed','last_rx',
         'last_processed_rx','offset','total','topics','final','zero_received','zero_processed','acked_batches',
@@ -370,20 +370,89 @@ def journal_evidence(since,timeout=30):
         if isinstance(value,list):return [clean(v) for v in value[:50]]
         if isinstance(value,str):return value[:180]
         return value if value is None or type(value) in (int,bool) else None
-    rows=[];lines=raw.splitlines()
+    rows=[];lines=raw.splitlines();issues=[]
     for line in lines:
-        entry=json.loads(line);message=entry.get('MESSAGE','')
+        entry=json.loads(line);message=entry.get('MESSAGE')
         row=dict(journal_us=entry.get('__REALTIME_TIMESTAMP'))
+        # journalctl JSON can represent non-printable UTF-8 as byte arrays.
+        # Missing/null/ambiguous/oversized fields must never masquerade as a
+        # harmless omitted text line (the old exporter hashed str(None)).
+        if isinstance(message,list) and len(message)<=65536 and all(type(x) is int and 0<=x<=255 for x in message):
+            try:message=bytes(message).decode('utf-8')
+            except UnicodeDecodeError:message=None
+        if not isinstance(message,str) or len(message.encode())>65536:
+            issues.append('JOURNAL_MESSAGE_UNAVAILABLE')
+            row['evidence']=dict(error_code='JOURNAL_MESSAGE_UNAVAILABLE')
+            rows.append(row);continue
+        parsed=False
         try:
             value=json.loads(message)
+            parsed=True
             require(isinstance(value,dict) and str(value.get('event','')).startswith('BINANCE_'),'UNSTRUCTURED')
+            if value.get('event')=='BINANCE_TOPIC_METRICS' and (
+                    not isinstance(value.get('topics'),list) or not 1<=len(value['topics'])<=50):
+                issues.append('TOPIC_METRICS_PAGE_SIZE_INVALID')
             row['evidence']=clean(value)
         except (ValueError,RuntimeError,TypeError):
+            if not parsed and message.lstrip().startswith('{'):issues.append('JOURNAL_STRUCTURED_MESSAGE_INVALID')
             row['message_sha256']=hashlib.sha256(str(message).encode()).hexdigest()
             code=re.search(r'\b(?:BINANCE_|PUBLIC_|ORPHANED_|BUDGET_)[A-Z0-9_]{1,110}\b',str(message))
             row['evidence']=dict(error_code=code.group(0)) if code else dict(raw_omitted=True)
         rows.append(row)
-    return dict(records=rows,limit=10000,at_limit=len(lines)>=10000)
+    coverage=journal_topic_coverage(rows,require_final=require_final)
+    issues.extend(coverage['errors'])
+    if len(lines)>=10000:issues.append('JOURNAL_RECORD_LIMIT')
+    return dict(records=rows,limit=10000,at_limit=len(lines)>=10000,
+                complete=not issues,completeness_errors=sorted(set(issues)),topic_coverage=coverage['epochs'])
+
+
+def journal_topic_coverage(rows,*,require_final=False):
+    """Verify every finalized epoch's exact page coverage; active epochs have no final pages yet."""
+    finals={};pages={};errors=[];coverage=[];observed=[];ended=set()
+    for row in rows:
+        value=row.get('evidence',{});epoch=value.get('epoch');event=value.get('event')
+        if event in ('BINANCE_TOPIC_METRICS','BINANCE_SESSION_METRICS','BINANCE_ACK_COMMITTED',
+                     'BINANCE_HTTP_LIFECYCLE','BINANCE_TOPIC_STALE_DETAIL','BINANCE_INITIALIZATION_READY'):
+            import re
+            if not isinstance(epoch,str) or not re.fullmatch('[a-f0-9]{32}',epoch):
+                errors.append('TOPIC_METRICS_EPOCH_INVALID');continue
+            if epoch not in observed:
+                if observed:ended.add(observed[-1])
+                observed.append(epoch)
+        if event=='BINANCE_STREAM_RECOVERY' and observed:ended.add(observed[-1])
+        if event=='BINANCE_SESSION_METRICS' and value.get('final') is True:
+            if epoch in finals:errors.append('TOPIC_METRICS_DUPLICATE_FINAL')
+            finals[epoch]=value
+        elif event=='BINANCE_TOPIC_METRICS':pages.setdefault(epoch,[]).append(value)
+    if require_final:ended.update(observed)
+    if require_final and not observed:errors.append('TOPIC_METRICS_FINAL_MISSING_OR_INVALID')
+    for epoch in set(finals)|set(pages)|ended:
+        final=finals.get(epoch,{});total=final.get('topics');seen=set();expected=0;valid=True
+        sums=dict(received=0,processed=0,zero_received=0,zero_processed=0)
+        if type(total) is not int or not 1<=total<=4000:
+            errors.append('TOPIC_METRICS_FINAL_MISSING_OR_INVALID');continue
+        for page in pages.get(epoch,[]):
+            items=page.get('topics');offset=page.get('offset')
+            if (type(offset) is not int or offset!=expected or page.get('total')!=total
+                    or not isinstance(items,list) or not 1<=len(items)<=50):
+                valid=False;continue
+            for item in items:
+                name=item.get('topic') if isinstance(item,dict) else None
+                counters=('received','processed','changed','last_rx','last_processed_rx')
+                if (not isinstance(name,str) or name in seen
+                        or any(type(item.get(k)) is not int or item[k]<0 for k in counters)
+                        or not item['changed']<=item['processed']<=item['received']
+                        or item['last_processed_rx']>item['last_rx']):
+                    valid=False
+                    continue
+                seen.add(name)
+                for k in ('received','processed'):
+                    sums[k]+=item[k];sums['zero_'+k]+=int(item[k]==0)
+            expected+=len(items)
+        valid=valid and expected==total and len(seen)==total and all(final.get(k)==v for k,v in sums.items())
+        if not valid:errors.append('TOPIC_METRICS_PAGES_INCOMPLETE')
+        coverage.append(dict(epoch=epoch,expected_topics=total,observed_topics=len(seen),complete=valid))
+    return dict(errors=errors,epochs=sorted(coverage,key=lambda x:x['epoch']))
 
 
 def continuous_ready(journal,sample,prepared,started_ms):
@@ -391,7 +460,7 @@ def continuous_ready(journal,sample,prepared,started_ms):
     records=journal['records']
     metrics=[x['evidence'] for x in records
              if x.get('evidence',{}).get('event')=='BINANCE_SESSION_METRICS']
-    require(not journal['at_limit'] and metrics and
+    require(journal.get('complete') is True and not journal['at_limit'] and metrics and
             all(x.get('audit_output_failures')==0 for x in metrics),'OBSERVATION_INCOMPLETE_STOPPED')
     audits=[(i,x) for i,x in enumerate(records)
             if x.get('evidence',{}).get('event')=='BINANCE_CACHE_AUDIT']
@@ -471,8 +540,16 @@ def supervise(upgrade,work,prepared,invocation_id=None):
     finally:
         if started and not accepted:
             stop_and_verify(upgrade,report)
-        try:report['journal']=journal_evidence(since)
-        except Exception as error:report['journal_error_type']=type(error).__name__
+        try:
+            report['journal']=journal_evidence(since,require_final=not accepted)
+            if report['journal'].get('complete') is not True and accepted:
+                accepted=False;report.update(status='FAILED_STOPPED',error_code='OBSERVATION_INCOMPLETE_STOPPED')
+                stop_and_verify(upgrade,report)
+        except BaseException as error:
+            report['journal_error_type']=type(error).__name__
+            if accepted:
+                accepted=False;report.update(status='FAILED_STOPPED',error_code='OBSERVATION_INCOMPLETE_STOPPED')
+                stop_and_verify(upgrade,report)
         destination=report_path(invocation_id)
         try:
             save(upgrade,work,'recovery-report.json',report)

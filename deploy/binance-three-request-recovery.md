@@ -1,5 +1,22 @@
 # One supervised Binance recovery for the 2026-10-12 17:19 incident
 
+**This incident's one permitted run has been consumed. Do not rerun its command.**
+The uploaded outcome report SHA256 is
+`d7cac76b56fe51a9daca95b92609cc801ee09cb71cde9afb19c9e56f356156fe`:
+runtime `8cb92bd7`, invocation `676227d443f4421589636a4da8760a8f`,
+`FAILED_STOPPED`, stopped verified, three historical outcomes still UNKNOWN.
+The subsequent journal-export fix is a code/test candidate only. It does not
+change this entry's pinned runtime or authorize another disposition/start.
+Retain the durable incident marker and all existing evidence.
+
+Journal export requests full JSON fields and retains only the existing safe
+field whitelist. Null, oversized/malformed messages, missing or duplicate pages,
+wrong epoch/offset/total, counter disagreement and record limits mark evidence
+incomplete. Every known ended epoch needs a final summary and complete topic
+coverage; an active accepted epoch has no final pages yet. Final evidence failure,
+including interruption after a preliminary acceptance, revokes acceptance and
+stops/verifies the service before writing the failed outcome.
+
 This entry is specific to epoch `51c723c224194317a49329ba8751d77f` and the uploaded
 report SHA256 `7c05690bbe062fec2638ab5f6b61fe35cd40617306acf35a9f25d383900c1f15`.
 It is not a generic orphan cleaner. Default invocation prints a plan; only

@@ -133,7 +133,7 @@ class ReentryTests(unittest.TestCase):
         audit=dict(event='BINANCE_CACHE_AUDIT',observed_at_ms=observed,ready_window_seconds=int(self.clock),
             source_head=recovery.NEW,manifest_sha256='f'*64,roster_hash='e'*64,epoch='b'*32,status='READY',
             shadow_only=True,real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY')
-        return dict(at_limit=False,records=[dict(evidence=dict(event='BINANCE_SESSION_METRICS',audit_output_failures=0)),
+        return dict(at_limit=False,complete=True,records=[dict(evidence=dict(event='BINANCE_SESSION_METRICS',audit_output_failures=0)),
             dict(journal_us=str(observed*1000),evidence=audit)])
 
     def write_report(self,path,value):
