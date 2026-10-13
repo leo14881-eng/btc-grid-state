@@ -789,7 +789,7 @@ def run_leg(scratch, with_reader, ports, head, source):
         out = (scratch/(name+'.stdout')).open('wb'); err = (scratch/(name+'.stderr')).open('wb')
         handles.extend([out,err])
         child = subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=out,stderr=err,
-            env={k:os.environ[k] for k in ('PATH','LANG','SYSTEMROOT','BINANCE_DIAGNOSTIC_MARKET_WAL') if k in os.environ})
+            env={k:os.environ[k] for k in ('PATH','LANG','SYSTEMROOT','BINANCE_DIAGNOSTIC_MARKET_WAL','BINANCE_DIAGNOSTIC_CACHE_FAILURE') if k in os.environ})
         processes[name] = child
         return child
 
