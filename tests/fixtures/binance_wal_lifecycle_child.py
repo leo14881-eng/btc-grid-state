@@ -13,14 +13,16 @@ sys.path.insert(0, str(ROOT))
 def main():
     from scripts.profile_binance_wal_lifecycle import (FILENAMES, KEY, TARGETS, canonical,
         check, connection_state, error_detail, file_state, install_guard, install_sql_audit,
-        loaded_source_audit, machine, open_pair, payload, read_value, source_hashes, value_summary)
+        loaded_source_audit, machine, native_argument_types, open_pair, payload, read_value,
+        source_hashes, value_summary)
     check(sys.platform == 'linux' and len(sys.argv) == 4, 'WAL_CHILD_EXACT_LINUX_ARGUMENTS')
     scratch = Path(sys.argv[1])
     role, target = sys.argv[2:]
     check(scratch.is_absolute() and scratch.resolve() == scratch and scratch.is_dir(), 'WAL_CHILD_SCRATCH')
     check(role in ('reader', 'writer') and target in TARGETS, 'WAL_CHILD_ROLE_OR_TARGET')
-    blocked = install_guard(scratch, role, set())
-    sql, denied = install_sql_audit(role)
+    native_connections = []
+    blocked = install_guard(scratch, role, set(), native_connections)
+    sql, denied = install_sql_audit(role, scratch)
     config = json.loads((scratch/'config.json').read_text(encoding='utf-8'))
     check(config['target'] == target and config['source_head'] == os.environ.get('CHECKOUT_SHA'), 'WAL_CHILD_BINDING')
     check(config['source_hashes'] == source_hashes(), 'WAL_CHILD_SOURCE_MISMATCH')
@@ -40,6 +42,8 @@ def main():
         with connect(readonly=True, timeout=.25) as db:
             pair_connections[name] = connection_state(db)
     emit('READY', machine=machine(), source_hashes=source_hashes(), pair_connections=pair_connections,
+         native_connection_audit=native_connections,
+         native_connection_argument_types=native_argument_types(native_connections),
          files={name: file_state(scratch/filename) for name, filename in FILENAMES.items()})
     try:
         for raw in sys.stdin:
@@ -48,6 +52,8 @@ def main():
             if action == 'STOP':
                 check(connection is None, 'STOP_WITH_LIVE_READ_TRANSACTION')
                 emit('STOPPED', source_hashes=source_hashes(), sql_audit=sql,
+                     native_connection_audit=native_connections,
+                     native_connection_argument_types=native_argument_types(native_connections),
                      source_audit=loaded_source_audit(config['source_hashes']),
                      market_transactions=store.transaction_diagnostics(),
                      control_transactions=control.transaction_diagnostics())

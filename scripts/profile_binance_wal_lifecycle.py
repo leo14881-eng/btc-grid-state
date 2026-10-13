@@ -29,6 +29,8 @@ MODES = ('DELETE', 'WAL')
 TARGETS = ('market', 'control')
 FILENAMES = {'market': 'state.sqlite3', 'control': 'control.sqlite3'}
 BOUND = 4000
+HELD_TARGET_SECONDS = 2.0
+WRITE_INTERVAL_NS = 500_000_000
 SOURCES = (SELF, CHILD, *(ROOT/'research'/name for name in (
     'hunter_binance_health_store.py', 'hunter_binance_stream_store.py',
     'hunter_binance_market_control.py', 'hunter_bybit_stream_store.py',
@@ -111,7 +113,12 @@ def value_summary(value):
     return dict(bytes=len(value.encode()), sha256=hashlib.sha256(value.encode()).hexdigest())
 
 
-def install_guard(scratch, role, owned_pids):
+def native_argument_types(records):
+    return {kind: sum(item['argument_type'] == kind for item in records)
+            for kind in sorted({item['argument_type'] for item in records})}
+
+
+def install_guard(scratch, role, owned_pids, connection_audit):
     """Lifetime guard. SQLite native sidecar I/O is NOT a Python audit event."""
     blocked = []
     paths = {case/FILENAMES[target] for case in (
@@ -166,9 +173,18 @@ def install_guard(scratch, role, owned_pids):
         if event == 'sqlite3.connect':
             if resolve(args[0]) not in paths:
                 reject('WAL_DIAGNOSTIC_SQLITE_OUTSIDE_EXACT_PAIR')
-            if role == 'reader' and (not str(args[0]).startswith('file:') or
-                    parse_qs(urlsplit(str(args[0])).query) != {'mode': ['ro']}):
-                reject('WAL_DIAGNOSTIC_READER_NOT_MODE_RO')
+            # CPython v3.10.22 audits the FSConverter bytes object; 3.12
+            # exposes str. str(bytes) is a repr, not the supplied SQLite URI.
+            # Source: python/cpython v3.10.22 Modules/_sqlite/connection.c.
+            address = os.fsdecode(args[0])
+            details = dict(argument_type=type(args[0]).__name__, database_uri=address,
+                           query=parse_qs(urlsplit(address).query, keep_blank_values=True),
+                           uri_flag='NOT_EXPOSED_BY_NATIVE_AUDIT_EVENT_SEE_WRAPPER_INTENT')
+            if len(connection_audit) >= BOUND:
+                reject('WAL_NATIVE_CONNECTION_AUDIT_BOUND')
+            connection_audit.append(details)
+            if role == 'reader' and (not address.startswith('file:') or details['query'] != {'mode': ['ro']}):
+                reject('WAL_DIAGNOSTIC_READER_NOT_MODE_RO:'+canonical(details))
         if event == 'open':
             name, mode, flags = args
             if (isinstance(mode, str) and any(c in mode for c in 'wax+') or
@@ -184,7 +200,7 @@ def install_guard(scratch, role, owned_pids):
     return blocked
 
 
-def install_sql_audit(role):
+def install_sql_audit(role, scratch):
     """Log SQL templates and hashes of bindings, never expanded payload/rows."""
     records, denied = [], []
     original = sqlite3.connect
@@ -233,6 +249,20 @@ def install_sql_audit(role):
 
     def connect(*args, **kwargs):
         check('factory' not in kwargs and len(args) < 6, 'UNEXPECTED_SQLITE_FACTORY')
+        address = os.fsdecode(args[0] if args else kwargs['database'])
+        parsed = urlsplit(address)
+        exact = (not parsed.netloc and Path(unquote(parsed.path)).resolve() in
+                 {scratch/filename for filename in FILENAMES.values()})
+        intent = dict(argument_type=type(args[0] if args else kwargs['database']).__name__,
+                      database_uri=address if exact else 'NOT_EXACT_CHILD_PAIR',
+                      query=parse_qs(parsed.query, keep_blank_values=True), uri=kwargs.get('uri', False))
+        if role == 'reader':
+            if not (exact and address.startswith('file:') and intent['query'] == {'mode': ['ro']}
+                    and intent['uri'] is True):
+                denied.append(dict(connect_intent=intent))
+                raise RuntimeError('WAL_READER_CONNECT_INTENT_INVALID:'+canonical(intent))
+            record('sqlite3.connect mode=ro', intent)
+            records[-1]['connect_intent'] = intent
         return original(*args, factory=Audited, **kwargs)
     sqlite3.connect = connect
     return records, denied
@@ -340,7 +370,10 @@ def run_case(root, mode, target, before, source_head, owned_pids, result):
     from research.hunter_binance_control import Control
     case = root/(mode.lower()+'-'+target)
     case.mkdir()
-    result.update(mode=mode, target=target, case_path=str(case), events=[], errors=[])
+    result.update(mode=mode, target=target, case_path=str(case), events=[], errors=[],
+                  held_target_seconds=HELD_TARGET_SECONDS, injected_delay=True,
+                  write_schedule_seconds=[.5, 1.0, 1.5, 2.0],
+                  delay_scope='PARENT_COMMAND_SCHEDULE_WHILE_REAL_READ_TRANSACTION_REMAINS_OPEN')
     anchors, peers = {}, []
     path = case/FILENAMES[target]
     try:
@@ -393,9 +426,20 @@ def run_case(root, mode, target, before, source_head, owned_pids, result):
             check(held['connection']['busy_timeout'] == 250 and held['connection']['journal_mode'].upper() == mode,
                   'READER_ACTUAL_MODE_OR_TIMEOUT_CHANGED')
             for index in range(1, 5):
+                # Explicit two-second pin, identical in DELETE and WAL. This
+                # changes only the synthetic metadata-write schedule; no
+                # production reader cadence, busy timeout or queue is tuned.
+                deadline = held['monotonic_ns']+index*WRITE_INTERVAL_NS
+                remaining = (deadline-time.monotonic_ns())/1e9
+                if remaining > 0:
+                    time.sleep(remaining)
+                command_start = time.monotonic_ns()
+                check(command_start >= deadline, 'INJECTED_WRITE_STARTED_BEFORE_SCHEDULE')
                 written = writer.command('WRITE', 'WRITTEN', index=index)
                 observed = reader.command('READ_HELD', 'HELD_VALUE')
                 sample = dict(index=index, write=written, held=observed,
+                              scheduled_write_offset_ns=index*WRITE_INTERVAL_NS,
+                              actual_command_start_offset_ns=command_start-held['monotonic_ns'],
                               checkpoint=checkpoint(anchors[target], 'PASSIVE', path))
                 result['events'].append(sample)
                 check(observed['value'] == held['value'], 'HELD_SNAPSHOT_CHANGED')
@@ -412,6 +456,8 @@ def run_case(root, mode, target, before, source_head, owned_pids, result):
             result['release'] = reader.command('RELEASE', 'RELEASED')
             result['held_read_wall_us'] = (result['release']['monotonic_ns']-held['monotonic_ns'])//1000
             result['held_read_wall_interval'] = 'HELD_EMIT_TO_RELEASED_EMIT_NOT_EXACT_SQLITE_LOCK_DURATION'
+            check(result['release']['monotonic_ns']-held['monotonic_ns'] >= int(HELD_TARGET_SECONDS*1e9),
+                  'INJECTED_HELD_WINDOW_SHORTER_THAN_TWO_SECONDS')
             result['visible_after_release'] = reader.command('REOPEN', 'REOPENED')
             check(result['visible_after_release'].get('error') is None, 'REOPEN_AFTER_RELEASE_FAILED')
             expected = value_summary(payload(4 if mode == 'WAL' else 0))
@@ -485,8 +531,9 @@ def main():
     sys.path.insert(0, str(ROOT))
     scratch = Path(tempfile.mkdtemp(prefix='binance-wal-lifecycle-')).resolve()
     owned = set()
-    blocked = install_guard(scratch, 'parent', owned)
-    sql, denied = install_sql_audit('parent')
+    native_connections = []
+    blocked = install_guard(scratch, 'parent', owned, native_connections)
+    sql, denied = install_sql_audit('parent', scratch)
     before = source_hashes()
     result = dict(schema='binance_wal_lifecycle_diagnostic_v1', source_head=args.source_head, git_head=git_head,
         scratch=str(scratch), machine=machine(), diagnostic_cases=4, cases=[],
@@ -495,6 +542,7 @@ def main():
         required_sqlite_fix='3.51.3+ or verified 3.44.6/3.50.7 backport; version alone is not vendor-patch evidence',
         limitations=[
             'Small scratch metadata transactions, not a collector/consumer throughput or strict acceptance gate.',
+            'The reader pin includes an injected two-second schedule with four writes; not a long-duration or hour-load gate.',
             'No active HTTP owners; unchanged real control owner snapshot and scope fence are checked.',
             'mode=ro and SQL authorizer prohibit SQL writes, DDL and write PRAGMAs, not native WAL/SHM readmark I/O.',
             'Python audit hooks do not observe internal SQLite filesystem operations; file state is sampled explicitly.',
@@ -515,7 +563,9 @@ def main():
                 errors=case['errors'])), flush=True)
     result.update(source_after=source_hashes(), source_audit=loaded_source_audit(before),
                   blocked_effects=blocked, sql_denied=denied,
-                  parent_sql_audit=sql, unreaped_pids=sorted(owned))
+                  parent_sql_audit=sql, native_connection_audit=native_connections,
+                  native_connection_argument_types=native_argument_types(native_connections),
+                  unreaped_pids=sorted(owned))
     result['diagnostic_completed'] = (all(case['mechanism_assertions_passed'] for case in result['cases'])
         and not blocked and not denied and not owned and before == result['source_after']
         and result['source_audit']['before_after_equal'])
