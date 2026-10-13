@@ -226,6 +226,41 @@ w.migrate(Path(sys.argv[1]))
             proc.stderr.close()
 
 
+
+    def test_sigkill_after_committed_mode_marker_stays_unavailable(self):
+        worker='''import sys,time
+from pathlib import Path
+from research import hunter_binance_market_wal as w
+# SCRATCH TEST ONLY; no production override exists.
+w._wal_reset_fixed=lambda _: True
+original=w._phase
+def delayed(marker,value,*,create):
+    original(marker,value,create=create)
+    if value.get('status')=='MODE_COMMITTED':
+        print('MODE_COMMITTED_DURABLE',flush=True)
+        time.sleep(10)
+w._phase=delayed
+w.migrate(Path(sys.argv[1]))
+'''
+        proc=subprocess.Popen([sys.executable,'-c',worker,str(self.state)],
+                              cwd=str(Path(__file__).resolve().parents[1]),
+                              stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+        try:
+            self.assertEqual(proc.stdout.readline().strip(),'MODE_COMMITTED_DURABLE')
+            proc.kill()
+            proc.wait(timeout=3)
+            self.assertNotEqual(proc.returncode,0)
+            self.assertEqual(json.loads(self.marker().read_text())['status'],'MODE_COMMITTED')
+            self.assertEqual(self.mode(),'WAL')
+            with self.assertRaisesRegex(wal.WalMigrationError,'UNVERIFIED_MIGRATION'):
+                Store(self.state)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            proc.stdout.close()
+            proc.stderr.close()
+
     def test_actual_version_gate_matches_upstream_fix_and_backports(self):
         cases={
             (3,44,5):False,(3,44,6):True,(3,45,3):False,
