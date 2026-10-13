@@ -75,7 +75,12 @@ def main():
         sys.addaudithook(guard)
         os.chdir(scratch)
         try:
-            suite = unittest.defaultTestLoader.discover(str(ROOT/'tests'), pattern='test_hunter_health_bybit*.py')
+            # Keep dependency-requiring transport checks out of production
+            # test_hunter*.py preludes; this dedicated gate still requires all 52.
+            suite = unittest.TestSuite([
+                unittest.defaultTestLoader.discover(str(ROOT/'tests'), pattern=pattern)
+                for pattern in ('test_hunter_health_bybit.py', 'test_bybit_health_process.py')
+            ])
             result = unittest.TextTestRunner(verbosity=2).run(suite)
             good = (result.wasSuccessful() and result.testsRun == EXPECTED_TESTS
                     and EXPECTED_TESTS > 0 and not result.skipped and not blocked)
