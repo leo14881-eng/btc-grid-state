@@ -21,6 +21,31 @@ class WalMigrationError(ValueError):
     pass
 
 
+
+def _wal_reset_fixed(version):
+    """Only upstream releases known to include the WAL-reset corruption fix.
+
+    3.52.0 is deliberately excluded because it was withdrawn for unrelated
+    compatibility defects. Backports are only recognized on their own lines.
+    Version-number acceptance is necessary, never complete deployment proof.
+    """
+    if type(version) is not tuple or len(version) < 3:
+        return False
+    major, minor, patch = version[:3]
+    if any(type(x) is not int for x in (major, minor, patch)):
+        return False
+    return ((major,minor) == (3,44) and patch >= 6
+            or (major,minor) == (3,50) and patch >= 7
+            or (major,minor) == (3,51) and patch >= 3
+            or (major,minor) >= (3,53))
+
+
+def _require_fixed_sqlite():
+    if not _wal_reset_fixed(sqlite3.sqlite_version_info):
+        raise WalMigrationError('MARKET_WAL_SQLITE_WAL_RESET_FIX_UNVERIFIED:' +
+                                sqlite3.sqlite_version)
+
+
 def _reject_if_link(path):
     try:
         mode = path.lstat().st_mode
@@ -100,6 +125,7 @@ def migrate(state):
     fd = os.open(str(lock_path), flags)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _require_fixed_sqlite()
         identity = state.stat()
         if _reject_if_link(marker) or Path(str(marker) + '.next').exists():
             raise WalMigrationError('MARKET_WAL_PREVIOUS_MIGRATION_REVIEW_REQUIRED')
@@ -115,6 +141,7 @@ def migrate(state):
         prepared = dict(schema='binance_market_wal_migration_v1', status='PREPARED',
                         state=str(state), dev=identity.st_dev, ino=identity.st_ino,
                         previous_mode='DELETE', target_mode='WAL', control_mode='UNCHANGED',
+                        python_sqlite_version=sqlite3.sqlite_version,
                         prepared_at_ns=time.time_ns())
         _phase(marker, prepared, create=True)
         # A crash from here onward is fail-closed until manual recovery.
@@ -150,6 +177,7 @@ def require_no_interrupted_migration(state):
         return
     if not _reject_if_link(marker):
         raise WalMigrationError('MARKET_WAL_MARKER_UNREADABLE')
+    _require_fixed_sqlite()
     try:
         record = json.loads(marker.read_text())
         if (record.get('schema') != 'binance_market_wal_migration_v1'
