@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from research import hunter_binance_health as health
 from research import hunter_binance_stream as stream
 from research.hunter_binance_stream_store import STEPS,topic
+from research.hunter_binance_public import QuarantinedRequestError
 
 NOW=1800000000000
 
@@ -255,6 +256,191 @@ class SchedulerTests(unittest.TestCase):
             self.jobs.work('seed',[name],key=key)
         self.assertEqual(len(requests),1)
         self.assertEqual(self.protocol.evidence.http_summary()['requests_terminal'],2)
+
+    def quarantined_candidate(self,kind,names=None):
+        names=list(names or [self.names[0]])
+        key=(kind,tuple(sorted({name.split('@')[0].upper() for name in names})) if kind=='directory' else names[0])
+        self.jobs.seeded.update(self.names)
+        recovery='quarantine-'+kind;original_scope=frozenset(names)
+        def permissions(epoch,scopes):
+            return [not set(scope).intersection(original_scope) or (identity==recovery and set(scope)==original_scope)
+                    for scope,identity in scopes]
+        self.store.control=SimpleNamespace(schedule_permissions=permissions)
+        self.jobs.submit(key,kind,names)
+        self.jobs.active[key][2].set_exception(QuarantinedRequestError(recovery))
+        self.jobs.finish()
+        self.clock[0]=NOW+30000
+        return key,names,recovery
+
+    def test_quiet_reverification_survives_fresh_websocket_removing_market_need(self):
+        key,names,recovery=self.quarantined_candidate('quiet')
+        self.store.states[names[0]].update(ws_rx=self.clock[0],reverify=False)
+        self.jobs.tick(self.clock[0])
+        self.assertIn(key,self.jobs.active)
+        self.assertEqual(self.jobs.active[key][:2],('quiet',names))
+        directory=next(k for k in self.jobs.candidates if k[0]=='directory')
+        self.assertEqual(self.jobs.blocked[directory],'CONTROL_SCOPE_BLOCKED')
+        self.assertEqual(self.jobs.requeues[key],recovery)
+
+    def test_repair_reverification_survives_websocket_resolving_gap_and_current_bar(self):
+        key,names,recovery=self.quarantined_candidate('repair')
+        self.store.states[names[0]].update(gap=0,unresolved=False,latest=NOW,ws_rx=self.clock[0],reverify=False)
+        self.jobs.tick(self.clock[0])
+        self.assertIn(key,self.jobs.active)
+        self.assertEqual(self.jobs.active[key][:2],('repair',names))
+        self.assertEqual(self.jobs.requeues[key],recovery)
+
+    def run_queued(self,key):
+        future=self.jobs.active[key][2]
+        fn,args,_=next(row for row in self.pool.calls if row[2] is future)
+        self.assertTrue(future.set_running_or_notify_cancel())
+        try:future.set_result(fn(*args))
+        except BaseException as error:future.set_exception(error)
+        return future
+
+    def test_quiet_recovery_at_native_boundary_keeps_original_kind_and_topic_mutex(self):
+        key,names,recovery=self.quarantined_candidate('quiet')
+        self.clock[0]=NOW+STEPS['15m']
+        self.store.states[names[0]].update(ws_rx=self.clock[0],latest=NOW,gap=1)
+        other=('repair',names[0]);self.jobs.submit(other,'repair',names)
+        self.jobs.tick(self.clock[0])
+        self.assertNotIn(other,self.jobs.candidates)
+        self.assertEqual(self.jobs.candidates[key],('quiet',names,True))
+        self.assertEqual(self.jobs.blocked[key],'TOPIC_ACTIVE')
+        self.assertNotIn(key,self.jobs.active)
+        self.jobs.active[other][2].cancel();self.jobs.tick(self.clock[0])
+        self.assertIn(key,self.jobs.active)
+        self.assertEqual(self.jobs.active[key][0],'quiet')
+        self.assertEqual(self.jobs.requeues[key],recovery)
+        self.assertFalse(any(k[0] in ('seed','repair') and k[1]==names[0] for k in self.jobs.active))
+
+    def test_directory_recovery_retains_complete_immutable_scope(self):
+        key,names,recovery=self.quarantined_candidate('directory',self.names)
+        original=tuple(names);names.pop()
+        self.store.states[original[-1]]['ack']=False
+        self.jobs.tick(self.clock[0]);self.assertEqual(self.jobs.blocked[key],'ACK_PENDING')
+        self.assertNotIn(key,self.jobs.active)
+        self.store.states[original[-1]]['ack']=True
+        self.jobs.tick(self.clock[0])
+        self.assertEqual(self.jobs.active[key][:2],('directory',list(original)))
+        self.assertEqual(self.jobs.recovery_work[key],('directory',original))
+        self.assertEqual(self.jobs.requeues[key],recovery)
+        self.assertEqual(sum(kind=='directory' for kind,_,_ in self.jobs.active.values()),1)
+
+    def test_pending_recovery_respects_ack_backoff_and_four_worker_capacity(self):
+        key,names,_=self.quarantined_candidate('quiet')
+        self.store.states[names[0]]['ack']=False
+        self.jobs.tick(self.clock[0]);self.assertEqual(self.jobs.blocked[key],'ACK_PENDING')
+        self.store.states[names[0]]['ack']=True;self.clock[0]-=1
+        self.jobs.tick(self.clock[0]);self.assertEqual(self.jobs.blocked[key],'BACKOFF_OR_REFRESH_INTERVAL')
+        self.clock[0]+=1
+        for name in self.names[1:5]:self.jobs.submit(('repair',name),'repair',[name])
+        self.jobs.tick(self.clock[0]);self.assertEqual(self.jobs.blocked[key],'SHARED_WORKERS_FULL')
+        other=next(iter(self.jobs.active));self.jobs.active[other][2].cancel()
+        self.jobs.tick(self.clock[0]);self.assertIn(key,self.jobs.active)
+        self.assertEqual(len(self.jobs.active),4)
+
+    def test_recovery_claim_success_uses_original_context_and_unblocks_directory_once(self):
+        key,names,recovery=self.quarantined_candidate('quiet')
+        state=dict(claimed=False,resolved=False);claims=[];requests=[];applied=[]
+        permissions=self.store.control.schedule_permissions
+        self.store.control.schedule_permissions=lambda epoch,scopes:([True for _ in scopes]
+            if state['resolved'] else permissions(epoch,scopes))
+        def claim(epoch,job_key):
+            self.assertEqual(job_key,key);claims.append(job_key)
+            if state['claimed']:return None
+            state['claimed']=True;return recovery
+        self.store.control.claim_requeue=claim
+        def apply(kind,epoch,scope,body,requested,received,**kwargs):
+            self.assertEqual((kind,list(scope),kwargs['job_key'],kwargs['recovery_id']),('quiet',names,key,recovery))
+            self.assertIn(key,self.jobs.recovery_work)
+            applied.append(kwargs);state['resolved']=True
+        self.store.apply_work=apply
+        class Client:
+            def __init__(inner,store):pass
+            def request(inner,endpoint,params,**kwargs):requests.append(kwargs['context']);return []
+        self.jobs.client_factory=Client
+        self.jobs.tick(self.clock[0]);self.run_queued(key);self.jobs.finish()
+        self.assertEqual(len(claims),1);self.assertEqual(len(requests),1);self.assertEqual(len(applied),1)
+        self.assertEqual(requests[0],dict(epoch='epoch',job_key=key,kind='quiet',scope=names,requeue_id=recovery))
+        self.assertNotIn(key,self.jobs.requeues);self.assertNotIn(key,self.jobs.recovery_work)
+        self.assertNotIn(key,self.jobs.claimed_requeues);self.assertNotIn(key,self.jobs.failed_requeues)
+        self.jobs.tick(self.clock[0]);self.assertNotIn(key,self.jobs.candidates)
+        self.assertTrue(any(kind=='directory' for kind,_,_ in self.jobs.active.values()))
+        final=self.jobs.shutdown(time.monotonic()+1)
+        self.assertTrue(final['complete']);self.assertEqual(final['submitted'],final['finalized'])
+        self.assertEqual(self.protocol.evidence.http_summary()['requests_pending'],0)
+
+    def test_claimed_recovery_failure_stops_and_never_claims_or_sends_again(self):
+        key,names,recovery=self.quarantined_candidate('repair');claims=[];requests=[]
+        self.store.control.claim_requeue=lambda epoch,job_key:claims.append(job_key) or recovery
+        class Client:
+            def __init__(inner,store):pass
+            def request(inner,*args,**kwargs):requests.append(kwargs);raise TimeoutError('RECOVERY_HTTP_FAILED')
+        self.jobs.client_factory=Client
+        self.jobs.tick(self.clock[0]);future=self.run_queued(key)
+        with self.assertRaisesRegex(health.DurableStopError,'REVERIFICATION_FAILED_MANUAL_REVIEW') as caught:
+            self.jobs.finish()
+        self.assertIs(caught.exception.__cause__,future.exception())
+        self.clock[0]+=120000;self.jobs.tick(self.clock[0])
+        self.assertEqual(self.jobs.blocked[key],'REVERIFICATION_FAILED_MANUAL_REVIEW')
+        self.assertEqual((len(claims),len(requests)),(1,1));self.assertNotIn(key,self.jobs.active)
+        self.assertEqual(self.jobs.requeues[key],recovery);self.assertIn(key,self.jobs.recovery_work)
+        final=self.jobs.shutdown(time.monotonic()+1)
+        self.assertTrue(final['complete']);self.assertEqual(final['submitted'],final['finalized'])
+        self.assertEqual(self.jobs.diagnostics(self.clock[0])['failed_reverifications'],1)
+
+    def test_publication_failure_after_recovery_claim_keeps_gate_without_second_claim(self):
+        key,names,recovery=self.quarantined_candidate('quiet');claims=[];requests=[]
+        self.store.control.claim_requeue=lambda epoch,job_key:claims.append(job_key) or recovery
+        def apply(*args,**kwargs):raise ValueError('PUBLICATION_NOT_VALID')
+        self.store.apply_work=apply
+        class Client:
+            def __init__(inner,store):pass
+            def request(inner,*args,**kwargs):requests.append(kwargs);return []
+        self.jobs.client_factory=Client
+        self.jobs.tick(self.clock[0]);future=self.run_queued(key)
+        with self.assertRaisesRegex(health.DurableStopError,'REVERIFICATION_FAILED_MANUAL_REVIEW') as caught:
+            self.jobs.finish()
+        self.assertIs(caught.exception.__cause__,future.exception())
+        self.assertEqual(str(caught.exception.__cause__),'PUBLICATION_NOT_VALID')
+        self.clock[0]+=120000;self.jobs.tick(self.clock[0])
+        self.assertEqual(self.jobs.blocked[key],'REVERIFICATION_FAILED_MANUAL_REVIEW')
+        self.assertEqual(self.jobs.requeues[key],recovery);self.assertIn(key,self.jobs.recovery_work)
+        self.assertEqual((len(claims),len(requests)),(1,1))
+        final=self.jobs.shutdown(time.monotonic()+1)
+        self.assertTrue(final['complete']);self.assertEqual(final['submitted'],final['finalized'])
+        self.assertEqual(self.protocol.evidence.http_summary()['requests_pending'],0)
+
+    def test_cancellation_after_claim_preserves_gate_and_is_terminal(self):
+        key,names,recovery=self.quarantined_candidate('quiet');claims=[]
+        self.store.control.claim_requeue=lambda epoch,job_key:claims.append(job_key) or recovery
+        jobs=self.jobs
+        class Client:
+            def __init__(inner,store):pass
+            def request(inner,*args,**kwargs):jobs.cancelled=lambda:True;return []
+        self.jobs.client_factory=Client
+        self.store.apply_work=lambda *args,**kwargs:self.fail('cancelled recovery published')
+        self.jobs.tick(self.clock[0]);self.run_queued(key)
+        with self.assertRaisesRegex(health.DurableStopError,'REVERIFICATION_FAILED_MANUAL_REVIEW'):
+            self.jobs.finish()
+        self.assertEqual(len(claims),1);self.assertEqual(self.jobs.requeues[key],recovery)
+        self.assertIn(key,self.jobs.failed_requeues)
+        self.assertEqual(self.protocol.evidence.http_summary()['requests_pending'],0)
+
+    def test_third_failure_quarantine_preserves_attempt_limit_with_explicit_stop(self):
+        name=self.names[0];key=('quiet',name);self.jobs.failures[key]=2
+        self.jobs.submit(key,'quiet',[name])
+        self.jobs.active[key][2].set_exception(QuarantinedRequestError('third-failure'))
+        with self.assertRaisesRegex(health.DurableStopError,'RECOVERY_ATTEMPTS_EXHAUSTED'):
+            self.jobs.finish()
+        self.assertEqual(self.jobs.failures[key],3)
+        self.assertEqual(self.jobs.requeues[key],'third-failure')
+        self.assertEqual(self.jobs.recovery_work[key],('quiet',(name,)))
+        self.clock[0]+=120000;self.jobs.tick(self.clock[0])
+        self.assertNotIn(key,self.jobs.active)
+        self.assertEqual(self.jobs.blocked[key],'REVERIFICATION_FAILED_MANUAL_REVIEW')
+        self.assertEqual(self.jobs.progress['quiet']['submitted'],1)
 
     def test_pre_admission_cancellation_records_request_without_constructing_client(self):
         self.jobs.cancelled=lambda:True

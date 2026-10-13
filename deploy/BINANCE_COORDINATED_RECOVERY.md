@@ -48,13 +48,35 @@ ambiguous proof, orphan owners, control corruption or a failed recovery stop
 the collector. There is no TTL lease deletion. Shutdown uses a shared deadline;
 unfinished work is recorded as unresolved, never as successfully reaped.
 
+Re-verification retains the original job key, kind and dependency scope even
+when newer WS observations remove the ordinary quiet/repair condition. The
+same acknowledgement, backoff, per-topic exclusion and shared admission limits
+still apply. The one re-verification opportunity also respects the existing
+three-failure ceiling; reaching that ceiling or failing after the recovery
+claim stops explicitly with the gate preserved, rather than leaving hidden
+pending work or granting another recovery attempt.
+
 Consumers take a fresh control fence before freezing market rows, then a new
 market/control read after computation and before delivery. Revocation ABA,
 epoch/manifest/roster changes, expiry, missing topics and draining invalidate
 the result. Early and Monitor also recheck immediately before their actual
 use boundary. Immutable local evidence is checked without re-freezing history.
+Monitor carries an optional guard into the shared existing-position manager:
+each position checks before its decision, immediately before ADD, and after
+identity I/O before signal-dependent exit/recovery evaluation. A rejected
+frozen generation stays rejected for that invocation, including its copied
+signal/health fields and deferred ADD. Independent book/supply invalidation
+and profit protection remain available. The default path without a cache
+guard keeps its existing behavior. Early also rechecks after history parsing
+and after temporary-file verification, before replacement.
 Old readers reject the v2 contract. Keep the collector and readers on the same
 reviewed source; a mixed-version installation is not an acceptance test.
+
+These checks establish validity at their observation points; they do not hold
+a database transaction across a portfolio action or filesystem publication.
+Do not describe them as atomic with those writes, or reuse a cached signal for
+later actions without the action's own check. Natural production consumer
+publication remains a separate acceptance requirement.
 
 ## Scope and invariants
 
@@ -86,6 +108,8 @@ git rev-parse HEAD
 python -c 'import sys,sqlite3; print(sys.version); print(sqlite3.sqlite_version)'
 python -m pip install -r deploy/hunter-binance-stream-requirements.txt
 python -I -B -X utf8 scripts/check_binance_stream_offline.py
+python -I -B -X utf8 scripts/check_binance_quarantine_regression.py
+python -I -B -X utf8 scripts/check_binance_signal_use_regression.py
 python -I -B -X utf8 scripts/check_binance_public_transport.py
 python -I -B -X utf8 scripts/check_binance_health_offline.py
 python -I -B -X utf8 scripts/check_binance_coordinated_offline.py
@@ -96,6 +120,25 @@ locks, child HTTP exit, crash-before/after-market-commit, full-topic WS writes,
 WAL checkpoint pressure, UTC midnight/Vietnam 07:00, interval boundaries and
 actual consumer use fences. Synthetic timestamps do not prove a production
 midnight observation. Windows portable SQLite tests are supplementary evidence.
+The two regression scripts intentionally require four assertion failures on
+the immutable `0b15bd7dde4d90519f316f1a146fd13da6f6b91a` modules: two scheduler
+cases and two actual V2 Monitor/engine cases. Cache fixtures and other
+dependencies are from the candidate; this is not a replay of the complete
+prior deployment. Import errors, skipped cases or blocked effects fail these
+scripts instead of counting as a reproduction.
+
+The additional whole-roster test fully initializes all 1,228 histories before
+at least 30 wall-clock seconds of queued writes, whole-scope reads, checkpoints
+and directory/quiet/repair work. Linux uses real rate-governed HTTP children;
+the Windows body fixture does not reproduce that transport or its pacing.
+Its metrics report initialized rows, READY scopes, queue delays, SQLite errors
+and ownership terminals. Initial full-roster history uses fixture bodies and
+real dual-database publication; it does not time a cold 1,228-topic REST backfill.
+A separate Linux collector process subscribes three topics over two epochs:
+it must reconnect to a loopback WS server, reject the first epoch's frozen
+read, acknowledge and seed the second epoch, and close both sessions with
+conserved receipts and retired HTTP owners. Neither fixture establishes a
+natural UTC boundary or full-roster collector WS reconnection.
 
 ## Offline provisioning and reviewed installation
 
@@ -105,6 +148,24 @@ invocation, candidate checkout, state path and existing account/group access
 through the approved server entry point. Retain source head, journal and
 read-only SQLite backup evidence. Do not enter previously denied SSH, WSL or
 stock runtime paths and do not expand permissions.
+
+The existing `hunter_binance_stage.sh` is first-install-only: it deliberately
+refuses an existing code directory, release-head or unit. It is not an upgrade
+command for the currently installed collector. An upgrade package must be
+prepared against the actual source/unit hashes and existing approved paths,
+with conditional replacement and retained rollback artifacts, after those
+read-only facts are available. This PR does not authorize guessed paths or
+overwriting the installed package.
+
+The available Ops connector has rejected reading the actual Binance unit and
+service journal. Obtain a fixed, redacted evidence export through an approved
+maintenance entry before deployment: unit/drop-ins and service identity;
+code/release hashes; Python/SQLite/websockets versions and journal modes;
+directory ACLs, file identities and disk capacity; legacy request/lease,
+budget/boot/epoch records; and the matching invocation/process/lock evidence.
+Absence of a PID alone cannot prove response completion or child reaping. An
+unverifiable request stays unresolved; neither deleting its marker nor creating
+a new state database is an approved migration path.
 
 Provisioning requires the existing collector.lock, exclusive offline ownership,
 `connected != 1`, no legacy requests/leases/halt, matching boot identity and no

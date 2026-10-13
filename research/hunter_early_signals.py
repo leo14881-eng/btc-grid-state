@@ -131,7 +131,7 @@ def build(scan,r1,r4,microdata,now,regional_signals=None):
     report["bybit_only_unscored"]=unscored
     report["bybit_only_signal_count"]=len(bybit_only)-len(unscored)
     return report
-def persist_first_early(report):
+def persist_first_early(report,check_delivery=None):
     """Durable first-seen EARLY evidence for lead-time/missed-opportunity audits."""
     try: hist=json.loads(HISTORY.read_text())
     except (OSError,ValueError): hist={"schema":"hunter_early_signal_history_v1","assets":{}}
@@ -143,7 +143,11 @@ def persist_first_early(report):
         rec["observations"]=int(rec.get("observations") or 0)+1
         rec["last_early_at_utc"]=now; rec["last_early_price"]=p; rec["last_signal"]=row
     hist["updated_at_utc"]=now
-    tmp=HISTORY.with_suffix(".json.tmp"); tmp.write_text(json.dumps(hist,ensure_ascii=False,indent=2)+"\n"); json.loads(tmp.read_text()); tmp.replace(HISTORY)
+    tmp=HISTORY.with_suffix(".json.tmp"); payload=json.dumps(hist,ensure_ascii=False,indent=2)+"\n"
+    if check_delivery is not None:check_delivery()
+    tmp.write_text(payload); json.loads(tmp.read_text())
+    if check_delivery is not None:check_delivery()
+    tmp.replace(HISTORY)
 
 def main():
     scan=json.loads(SCAN.read_text())
@@ -191,6 +195,7 @@ def main():
     payload=json.dumps(report,ensure_ascii=False,indent=2)+"\n"
     if cached is not None:cached.check_delivery()
     OUT.write_text(payload)
-    persist_first_early(report)
+    if cached is None:persist_first_early(report)
+    else:persist_first_early(report,cached.check_delivery)
     print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]}))
 if __name__=="__main__":main()

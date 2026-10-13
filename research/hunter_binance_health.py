@@ -226,6 +226,7 @@ class CoordinatedJobs(Jobs):
         self.progress={kind:dict(completed=0,last_success=None,submitted=0) for kind in self.KINDS}
         self.classes=deque(self.KINDS);self.waiting={};self.candidates={};self.blocked={}
         self.observers={};self.requeues={};self.terminal_errors=[];self.scope_permissions={}
+        self.recovery_work={};self.claimed_requeues=set();self.failed_requeues=set()
         self.submitted=0;self.finalized=0;self.last_admission_block=None
 
     def _context(self,key,kind,names,recovery_id=None):
@@ -258,6 +259,7 @@ class CoordinatedJobs(Jobs):
             if recovery_id is not None:
                 claimed=control.claim_requeue(self.protocol.epoch,key)
                 if claimed!=recovery_id:raise DurableStopError('BINANCE_RECOVERY_CLAIM_UNAVAILABLE')
+                self.claimed_requeues.add(key)
             now=self.clock();client=self.client_factory(self.store)
             context=self._context(key,kind,names,recovery_id)
             if kind=='directory':
@@ -286,11 +288,24 @@ class CoordinatedJobs(Jobs):
 
     def _record_failure(self,key,kind,names,error,shutdown):
         recovery_id=getattr(error,'requeue_id',None)
-        if recovery_id is not None:self.requeues[key]=recovery_id
+        if key in self.claimed_requeues:
+            # The control ledger grants one recovery call, never another claim
+            # after a failed HTTP or publication. Preserve its original scope.
+            self.failed_requeues.add(key)
+            terminal=error if isinstance(error,TERMINAL) else DurableStopError('BINANCE_REVERIFICATION_FAILED_MANUAL_REVIEW')
+            if terminal is not error:terminal.__cause__=error
+            self.terminal_errors.append(terminal);return
+        if recovery_id is not None:
+            self.requeues[key]=recovery_id
+            self.recovery_work[key]=(kind,tuple(names))
         if isinstance(error,TERMINAL) or not isinstance(error,Exception):
             self.terminal_errors.append(error);return
         self.failures[key]=self.failures.get(key,0)+1
         self.next_due[key]=self.clock()+min(120000,30000*2**(self.failures[key]-1))
+        if key in self.requeues and self.failures[key]>=3:
+            self.failed_requeues.add(key)
+            self.terminal_errors.append(DurableStopError('BINANCE_RECOVERY_ATTEMPTS_EXHAUSTED'))
+            return
         if not shutdown and recovery_id is None:
             meta=self.store.metadata();now=self.clock()
             if kind=='directory':
@@ -318,7 +333,8 @@ class CoordinatedJobs(Jobs):
                     if kind in ('seed','repair'):
                         self.seeded.add(names[0])
                         self.next_due[('repair',names[0])]=requested+30000
-                    self.requeues.pop(key,None)
+                    self.requeues.pop(key,None);self.recovery_work.pop(key,None)
+                    self.claimed_requeues.discard(key);self.failed_requeues.discard(key)
             except BaseException as caught:
                 error=caught;state='FAILED'
                 try:self._record_failure(key,kind,names,caught,shutdown)
@@ -343,6 +359,13 @@ class CoordinatedJobs(Jobs):
                      or state['latest']<now//STEPS[interval]*STEPS[interval] else 'quiet'
                   if state['reverify'] or now-state['ws_rx']>FRESH_MS else None)
             if kind is not None:candidates[(kind,name)]=(kind,[name],bool(state['ack']))
+        # Quarantine is a separate outstanding obligation. New WS frames can
+        # remove or change market need, but cannot change this control grant.
+        for key,(kind,scope) in self.recovery_work.items():
+            if not set(scope)<=states.keys():raise DurableStopError('BINANCE_RECOVERY_SCOPE_CHANGED')
+            if kind!='directory':
+                for other in ('seed','repair','quiet'):candidates.pop((other,scope[0]),None)
+            candidates[key]=(kind,list(scope),all(states[name]['ack'] for name in scope))
         self.waiting={key:stamp for key,stamp in self.waiting.items() if key in candidates and key not in self.active}
         for key in candidates:
             if key not in self.active:self.waiting.setdefault(key,now)
@@ -359,6 +382,7 @@ class CoordinatedJobs(Jobs):
         kind,names,acked=row
         if not acked:return 'ACK_PENDING'
         if key in self.active:return 'ACTIVE'
+        if key in self.failed_requeues:return 'REVERIFICATION_FAILED_MANUAL_REVIEW'
         if self.failures.get(key,0)>=3:return 'ATTEMPTS_EXHAUSTED'
         if now<self.next_due.get(key,0):return 'BACKOFF_OR_REFRESH_INTERVAL'
         if kind=='directory' and any(k=='directory' for k,_,_ in self.active.values()):return 'DIRECTORY_ACTIVE'
@@ -397,7 +421,8 @@ class CoordinatedJobs(Jobs):
             waiting[kind]=dict(pending=len(keys),oldest_wait_ms=max([now-self.waiting[key] for key in keys]+[0]),
                 reasons=reasons,minimum_share='ONE_PER_ELIGIBLE_FOUR_CLASS_ROUND',wall_clock_bound=False)
         result.update(work_waiting=waiting,work_submitted=self.submitted,work_finalized=self.finalized,
-            work_unresolved=len(self.active),work_conserved=self.submitted==self.finalized+len(self.active))
+            work_unresolved=len(self.active),work_conserved=self.submitted==self.finalized+len(self.active),
+            pending_reverifications=len(self.recovery_work),failed_reverifications=len(self.failed_requeues))
         return result
 
     def shutdown(self,deadline,steady=time.monotonic):

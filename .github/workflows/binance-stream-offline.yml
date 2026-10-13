@@ -7,9 +7,12 @@ on:
       - 'research/hunter_forward_research.py'
       - 'research/hunter_tail_risk.py'
       - 'research/hunter_signal_provenance.py'
+      - 'research/hunter_position_monitor.py'
+      - 'research/hunter_shadow_trader_v2.py'
       - 'tests/test_hunter_binance*.py'
       - 'tests/fixtures/binance_http_child.py'
       - 'tests/fixtures/binance_coordinated_crash.py'
+      - 'tests/fixtures/binance_ws_reconnect.py'
       - 'scripts/*binance*'
       - 'deploy/*binance*'
       - 'deploy/systemd/*binance*'
@@ -76,6 +79,10 @@ jobs:
           PY
       - name: Guarded cache and consumer regressions
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
+      - name: Reproduce lost quiet and repair recovery on the immutable prior scheduler
+        run: python -I -B -X utf8 scripts/check_binance_quarantine_regression.py
+      - name: Reproduce stale-signal actions on the immutable prior Monitor and engine
+        run: python -I -B -X utf8 scripts/check_binance_signal_use_regression.py
       - name: Bounded evidence and commit-versus-ingress regressions
         run: python -B -m unittest discover -s tests -p test_hunter_binance_observability.py -v
       - name: Full 1228-topic bounded initialization with real SQLite and queues
