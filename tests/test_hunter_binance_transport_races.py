@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 import sys
 import tempfile
+import time
 from threading import Event
 import unittest
 from unittest.mock import Mock, patch
@@ -73,6 +74,10 @@ class IngressRaceTests(unittest.TestCase):
             self.assertEqual(topic,name);now[0]=100002
             return now[0]-age
         protocol.market_arrival.side_effect=arrival
+        options={}
+        if hasattr(stream,'InitializationWindow'):
+            initialized=stream.InitializationWindow(time.monotonic());initialized.ready=True
+            options['initialization']=initialized
         store=Mock();store.states.return_value=[dict(topic=name,ack=1,gap=0,epoch='e',ws_rx=0,ws_ts=0)]
         def nonready(reason):
             reasons.append(reason)
@@ -81,11 +86,11 @@ class IngressRaceTests(unittest.TestCase):
              patch.object(stream,'Budget') as budget,contextlib.redirect_stdout(io.StringIO()):
             budget.return_value.status.return_value=dict(halt=None,cooldown_ms=0)
             if accepted:
-                stream.session(store,[name],'a'*64,stopped.is_set,clock=lambda:now[0],on_nonready=nonready)
+                stream.session(store,[name],'a'*64,stopped.is_set,clock=lambda:now[0],on_nonready=nonready,**options)
                 self.assertIn('CACHE_WRITER_LAG',reasons)
             else:
                 with self.assertRaisesRegex(TimeoutError,'BINANCE_TOPIC_STALE'):
-                    stream.session(store,[name],'a'*64,stopped.is_set,clock=lambda:now[0],on_nonready=nonready)
+                    stream.session(store,[name],'a'*64,stopped.is_set,clock=lambda:now[0],on_nonready=nonready,**options)
                 self.assertNotIn('CACHE_WRITER_LAG',reasons)
         self.assertIn('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN',reasons)
         store.disconnect.assert_called_once_with('e')

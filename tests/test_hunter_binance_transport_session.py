@@ -27,14 +27,22 @@ HELPER=Path(__file__).parent/'fixtures/binance_http_child.py'
 NOW=1791670694000
 
 
+def initialized_options():
+    # These fixtures isolate post-initialization stale cancellation. Bootstrap
+    # itself is exercised against real storage in test_hunter_binance_initialization.
+    if not hasattr(stream,'InitializationWindow'):return {}
+    window=stream.InitializationWindow(time.monotonic());window.ready=True
+    return dict(initialization=window)
+
+
 class Clock:
     def __init__(self):
-        self.owner=get_ident(); self.now=NOW; self.lock=Lock(); self.armed=lambda:False
+        self.owner=get_ident(); self.now=NOW; self.lock=Lock(); self.armed=lambda:False;self.advance_ms=20_000
 
     def __call__(self):
         advance=get_ident()==self.owner and self.armed()
         with self.lock:
-            if advance:self.now+=20_000
+            if advance:self.now+=self.advance_ms
             return self.now
 
     def sleep(self,seconds):
@@ -80,9 +88,10 @@ class SessionCancellationTests(unittest.TestCase):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         self.folder=Path(temp.name);self.store=Store(self.folder/'state.sqlite3')
 
-    def run_chain(self,complete):
+    def run_chain(self,complete,initializing=False):
         server=DeferredHTTP(complete);self.addCleanup(server.close)
         clock=Clock();names=[topic('X'+str(i)+'USDT','1h') for i in range(1228)]
+        if initializing:clock.advance_ms=100_000
         peers=[];delays=[];session_calls=[];output=io.StringIO();children=[]
         clock.armed=lambda:server.ready.is_set() and len(peers)==3 and all(p.processed.is_set() for p in peers)
         @contextlib.contextmanager
@@ -107,8 +116,11 @@ class SessionCancellationTests(unittest.TestCase):
             if len(session_calls)>1:return  # Admission itself proves no orphan blocks reconnection.
             def state(reason):
                 if reason=='SESSION_DISCONNECTED':server.deliver.set()
+            options=initialized_options()
+            if initializing:
+                options=dict(initialization=stream.InitializationWindow(0),steady=lambda:(clock.now-NOW)/1000)
             return actual_session(self.store,names,'a'*64,lambda:False,connect=connect,
-                clock=clock,sleep=clock.sleep,repairer=repairer,on_nonready=state)
+                clock=clock,sleep=clock.sleep,repairer=repairer,on_nonready=state,**options)
         actual_popen=public.subprocess.Popen
         def spawn(*args,**kwargs):
             child=actual_popen(*args,**kwargs);children.append(child);return child
@@ -182,12 +194,28 @@ class SessionCancellationTests(unittest.TestCase):
                 with self.assertRaisesRegex(TimeoutError,'BINANCE_TOPIC_STALE'):
                     stream.session(store,[name],'a'*64,lambda:False,connect=connect,clock=clock,sleep=clock.sleep,repairer=repairer)
             else:
-                stream.session(store,[name],'a'*64,stop.is_set,connect=connect,clock=clock,sleep=clock.sleep,repairer=repairer)
+                stream.session(store,[name],'a'*64,stop.is_set,connect=connect,clock=clock,sleep=clock.sleep,repairer=repairer,**initialized_options())
                 self.assertTrue(stop.is_set())
         self.assertTrue(store.injected)
         self.assertEqual(store.freeze([name],clock.now,clock.now)['status'],'UNKNOWN')
         self.assertTrue(all(not p.thread.is_alive() for p in peers))
         print('QUEUED_FRAME_STALE_REPRO',dict(deployed=DEPLOYED,readiness='UNKNOWN'))
+
+
+if hasattr(stream,'InitializationWindow'):
+    class InitializationCancellationTests(unittest.TestCase):
+        setUp=SessionCancellationTests.setUp
+        run_chain=SessionCancellationTests.run_chain
+
+        def test_initialization_expiry_drains_go_and_stops_without_reconnect(self):
+            failure,delays,calls,counts,events=self.run_chain(True,initializing=True)
+            self.assertIsInstance(failure,stream.InitializationTimeout)
+            self.assertEqual((len(calls),counts),(1,(0,0,0)));self.assertEqual(delays,[])
+
+        def test_initialization_expiry_preserves_incomplete_http_owner(self):
+            failure,delays,calls,counts,events=self.run_chain(False,initializing=True)
+            self.assertIsInstance(failure,public.UncertainRequestError)
+            self.assertEqual((len(calls),counts),(1,(1,1,0)));self.assertEqual(delays,[])
 
 
 if __name__=='__main__':unittest.main()

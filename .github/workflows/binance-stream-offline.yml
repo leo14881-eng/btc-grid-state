@@ -18,7 +18,7 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +77,20 @@ jobs:
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
       - name: Bounded evidence and commit-versus-ingress regressions
         run: python -B -m unittest discover -s tests -p test_hunter_binance_observability.py -v
+      - name: Full 1228-topic bounded initialization with real SQLite and queues
+        run: |
+          python -B - <<'PY'
+          import sys,unittest
+          blocked=[]
+          def guard(event,args):
+              if event.startswith('socket.') or event in ('subprocess.Popen','os.system','os.posix_spawn','os.fork','os.forkpty') or event.startswith(('os.exec','os.spawn')):
+                  blocked.append(event);raise RuntimeError('NETWORK_OR_PROCESS_FORBIDDEN')
+          sys.addaudithook(guard)
+          result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_hunter_binance_initialization.py'))
+          good=result.wasSuccessful() and result.testsRun==13 and not result.skipped and not blocked
+          print('INITIALIZATION_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
+          if not good:raise SystemExit(1)
+          PY
       - name: Real loopback cancellation and denial regressions
         run: python -I -B -X utf8 scripts/check_binance_public_transport.py
       - name: Deployment shell syntax only

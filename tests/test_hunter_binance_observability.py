@@ -58,10 +58,21 @@ class EvidenceTests(unittest.TestCase):
             evidence.snapshot(stream.ObservedQueue(4096),4)
             evidence.snapshot(stream.ObservedQueue(4096),0,final=True)
         values=[json.loads(line) for line in out.getvalue().splitlines()]
-        self.assertEqual(len(values),82)
-        self.assertTrue(all(len(x['topics'])<=50 for x in values[2:]))
+        self.assertEqual(len(values),252)
+        self.assertTrue(all(len(x['topics'])<=16 for x in values[2:]))
         self.assertEqual(sum(len(x['topics']) for x in values[2:]),4000)
-        self.assertLess(max(len(line) for line in out.getvalue().splitlines()),16000)
+        self.assertLess(max(len(line.encode()) for line in out.getvalue().splitlines()),4096)
+
+    def test_topic_pages_fit_journal_json_with_maximum_symbols_and_counters(self):
+        for character in ('X','币','𐐀'):
+            evidence=stream.SessionEvidence('a'*32,[topic(character*26+str(i).zfill(4)+'USDT','15m') for i in range(33)])
+            for value in evidence.topics.values():
+                for key in value:value[key]=2**63-1
+            out=io.StringIO()
+            with contextlib.redirect_stdout(out):evidence.snapshot(stream.ObservedQueue(4096),0,final=True)
+            self.assertTrue(all(len(line.encode())<4096 for line in out.getvalue().splitlines()))
+            pages=[json.loads(line) for line in out.getvalue().splitlines()[1:]]
+            self.assertEqual(sum(len(x['topics']) for x in pages),33)
 
     def test_ack_evidence_is_emitted_only_after_store_commit(self):
         request=self.protocol.requests[0][0];self.protocol.mark_sent(0,request['id'],NOW)

@@ -18,6 +18,8 @@ from research.hunter_binance_public import Client, DurableStopError, UncertainRe
 WS_URL = 'wss://data-stream.binance.vision/ws'
 SHARD_SIZE = 500
 MAX_SHARDS = 8
+INITIALIZATION_SECONDS = 900
+TOPIC_PAGE_SIZE = 16
 AUDIT_LOCK = Lock()
 AUDIT_FAILURES = 0
 
@@ -100,10 +102,15 @@ class SessionEvidence:
             summary['audit_output_failures']=AUDIT_FAILURES
         emit(summary)
         if final:
-            # At most 80 pages for the existing 4000-topic cap; no per-frame IO.
-            for offset in range(0,len(rows),50):
-                emit(dict(event='BINANCE_TOPIC_METRICS',epoch=self.epoch,
-                          offset=offset,total=len(rows),topics=rows[offset:offset+50]))
+            # Bound actual serialized bytes: legal symbols include Unicode,
+            # which json.dumps escapes. A row-count bound alone is insufficient.
+            offset=0
+            while offset<len(rows):
+                page=dict(event='BINANCE_TOPIC_METRICS',epoch=self.epoch,
+                          offset=offset,total=len(rows),topics=rows[offset:offset+TOPIC_PAGE_SIZE])
+                while len(json.dumps(page,sort_keys=True).encode())>4000:
+                    page['topics'].pop()
+                emit(page);offset+=len(page['topics'])
 
 
 def millis(): return time.time_ns()//1_000_000
@@ -138,6 +145,27 @@ class RecoveryBudget:
         self.healthy_since=self.last_sample=None
         self.failures+=1
         return 5*2**(self.failures-1)
+
+
+class InitializationTimeout(TimeoutError):
+    """An exhausted bootstrap is terminal, not a new reconnect allowance."""
+
+
+class InitializationWindow:
+    def __init__(self, steady):
+        self.deadline=steady+INITIALIZATION_SECONDS; self.ready=False
+
+    def check(self, steady):
+        if not self.ready and steady>=self.deadline:
+            raise InitializationTimeout('BINANCE_INITIALIZATION_DEADLINE')
+
+    def observe(self, store, names, now, clock, steady, epoch):
+        self.check(steady())
+        frozen=store.freeze(names,now,now); finished=clock()
+        self.check(steady())
+        if frozen['status']=='READY' and frozen.get('epoch')==epoch and 0<=finished-now<=FRESH_MS:
+            self.ready=True
+            emit(dict(event='BINANCE_INITIALIZATION_READY',epoch=frozen['epoch']))
 
 
 class Protocol:
@@ -273,12 +301,20 @@ def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, c
 
 
 def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sleep,
-            repairer=repair,observer=None,on_nonready=lambda *_:None):
+            repairer=repair,observer=None,on_nonready=lambda *_:None,
+            initialization=None,steady=time.monotonic):
+    initialization=initialization or InitializationWindow(steady())
+    initialization.check(steady())
     protocol=Protocol(store,names,manifest,clock())
     on_nonready('SESSION_STARTED')
     cancelled=Event(); messages=ObservedQueue(maxsize=4096); threads=[]; jobs={}; completed=set()
-    deadline=clock()+900_000; last_check=last_audit=0
+    deadline=clock()+int(max(0,initialization.deadline-steady())*1000)
+    last_check=last_audit=0
     def stopping(): return cancelled.is_set() or stop()
+    def repair_stopping():
+        # Workers recheck this through shared-budget admission immediately
+        # before GO, even while the main thread is blocked on SQLite/audit IO.
+        return stopping() or (not initialization.ready and steady()>=initialization.deadline)
     def pump(index,ws,requests):
         try:
             for request in requests:
@@ -312,11 +348,13 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
     try:
         for index,requests in enumerate(protocol.requests):
             if stopping(): return
+            initialization.check(steady())
             drain();protocol.tick(clock())
             ws=stack.enter_context(connect())
             thread=Thread(target=pump,args=(index,ws,requests),daemon=False)
             threads.append(thread); thread.start()
         while not stopping():
+            initialization.check(steady())
             drain()
             now=clock()
             protocol.tick(now)
@@ -327,17 +365,21 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 if state['halt'] or state['cooldown_ms']-now>=590_000:
                     raise RuntimeError(state['halt'] or 'BINANCE_GLOBAL_COOLDOWN')
                 for name,job in list(jobs.items()):
+                    initialization.check(steady())
                     if job.done(): job.result(); completed.add(name); del jobs[name]
+                candidate=True
                 for state in store.states():
                     name=state['topic']
                     if (not state['ack'] or state['gap'] or state['epoch']!=protocol.epoch
                             or any(not 0<=now-state[k]<=FRESH_MS for k in ('ws_rx','ws_ts'))):
+                        candidate=False
                         on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
                     if state['ack'] and state['gap'] and name not in jobs and len(jobs)<4:
+                        initialization.check(steady())
                         if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
                         options={'observe':protocol.evidence.request_observer(name)} if repairer is repair else {}
-                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping,**options)
-                    if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
+                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=repair_stopping,**options)
+                    if initialization.ready and state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
                         ingress=protocol.market_arrival(name)
                         ingress_now=clock()  # Receipt can occur after the scan's now.
                         if ingress and 0<=ingress_now-ingress<=FRESH_MS:
@@ -348,6 +390,12 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                                 ws_rx=state['ws_rx'],ws_ts=state['ws_ts'],ingress_rx=ingress,
                                 ack=state['ack'],gap=state['gap'],queued=messages.qsize(),active_repairs=len(jobs)))
                             raise TimeoutError('BINANCE_TOPIC_STALE')
+                # Topic flags alone cannot establish native closed history or a
+                # current WS revision. Only the unchanged consumer freeze can
+                # end bootstrap, once, for this epoch. Until then stale topics
+                # remain UNKNOWN without throwing away other initialization.
+                if not initialization.ready and candidate and not jobs:
+                    initialization.observe(store,names,now,clock,steady,protocol.epoch)
                 if observer and now-last_audit>=30_000:
                     protocol.evidence.snapshot(messages,len(jobs))
                     observer(now); last_audit=now
@@ -381,6 +429,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
 def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
             clock=millis,sleep=time.sleep,steady=time.monotonic):
     budget=RecoveryBudget()
+    initialization=InitializationWindow(steady())
     def nonready(reason):
         interrupted=budget.healthy_since is not None
         budget.observe(False,steady())
@@ -402,9 +451,11 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
         state=Budget(store).status()
         if state['halt'] or clock()<state['cooldown_ms']: raise RuntimeError(state['halt'] or 'BINANCE_COOLDOWN_ACTIVE')
         try:
-            session(store,names,manifest,stop,connect,clock,sleep,observer=audit,on_nonready=nonready)
+            initialization.check(steady())
+            session(store,names,manifest,stop,connect,clock,sleep,observer=audit,on_nonready=nonready,
+                    initialization=initialization,steady=steady)
             return
-        except (DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error): raise
+        except (InitializationTimeout,DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error): raise
         except Exception as error:
             response=getattr(error,'response',None)
             status=getattr(response,'status_code',0)
@@ -415,6 +466,10 @@ def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
             if not re.fullmatch(r'[A-Z][A-Z0-9_]{0,127}',reason): reason='UNCLASSIFIED'
             emit(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
                 error_type=type(error).__name__,error_code=reason,status='UNKNOWN'))
+            # Failed initial sessions share the original monotonic deadline.
+            # A previously READY session may bootstrap a new connection, while
+            # the existing five-failure/300-second recovery budget still applies.
+            if initialization.ready: initialization=InitializationWindow(steady())
         if budget.failures<5:
             for _ in range(delay*10):
                 if stop(): return
