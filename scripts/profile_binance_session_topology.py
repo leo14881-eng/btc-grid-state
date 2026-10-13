@@ -958,6 +958,14 @@ def main():
                 health_samples_within_load=result.get('health_samples_within_load'),
                 native_sqlite_phase_errors=result.get('native_sqlite_phase_errors'),
                 first_reader_error=(result.get('reader') or {}).get('problem'),
+                reader_ready_count=(result.get('reader') or {}).get('ready'),
+                reader_status=(result.get('reader') or {}).get('status'),
+                reader_result_keys=sorted((result.get('reader') or {}).keys())[:25],
+                reader_distinct_process=result.get('reader_is_separate_process'),
+                load_cutoff_consistent=result.get('load_cutoff_matches_load_counter'),
+                partition_valid=result.get('session_final_partition_valid'),
+                stage_partition_consistent=result.get('stage_partition_matches_durable_final'),
+                raw_files_count=len(result.get('raw_files') or {}),
                 market_commit_failures=len(failures),
                 first_commit_failure=failures[0].get('failed_commit') if failures else None)),flush=True)
         emit_bounded('BINANCE_SESSION_TOPOLOGY_LEG',result)
