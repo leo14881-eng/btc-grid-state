@@ -50,6 +50,8 @@ parser.add_argument('--probe-consumer-cost', action='store_true',
                     help='Measure actual Research/Monitor read segments on the initialized scratch cache')
 parser.add_argument('--probe-revision-copy', action='store_true',
                     help='Compare the original row copier with the candidate on the same restored full-reader seed')
+parser.add_argument('--probe-revision-point', action='store_true',
+                    help='Test-only indexed topic/start point projection against the unchanged snapshot and writer')
 args = parser.parse_args()
 repo = args.repo.resolve(strict=True)
 if sys.platform != 'linux':
@@ -72,6 +74,8 @@ from tests import test_hunter_binance_coordinated_runtime as runtime
 from tests.test_hunter_binance_cache import rows, message
 if args.probe_snapshot_codec:
     from tests.fixtures import binance_snapshot_codec_probe as codec_probe
+if args.probe_revision_point:
+    from tests.fixtures import binance_revision_point_probe as point_probe
 if args.probe_consumer_cost:
     from tests.fixtures import binance_consumer_cost_probe as consumer_probe
 
@@ -584,6 +588,7 @@ def main():
         probe_snapshot_codec=args.probe_snapshot_codec,
         probe_consumer_cost=args.probe_consumer_cost,
         probe_revision_copy=args.probe_revision_copy,
+        probe_revision_point=args.probe_revision_point,
         checkout_source_head=args.source_head, source_file_sha256_before=source_hashes,
         fixed_market_stamp=STAMP, fixture_source_head=runtime.HEAD,
         fixture_manifest=runtime.MANIFEST, fixture_identity_is_synthetic=True,
@@ -616,6 +621,8 @@ def main():
                 generation_sha256=initial.generation['generation_sha256'])
         if args.probe_snapshot_codec:
             report['snapshot_codec_probe'] = codec_probe.run_codec_probe(initial.generation)
+        if args.probe_revision_point:
+            report['revision_point_probe'] = point_probe.prove_equivalence(market,NAMES,STAMP+1)
         if args.probe_consumer_cost:
             with consumer_probe.original_formula_delivery():
                 report['formula_cost_baseline'] = consumer_probe.run_consumer_cost_probe(
@@ -648,11 +655,14 @@ def main():
             conditions.append((True, args.probe_switch_interval, 'json', 'candidate'))
         if args.probe_snapshot_codec:
             conditions.append((True, original_switch_interval, 'marshal_owned_memory', 'candidate'))
+        if args.probe_revision_point:
+            conditions.append((True, original_switch_interval, 'json', 'point_lookup'))
         for with_reader, switch_interval, codec, revision_copy in conditions:
             prior_error_count = len(report['fatal_errors'])
             sys.setswitchinterval(switch_interval)
             with (codec_probe.installed_codec() if codec != 'json' else nullcontext()), \
-                    (original_revision_copy() if revision_copy == 'original_rows' else nullcontext()):
+                    (original_revision_copy() if revision_copy == 'original_rows' else
+                     point_probe.installed() if revision_copy == 'point_lookup' else nullcontext()):
                 leg = run_leg(market, seed_root, with_reader)
             leg['snapshot_copy_codec'] = codec
             leg['revision_copy'] = revision_copy
@@ -694,7 +704,8 @@ def main():
         if BLOCKED:
             report['fatal_errors'].append('AUDIT_GUARD_BLOCKED_SIDE_EFFECT')
         if len(report['legs']) != (2+int(args.probe_switch_interval is not None)
-                                  +int(args.probe_snapshot_codec)+int(args.probe_revision_copy)):
+                                  +int(args.probe_snapshot_codec)+int(args.probe_revision_copy)
+                                  +int(args.probe_revision_point)):
             report['fatal_errors'].append('PAIR_INCOMPLETE')
         report['diagnostic_completed_without_fatal_error'] = not report['fatal_errors']
         target.write_text(json.dumps(report, sort_keys=True, indent=2), encoding='utf-8')
