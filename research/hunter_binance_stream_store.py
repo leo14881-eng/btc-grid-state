@@ -259,7 +259,10 @@ class Store(MarketControlMixin, CoordinationStore):
             (source-step-FRESH_MS,name,*sorted(needed))).fetchone()
         return present != len(needed) or bool(unclosed)
 
-    def _ingest_ws(self, db, epoch, message, received, state=None):
+    def _ingest_ws(self, db, epoch, message, received, state=None, *, epoch_checked=False):
+        # Only the owning batched ingest caller may assert that the same SQLite
+        # write transaction has already checked the epoch; standalone ingest_ws
+        # always retains its own validation and cannot use this fast path.
         # A supplied state belongs to this frame in this same write transaction.
         # It must never be cached across frames, batches, or transactions.
         k = message['k']; name = topic(message['s'], k['i'])
@@ -271,7 +274,7 @@ class Store(MarketControlMixin, CoordinationStore):
         row = valid_row([k['t'],k['o'],k['h'],k['l'],k['c'],k['v'],k['T'],k['q'],k['n'],k['V'],k['Q'],'0'], k['i'])
         if row[0] > source or (k['x'] and row[6] > source):
             raise ValueError('BINANCE_WS_CONFIRMATION_INVALID')
-        self.check_epoch(db, epoch)
+        if not epoch_checked:self.check_epoch(db, epoch)
         if state is None:
             state = db.execute('SELECT * FROM topics WHERE topic=?',(name,)).fetchone()
         if not state or not state['ack']: raise ValueError('BINANCE_TOPIC_NOT_ACKED')

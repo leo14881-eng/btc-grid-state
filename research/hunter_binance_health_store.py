@@ -214,7 +214,7 @@ class Store(BaseStore):
                     if state is None or message['E']<=state['ws_ts']:raise ValueError('BINANCE_OLD_UNVERIFIABLE_EVENT')
                     # Roll back a semantically rejected observation, retaining its audit separately.
                     db.execute('SAVEPOINT observation')
-                    try:changed=super()._ingest_ws(db,epoch,message,received,state=state)
+                    try:changed=super()._ingest_ws(db,epoch,message,received,state=state,epoch_checked=True)
                     except (ValueError,KeyError,TypeError,OverflowError):
                         db.execute('ROLLBACK TO observation');raise
                     finally:db.execute('RELEASE observation')
