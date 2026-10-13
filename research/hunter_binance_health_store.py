@@ -96,6 +96,7 @@ class Store(BaseStore):
                 payload_sha256 TEXT,PRIMARY KEY(epoch,topic,open_time,event_time));
               CREATE TABLE IF NOT EXISTS bn_unprocessed(id INTEGER PRIMARY KEY,epoch TEXT,topic TEXT,
                 received_at INTEGER,open_time INTEGER,event_time INTEGER,payload_sha256 TEXT,reason TEXT,category TEXT,resolved_at INTEGER);
+              CREATE INDEX IF NOT EXISTS bn_unprocessed_open_topic ON bn_unprocessed(topic) WHERE resolved_at IS NULL;
               CREATE TABLE IF NOT EXISTS bn_protocol_invalid(id INTEGER PRIMARY KEY,epoch TEXT,
                 received_at INTEGER,payload_sha256 TEXT,reason TEXT);
               CREATE TABLE IF NOT EXISTS bn_publications(intent_id TEXT PRIMARY KEY,epoch TEXT,
