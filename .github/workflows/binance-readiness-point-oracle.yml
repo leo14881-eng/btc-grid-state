@@ -1,0 +1,38 @@
+name: Binance readiness point lookup oracle
+
+on:
+  pull_request:
+    paths:
+      - research/hunter_binance_stream_store.py
+      - tests/test_hunter_binance_readiness_point_lookup.py
+      - .github/workflows/binance-readiness-point-oracle.yml
+
+permissions:
+  contents: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify candidate SHA
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Fixed-cut snapshot readiness oracle and existing consumer regressions
+        run: |
+          python -B -X utf8 -m unittest -v \
+            tests.test_hunter_binance_readiness_point_lookup \
+            tests.test_hunter_binance_revision_copy \
+            tests.test_hunter_binance_snapshot_copy
