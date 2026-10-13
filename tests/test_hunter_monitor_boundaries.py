@@ -28,7 +28,7 @@ def closed_position():
 
 
 class MonitorBoundaryTests(unittest.TestCase):
-    def main_cycle(self, states, market, real_lanes=False, history_rows=None):
+    def main_cycle(self, states, market, real_lanes=False, history_rows=None, lane_callback=None):
         docs = {monitor.V1: states[0], monitor.V2: states[1]}
         writes = {}
         def write(path, doc):
@@ -49,13 +49,38 @@ class MonitorBoundaryTests(unittest.TestCase):
             stack.enter_context(patch('research.hunter_fast_reconciliation.observe', return_value={}))
             stack.enter_context(patch.object(eng, 'binance_kline_bars', return_value=history_rows))
             stack.enter_context(patch.object(eng, 'atomic_json_write', side_effect=write))
-            lane_impl=monitor.run_lane if real_lanes else lambda path,label,*a: {'lane':label,'open':len(docs[path]['open_positions'])}
+            lane_impl=lane_callback or (monitor.run_lane if real_lanes else lambda path,label,*a: {'lane':label,'open':len(docs[path]['open_positions'])})
             lanes = stack.enter_context(patch.object(monitor, 'run_lane', side_effect=lane_impl))
             stack.enter_context(redirect_stdout(StringIO()))
             monitor.main()
         self.writes=writes
         monitor.configure_lane(False)
         return writes[monitor.OUT], lanes
+
+    def test_v2_rechecks_evidence_age_after_v1_work(self):
+        from tests.test_hunter_lifecycle_state import position, book
+        from research import hunter_lifecycle_state as lifecycle
+        clock = [NOW]
+        class Clock(dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return clock[0]
+        # Source evidence may already be near its existing 600-second boundary.
+        # No network, actual sleeping, or policy threshold changes are involved.
+        raw_book = book(103., NOW-dt.timedelta(seconds=590))
+        observed = {}
+        def lane(path, label, market, review, liq, supply, now, *args):
+            observed[label] = (now, lifecycle.liquidation(position(), raw_book, now))
+            if label == 'SHADOW_V1':
+                clock[0] += dt.timedelta(seconds=20)
+            return {'lane': label, 'open': 1}
+        state = {'open_positions': [position()], 'closed_positions': []}
+        with patch.object(monitor.dt, 'datetime', Clock):
+            result, _ = self.main_cycle([state, state], {'ENA': {'reference_price': 103.}}, lane_callback=lane)
+        self.assertEqual(observed['SHADOW_V1'][1]['status'], 'SHADOW_RECEIPT_ESTIMATE')
+        self.assertEqual(observed['SHADOW_V2'][0], NOW+dt.timedelta(seconds=20))
+        self.assertEqual(observed['SHADOW_V2'][1]['status'], 'UNKNOWN')
+        self.assertEqual(result['as_of_utc'], NOW.isoformat())  # acquisition is not restamped
 
     def test_closed_quote_gap_does_not_block_open_lane(self):
         state = {'open_positions': [{'asset': 'OPEN', 'tranches': [{'price': 100., 'notional_usdt': 1000.}]}], 'closed_positions': [closed_position()]}

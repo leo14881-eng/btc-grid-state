@@ -6,6 +6,7 @@ import os
 import pathlib
 from scripts.hunter_monitor_persist import PATHS, git, require, snapshot, validate
 from scripts.hunter_monitor_runtime import PROOF_PATH, HEALTH_PATH, should_run
+from scripts.hunter_generation_admission import CLAIM, ClaimStore, verify_owner
 
 SCAN = "research/results/hunter-cex-universe-run.json"
 RULES = "research/results/hunter-shadow-rules.json"
@@ -23,7 +24,7 @@ def protected(path):
 
 def research_output(path):
     return (path.startswith("research/results/hunter-") and
-            path.endswith((".json", ".jsonl")) and path not in (RULES, PROOF_PATH))
+            path.endswith((".json", ".jsonl")) and path not in (RULES, PROOF_PATH, CLAIM))
 
 
 def verified_monitor_proof(latest):
@@ -100,6 +101,9 @@ def main():
     parser.add_argument("--isolated-checkout", action="store_true")
     parser.add_argument("--check-base")
     a = parser.parse_args()
+    # Production CLI is fenced; direct helpers retain their existing offline
+    # contracts for snapshot/CAS regression fixtures without an ownership store.
+    verify_owner(ClaimStore(), a.generation, os.environ.get("HUNTER_RESEARCH_OWNER"))
     if a.check_base:
         check_current(a.check_base, a.generation)
         return
