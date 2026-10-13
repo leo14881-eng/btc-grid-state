@@ -302,6 +302,14 @@ on the writer, not just copy/encode time. A same-epoch cache key is insufficient
 cut, observations, proof and generation hash can change within that epoch.
 
 There is no tested capacity claim for 1000 users or 1000 concurrent requests.
+This repository has no multi-user display/service entry point; that capacity
+question concerns a future serving layer, not an established production fault.
+Public collection is shared once. Public indicators and public display results
+can also be reused by exact data version; displaying a result does not require
+starting another Research job or constructing another whole-roster snapshot.
+User-specific holdings analysis is a separate workload with separate
+authorization and ledger boundaries. The following request rates are inputs
+for that future service, not a claim that every request repeats Research.
 Registration count, active users, request frequency and simultaneous requests
 are different inputs. For example, 1000 active users requesting once per five
 minutes average about 3.33 requests/s but can still create a simultaneous
