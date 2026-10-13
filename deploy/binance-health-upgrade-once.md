@@ -88,7 +88,29 @@ the delivered archive SHA256 against the final review, then unpack its fixed fil
 into the new directory above with the existing root identity. Keep that directory
 until all supervisor exit evidence has been read: the independent hook needs it.
 
-The single execution command is:
+The delivery receipt provides `PACKAGE_HEAD`, `ARCHIVE_SHA256` and the archive
+filename. In the already authorized root terminal, substitute those exact values
+and the actual path where the operator received the archive:
+
+```sh
+set -e
+PACKAGE_HEAD='EXACT_40_CHARACTER_PACKAGE_COMMIT'
+ARCHIVE_SHA256='EXACT_64_CHARACTER_ARCHIVE_HASH'
+ARCHIVE='/existing/approved/transfer/path/hunter-binance-health-upgrade.tar.gz'
+printf '%s  %s\n' "$ARCHIVE_SHA256" "$ARCHIVE" | sha256sum --check --strict
+umask 077
+mkdir -- "/tmp/hunter-binance-health-upgrade-$PACKAGE_HEAD"
+tar --extract --gzip --file "$ARCHIVE" \
+  --directory "/tmp/hunter-binance-health-upgrade-$PACKAGE_HEAD" \
+  --keep-old-files --no-same-owner --no-same-permissions
+```
+
+Stop on the first failure. `mkdir` must create a new directory; do not reuse an
+existing path or overwrite files. The reviewed archive has only the nine flat
+bundle files and no links. Its outer hash is the trust anchor; `SHA256SUMS` then
+verifies each inner payload.
+
+The single service execution command is:
 
 ```sh
 bash /tmp/hunter-binance-health-upgrade-PACKAGE_HEAD/launch.sh --approved-collector-upgrade-once
@@ -114,6 +136,14 @@ return only confirms dispatch. Require the final independent receipt **and**
 PID1's terminal supervisor result for that invocation. An `acceptance.json` left
 before a later hook failure is not final success. A failed final receipt or stop
 uncertainty must remain explicit; no automatic retry/rollback/start is provided.
+
+The active service journal is bound to its invocation and complete startup
+scope. Every ended epoch must provide all per-topic final counters and the exact
+receipt-partition digest. A still-running last epoch is `ACTIVE_NO_FINAL`, with
+receipt conservation unverified. Missing, truncated, crossed or unknown records
+cannot become audit-complete. Failure before a collector invocation exists stays
+`NO_COLLECTOR_INVOCATION`; successful stop alone does not prove final receipt
+conservation. The acceptance and final receipts always keep publication false.
 
 An interrupted swap may be restored by the reviewed swap routine before start.
 Other preparation failures can leave code, manifest or the candidate drop-in
@@ -169,3 +199,19 @@ small Binance Monitor patch and matching reader cutover, then Bybit's bounded
 full-scope runtime verification and necessary fixes. Health, complete consumer
 READY and natural publication are separate acceptance facts. No 2–4 hour promise
 for total migration follows from a collector acceptance.
+
+## Offline evidence boundary
+
+The PR workflow requires all 29 readback boundary tests, 22 executor tests and
+32 journal-contract tests on Ubuntu Python 3.10 and 3.12 with no skipped tests.
+The readback suite exercises real Linux descriptor, parent/symlink, hardlink,
+FIFO, mutation, size and descriptor-close boundaries. Journal compatibility
+uses exact PR126 startup-plan, health-sample and final-event methods.
+
+The Python 3.12 job additionally uses actual PID1, generated private transient
+units, real process/cgroup checks and durable exit receipts; five immutable-swap
+failure boundaries use the actual pinned upgrader. Market health is synthetic
+in that fixture, and its acceptance window is compressed. The real queued-start
+timeout still runs for 60 seconds. These checks establish executor boundaries,
+not production market health, cache READY, installation or publication success.
+Use the CI URL for the final reviewed package commit, not a prior candidate run.

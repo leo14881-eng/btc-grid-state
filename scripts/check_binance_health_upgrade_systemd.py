@@ -24,7 +24,7 @@ import uuid
 UNIT_PREFIX = 'codex-binance-health-fixture-'
 CASES = ('success', 'exit-failure', 'term', 'kill', 'timeout', 'component-loss',
          'final-receipt-failure', 'changed-invocation', 'preflight', 'no-start-guard',
-         'queued-start-kill', 'start-timeout')
+         'queued-start-kill', 'start-timeout', 'active-start-before-binding-kill')
 UNCHANGED_RUNNING = ('changed-invocation', 'preflight', 'no-start-guard')
 QUEUED_START = ('queued-start-kill', 'start-timeout')
 
@@ -232,7 +232,25 @@ def fixture(mode):
     # Support the candidate's dedicated health-journal adapter as well. A fake
     # sleep collector has no health payload; raw PID 1 records remain real and
     # are independently checked below, without any fabricated terminal event.
-    entry.journal = lambda *_args, **_kwargs: journal_evidence()
+    def health_journal(_work, _prepared, collector, **kwargs):
+        if case == 'active-start-before-binding-kill':
+            # Capture the exact invocation supplied by the real cleanup code.
+            # There is deliberately no collector-binding.json to read it from.
+            write(root / 'journal-binding.json', dict(collector=collector,
+                require_final=kwargs.get('require_final', False), mode=mode))
+            deadline = time.monotonic() + 5
+            while True:
+                value = journal_evidence()
+                terminal = [row for row in value['records'] if row.get('_PID') == '1'
+                    and row.get('UNIT') == entry.SERVICE and row.get('INVOCATION_ID') == collector
+                    and (row.get('MESSAGE', '').endswith(': Deactivated successfully.') or 'UNIT_RESULT' in row)]
+                if terminal or time.monotonic() >= deadline:
+                    require(terminal, 'MISSING_REAL_COLLECTOR_FINAL_INVOCATION_RESULT')
+                    return value
+                time.sleep(.05)
+        return journal_evidence()
+
+    entry.journal = health_journal
     entry.bundle = lambda: (None, evidence, None, None)
     if mode == '--cleanup':
         if case == 'component-loss':
@@ -290,6 +308,27 @@ def fixture(mode):
     entry.DROP_DIR.mkdir(mode=0o755)
     entry.save(entry.DROP, entry.dropin(invocation), 0o644)
     entry.save(work / 'prepared.json', prepared)
+    if case == 'active-start-before-binding-kill':
+        original_save = entry.save
+
+        def hold_before_binding(path, value, *args, **kwargs):
+            if path == work / 'collector-binding.json':
+                intent = entry.private_json(work / 'start-intent.json')
+                require(intent['supervisor_invocation'] == invocation, 'DURABLE_INTENT_REQUIRED')
+                running = state(entry.SERVICE)
+                require(running['ActiveState'] == 'active' and running['SubState'] == 'running'
+                        and running['MainPID'] != '0' and running['Job'] in ('', '0')
+                        and running['InvocationID'] == value['invocation_id'] and not path.exists(),
+                        'ACTIVE_PRE_BINDING_BOUNDARY_REQUIRED')
+                write(root / 'active-before-binding.json', running)
+                ready()
+                # The harness delivers a real SIGKILL to this process while the
+                # collector remains active and the binding file does not exist.
+                time.sleep(60)
+                raise RuntimeError('FIXTURE_PRE_BINDING_SIGKILL_WAS_NOT_DELIVERED')
+            return original_save(path, value, *args, **kwargs)
+
+        entry.save = hold_before_binding
 
     class FixtureHealthWindow:
         # The production Window has separate deterministic tests. This fixture
@@ -458,7 +497,7 @@ def test_case(source, case):
                 time.sleep(.05)
             require((root / 'ready.json').exists(), 'FIXTURE_DID_NOT_REACH_BOUNDARY: ' + case)
             invocation = json.loads((root / 'ready.json').read_bytes())['invocation']
-            if case in ('term', 'kill', 'queued-start-kill'):
+            if case in ('term', 'kill', 'queued-start-kill', 'active-start-before-binding-kill'):
                 run(['systemctl', 'kill', '--kill-whom=main',
                      '--signal=' + ('TERM' if case == 'term' else 'KILL'), supervisor])
             while state(supervisor).get('ActiveState') not in ('inactive', 'failed') and time.monotonic() < deadline:
@@ -509,6 +548,22 @@ def test_case(source, case):
                     require(final.get('journal_error_type') == 'OSError', 'COMPONENT_LOSS_NOT_EXERCISED')
                 if case == 'final-receipt-failure':
                     require((work / 'supervisor-final.json').exists(), 'FINAL_RECEIPT_FAILURE_NOT_AFTER_WRITE')
+                if case == 'active-start-before-binding-kill':
+                    require((work / 'start-intent.json').exists() and not (work / 'collector-binding.json').exists(),
+                            'PRE_BINDING_KILL_BOUNDARY_NOT_PRESERVED')
+                    running = json.loads((root / 'active-before-binding.json').read_bytes())
+                    called = json.loads((root / 'journal-binding.json').read_bytes())
+                    require(running['InvocationID'] == started['InvocationID']
+                            and final.get('owned_collector_invocation') == running['InvocationID']
+                            and called == dict(collector=running['InvocationID'], require_final=True, mode='--cleanup')
+                            and 'journal_error_type' not in final and final['journal']['complete'] is True,
+                            'PRE_STOP_INVOCATION_NOT_USED_FOR_FINAL_JOURNAL')
+                    terminal = [row for row in final['journal']['records'] if row.get('_PID') == '1'
+                        and row.get('UNIT') == collector and row.get('INVOCATION_ID') == running['InvocationID']
+                        and (row.get('MESSAGE', '').endswith(': Deactivated successfully.') or 'UNIT_RESULT' in row)]
+                    require(terminal, 'COLLECTOR_PID1_TERMINAL_RESULT_NOT_RETAINED')
+                    print('REAL_SYSTEMD_ACTIVE_PRE_BINDING_JOURNAL_FALLBACK',
+                          running['InvocationID'], 'PASS', flush=True)
                 if case in QUEUED_START:
                     require(not (work / 'collector-binding.json').exists(), 'QUEUED_START_UNEXPECTEDLY_EXECUTED')
                     # Let the dependency finish normally. A surviving start job

@@ -224,15 +224,25 @@ class JournalTests(unittest.TestCase):
         tree=ast.parse(source)
         protocol=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Protocol')
         method=next(n for n in protocol.body if isinstance(n,ast.FunctionDef) and n.name=='final')
+        sample=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='sample')
         namespace={'stream':types.SimpleNamespace(emit=lambda row:events.append(row)),
-                   'content_hash':journal.content_hash,'CONTRACT':'binance_health_v1','DurableStopError':RuntimeError}
-        exec(compile(ast.Module(body=[method],type_ignores=[]),'<reviewed-Protocol.final>','exec'),namespace)
+                   'content_hash':journal.content_hash,'CONTRACT':'binance_health_v1','DurableStopError':RuntimeError,
+                   'FRESH_MS':90000,'Budget':lambda _:types.SimpleNamespace(status=lambda:{'halt':None,'cooldown_ms':0})}
+        exec(compile(ast.Module(body=[method,sample],type_ignores=[]),'<reviewed-health-events>','exec'),namespace)
         counts={name:dict(epoch=EPOCH,topic=name,committed=1,duplicate=2,invalid=3,
                          unprocessed_recorded=4,revisions_changed=1) for name in NAMES}
-        store=types.SimpleNamespace(counts=lambda epoch:counts,read_health=lambda:{},store_health=lambda value:None)
+        store=types.SimpleNamespace(counts=lambda epoch:counts,read_health=lambda:{},store_health=lambda value:None,
+            states=lambda:[dict(ack=1,epoch=EPOCH) for _ in NAMES],
+            metadata=lambda:dict(scope_hash=EXPECTED['manifest_sha256'],health_source_head=EXPECTED['source_head']),
+            connection_proofs=lambda *_:None,freeze=lambda *_:dict(status='UNKNOWN',reason='BINANCE_TOPIC_STALE'))
         evidence=types.SimpleNamespace(lock=threading.Lock(),topics={name:dict(received=10,last_rx=123456) for name in NAMES})
         subject=types.SimpleNamespace(store=store,evidence=evidence,epoch=EPOCH,
-            raw_frames=23,control_receipts=2,invalid_envelopes=1,controls=1)
+            raw_frames=23,control_receipts=2,invalid_envelopes=1,controls=1,started=123000,
+            lock=threading.Lock(),shards={0:dict(observed_at=123450,evidence='MATCHING_PONG')},
+            topic_shards={name:0 for name in NAMES},processed=20)
+        jobs=types.SimpleNamespace(active={},seeded=set(NAMES),completed=2,failures={},diagnostics=lambda _:
+            dict(work_progress={kind:dict(completed=1,last_success=123400) for kind in ('directory','repair','quiet')},
+                 exhausted_work=[],exhausted_count=0,exhausted_sha256=journal.content_hash([]),oldest_active_ms=0))
         source=subprocess.check_output(['git','-C',str(ROOT),'show',
             '33abf19c7a91855ba2efc2e65e1d383055494d75:research/hunter_binance_stream.py'],timeout=20)
         tree=ast.parse(source)
@@ -241,7 +251,9 @@ class JournalTests(unittest.TestCase):
             isinstance(t,ast.Name) and t.id in ('SHARD_SIZE','MAX_SHARDS') for t in n.targets)]
         namespace['roster_hash']=lambda names:journal.content_hash(sorted(names))
         exec(compile(ast.Module(body=constants+[plan],type_ignores=[]),'<reviewed-plan>','exec'),namespace)
-        events=[namespace['plan'](NAMES),health()];namespace['final'](subject,'STOP_REQUESTED')
+        events=[namespace['plan'](NAMES)]
+        namespace['sample'](store,subject,NAMES,jobs,123456,0)
+        namespace['final'](subject,'STOP_REQUESTED')
         result=self.parse(events,require_final=True)
         self.assertTrue(result['complete'],result)
         self.assertEqual(result['startup_plan'],events[0])
