@@ -91,6 +91,10 @@ jobs:
           print('INITIALIZATION_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
           if not good:raise SystemExit(1)
           PY
+      - name: Exact PR126 health reader and Monitor compatibility only
+        run: |
+          git fetch --depth=1 --no-tags origin 33abf19c7a91855ba2efc2e65e1d383055494d75
+          python -I -B -X utf8 scripts/check_binance_monitor_health_compat.py
       - name: Real loopback cancellation and denial regressions
         run: python -I -B -X utf8 scripts/check_binance_public_transport.py
       - name: Install pinned WebSocket runtime for loopback-only health checks
