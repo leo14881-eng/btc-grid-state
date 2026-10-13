@@ -148,7 +148,16 @@ Success requires all of the following together:
    main exit code `exited`, status `0`, overall unit result `success`. Inspect both
    the unit result and durable systemd journal; a successful transient unit can be
    garbage-collected, so missing live properties alone are not proof of success.
-   If the complete final result cannot be established, acceptance remains unproven.
+   Require the durable PID 1 success record: `_PID=1`,
+   `UNIT=hunter-binance-bootstrap-f4e8ad4.service`, `INVOCATION_ID` equal to the
+   new guard, and `MESSAGE` ending `: Deactivated successfully.`. It must follow
+   the same invocation's `FINAL_SUPERVISOR_RECEIPT` from the exit hook. Retain the
+   full JSON record, including `MESSAGE_ID`, cursor and monotonic timestamp.
+   systemd's [unit success implementation](https://github.com/systemd/systemd/blob/v255/src/core/unit.c)
+   identifies this terminal event; the Linux fixture prints the actual PID 1
+   fields for every tested outcome. `Started`, main exit 0, a hook receipt alone,
+   or merely finding no failure does not prove final success. Missing positive
+   terminal evidence means UNKNOWN; do not start again to recreate evidence.
 2. `supervisor-final.json` says `ACCEPTED_AFTER_NORMAL_SUPERVISOR_EXIT`, binds the same
    invocation, and its report path/SHA256 match the complete acceptance report.
 3. No `failure-completion.json`, `supervisor-final-failure-*.json`, independent stop

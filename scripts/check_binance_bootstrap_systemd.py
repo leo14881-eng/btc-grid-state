@@ -153,6 +153,24 @@ def main():
                 assert running==(case=='success'),(case,state(collector))
                 reports=list((root/'prefix').glob('upgrade-*/supervisor-exit-report-*.json'))
                 logs=run(['journalctl','--no-pager','--all','-u',supervisor,'-o','cat']).stdout.decode()
+                records=[json.loads(line) for line in run(['journalctl','--no-pager','--all','-u',supervisor,'-o','json']).stdout.decode().splitlines()]
+                guard=json.loads(next((root/'prefix').glob('bootstrap-upgrade-once-*.json')).read_bytes())
+                terminal=[item for item in records if item.get('_PID')=='1' and item.get('UNIT')==supervisor
+                          and item.get('INVOCATION_ID')==guard['invocation_id']
+                          and (item.get('MESSAGE','').endswith(': Deactivated successfully.') or 'UNIT_RESULT' in item)]
+                assert terminal,'MISSING_PID1_FINAL_INVOCATION_RESULT'
+                successful=[item for item in terminal if item.get('MESSAGE','').endswith(': Deactivated successfully.')]
+                assert bool(successful)==(case=='success'),(case,terminal)
+                if case=='success':
+                    final=json.loads(next((root/'prefix').glob('upgrade-*/supervisor-final.json')).read_bytes())
+                    assert final['accepted'] is True and final['invocation_id']==guard['invocation_id']
+                    hooks=[item for item in records if item.get('_SYSTEMD_INVOCATION_ID')==guard['invocation_id']
+                           and 'FINAL_SUPERVISOR_RECEIPT' in item.get('MESSAGE','')]
+                    assert len(hooks)==1 and len(successful)==1
+                    assert hooks[0]['_BOOT_ID']==successful[0]['_BOOT_ID']
+                    assert int(hooks[0]['__MONOTONIC_TIMESTAMP'])<int(successful[0]['__MONOTONIC_TIMESTAMP'])
+                fields=('_PID','UNIT','INVOCATION_ID','MESSAGE_ID','MESSAGE','UNIT_RESULT','__MONOTONIC_TIMESTAMP')
+                print('REAL_SYSTEMD_FINAL_EVIDENCE',case,json.dumps([{key:item[key] for key in fields if key in item} for item in terminal],sort_keys=True),flush=True)
                 if case in ('component-loss','corrupt-intent'):assert 'INDEPENDENT_EXIT_STOP_FALLBACK' in logs
                 elif case!='success':assert len(reports)==1 and json.loads(reports[0].read_bytes())['stopped_verified'] is True
                 print('REAL_SYSTEMD_EXIT_CHECK',case,'PASS',flush=True)
