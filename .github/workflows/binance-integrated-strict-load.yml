@@ -1,0 +1,51 @@
+name: Binance integrated strict load gate
+
+on:
+  pull_request:
+    paths:
+      - research/hunter_binance*.py
+      - scripts/*binance*
+      - tests/test_hunter_binance*.py
+      - .github/workflows/binance-integrated-strict-load.yml
+
+permissions:
+  contents: read
+
+jobs:
+  strict-32s:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Assert exact candidate
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Unchanged 1228 topics, 0.8-second ingress and continuous full reader
+        run: python -B -X utf8 -m unittest -v tests.test_hunter_binance_coordinated_soak.WholeRosterSoak.test_complete_1228_topics_during_continuous_wall_load
+  hour-load:
+    needs: strict-32s
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned local loopback WS runtime
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: Unchanged 3600 second full-roster gate plus process reconnect
+        run: python -I -B -X utf8 scripts/check_binance_write_load.py --seconds 3600
