@@ -116,6 +116,43 @@ jobs:
         run: python -I -B -X utf8 scripts/check_binance_write_load.py --prior-cache
       - name: Deployment shell syntax only
         run: bash -n scripts/hunter_binance_preflight.sh scripts/hunter_binance_stage.sh
+  contention-profile:
+    # Diagnostic comparison, independent of the failing acceptance gate. It
+    # cannot authorize the hour load, deployment, or any production action.
+    if: github.event.pull_request.number == 131
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Paired scratch throughput and CPU diagnosis without HTTP
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$CHECKOUT_SHA"
+          python -I -B -X utf8 scripts/profile_binance_contention.py \
+            --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
+            | tee "$RUNNER_TEMP/binance-contention.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binance-contention-${{ matrix.python }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/binance-paired8-*/paired8-report.json
+            ${{ runner.temp }}/binance-contention.log
+          if-no-files-found: error
   hour-load:
     if: github.event.pull_request.number == 131
     needs: offline

@@ -229,6 +229,23 @@ of the complete prior deployment. A queue-capacity failure is the expected
 comparison outcome; unrelated exceptions, missing tests or blocked effects
 cannot count as that reproduction. No benchmark result permits deployment.
 
+The PR131 `contention-profile` CI job is a separate diagnostic, not an
+acceptance gate. It seeds one scratch database pair, restores the same paths
+and file identities before each eight-second leg, and compares writes with
+and without a continuous full-scope reader. Both legs retain 1,228 topics per
+0.8-second target round, the 4,096-entry queue, 100-frame batch limit and
+0.2-second PASSIVE checkpoints. HTTP and the recovery scheduler are absent.
+Queue saturation remains an explicit outcome with its actual elapsed time;
+it does not count as eight completed seconds or permission to run the hour gate.
+The `binance-contention-<python>-<head>` artifact contains `paired8-report.json`
+with actual offered/processed counts, queue and WAL samples, batch boundaries,
+thread/process CPU, nested read-phase timings and per-topic receipt partitions.
+Samples are not cross-thread atomic, phase timings are inclusive, and the
+fixed no-reader-first order does not establish GIL causation. Source hashes
+and the real checkout SHA are separate from synthetic fixture identities.
+Use this evidence to select the next bounded experiment; do not relax the
+full-load gate or infer production behavior from the diagnostic.
+
 ## Offline provisioning and reviewed installation
 
 These are reviewable commands for a **future authorized deployment**, not
