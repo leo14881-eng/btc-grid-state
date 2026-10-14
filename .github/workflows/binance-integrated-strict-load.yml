@@ -33,6 +33,34 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Unchanged 1228 topics, 0.8-second ingress and continuous full reader
         run: python -B -X utf8 -m unittest -v tests.test_hunter_binance_coordinated_soak.WholeRosterSoak.test_complete_1228_topics_during_continuous_wall_load
+  strict-process-32s-diagnostic:
+    # Independent diagnostic; never replaces or bypasses strict-32s acceptance.
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Assert exact SHA and unchanged load contract
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          grep -q "ObservedQueue(4096)" tests/test_hunter_binance_coordinated_soak.py
+          grep -q "max(0, .8-" tests/test_hunter_binance_coordinated_soak.py
+      - name: Isolated child reader under same strict ingress
+        env:
+          BINANCE_SOAK_READER_MODE: ISOLATED_PROCESS
+        run: python -B -X utf8 -m unittest -v tests.test_hunter_binance_coordinated_soak.WholeRosterSoak.test_complete_1228_topics_during_continuous_wall_load
+
   hour-load:
     needs: strict-32s
     runs-on: ubuntu-latest
