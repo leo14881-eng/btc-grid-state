@@ -199,6 +199,8 @@ class Store(MarketControlMixin, CoordinationStore):
             control.begin_epoch(epoch,self._control_source_head,digest,
                                 manifest_sha256=manifest,names=names)
         with self.db() as db:
+            from research.hunter_binance_topic_state import begin as state_begin
+            state_begin(db,names,epoch)
             db.execute('DELETE FROM topics')
             db.execute('DELETE FROM readiness')
             db.executemany('INSERT INTO topics(topic,epoch) VALUES(?,?)', [(n,epoch) for n in names])
@@ -235,6 +237,8 @@ class Store(MarketControlMixin, CoordinationStore):
         values = (name,int(row[0]),json.dumps(row),observed,source_time,int(confirmed),origin,epoch)
         db.execute('INSERT OR REPLACE INTO bars VALUES(?,?,?,?,?,?,?,?)',values)
         db.execute('INSERT INTO revisions VALUES(?,?,?,?,?,?,?,?)',values)
+        from research.hunter_binance_topic_state import bump as topic_bump
+        topic_bump(db,name,epoch,observed)
         db.execute('''DELETE FROM revisions WHERE topic=? AND start=? AND source_time NOT IN
             (SELECT source_time FROM revisions WHERE topic=? AND start=? AND
              (observed>=? OR source_time=(SELECT MAX(source_time) FROM revisions

@@ -1,0 +1,32 @@
+name: Binance topic-state candidate (draft)
+on:
+  push:
+    branches:
+      - feat/binance-topic-state-incremental-20261014
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  topic-state-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Report immutable identity
+        run: |
+          git rev-parse HEAD
+          python -c 'import sqlite3,sys;print("PYTHON",sys.version,"SQLITE",sqlite3.sqlite_version)'
+          sha256sum research/hunter_binance_topic_state.py
+      - name: Fail-closed topic state and cache regression
+        run: python -B -m unittest tests.test_hunter_binance_topic_state tests.test_hunter_binance_cache -q
+      - name: Existing market/control regression
+        run: python -B -m unittest tests.test_hunter_binance_market_admission tests.test_hunter_binance_health -q
