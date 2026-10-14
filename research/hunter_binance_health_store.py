@@ -116,6 +116,16 @@ class Store(BaseStore):
             for key,value in [('health_epoch',epoch),('health_epoch_started',str(started)),('health_phase','ACTIVE')]:
                 db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)',(key,value))
             db.executemany('INSERT INTO bn_counts(epoch,topic) VALUES(?,?)',[(epoch,n) for n in names])
+            # Unresolved receipts survive reconnect by design. Carry their
+            # invalidity into the NEW epoch's topic_state, so an accepted WS
+            # frame cannot accidentally relabel pending recovery as valid.
+            from research.hunter_binance_topic_state import bump as topic_bump
+            unresolved=[r[0] for r in db.execute("""
+                SELECT DISTINCT u.topic FROM bn_unprocessed u
+                JOIN topics t ON t.topic=u.topic
+                WHERE u.resolved_at IS NULL""")]
+            for name in unresolved:
+                topic_bump(db,name,epoch,started,status='invalid',valid_until_ms=0)
 
     def metadata(self):
         with self.db(readonly=True) as db:return dict(db.execute('SELECT key,value FROM meta'))

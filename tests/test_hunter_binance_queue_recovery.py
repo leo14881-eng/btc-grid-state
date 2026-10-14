@@ -164,6 +164,15 @@ class PumpFixture:
         with self.store.db(readonly=True) as db:
             return [dict(row) for row in db.execute('SELECT * FROM bn_unprocessed ORDER BY id')]
 
+    def projected(self, name):
+        symbol, interval = split_topic(name)
+        with self.store.db(readonly=True) as db:
+            row=db.execute("""SELECT revision,epoch,generation,status,valid_until_ms
+                FROM topic_state WHERE exchange='BINANCE' AND market='spot'
+                  AND symbol=? AND interval=?""",(symbol,interval)).fetchone()
+            self.case.assertIsNotNone(row)
+            return dict(row)
+
     def check_before_drain(self):
         case = self.case
         case.assertEqual(len(self.accepted), 1)
@@ -177,6 +186,12 @@ class PumpFixture:
         case.assertEqual((record['received_at'], record['open_time'], record['event_time'], record['payload_sha256']),
                          (received, rejected['k']['t'], rejected['E'], payload_hash(rejected)))
         case.assertIsNone(record['resolved_at'])
+        blocked=self.projected(self.rejected_name)
+        case.assertEqual(blocked['status'],'invalid')
+        case.assertEqual(blocked['valid_until_ms'],0)
+        case.assertEqual((blocked['epoch'],blocked['generation']),
+                         (self.protocol.epoch,self.protocol.epoch))
+        case.assertNotEqual(self.projected(self.accepted_name)['status'],'invalid')
         counted = self.store.counts(self.protocol.epoch)
         for name in self.names:
             expected = int(name == self.rejected_name)
@@ -207,8 +222,14 @@ class PumpFixture:
             self.repair_rejected_scope()
 
     def repair_rejected_scope(self):
+        before=self.projected(self.rejected_name)
         self.apply('repair', [self.rejected_name])
         self.frame(self.rejected_name)
+        after=self.projected(self.rejected_name)
+        self.case.assertIn(after['status'],('valid','quiet_verified'))
+        self.case.assertGreater(after['revision'],before['revision'])
+        self.case.assertEqual(after['epoch'],before['epoch'])
+        self.case.assertEqual(self.projected(self.other_name)['status'],'invalid')
         self.case.assertEqual(self.read([self.rejected_name]).generation['status'], 'READY')
         with self.case.assertRaises((ValueError, ControlError)):
             self.read([self.other_name])
