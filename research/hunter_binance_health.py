@@ -18,6 +18,9 @@ TERMINAL=(DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Er
 PING_SECONDS=30
 PONG_SECONDS=20
 SHUTDOWN_DRAIN_SECONDS=5
+# Bound a market writer transaction independently of 100-frame ingress batches.
+# This does not change the WS ingress rate, admission guards or queue capacity.
+MARKET_TX_FRAME_LIMIT=24
 
 
 class Protocol(stream.Protocol):
@@ -56,7 +59,7 @@ class Protocol(stream.Protocol):
             if 'id' in message:
                 self.receive(shard,message,received);self.controls+=1;self.inflight.pop(0);continue
             group=[]
-            for item in self.inflight:
+            for item in self.inflight[:MARKET_TX_FRAME_LIMIT]:
                 if isinstance(item[1],BaseException) or 'id' in item[1]:break
                 name=stream.split_message_topic(item[1])
                 if self.topic_shards.get(name)!=item[0]:raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
