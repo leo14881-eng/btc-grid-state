@@ -78,9 +78,17 @@ class IncrementalReader:
             raise ValueError("ABSOLUTE_STATE_PATH_REQUIRED")
         self.previous={}
 
-    def poll(self, now_ms, *, before_recheck=None):
+    def poll(self, now_ms, *, expected_names=None, before_recheck=None):
         if type(now_ms) is not int:
             raise ValueError("BINANCE_TOPIC_STATE_TIME_INVALID")
+        # A narrow consumer scope cannot silently replace the entire roster.
+        # This is a hint gate; formal consumers still validate the authoritative
+        # roster hash and each delivery proof independently.
+        expected=None
+        if expected_names is not None:
+            from research.hunter_binance_stream_store import roster_hash
+            roster_hash(expected_names)
+            expected={key(name) for name in expected_names}
         uri=self.path.as_uri()+"?mode=ro"
         with sqlite3.connect(uri,uri=True,timeout=.25) as db:
             db.row_factory=sqlite3.Row
@@ -88,6 +96,9 @@ class IncrementalReader:
             db.execute("PRAGMA busy_timeout=250")
             # No long-lived read transaction; row copy closes before parsing.
             begin_rows=_read_rows(db)
+        if expected is not None and set(begin_rows)!=expected:
+            self.previous.clear()
+            raise ValueError("BINANCE_TOPIC_STATE_ROSTER_MISMATCH")
         changed={k:v for k,v in begin_rows.items() if
                  k not in self.previous or self.previous[k] != (
                      v["revision"],v["epoch"],v["generation"])}

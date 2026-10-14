@@ -112,5 +112,15 @@ class TopicStateTests(unittest.TestCase):
         self.assertEqual(list(result["changed"]),[key(changed)])
 
 
+    def test_expected_roster_must_not_shrink(self):
+        for name in self.names: bump(self.db,name,"e"*32,100)
+        self.db.commit()
+        reader=IncrementalReader(self.path)
+        self.assertEqual(reader.poll(100,expected_names=self.names)["topic_count"],2)
+        with self.assertRaisesRegex(ValueError,"ROSTER_MISMATCH"):
+            reader.poll(100,expected_names=self.names[:1])
+        self.assertEqual(reader.poll(100,expected_names=self.names)["changed_topics"],2)
+
+
 if __name__=="__main__":
     unittest.main()
