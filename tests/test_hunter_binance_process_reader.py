@@ -39,5 +39,24 @@ class ProcessReaderContract(unittest.TestCase):
         finally:
             case.doCleanups()
 
+
+    def test_research_monitor_and_single_window_route_to_child(self):
+        from unittest.mock import patch
+        from research import hunter_binance_stream_consumer as consumer
+        import datetime as dt
+        now=dt.datetime(2026,10,14,tzinfo=dt.timezone.utc)
+        sentinel=object()
+        with patch.object(consumer,'selected',return_value='SPOT_CACHE'), \
+             patch.object(consumer,'isolated_read',return_value=sentinel) as isolated, \
+             patch.object(consumer,'roster',return_value=['btcusdt@kline_15m']), \
+             patch.object(consumer,'roster_hash',return_value='f'*64):
+            self.assertIs(consumer.management_inputs(['ETHUSDT'],now),sentinel)
+            self.assertEqual(len(isolated.call_args.args[0]),4)
+            self.assertIs(consumer.window('BTCUSDT','1h',now),sentinel)
+            self.assertEqual(isolated.call_args.args[0],['btcusdt@kline_1h'])
+            self.assertIs(consumer.signal_inputs({'as_of_utc':'irrelevant'},
+                ['ETHUSDT']),sentinel)
+            self.assertEqual(isolated.call_args.kwargs['expected_roster'],'f'*64)
+
 if __name__=='__main__':
     unittest.main()
