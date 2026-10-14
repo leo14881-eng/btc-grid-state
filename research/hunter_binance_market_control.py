@@ -107,45 +107,58 @@ class MarketAdmissionTimeout(sqlite3.OperationalError):
     """The process queue expired before any SQLite connection was opened."""
 
 
+# Only control/directory/validity operations preempt pending market batches.
+# Starvation is bounded by the existing absolute admission deadline: failure
+# remains fail-closed rather than silently extending wait or dropping a frame.
+CRITICAL_WRITE_KINDS = frozenset((
+    'directory_proof', 'draining', 'publication:directory',
+    'publication:quiet', 'publication:repair',
+))
+
 class _WriterAdmission:
-    """FIFO for collaborating writers in this process, never an SQLite retry."""
+    """One owning market writer; critical queued work goes before market writes."""
     def __init__(self):
         self.condition = threading.Condition()
-        self.waiting = deque()
+        self.waiting = deque()  # Original FIFO diagnostics contract
+        self.priority_waiting = deque()
         self.active = None
         self.thread = None
 
-    def acquire(self, timeout):
+    def acquire(self, timeout, *, priority=False):
         ticket = object()
         deadline = time.monotonic()+timeout
+        lane = self.priority_waiting if priority else self.waiting
         with self.condition:
             if self.thread == threading.get_ident():
                 raise sqlite3.OperationalError('BINANCE_MARKET_WRITER_REENTRY')
-            self.waiting.append(ticket)
+            lane.append(ticket)
             self.condition.notify_all()
             waited = False
             try:
                 while True:
                     remaining = deadline-time.monotonic()
-                    if self.active is None and self.waiting[0] is ticket and (not waited or remaining > 0):
-                        self.waiting.popleft()
-                        self.active = ticket
-                        self.thread = threading.get_ident()
+                    earlier=not priority and bool(self.priority_waiting)
+                    if (self.active is None and not earlier
+                            and lane[0] is ticket
+                            and (not waited or remaining>0)):
+                        lane.popleft()
+                        self.active=ticket
+                        self.thread=threading.get_ident()
                         return ticket
-                    if remaining <= 0:
+                    if remaining<=0:
                         raise MarketAdmissionTimeout('BINANCE_MARKET_ADMISSION_TIMEOUT')
-                    waited = True
+                    waited=True
                     self.condition.wait(remaining)
             except BaseException:
-                self.waiting.remove(ticket)
+                lane.remove(ticket)
                 self.condition.notify_all()
                 raise
 
     def release(self, ticket):
         with self.condition:
-            if self.active is not ticket or self.thread != threading.get_ident():
+            if self.active is not ticket or self.thread!=threading.get_ident():
                 raise RuntimeError('BINANCE_MARKET_ADMISSION_OWNER_MISMATCH')
-            self.active = self.thread = None
+            self.active=self.thread=None
             self.condition.notify_all()
 
 
@@ -218,7 +231,8 @@ class MarketControlMixin:
         phase = 'admission_wait' if coordinated and not readonly else 'connect'
         try:
             if coordinated and not readonly:
-                ticket = self._market_writer.acquire(admission_timeout)
+                ticket = self._market_writer.acquire(admission_timeout,
+                    priority=(write_kind in CRITICAL_WRITE_KINDS))
                 self._measure(kind,phase,started,context=context)
                 phase = 'connect'; started = time.perf_counter_ns()
             connection = sqlite3.connect(address,uri=existing,timeout=timeout)

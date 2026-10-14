@@ -1,0 +1,24 @@
+name: Binance writer priority candidate
+on:
+  push:
+    branches:
+      - feat/binance-write-admission-priority-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Code identity
+        run: git rev-parse HEAD
+      - name: Writer admission priority and timeout tests
+        run: python -B -m unittest tests.test_hunter_binance_market_admission -q
