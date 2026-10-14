@@ -128,12 +128,10 @@ class IncrementalReader:
             db.execute("PRAGMA query_only=1")
             db.execute("PRAGMA busy_timeout=250")
             end_rows=_read_rows(db)
-        # Any change of an old topic OR whole-roster reconfiguration refuses
-        # the whole read; do not re-use stale bars or stale previous cache.
-        if begin_rows.keys()!=end_rows.keys() or any(
-            (v["revision"],v["epoch"],v["generation"]) != (
-              end_rows[k]["revision"],end_rows[k]["epoch"],end_rows[k]["generation"])
-            for k,v in begin_rows.items()):
+        # A direct validity/status update can revoke a topic without changing
+        # its revision. Check the complete state projection, not just the three
+        # candle version fields, before exposing even raw incremental hints.
+        if begin_rows != end_rows:
             self.previous.clear()
             raise ValueError("BINANCE_TOPIC_STATE_REVISION_RACE")
         if any(v["status"] not in ("valid","quiet_verified")

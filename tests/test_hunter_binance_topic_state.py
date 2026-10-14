@@ -51,6 +51,18 @@ class TopicStateTests(unittest.TestCase):
             r.poll(100,before_recheck=mutate)
         self.assertEqual(r.poll(101)["changed_topics"],2)
 
+    def test_validity_revocation_without_revision_increment_refuses(self):
+        for name in self.names: bump(self.db,name,"e"*32,100)
+        self.db.commit()
+        reader=IncrementalReader(self.path)
+        def revoke():
+            self.db.execute("UPDATE topic_state SET status='quarantined', valid_until_ms=0 WHERE symbol='BTCUSDT'")
+            self.db.commit()
+        with self.assertRaisesRegex(ValueError,"REVISION_RACE"):
+            reader.poll(100,before_recheck=revoke)
+        with self.assertRaisesRegex(ValueError,"INVALID_OR_EXPIRED"):
+            reader.poll(101)
+
     def test_epoch_reset_refuses_stale_reader(self):
         for n in self.names: bump(self.db,n,"e"*32,100)
         self.db.commit()
