@@ -118,6 +118,8 @@ def run(config, output):
     batch_count = 0
     queue_full = 0
     producer_cpu = [0.]
+    directory_stats = []
+    wal_metrics = dict(samples=0,last_bytes=0,max_bytes=0)
     errors=[]
     observed=stream.ObservedQueue(4096)
     def durable_counts(store):
@@ -141,6 +143,16 @@ def run(config, output):
             stamp=clock()
             market.apply('seed',[name],fixture_rows(split_topic(name)[1],stamp),stamp)
         market.frames(names,clock())
+        # Seeding 1228 independent topics can consume most of proof freshness.
+        # Re-verify the WHOLE directory with real test fixture evidence; do not
+        # skip or alter any proof, expiry, publication, or consumer fence.
+        market.apply('directory',names,fx.directory(names),clock())
+        check_at=clock()
+        validated=consumer.read(names,dt.datetime.fromtimestamp(check_at/1000,dt.timezone.utc),
+                                reader=Store.reader(market.path),clock=lambda:check_at)
+        validated.check_delivery()
+        if len(validated.generation['windows'])!=len(names):
+            raise AssertionError('PHASE0_INITIAL_FULL_SCOPE_NOT_READY')
         receipt_before = durable_counts(market.store)
         # Prep work is excluded from the 300 second measurement; no relaxed data gates.
         anchor=time.monotonic()
@@ -149,31 +161,59 @@ def run(config, output):
         base=config['base_ms']
         clock=lambda:base+int((time.monotonic()-anchor)*1000)
         config['database']=str(market.path)
+        wal=Path(str(market.path)+'-wal')
+        def monitor_wal():
+            while not stop.is_set():
+                try:size=wal.stat().st_size
+                except FileNotFoundError:size=0
+                wal_metrics['last_bytes']=size
+                wal_metrics['max_bytes']=max(size,wal_metrics['max_bytes'])
+                wal_metrics['samples']+=1
+                if stop.wait(.1):break
+        def maintain_directory():
+            next_at=anchor+30
+            while next_at<anchor+seconds and not stop.is_set():
+                if stop.wait(max(0,next_at-time.monotonic())):break
+                started=time.perf_counter()
+                try:
+                    market.apply('directory',names,fx.directory(names),clock())
+                except BaseException as error:
+                    errors.append('DIRECTORY:'+repr(error));stop.set();break
+                directory_stats.append((time.perf_counter()-started)*1000)
+                next_at+=30
         def producer():
             nonlocal received_count,queue_full
             next_at=time.monotonic()
+            previous={}
             while time.monotonic()<anchor+seconds and not stop.is_set():
                 stamp=clock()
                 start_cpu=time.thread_time()
                 for name in names:
                     symbol,interval=split_topic(name)
                     shard=market.protocol.topic_shards[name]
-                    frame=message(symbol,interval,stamp)
-                    try:
-                        # Match the strict test receipt-first semantics.
-                        market.protocol.arrived(shard,json.dumps(frame),stamp)
-                        received_count+=1
-                        observed.put((shard,frame,stamp),timeout=.5)
-                    except queue.Full:
-                        queue_full+=1
+                    bar_start=stamp//STEPS[interval]*STEPS[interval]
+                    frames=[]
+                    if name in previous and previous[name]!=bar_start:
+                        frames.append((message(symbol,interval,stamp-1,
+                                               start=previous[name],closed=True),stamp-1))
+                    frames.append((message(symbol,interval,stamp),stamp))
+                    for frame,received_at in frames:
                         try:
-                            market.store.unprocessed(market.epoch,[(frame,stamp)],'SOAK_QUEUE_FULL')
+                            # Same receipt-first and bound as original strict soak.
+                            market.protocol.arrived(shard,json.dumps(frame),received_at)
+                            received_count+=1
+                            observed.put((shard,frame,received_at),timeout=.5)
+                        except queue.Full:
+                            queue_full+=1
+                            try:
+                                market.store.unprocessed(market.epoch,[(frame,received_at)],'SOAK_QUEUE_FULL')
+                            except BaseException as error:
+                                errors.append('UNPROCESSED_RECORD_FAILED:'+repr(error))
+                                stop.set()
+                                break
                         except BaseException as error:
-                            errors.append('UNPROCESSED_RECORD_FAILED:'+repr(error))
-                            stop.set()
-                            break
-                    except BaseException as error:
-                        errors.append('PRODUCER:'+repr(error));stop.set();break
+                            errors.append('PRODUCER:'+repr(error));stop.set();break
+                    previous[name]=bar_start
                 producer_cpu[0]+=time.thread_time()-start_cpu
                 next_at+=.8
                 pause=next_at-time.monotonic()
@@ -200,9 +240,13 @@ def run(config, output):
                 committed_count+=len(batch);batch_count+=1
         writer_thread=Thread(target=writer,name='soak-writer')
         producer_thread=Thread(target=producer,name='soak-producer')
-        if mode not in ('C',):
+        directory_thread=Thread(target=maintain_directory,name='soak-directory')
+        wal_thread=Thread(target=monitor_wal,name='soak-wal')
+        wal_thread.start()
+        if mode != 'C':
             writer_thread.start()
             producer_thread.start()
+            directory_thread.start()
         if mode=='D':
             config_path=output.with_name(output.stem+'.config.json')
             config_path.write_text(json.dumps(config),encoding='utf8')
@@ -218,7 +262,9 @@ def run(config, output):
         remaining=anchor+seconds-time.monotonic()
         if remaining>0:time.sleep(remaining)
         stop.set()
+        wal_thread.join(3)
         if mode != 'C':
+            directory_thread.join(30)
             producer_thread.join(30);writer_thread.join(30)
         if reader_proc is not None:
             try:_,stderr=reader_proc.communicate(timeout=20)
@@ -227,7 +273,6 @@ def run(config, output):
             if reader_proc.returncode!=0:errors.append('READER_CHILD:'+str(stderr)[-500:])
             if child_log.exists():
                 reader_stats=json.loads(child_log.read_text(encoding='utf8'))
-        wal=Path(str(market.path)+'-wal')
         receipt_after=durable_counts(market.store)
         receipt_delta=[new-old for new,old in zip(receipt_after,receipt_before)]
         return dict(mode=mode,source_head=config['head'],manifest_sha256=config['manifest_sha256'],
@@ -242,8 +287,11 @@ def run(config, output):
             writer=summary(writer_stats),writer_cpu_seconds=round(writer_cpu[0],3),
             producer_cpu_seconds=round(producer_cpu[0],3),
             reader=reader_stats, wal_file_bytes=wal.stat().st_size if wal.exists() else 0,
+            wal_observations=wal_metrics,directory_maintenance=summary(directory_stats),
+            market_transactions=market.store.transaction_diagnostics(),
             errors=errors,writer_thread_alive=writer_thread.is_alive() if mode!='C' else False,
-            producer_thread_alive=producer_thread.is_alive() if mode!='C' else False)
+            producer_thread_alive=producer_thread.is_alive() if mode!='C' else False,
+            directory_thread_alive=directory_thread.is_alive() if mode!='C' else False)
     finally:
         case.doCleanups()
 
