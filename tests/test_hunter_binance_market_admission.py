@@ -43,7 +43,7 @@ class MarketAdmissionTests(unittest.TestCase):
     def queued(self,count):
         gate=self.store._market_writer
         with gate.condition:
-            self.assertTrue(gate.condition.wait_for(lambda:len(gate.waiting)==count,timeout=1))
+            self.assertTrue(gate.condition.wait_for(lambda:len(gate.waiting)+len(gate.priority_waiting)==count,timeout=1))
 
     def append(self,store,value,**kwargs):
         with store.db(write_kind=value,**kwargs) as db:
@@ -64,6 +64,16 @@ class MarketAdmissionTests(unittest.TestCase):
         self.join_all();self.assertEqual(self.errors,[])
         self.assertEqual(self.values(),['publication:directory']+['ws_receipts']*8)
         self.assertEqual(self.other.transaction_diagnostics()['publication:directory:admission_wait']['count'],1)
+
+    def test_priority_overtakes_prequeued_market_without_preempting_active(self):
+        with self.store.db(write_kind='ws_receipts'):
+            self.run_thread(lambda:self.append(self.other,'market-first'))
+            self.queued(1)
+            self.run_thread(lambda:self.append(self.other,'publication:directory'))
+            self.queued(2)
+        self.join_all()
+        self.assertEqual(self.errors,[])
+        self.assertEqual(self.values(),['publication:directory','market-first'])
 
     def test_real_continuous_ws_writer_yields_to_waiting_publication(self):
         # Uses only public db/diagnostics and real SQLite. This also runs against
