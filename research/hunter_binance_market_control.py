@@ -111,12 +111,9 @@ class MarketAdmissionTimeout(sqlite3.OperationalError):
 # Starvation is bounded by the existing absolute admission deadline: failure
 # remains fail-closed rather than silently extending wait or dropping a frame.
 CRITICAL_WRITE_KINDS = frozenset((
-    'directory_proof', 'draining', 'ws_receipts', 'publication:directory',
-    'publication:quiet', 'publication:repair', 'publication:seed',
+    'directory_proof', 'draining', 'publication:directory',
+    'publication:quiet', 'publication:repair',
 ))
-# WS receipts are still market batches, not a control priority lane.
-MARKET_WRITE_KINDS = frozenset(('ws_receipts',))
-
 
 class _WriterAdmission:
     """One owning market writer; critical queued work goes before market writes."""
@@ -235,8 +232,7 @@ class MarketControlMixin:
         try:
             if coordinated and not readonly:
                 ticket = self._market_writer.acquire(admission_timeout,
-                    priority=(write_kind in CRITICAL_WRITE_KINDS and
-                              write_kind not in MARKET_WRITE_KINDS))
+                    priority=(write_kind in CRITICAL_WRITE_KINDS))
                 self._measure(kind,phase,started,context=context)
                 phase = 'connect'; started = time.perf_counter_ns()
             connection = sqlite3.connect(address,uri=existing,timeout=timeout)
