@@ -256,6 +256,12 @@ def read(names,now,reader=None,clock=lambda:time.time_ns()//1_000_000,expected_r
     names=sorted(names)
     fence=reader.capture_fence(names)
     generation=reader.freeze(names,cut,started,expected_roster)
+    # A publication that starts after capture_fence() but before freeze()
+    # must remain a typed, expected control denial, never corrupt-data status.
+    # No READY generation or decision can escape this branch.
+    if generation.get('status')=='UNKNOWN' and generation.get('reason')=='CONTROL_PUBLICATION_PENDING':
+        from research.hunter_binance_control import ScopeQuarantined
+        raise ScopeQuarantined('CONTROL_PUBLICATION_PENDING')
     frozen=Frozen(generation,checked_at=started,reader=reader,fence=fence,names=names,
                   clock=clock,started_at=started)
     frozen.check_delivery(started=started)

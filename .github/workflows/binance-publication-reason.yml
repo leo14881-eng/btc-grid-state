@@ -1,0 +1,35 @@
+name: Binance typed publication reason regression
+
+on:
+  pull_request:
+    paths:
+      - research/hunter_binance_stream_store.py
+      - tests/test_hunter_binance_publication_reason.py
+      - .github/workflows/binance-publication-reason.yml
+
+permissions:
+  contents: read
+
+jobs:
+  fail-closed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Exact head verification
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Typed publish denial and unrelated SQLite failure remain fail-closed
+        run: |
+          python -B -X utf8 -m unittest -v             tests.test_hunter_binance_publication_reason             tests.test_hunter_binance_coordinated_runtime

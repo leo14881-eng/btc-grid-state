@@ -9,12 +9,14 @@ import uuid
 
 try:
     from research.hunter_binance_market_control import MarketControlMixin, HEALTH_CONTROL_CONTRACT, CONTROL_CONTRACT
+    from research.hunter_binance_control import ScopeQuarantined
     from research.hunter_bybit_stream_store import (
         Store as CoordinationStore, Budget as SharedBudget, budget_state, budget_time, request_gate, content_hash,
         FRESH_MS, HISTORY_MS, MAX_REVISIONS)
 except ModuleNotFoundError as exc:
     if exc.name != 'research': raise
     from hunter_binance_market_control import MarketControlMixin, HEALTH_CONTROL_CONTRACT, CONTROL_CONTRACT
+    from hunter_binance_control import ScopeQuarantined
     from hunter_bybit_stream_store import (
         Store as CoordinationStore, Budget as SharedBudget, budget_state, budget_time, request_gate, content_hash,
         FRESH_MS, HISTORY_MS, MAX_REVISIONS)
@@ -457,6 +459,11 @@ class Store(MarketControlMixin, CoordinationStore):
             out['generation_sha256'] = content_hash(out)
             return out
         except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,AttributeError,OverflowError) as error:
+            # An in-flight publication is an expected fail-closed control fence,
+            # not corrupt market data. Keep scope UNKNOWN but retain its typed,
+            # actionable reason. Other control failures stay generic UNKNOWN.
+            if isinstance(error, ScopeQuarantined) and str(error)=='CONTROL_PUBLICATION_PENDING':
+                return dict(out,status='UNKNOWN',windows={},reason='CONTROL_PUBLICATION_PENDING')
             # Optional scratch-only observer; no public exception detail and no
             # relaxation of the existing fail-closed UNKNOWN behavior. Never
             # set by regular Store/reader construction or production services.

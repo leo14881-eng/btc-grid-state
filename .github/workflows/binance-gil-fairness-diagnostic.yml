@@ -1,0 +1,46 @@
+name: Binance GIL fairness unchanged-scope diagnostic
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/binance-gil-fairness-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  strict-gil-fairness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify exact head
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Same strict full-reader 1228-topic 0.8s/4096 gate; diagnostic Python switch only
+        run: |
+          python -B -X utf8 - <<'PY'
+          import sys, unittest
+          from tests.test_hunter_binance_coordinated_soak import WholeRosterSoak
+          old = sys.getswitchinterval()
+          sys.setswitchinterval(0.0005)
+          print('DIAGNOSTIC_SWITCH_SECONDS',old,sys.getswitchinterval(),flush=True)
+          suite=unittest.defaultTestLoader.loadTestsFromName(
+            'tests.test_hunter_binance_coordinated_soak.WholeRosterSoak.test_complete_1228_topics_during_continuous_wall_load')
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          print('DIAGNOSTIC_STRICT_TESTS',result.testsRun,result.wasSuccessful(),flush=True)
+          sys.setswitchinterval(old)
+          if not (result.wasSuccessful() and result.testsRun==1):
+              raise SystemExit(1)
+          PY
