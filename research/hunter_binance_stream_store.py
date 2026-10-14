@@ -1,6 +1,7 @@
 """Binance-only rolling cache; reuse durable SQLite coordination, never Bybit data."""
 import datetime as dt
 import json
+from functools import lru_cache
 import math
 from pathlib import Path
 import re
@@ -165,6 +166,17 @@ def valid_row(row, interval):
             or not l <= min(o,c) <= max(o,c) <= h or min(v,q,tv,tq) < 0 or tv > v or tq > q):
         raise ValueError('BINANCE_BAR_VALUES_INVALID')
     return list(row)
+
+
+@lru_cache(maxsize=65_536)
+def _validated_json_row(row_json, interval):
+    """Cache only a pure parsed bar, keyed by every original JSON byte and interval.
+
+    This never caches a validity/freshness/fence decision or an epoch. A caller
+    receives a new list so mutations cannot poison the shared immutable tuple.
+    Invalid JSON or malformed bars raise on every access, exactly as before.
+    """
+    return tuple(valid_row(json.loads(row_json),interval))
 
 
 class Store(MarketControlMixin, CoordinationStore):
@@ -425,7 +437,7 @@ class Store(MarketControlMixin, CoordinationStore):
                         # newly listed assets; only an oldest prefix may be absent.
                         if interval == '1d' and not chosen: continue
                         return dict(out,reason='BINANCE_HISTORY_MISSING',failed_topic=name)
-                    row = valid_row(json.loads(r['row_json']),interval)
+                    row = list(_validated_json_row(r['row_json'],interval))
                     if (row[0] != start or r['origin'] not in (WS_SOURCE,REST_SOURCE) or r['confirmed'] not in (0,1)
                             or not start <= r['source_time'] <= r['observed'] <= cut
                             or not re.fullmatch('[0-9a-f]{32}',r['epoch'])
