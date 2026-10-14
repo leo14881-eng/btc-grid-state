@@ -19,10 +19,21 @@ class ReadOnlyStore(Store):
     def db(self, readonly=False, timeout=10, *, write_kind='market'):
         if not readonly:
             raise RuntimeError('BINANCE_ISOLATED_READER_WRITE_FORBIDDEN')
-        with super().db(readonly=True,timeout=timeout,write_kind=write_kind) as db:
+        import sqlite3
+        # Set read-only invariants BEFORE starting a read transaction.
+        # Never call writable Store.db() from a subprocess, even transiently.
+        uri=self.path.as_uri()+'?mode=ro'
+        with sqlite3.connect(uri,uri=True,timeout=min(timeout,.25)) as db:
+            db.row_factory=sqlite3.Row
             db.execute('PRAGMA query_only=1')
             db.execute('PRAGMA busy_timeout=250')
-            yield db
+            db.execute('BEGIN')
+            try:
+                yield db
+                db.commit()
+            except BaseException:
+                db.rollback()
+                raise
 
 
 def _payload(request):
