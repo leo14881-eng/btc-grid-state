@@ -388,6 +388,14 @@ class WholeRosterSoak(unittest.TestCase):
         market.frames(names, clock())
         def whole_read():
             now = dt.datetime.fromtimestamp(clock()/1000, dt.timezone.utc)
+            if os.environ.get('BINANCE_SOAK_READER_MODE')=='ISOLATED_PROCESS':
+                if sys.platform!='linux':
+                    raise RuntimeError('BINANCE_SOAK_PROCESS_MODE_REQUIRES_LINUX')
+                from research.hunter_binance_process_reader import read_in_process
+                # Exactly the same 1228-topic scope, generation cutoff,
+                # hash/proof/fence checks and final parent delivery guard.
+                return read_in_process(names,now,database=market.path,clock=clock,
+                                       timeout=30)
             return consumer.read(names, now, reader=market.store, clock=clock)
         seeded = whole_read()
         self.assertEqual(set(seeded.generation['windows']), set(names))

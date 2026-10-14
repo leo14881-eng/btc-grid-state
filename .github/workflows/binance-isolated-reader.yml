@@ -1,0 +1,24 @@
+name: Binance independent reader candidate
+on:
+  push:
+    branches:
+      - feat/binance-isolated-reader-20261014
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  independent-reader:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10','3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Exact identity
+        run: git rev-parse HEAD
+      - name: Native Linux independent-process readback and DRAINING denial
+        run: PYTHONPATH=.:tests python -B -m unittest tests.test_hunter_binance_process_reader tests.test_hunter_binance_topic_state tests.test_hunter_binance_queue_recovery -q

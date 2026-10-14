@@ -268,12 +268,23 @@ def read(names,now,reader=None,clock=lambda:time.time_ns()//1_000_000,expected_r
     return frozen
 
 
+def isolated_read(names,now,*,expected_roster=None):
+    """Research/Monitor entrypoint: fail-closed child+parent readback.
+
+    The original read() remains available for test fixtures and inside the
+    isolated child; signal/management/window paths never read in the collector.
+    """
+    from research.hunter_binance_process_reader import read_in_process
+    from research.hunter_binance_stream_store import STATE_PATH
+    return read_in_process(names,now,database=STATE_PATH,expected_roster=expected_roster)
+
+
 def signal_inputs(scan,symbols):
     if selected()=='REST': return None
     now=dt.datetime.now(dt.timezone.utc)
     expected=roster_hash(roster(scan,now))
     names=sorted(topic(s,i) for s in symbols for i in ('15m','1h'))
-    return read(names,now,expected_roster=expected)
+    return isolated_read(names,now,expected_roster=expected)
 
 
 def management_inputs(symbols,now):
@@ -285,9 +296,9 @@ def management_inputs(symbols,now):
     """
     if selected()=='REST': return None
     names=sorted(topic(s,i) for s in set(symbols)|{'BTCUSDT'} for i in ('15m','1h'))
-    return read(names,now)
+    return isolated_read(names,now)
 
 
 def window(symbol,interval,now):
     if selected()=='REST': return None
-    return read([topic(symbol,interval)],now)
+    return isolated_read([topic(symbol,interval)],now)

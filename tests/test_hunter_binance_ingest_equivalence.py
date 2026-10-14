@@ -118,10 +118,15 @@ class Ec3dHotPathOracle(Store):
 
 
 def table_snapshot(store):
-    """All durable rows including counters, hashes, receipts and pruned history."""
+    """Original hot-path durable rows; topic_state projection has its own monotonicity/epoch oracle."""
     with store.db(readonly=True) as db:
         tables = [row[0] for row in db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        # The ec3d old algorithm cannot know the new topic_state revision
+        # projection; comparing that diagnostic table would falsely assert
+        # the old hot path performed revisions it never implemented. All
+        # original bars/revisions/readiness/receipts/proofs remain compared.
+        tables=[name for name in tables if name!='topic_state']
         result = {}
         for table in tables:
             columns = [row[1] for row in db.execute('PRAGMA table_info('+table+')')]

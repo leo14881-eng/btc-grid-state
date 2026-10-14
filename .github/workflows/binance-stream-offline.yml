@@ -85,6 +85,8 @@ jobs:
                   cwd=root,env=env,check=True)
               print('REJECTED_HEAD_RACES_REPRODUCED',sha)
           PY
+      - name: Native Linux independent reader and DRAINING rejection
+        run: PYTHONPATH=.:tests python -B -m unittest tests.test_hunter_binance_process_reader tests.test_hunter_binance_topic_state tests.test_hunter_binance_queue_recovery -q
       - name: Guarded cache and consumer regressions
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
       - name: Reproduce lost quiet and repair recovery on the immutable prior scheduler
