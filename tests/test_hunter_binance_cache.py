@@ -263,12 +263,18 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(len(roster(s,DATE)),10)
 
     def test_collector_stops_after_five_failures_without_automatic_restart(self):
-        with patch.object(stream,'session',side_effect=OSError('fixture')) as run:
-            delays=[]
-            with self.assertRaisesRegex(RuntimeError,'CIRCUIT_OPEN'):
-                stream.collect(self.store,self.names,'a'*64,'b'*40,clock=lambda:NOW,sleep=delays.append)
-        self.assertEqual(run.call_count,5)
-        self.assertAlmostEqual(sum(delays),75)
+        import contextlib
+        import io
+        for error,code in ((TimeoutError('BINANCE_TOPIC_STALE'),'BINANCE_TOPIC_STALE'),
+                           (OSError('fixture private payload'),'UNCLASSIFIED')):
+            with self.subTest(code=code),patch.object(stream,'session',side_effect=error) as run:
+                delays=[];output=io.StringIO()
+                with contextlib.redirect_stdout(output),self.assertRaisesRegex(RuntimeError,'CIRCUIT_OPEN'):
+                    stream.collect(self.store,self.names,'a'*64,'b'*40,clock=lambda:NOW,sleep=delays.append)
+            self.assertEqual(run.call_count,5)
+            self.assertAlmostEqual(sum(delays),75)
+            self.assertEqual([json.loads(line)['error_code'] for line in output.getvalue().splitlines()],[code]*5)
+            self.assertNotIn('private payload',output.getvalue())
 
     def test_failed_open_disconnects_session(self):
         def fail():raise OSError('fixture closed')
