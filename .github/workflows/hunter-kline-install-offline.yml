@@ -1,0 +1,40 @@
+name: Kline Install Plan Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_kline_install.py'
+      - 'scripts/check_kline_install_offline.py'
+      - 'scripts/check_kline_stage_offline.py'
+      - 'scripts/hunter_kline_start.py'
+      - 'scripts/check_kline_start_offline.py'
+      - 'tests/test_hunter_kline_start.py'
+      - 'tests/test_hunter_kline_install.py'
+      - 'deploy/hunter-kline-install-plan.md'
+      - '.github/workflows/hunter-kline-install-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Temp-only filesystem with fake account/service/network commands
+        run: python -I -B scripts/check_kline_install_offline.py
+      - name: Read-only default mode
+        run: python -I -B scripts/hunter_kline_install.py
+      - name: Fetch exact approved payload for staging regression only
+        run: timeout 60s git fetch --depth=1 --no-tags origin 99f75edcf2c2f95d59e5cf797051442639dc64ce
+      - name: Real isolated staged prepare, including original missing-config reproduction
+        run: python -I -B scripts/check_kline_stage_offline.py
+      - name: Local Git integration for bounded startup and exact origin main guard
+        run: python -I -B scripts/check_kline_start_offline.py
