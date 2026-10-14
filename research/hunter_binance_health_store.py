@@ -185,6 +185,8 @@ class Store(BaseStore):
         db.execute('INSERT INTO bn_unprocessed(epoch,topic,received_at,open_time,event_time,payload_sha256,reason,category) VALUES(?,?,?,?,?,?,?,?)',
                    (epoch,name,received,opened,event,payload_hash(message),reason,category))
         db.execute('UPDATE topics SET gap=1,error=? WHERE topic=?',(reason,name))
+        from research.hunter_binance_topic_state import bump as topic_bump
+        topic_bump(db,name,epoch,received,status='invalid',valid_until_ms=0)
         db.execute('UPDATE bn_counts SET '+category+'='+category+'+1 WHERE epoch=? AND topic=?',(epoch,name))
 
     def unprocessed(self,epoch,observations,reason):
@@ -239,6 +241,12 @@ class Store(BaseStore):
             db.executemany('''UPDATE bn_unprocessed SET resolved_at=? WHERE topic=? AND resolved_at IS NULL
                        AND received_at<=? AND open_time=?''',
                        [(received,name,requested,row[0]) for row in rows])
+            unresolved=db.execute(
+                "SELECT 1 FROM bn_unprocessed WHERE topic=? AND resolved_at IS NULL LIMIT 1",
+                (name,)).fetchone()
+            if not unresolved:
+                from research.hunter_binance_topic_state import bump as topic_bump
+                topic_bump(db,name,epoch,received,repaired=True)
 
     def protocol_invalid(self,epoch,received,message,reason):
         with self.db() as db:
