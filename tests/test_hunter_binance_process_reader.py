@@ -17,6 +17,29 @@ class ProcessReaderContract(unittest.TestCase):
                 with store.db():
                     pass
 
+    def test_child_denial_reason_is_allowlisted_and_never_delivers(self):
+        import datetime as dt
+        import subprocess
+        from pathlib import Path
+        from unittest.mock import patch
+        from research import hunter_binance_process_reader as worker
+        now=dt.datetime(2026,10,14,tzinfo=dt.timezone.utc)
+        calls=[]
+        for raw,expected in (
+            ('{"status":"DENIED","reason":"CONTROL_PUBLICATION_PENDING"}',
+                'CONTROL_PUBLICATION_PENDING'),
+            ('{"status":"DENIED","reason":"SQLITE_RAW_SECRET"}',
+                'BINANCE_ISOLATED_READER_DENIED'),
+            ('{"status":"READY","generation":{}}',
+                'BINANCE_ISOLATED_READER_DENIED')):
+            with patch.object(worker.subprocess,'run',return_value=subprocess.CompletedProcess(
+                    ['child'],1,raw,'')):
+                with self.assertRaisesRegex(ValueError,expected):
+                    worker.read_in_process(['btcusdt@kline_15m'],now,
+                        database=Path(__file__).resolve(),clock=lambda:int(now.timestamp()*1000),
+                        before_delivery=lambda:calls.append('delivered'))
+        self.assertEqual(calls,[])
+
     @unittest.skipUnless(sys.platform=='linux','NATIVE_LINUX_CONTROL_LOCK_REQUIRED')
     def test_independent_reader_and_drain_revocation(self):
         case=fx.DataCases('test_utc_midnight_vietnam_seven_and_native_boundaries_require_new_ws')

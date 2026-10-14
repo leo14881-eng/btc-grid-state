@@ -13,6 +13,21 @@ import time
 
 from research.hunter_binance_stream_store import Store
 
+# Allowlisted non-authoritative denial identities only. No database, error
+# strings, credentials, stack traces or market rows leave a rejected child.
+SAFE_DENIAL_REASONS=frozenset((
+    'CONTROL_PUBLICATION_PENDING','CONTROL_READ_FENCE_CHANGED',
+    'BINANCE_FINAL_READ_REVOKED','BINANCE_FINAL_TOPIC_REVOKED',
+    'BINANCE_FINAL_GENERATION_HASH','BINANCE_FINAL_READ_STALE',
+    'BINANCE_CACHE_UNKNOWN:BINANCE_TOPIC_STALE_OR_NOT_READY',
+    'BINANCE_CACHE_UNKNOWN:BINANCE_CURRENT_WS_REQUIRED',
+    'BINANCE_CACHE_UNKNOWN:BINANCE_TRADING_STATUS_UNKNOWN_OR_INVALID',
+    'BINANCE_CACHE_UNKNOWN:BINANCE_UNRECONCILED_RECEIPT',
+    'BINANCE_CACHE_UNKNOWN:BINANCE_QUIET_REVERIFICATION_REQUIRED',
+    'BINANCE_CACHE_UNKNOWN:BINANCE_HEALTH_DRAINING_OR_STOPPED',
+))
+
+
 
 class ReadOnlyStore(Store):
     @contextmanager
@@ -74,7 +89,15 @@ def read_in_process(names, now, *, database, clock=lambda:time.time_ns()//1_000_
         input=json.dumps(request,separators=(',',':')),text=True,capture_output=True,
         cwd=root,timeout=timeout,check=False)
     if response.returncode!=0:
-        # Child cannot grant permission on error, regardless of partial output.
+        # A denied child can return ONLY an allowlisted reason. Its result
+        # cannot carry data or grant readiness, even if it is syntactically JSON.
+        try:
+            failure=json.loads(response.stdout)
+            reason=failure.get('reason') if failure.get('status')=='DENIED' else None
+        except (ValueError,TypeError,AttributeError):
+            reason=None
+        if reason in SAFE_DENIAL_REASONS:
+            raise ValueError(reason)
         raise ValueError('BINANCE_ISOLATED_READER_DENIED')
     try:
         result=json.loads(response.stdout)
@@ -100,8 +123,11 @@ def main():
     try:
         request=json.loads(sys.stdin.read())
         result=_payload(request)
-    except BaseException:
-        # Never emit partial generations, proof internals or stack trace.
+    except BaseException as error:
+        # Never emit partial generations, proof internals or stack traces.
+        reason=str(error)
+        safe=reason if reason in SAFE_DENIAL_REASONS else 'BINANCE_ISOLATED_READER_DENIED'
+        print(json.dumps(dict(status='DENIED',reason=safe)),flush=True)
         raise SystemExit(1)
     print(json.dumps(result,separators=(',',':'),ensure_ascii=True),flush=True)
 
