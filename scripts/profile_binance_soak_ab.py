@@ -69,6 +69,11 @@ def reader_loop(config, *, process=False):
     base = config['base_ms']; anchor = config['anchor_mono']
     seconds = config['seconds']; mode = config['mode']
     store = Store.reader(path)
+    freeze_errors = {}
+    def observe_freeze(err_type, message, sqlite_code, sqlite_name):
+        key = str((err_type,message,sqlite_code,sqlite_name))
+        freeze_errors[key] = freeze_errors.get(key,0)+1
+    store._freeze_error_probe = observe_freeze
     clock = lambda: base+int((time.monotonic()-anchor)*1000)
     results = []; cpu = 0.; errors = {}
     count_rows = 0
@@ -87,7 +92,7 @@ def reader_loop(config, *, process=False):
                 obj.check_delivery()
                 count_rows = len(obj.generation['windows'])
         except BaseException as error:
-            label = type(error).__name__+':'+str(error).split(':')[0]
+            label = type(error).__name__+':'+str(error)[:200]
             errors[label]=errors.get(label,0)+1
         elapsed=(time.perf_counter()-start)*1000
         results.append(elapsed)
@@ -97,7 +102,8 @@ def reader_loop(config, *, process=False):
         if wait>0: time.sleep(wait)
         else: target=time.monotonic()
     return dict(read=summary(results), read_cpu_seconds=round(cpu,3),
-                read_errors=errors, last_row_count=count_rows)
+                read_errors=errors, freeze_errors=freeze_errors,
+                read_accepted=len(results)-sum(errors.values()), last_row_count=count_rows)
 
 
 def run(config, output):
@@ -114,6 +120,11 @@ def run(config, output):
     producer_cpu = [0.]
     errors=[]
     observed=stream.ObservedQueue(4096)
+    def durable_counts(store):
+        with store.db(readonly=True) as db:
+            return [int(x or 0) for x in db.execute(
+                'SELECT COALESCE(SUM(committed),0),COALESCE(SUM(duplicate),0),'
+                'COALESCE(SUM(invalid),0),COALESCE(SUM(unprocessed_recorded),0) FROM bn_counts').fetchone()]
     stop=Event()
     producer_done=Event()
     case=fx.DataCases(methodName='test_utc_midnight_vietnam_seven_and_native_boundaries_require_new_ws')
@@ -130,6 +141,7 @@ def run(config, output):
             stamp=clock()
             market.apply('seed',[name],fixture_rows(split_topic(name)[1],stamp),stamp)
         market.frames(names,clock())
+        receipt_before = durable_counts(market.store)
         # Prep work is excluded from the 300 second measurement; no relaxed data gates.
         anchor=time.monotonic()
         config['anchor_mono']=anchor
@@ -216,18 +228,22 @@ def run(config, output):
             if child_log.exists():
                 reader_stats=json.loads(child_log.read_text(encoding='utf8'))
         wal=Path(str(market.path)+'-wal')
-        with market.store.db(readonly=True) as db:
-            receipt=db.execute('SELECT COALESCE(SUM(received),0),COALESCE(SUM(committed),0),COALESCE(SUM(duplicate),0),COALESCE(SUM(invalid),0),COALESCE(SUM(unprocessed_recorded),0) FROM bn_counts').fetchone()
+        receipt_after=durable_counts(market.store)
+        receipt_delta=[new-old for new,old in zip(receipt_after,receipt_before)]
         return dict(mode=mode,source_head=config['head'],manifest_sha256=config['manifest_sha256'],
             fixture_manifest_sha256=fx.MANIFEST, strict_topics=len(names),round_interval_seconds=.8,
             capacity=4096,actual_elapsed_seconds=round(time.monotonic()-anchor,3),
             queue_high_water=observed.high_water,queue_full_rejections=queue_full,
             received=received_count,committed_in_batches=committed_count,
-            durable_receipt_totals=list(receipt),write_batches=batch_count,
+            durable_outcome_initial=receipt_before,durable_outcome_final=receipt_after,
+            durable_outcome_during_load=receipt_delta,
+            receipt_conserved=(received_count==sum(receipt_delta)),
+            write_batches=batch_count,
             writer=summary(writer_stats),writer_cpu_seconds=round(writer_cpu[0],3),
             producer_cpu_seconds=round(producer_cpu[0],3),
             reader=reader_stats, wal_file_bytes=wal.stat().st_size if wal.exists() else 0,
-            errors=errors)
+            errors=errors,writer_thread_alive=writer_thread.is_alive() if mode!='C' else False,
+            producer_thread_alive=producer_thread.is_alive() if mode!='C' else False)
     finally:
         case.doCleanups()
 
