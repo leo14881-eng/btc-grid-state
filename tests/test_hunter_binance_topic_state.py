@@ -86,5 +86,31 @@ class TopicStateTests(unittest.TestCase):
         self.assertNotIn(("BINANCE","futures","BTCUSDT","15m"),result["state"])
 
 
+    def test_all_1228_topics_chunked_without_cross_market(self):
+        # Validate the exact 400-variable split and changed-only scope.
+        from research.hunter_binance_stream_store import topic
+        names=[topic("BTCUSDT","5m")]+[
+            topic(symbol,interval)
+            for symbol in (["BTCUSDT"]+["S%03dUSDT"%i for i in range(408)])
+            for interval in ("15m","1h","1d")]
+        self.assertEqual(len(names),1228)
+        begin(self.db,names,"f"*32)
+        self.db.executemany("INSERT INTO bars VALUES(?,?,?)",
+                            [(n,0,"[]") for n in names])
+        for n in names: bump(self.db,n,"f"*32,100)
+        self.db.commit()
+        reader=IncrementalReader(self.path)
+        first=reader.poll(100)
+        self.assertEqual((first["topic_count"],first["changed_topics"]),(1228,1228))
+        self.assertEqual(sum(map(len,first["changed"].values())),1228)
+        self.assertEqual(reader.poll(100)["changed_topics"],0)
+        changed=names[700]
+        bump(self.db,changed,"f"*32,105)
+        self.db.commit()
+        result=reader.poll(105)
+        self.assertEqual(result["changed_topics"],1)
+        self.assertEqual(list(result["changed"]),[key(changed)])
+
+
 if __name__=="__main__":
     unittest.main()

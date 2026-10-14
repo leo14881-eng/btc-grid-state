@@ -91,19 +91,25 @@ class IncrementalReader:
         changed={k:v for k,v in begin_rows.items() if
                  k not in self.previous or self.previous[k] != (
                      v["revision"],v["epoch"],v["generation"])}
-        samples={}
-        for identity,v in changed.items():
-            if identity[:2] != (EXCHANGE,MARKET):
-                continue
-            from research.hunter_binance_stream_store import topic
-            name=topic(identity[2],identity[3])
-            with sqlite3.connect(uri,uri=True,timeout=.25) as db:
-                db.row_factory=sqlite3.Row
-                db.execute("PRAGMA query_only=1")
-                db.execute("PRAGMA busy_timeout=250")
-                # SQL ownership only; no snapshot is trusted until the recheck.
-                samples[identity]=[dict(r) for r in db.execute(
-                    "SELECT * FROM bars WHERE topic=? ORDER BY start",(name,))]
+        # Copy only changed topics, in one short read transaction. Opening
+        # one connection per topic multiplies WAL/SQLite overhead by 1228.
+        from research.hunter_binance_stream_store import topic
+        mapped={topic(k[2],k[3]):k for k in changed if k[:2]==(EXCHANGE,MARKET)}
+        samples={k:[] for k in mapped.values()}
+        with sqlite3.connect(uri,uri=True,timeout=.25) as db:
+            db.row_factory=sqlite3.Row
+            db.execute("PRAGMA query_only=1")
+            db.execute("PRAGMA busy_timeout=250")
+            db.execute("BEGIN")
+            for offset in range(0,len(mapped),400):
+                group=list(mapped)[offset:offset+400]
+                if not group:continue
+                marks=",".join("?" for _ in group)
+                for row in db.execute(
+                    "SELECT * FROM bars WHERE topic IN ("+marks+") ORDER BY topic,start",
+                    group):
+                    samples[mapped[row["topic"]]].append(dict(row))
+            db.commit()
         if before_recheck:
             before_recheck()
         with sqlite3.connect(uri,uri=True,timeout=.25) as db:
