@@ -27,6 +27,7 @@ class Protocol(stream.Protocol):
         self.shards={i:dict(observed_at=0,evidence=None) for i in range(len(self.requests))}
         self.controls=0;self.processed=0;self.raw_frames=0;self.control_receipts=0;self.invalid_envelopes=0
         self.inflight=[]
+        self._market_batch_limit=100
 
     def alive(self,shard,received,evidence):
         with self.lock:
@@ -56,12 +57,23 @@ class Protocol(stream.Protocol):
             if 'id' in message:
                 self.receive(shard,message,received);self.controls+=1;self.inflight.pop(0);continue
             group=[]
+            # Adaptive transaction size; the original hard ceiling of 100
+            # market frames and all per-frame validation/accounting are intact.
+            # A slow commit halves the next group. Never split or retry inside
+            # an active transaction, and never turn a failed frame into success.
             for item in self.inflight:
+                if len(group)>=self._market_batch_limit:break
                 if isinstance(item[1],BaseException) or 'id' in item[1]:break
                 name=stream.split_message_topic(item[1])
                 if self.topic_shards.get(name)!=item[0]:raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
                 group.append(item)
+            batch_started=time.monotonic_ns()
             results=self.store.ingest_accounted(self.epoch,[(m,r) for _,m,r in group])
+            elapsed_ms=(time.monotonic_ns()-batch_started)/1_000_000
+            if elapsed_ms>50:
+                self._market_batch_limit=max(1,self._market_batch_limit//2)
+            elif elapsed_ms<20 and self._market_batch_limit<100:
+                self._market_batch_limit=min(100,self._market_batch_limit+1)
             for (index,message,received),result in zip(group,results):
                 if result=='committed':self.alive(index,received,'VALIDATED_MARKET_FRAME')
             self.processed+=len(group)
