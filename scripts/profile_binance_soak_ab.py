@@ -155,11 +155,17 @@ def run(config, output):
             raise AssertionError('PHASE0_INITIAL_FULL_SCOPE_NOT_READY')
         receipt_before = durable_counts(market.store)
         # Prep work is excluded from the 300 second measurement; no relaxed data gates.
+        # Capture logical time BEFORE changing the closure's anchor.
+        # A backwards rebasing invalidates WS event keys/proof validity and
+        # produces misleading queue/reader results in ALL five groups.
+        before_rebase=clock()
         anchor=time.monotonic()
+        base=before_rebase
         config['anchor_mono']=anchor
-        config['base_ms']=clock()
-        base=config['base_ms']
+        config['base_ms']=base
         clock=lambda:base+int((time.monotonic()-anchor)*1000)
+        if clock()<before_rebase or clock()-before_rebase>5000:
+            raise AssertionError('PHASE0_CLOCK_REBASE_INVALID')
         config['database']=str(market.path)
         wal=Path(str(market.path)+'-wal')
         def monitor_wal():
