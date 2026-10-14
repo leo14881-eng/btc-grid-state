@@ -29,4 +29,4 @@ jobs:
       - name: Fail-closed topic state and cache regression
         run: python -B -m unittest tests.test_hunter_binance_topic_state tests.test_hunter_binance_cache -q
       - name: Existing market/control regression
-        run: python -B -m unittest tests.test_hunter_binance_market_admission tests.test_hunter_binance_health -q
+        run: PYTHONPATH=.:tests python -B -m unittest tests.test_hunter_binance_market_admission tests.test_hunter_binance_health -q
