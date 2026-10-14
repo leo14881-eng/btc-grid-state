@@ -1,0 +1,54 @@
+name: Binance SOAK phase-0 five-way isolation
+on:
+  pull_request:
+    branches:
+      - perf/binance-unprocessed-active-index-20261014
+    paths:
+      - scripts/profile_binance_soak_ab.py
+      - .github/workflows/binance-soak-phase0.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  five_way_300s:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+        mode: [A, B, C, D, E]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: Run unchanged 1228 / 0.8 / 4096 300-second diagnosis
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/binance-phase0"
+          python -I -B -X utf8 -c 'import sqlite3,sys;print("PYTHON",sys.version,"SQLITE",sqlite3.sqlite_version)'
+          # Record per-thread CPU samples without changing interpreter scheduling.
+          (
+            sleep 2
+            while pgrep -f 'profile_binance_soak_ab.py --mode' >/dev/null; do
+              pid=$(pgrep -f 'python.*profile_binance_soak_ab.py --mode' | head -1 || true)
+              [ -n "$pid" ] && top -H -b -n 1 -p "$pid" >> "${RUNNER_TEMP}/binance-phase0/top-H.log" 2>&1 || true
+              sleep 5
+            done
+          ) &
+          top_pid=$!
+          trap 'kill "$top_pid" 2>/dev/null || true' EXIT
+          python -B -X utf8 scripts/profile_binance_soak_ab.py --mode ${{ matrix.mode }} --seconds 300 --output "${RUNNER_TEMP}/binance-phase0/phase0-${{ matrix.python }}-${{ matrix.mode }}.json" > "${RUNNER_TEMP}/binance-phase0/console.log" 2>&1
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binance-phase0-${{ matrix.python }}-${{ matrix.mode }}
+          path: ${{ runner.temp }}/binance-phase0/
+          if-no-files-found: warn
