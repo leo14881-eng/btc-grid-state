@@ -55,6 +55,17 @@ print('FULL_JOB_RECOMPUTED_FROM_FRESH_MAIN')
         self.assertEqual(rows[1]['args'],['-m','scripts.hunter_job_runner','discovery','--fixture-argument'])
         self.assertIn('HUNTER_AUX_FRESH_SOURCE_RETRY',run.stdout)
         self.assertEqual(dirs,[]);self.assertEqual(logs,[])
+        import re
+        phases=re.findall(r'HUNTER_LAUNCH_PHASE_END job=discovery attempt=(\d+) phase=(\w+) elapsed_ns=(\d+) exit=(\d+) clock=monotonic_ns',run.stdout)
+        self.assertTrue(phases,run.stdout)
+        self.assertTrue(all(int(elapsed)>=0 for _,_,elapsed,_ in phases))
+        for attempt in ('1','2'):
+            self.assertEqual([phase for a,phase,_,_ in phases if a==attempt and phase in ('clone','fetch','checkout','runner')],['clone','fetch','checkout','runner'])
+        self.assertIn('phase=cleanup',run.stdout)
+        self.assertIn('scope=launcher_entry_through_cleanup',run.stdout)
+        timing='\n'.join(line for line in run.stdout.splitlines() if line.startswith('HUNTER_LAUNCH_'))
+        self.assertNotIn('--fixture-argument',timing)
+        self.assertNotIn('fixture@example.test',timing)
 
     def test_blind_and_missed_replay_retry_whole_job(self):
         for job in ('blind-replay','missed-replay'):
