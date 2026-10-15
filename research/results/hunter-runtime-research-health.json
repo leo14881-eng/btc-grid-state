@@ -1,47 +1,329 @@
 {
   "capital_authority": "NONE_SHADOW_ONLY",
-  "completed_at_utc": "2026-10-15T23:23:21.611993+00:00",
-  "duration_seconds": 212.391,
-  "error": "RuntimeError",
-  "error_details": {
-    "failed_step": "Test complete Hunter system before state mutation",
-    "message": "JOB_STEP_FAILED Test complete Hunter system before state mutation",
-    "type": "RuntimeError"
-  },
+  "completed_at_utc": "2026-10-15T23:34:50.479376+00:00",
+  "duration_seconds": 401.531,
+  "error": null,
   "job": "research",
-  "main_readback_head_sha": "d944389d9e711482ae4156a4216d1ac06f2bd340",
-  "main_readback_verified": false,
+  "main_readback_head_sha": "dd83c7d17a2f85a9fd125f6ad3a554aebd2f92db",
+  "main_readback_verified": true,
   "real_trading_enabled": false,
-  "scan_generation_id": "20261015T231413449627Z",
+  "scan_generation_id": "20261015T232221899961Z",
   "schema": "hunter_runtime_job_health_v1",
   "source": "VULTR_SYSTEMD",
-  "source_head_sha": "d944389d9e711482ae4156a4216d1ac06f2bd340",
-  "started_at_utc": "2026-10-15T23:19:49.220728+00:00",
-  "status": "FAILURE",
+  "source_head_sha": "dd83c7d17a2f85a9fd125f6ad3a554aebd2f92db",
+  "started_at_utc": "2026-10-15T23:28:08.948239+00:00",
+  "status": "SUCCESS",
   "steps": [
     {
-      "completed_at_utc": "2026-10-15T23:19:51.849452+00:00",
+      "completed_at_utc": "2026-10-15T23:28:10.822749+00:00",
       "exit": 0,
       "job": "research",
       "name": "Refresh admitted generation baseline",
-      "seconds": 2.604,
-      "started_at_utc": "2026-10-15T23:19:49.245914+00:00",
+      "seconds": 1.847,
+      "started_at_utc": "2026-10-15T23:28:08.975367+00:00",
       "status": "SUCCESS",
-      "stderr_tail": "From github.com:leo14881-eng/btc-grid-state\n * branch                main       -> FETCH_HEAD\n   19abe5887..d944389d9  main       -> origin/main\nPrevious HEAD position was 19abe5887 ops: Hunter discovery runtime health\nSwitched to and reset branch 'main'\n"
+      "stderr_tail": "From github.com:leo14881-eng/btc-grid-state\n * branch                main       -> FETCH_HEAD\nSwitched to and reset branch 'main'\n"
     },
     {
-      "completed_at_utc": "2026-10-15T23:23:21.591168+00:00",
-      "error_details": {
-        "message": "JOB_STEP_FAILED Test complete Hunter system before state mutation",
-        "type": "RuntimeError"
-      },
-      "exit": 1,
+      "completed_at_utc": "2026-10-15T23:30:03.012911+00:00",
+      "exit": 0,
       "job": "research",
       "name": "Test complete Hunter system before state mutation",
-      "seconds": 209.74,
-      "started_at_utc": "2026-10-15T23:19:51.849569+00:00",
-      "status": "FAILURE",
-      "stderr_tail": "2/subprocess.py\", line 2116, in _communicate\n    self._check_timeout(endtime, orig_timeout, stdout, stderr)\n  File \"/usr/lib/python3.12/subprocess.py\", line 1253, in _check_timeout\n    raise TimeoutExpired(\nsubprocess.TimeoutExpired: Command '['/tmp/tmpaz_um4ee/runner.sh']' timed out after 10 seconds\n\n======================================================================\nERROR: test_real_clone_after_retry_has_existing_current_directory (test_hunter_monitor_retry.RetryTests.test_real_clone_after_retry_has_existing_current_directory)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/opt/shadow-runner/job-generation.3XsPFn/repo/tests/test_hunter_monitor_retry.py\", line 134, in test_real_clone_after_retry_has_existing_current_directory\n    result,calls=self.run_fixture(REAL_CLONE='1')\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/shadow-runner/job-generation.3XsPFn/repo/tests/test_hunter_monitor_retry.py\", line 79, in run_fixture\n    result=subprocess.run([str(runner)],env=env,capture_output=True,text=True,timeout=10)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/subprocess.py\", line 550, in run\n    stdout, stderr = process.communicate(input, timeout=timeout)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/subprocess.py\", line 1209, in communicate\n    stdout, stderr = self._communicate(input, endtime, timeout)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.12/subprocess.py\", line 2116, in _communicate\n    self._check_timeout(endtime, orig_timeout, stdout, stderr)\n  File \"/usr/lib/python3.12/subprocess.py\", line 1253, in _check_timeout\n    raise TimeoutExpired(\nsubprocess.TimeoutExpired: Command '['/tmp/tmppsi5qmnb/runner.sh']' timed out after 10 seconds\n\n----------------------------------------------------------------------\nRan 1104 tests in 208.114s\n\nFAILED (errors=2, skipped=1)\n"
+      "seconds": 112.19,
+      "started_at_utc": "2026-10-15T23:28:10.822815+00:00",
+      "status": "SUCCESS",
+      "stderr_tail": "de_notifications.NotificationTests.test_buy_add_included_and_v1_filtered) ... ok\ntest_changed_event_cannot_silently_deduplicate (test_hunter_trade_notifications.NotificationTests.test_changed_event_cannot_silently_deduplicate) ... ok\ntest_cutoff_uses_instant_not_timezone_string (test_hunter_trade_notifications.NotificationTests.test_cutoff_uses_instant_not_timezone_string) ... ok\ntest_idempotence_and_acknowledged_only (test_hunter_trade_notifications.NotificationTests.test_idempotence_and_acknowledged_only) ... ok\ntest_missing_or_invalid_evidence_fails_closed (test_hunter_trade_notifications.NotificationTests.test_missing_or_invalid_evidence_fails_closed) ... ok\ntest_only_actual_matching_message_is_receipt (test_hunter_trade_notifications.NotificationTests.test_only_actual_matching_message_is_receipt) ... ok\ntest_prepared_is_not_delivered_and_does_not_mutate (test_hunter_trade_notifications.NotificationTests.test_prepared_is_not_delivered_and_does_not_mutate) ... ok\ntest_binance_signal_cannot_be_silently_exempted (test_hunter_v1_coverage.V1CoverageTests.test_binance_signal_cannot_be_silently_exempted) ... ok\ntest_mixed_generation_fails (test_hunter_v1_coverage.V1CoverageTests.test_mixed_generation_fails) ... ok\ntest_research_missing_from_record_fails (test_hunter_v1_coverage.V1CoverageTests.test_research_missing_from_record_fails) ... ok\ntest_supported_coverage_stays_required_unsupported_samples_are_recorded (test_hunter_v1_coverage.V1CoverageTests.test_supported_coverage_stays_required_unsupported_samples_are_recorded) ... ok\ntest_exclusion_does_not_admit_candidate_or_drop_existing_management (test_hunter_v1_exclusion_audit.V1ExclusionAuditTests.test_exclusion_does_not_admit_candidate_or_drop_existing_management) ... ok\ntest_stale_audit_fails_before_recording_and_v2_is_unchanged (test_hunter_v1_exclusion_audit.V1ExclusionAuditTests.test_stale_audit_fails_before_recording_and_v2_is_unchanged) ... ok\n\n----------------------------------------------------------------------\nRan 1104 tests in 110.268s\n\nOK (skipped=1)\n"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:30:03.112266+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Capture discovery generation",
+      "seconds": 0.099,
+      "started_at_utc": "2026-10-15T23:30:03.013086+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:30:34.791038+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Run Hunter closed-loop engine \u2014 signals",
+      "seconds": 31.679,
+      "started_at_utc": "2026-10-15T23:30:03.112342+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:31:13.104995+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Forward-upside research",
+      "seconds": 38.314,
+      "started_at_utc": "2026-10-15T23:30:34.791122+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:31:17.514839+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Identity audit",
+      "seconds": 4.41,
+      "started_at_utc": "2026-10-15T23:31:13.105073+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:31:20.179990+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Forward outcome audit",
+      "seconds": 2.665,
+      "started_at_utc": "2026-10-15T23:31:17.514910+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:31:21.551980+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Candidate dossiers",
+      "seconds": 1.369,
+      "started_at_utc": "2026-10-15T23:31:20.182796+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:00.641239+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Liquidity only for shortlisted candidates",
+      "seconds": 39.087,
+      "started_at_utc": "2026-10-15T23:31:21.554633+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:01.173083+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Rebuild dossiers with execution evidence",
+      "seconds": 0.53,
+      "started_at_utc": "2026-10-15T23:32:00.642680+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:01.745966+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Primary-source lead discovery",
+      "seconds": 0.572,
+      "started_at_utc": "2026-10-15T23:32:01.174421+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:02.429889+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Official-source evidence enrichment",
+      "seconds": 0.684,
+      "started_at_utc": "2026-10-15T23:32:01.746042+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:02.564955+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Research completion state",
+      "seconds": 0.134,
+      "started_at_utc": "2026-10-15T23:32:02.430685+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:02.996574+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Rebuild dossiers with completion state",
+      "seconds": 0.431,
+      "started_at_utc": "2026-10-15T23:32:02.565030+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:03.124257+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Tactical supply and unlock risk",
+      "seconds": 0.128,
+      "started_at_utc": "2026-10-15T23:32:02.996647+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:08.454056+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Single authoritative BUY WAIT REJECT decision",
+      "seconds": 5.329,
+      "started_at_utc": "2026-10-15T23:32:03.124801+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:08.859877+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Health and candidate gate report",
+      "seconds": 0.4,
+      "started_at_utc": "2026-10-15T23:32:08.459705+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:21.098047+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Run historical tail-risk replay",
+      "seconds": 12.237,
+      "started_at_utc": "2026-10-15T23:32:08.860616+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:32:21.296947+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Verify tail-risk replay assumptions and shadow boundary",
+      "seconds": 0.199,
+      "started_at_utc": "2026-10-15T23:32:21.098156+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:00.344032+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Run historical leading-risk replay",
+      "seconds": 39.045,
+      "started_at_utc": "2026-10-15T23:32:21.298623+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:00.470361+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Verify leading-risk replay shadow boundary",
+      "seconds": 0.125,
+      "started_at_utc": "2026-10-15T23:33:00.344955+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:00.825967+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Refresh official Bybit execution channels",
+      "seconds": 0.356,
+      "started_at_utc": "2026-10-15T23:33:00.470438+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:01.303713+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Validate shadow engines",
+      "seconds": 0.478,
+      "started_at_utc": "2026-10-15T23:33:00.826044+00:00",
+      "status": "SUCCESS",
+      "stderr_tail": "w_trader_v2.V2CapitalDecisionTests.test_missing_candidate_is_review_only_for_existing) ... ok\ntest_missing_liquidity_rejects (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_missing_liquidity_rejects) ... ok\ntest_profit_protection_arms_after_real_mfe (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_profit_protection_arms_after_real_mfe) ... ok\ntest_profit_protection_caps_large_giveback (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_profit_protection_caps_large_giveback) ... ok\ntest_profit_protection_does_not_fake_unprofitable_trade (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_profit_protection_does_not_fake_unprofitable_trade) ... ok\ntest_real_evidence_blocker_rejects (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_real_evidence_blocker_rejects) ... ok\ntest_relative_weakness_alone_does_not_force_exit (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_relative_weakness_alone_does_not_force_exit) ... ok\ntest_right_side_chase_requires_extra_edge (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_right_side_chase_requires_extra_edge) ... ok\ntest_strong_profitable_signal_remains_valid (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_strong_profitable_signal_remains_valid) ... ok\ntest_third_add_requires_stronger_recovery (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_third_add_requires_stronger_recovery) ... ok\ntest_time_is_review_only (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_time_is_review_only) ... ok\ntest_tranche_counterfactuals_compare_one_vs_two (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_tranche_counterfactuals_compare_one_vs_two) ... ok\ntest_weighted_cost_falls (tests.test_hunter_shadow_trader_v2.V2CapitalDecisionTests.test_weighted_cost_falls) ... ok\ntest_metrics (tests.test_hunter_shadow_optimizer.OptimizerTests.test_metrics) ... ok\n\n----------------------------------------------------------------------\nRan 78 tests in 0.115s\n\nOK\n"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:44.239179+00:00",
+      "exit": 0,
+      "job": "research",
+      "lock_wait_seconds": 35.257658,
+      "name": "Bind latest authoritative monitor state before shadow execution",
+      "seconds": 42.935,
+      "started_at_utc": "2026-10-15T23:33:01.303844+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:47.032927+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Revalidate capital decisions against bound monitor state",
+      "seconds": 2.793,
+      "started_at_utc": "2026-10-15T23:33:44.239587+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:33:47.039082+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Shadow optimizer frozen pending user acceptance",
+      "seconds": 0.006,
+      "started_at_utc": "2026-10-15T23:33:47.033004+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:04.731085+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Run V1 broad-net shadow orders",
+      "seconds": 17.692,
+      "started_at_utc": "2026-10-15T23:33:47.039150+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:05.969984+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Verify V1 EARLY coverage and state integrity",
+      "seconds": 1.238,
+      "started_at_utc": "2026-10-15T23:34:04.731704+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:12.340028+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Run V2 executable shadow orders",
+      "seconds": 6.37,
+      "started_at_utc": "2026-10-15T23:34:05.970060+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:12.761405+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Verify V2 shadow state integrity",
+      "seconds": 0.421,
+      "started_at_utc": "2026-10-15T23:34:12.340464+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:13.641126+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Reject mixed-generation research",
+      "seconds": 0.88,
+      "started_at_utc": "2026-10-15T23:34:12.761521+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:15.220488+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Closed-loop acceptance guard",
+      "seconds": 1.579,
+      "started_at_utc": "2026-10-15T23:34:13.641257+00:00",
+      "status": "SUCCESS"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:48.335710+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Persist Hunter state only after closed-loop acceptance",
+      "seconds": 33.115,
+      "started_at_utc": "2026-10-15T23:34:15.220922+00:00",
+      "status": "SUCCESS",
+      "stderr_tail": "From github.com:leo14881-eng/btc-grid-state\n * branch                main       -> FETCH_HEAD\nFrom github.com:leo14881-eng/btc-grid-state\n * branch                main       -> FETCH_HEAD\nTo github.com:leo14881-eng/btc-grid-state.git\n   ce5cff707..dd83c7d17  HEAD -> main\nFrom github.com:leo14881-eng/btc-grid-state\n * branch                main       -> FETCH_HEAD\nFrom github.com:leo14881-eng/btc-grid-state\n * branch                main       -> FETCH_HEAD\n"
+    },
+    {
+      "completed_at_utc": "2026-10-15T23:34:50.434140+00:00",
+      "exit": 0,
+      "job": "research",
+      "name": "Authoritative main read-back",
+      "seconds": 2.097,
+      "started_at_utc": "2026-10-15T23:34:48.336971+00:00",
+      "status": "SUCCESS"
     }
   ]
 }
