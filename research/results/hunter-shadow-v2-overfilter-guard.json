@@ -2,13 +2,6 @@
   "schema": "hunter_shadow_v2_overfilter_guard_v1",
   "cycles": [
     {
-      "at_utc": "2026-10-15T06:30:09.654904+00:00",
-      "generation_id": "20261015T062006763481Z",
-      "buys": 1,
-      "safe_misses": [],
-      "risk_blocked": false
-    },
-    {
       "at_utc": "2026-10-15T07:27:29.475224+00:00",
       "generation_id": "20261015T071902837362Z",
       "buys": 0,
@@ -145,15 +138,52 @@
         }
       ],
       "risk_blocked": false
+    },
+    {
+      "at_utc": "2026-10-16T11:23:34.485510+00:00",
+      "generation_id": "20261016T111509441716Z",
+      "buys": 0,
+      "safe_misses": [
+        {
+          "asset": "RAY",
+          "change_24h_pct": 10.609,
+          "reasons": [
+            "SCORE_WEAK"
+          ],
+          "estimated_rr": 1.813
+        },
+        {
+          "asset": "PHA",
+          "change_24h_pct": 9.611,
+          "reasons": [
+            "SCORE_WEAK",
+            "RELATIVE_MOMENTUM_DECELERATING"
+          ],
+          "estimated_rr": 1.737
+        },
+        {
+          "asset": "SYRUP",
+          "change_24h_pct": 8.994,
+          "reasons": [
+            "SCORE_WEAK",
+            "BTC_RELATIVE_WEAK"
+          ],
+          "estimated_rr": 1.838
+        }
+      ],
+      "risk_blocked": false
     }
   ],
-  "status": "NORMAL",
-  "as_of_utc": "2026-10-16T00:26:21.866717+00:00",
-  "consecutive_zero_buy_cycles": 3,
+  "status": "OVER_FILTERING",
+  "as_of_utc": "2026-10-16T11:23:34.485510+00:00",
+  "consecutive_zero_buy_cycles": 4,
   "recent_safe_missed_assets": [
-    "PROM"
+    "PHA",
+    "PROM",
+    "RAY",
+    "SYRUP"
   ],
-  "optimizer_action": "NONE",
+  "optimizer_action": "RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST",
   "live_capital_rules_changed": false,
   "capital_authority": "NONE_SHADOW_ONLY"
 }
