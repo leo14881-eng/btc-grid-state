@@ -26,6 +26,8 @@ class DiagnosticsTests(unittest.TestCase):
   self.stack.enter_context(mock.patch.object(runner, 'RESULTS', self.root))
   self.git = self.stack.enter_context(mock.patch.object(runner, 'git'))
   self.git.return_value.stdout = 'sha'
+  self.admission = self.stack.enter_context(mock.patch(
+      'scripts.hunter_generation_admission.server_acquire', return_value=True))
 
  def tearDown(self):
   self.stack.close(); self.temp.cleanup()
@@ -43,6 +45,8 @@ class DiagnosticsTests(unittest.TestCase):
   args = publish.call_args.args
   self.assertEqual(args[1], 'FAILURE')
   rows = args[3]
+  self.assertEqual(rows[0]['name'], 'Acquire shared Research generation ownership')
+  rows = rows[1:]
   self.assertEqual([r['name'] for r in rows], ['First completed step', 'Actual failing validator'])
   self.assertEqual(rows[0]['status'], 'SUCCESS')
   self.assertEqual(rows[1]['status'], 'FAILURE')
@@ -62,6 +66,29 @@ class DiagnosticsTests(unittest.TestCase):
   self.assertEqual(args[1], 'FAILURE')
   self.assertEqual(args[3][-1]['status'], 'FAILURE')
   self.assertEqual(args[5]['failed_step'], 'Authoritative main read-back')
+
+ def test_already_published_preserves_prior_failure_and_never_reports_success(self):
+  self.admission.return_value = False
+  with mock.patch.object(runner, 'enabled', return_value=True), \
+       mock.patch.object(runner, 'publish_health') as publish, \
+       mock.patch.object(runner, 'run_job') as run, \
+       mock.patch('sys.argv', ['runner', 'research']), contextlib.redirect_stdout(io.StringIO()) as log:
+   runner.main()
+  run.assert_not_called(); publish.assert_not_called()
+  self.assertIn('ALREADY_PUBLISHED', log.getvalue())
+  self.assertNotIn('HUNTER_JOB_SUCCESS', log.getvalue())
+
+ def test_active_other_owner_is_explicit_failure_before_any_computation(self):
+  self.admission.side_effect = RuntimeError('RESEARCH_DEFERRED_OWNER_ACTIVE')
+  with mock.patch.object(runner, 'enabled', return_value=True), \
+       mock.patch.object(runner, 'publish_health') as publish, \
+       mock.patch.object(runner, 'run_job') as run, \
+       mock.patch('sys.argv', ['runner', 'research']), contextlib.redirect_stdout(io.StringIO()):
+   with self.assertRaisesRegex(RuntimeError, 'RESEARCH_DEFERRED_OWNER_ACTIVE'):
+    runner.main()
+  run.assert_not_called()
+  self.assertEqual(publish.call_args.args[1], 'FAILURE')
+  self.assertEqual(publish.call_args.args[5]['failed_step'], 'Acquire shared Research generation ownership')
 
  def test_timeout_retains_active_step_with_exact_guard_code(self):
   rows = []
