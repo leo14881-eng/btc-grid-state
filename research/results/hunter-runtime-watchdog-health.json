@@ -1,7 +1,7 @@
 {
   "capital_authority": "NONE_SHADOW_ONLY",
-  "completed_at_utc": "2026-10-17T01:09:56.318404+00:00",
-  "duration_seconds": 3.631,
+  "completed_at_utc": "2026-10-17T01:40:03.744154+00:00",
+  "duration_seconds": 3.795,
   "error": null,
   "fast_watch_health": {
     "authoritative_monitor_affected": false,
@@ -11,11 +11,13 @@
       "BINANCE_SPOT": {
         "rest_fallback_symbols": [
           "NEXOUSDT",
-          "HAEDALUSDT"
+          "HAEDALUSDT",
+          "AVNTUSDT"
         ],
         "stale_symbols": [
           "NEXOUSDT",
-          "HAEDALUSDT"
+          "HAEDALUSDT",
+          "AVNTUSDT"
         ],
         "status": "FAST_PATH_DEGRADED_REST_FALLBACK_HEALTHY",
         "ws_connected": true
@@ -29,49 +31,63 @@
     }
   },
   "job": "watchdog",
-  "main_readback_head_sha": "8a978357d0db362c939bb0a632b39b38dd97cb49",
+  "main_readback_head_sha": "14c7098adfe45d6e4c7f34dec454a2d74e5456a1",
   "main_readback_verified": true,
   "real_trading_enabled": false,
   "schema": "hunter_runtime_job_health_v1",
   "source": "VULTR_SYSTEMD",
-  "source_head_sha": "6ade89e5642c0eedf096f2c8d9ae4a0ceda14e2b",
-  "started_at_utc": "2026-10-17T01:09:52.687184+00:00",
+  "source_head_sha": "10c19c8482c08015653b523bbff9becb071cab80",
+  "started_at_utc": "2026-10-17T01:39:59.948911+00:00",
   "status": "SUCCESS",
   "steps": [
     {
-      "completed_at_utc": "2026-10-17T01:09:54.996313+00:00",
+      "action_status": "RECOVERY_REQUESTED_NOT_VERIFIED",
+      "completed_at_utc": "2026-10-17T01:40:00.002624+00:00",
+      "exit": 0,
+      "job": "watchdog",
+      "name": "Request fresh-source auxiliary CAS recovery",
+      "recovery_mode": "FULL_JOB_FROM_LATEST_MAIN",
+      "recovery_verified": false,
+      "started_at_utc": "2026-10-17T01:39:59.968026+00:00",
+      "status": "SUCCESS",
+      "units": [
+        "hunter-discovery.service"
+      ]
+    },
+    {
+      "completed_at_utc": "2026-10-17T01:40:02.366420+00:00",
       "exit": 0,
       "job": "watchdog",
       "name": "Observe discovery and downstream generation",
-      "seconds": 2.291,
-      "started_at_utc": "2026-10-17T01:09:52.705796+00:00",
+      "seconds": 2.363,
+      "started_at_utc": "2026-10-17T01:40:00.003300+00:00",
       "status": "SUCCESS"
     },
     {
-      "completed_at_utc": "2026-10-17T01:09:55.029382+00:00",
-      "exit": 0,
+      "completed_at_utc": "2026-10-17T01:40:02.366933+00:00",
+      "exit": null,
       "job": "watchdog",
       "name": "Self-heal stale discovery or downstream by touching dedicated trigger",
-      "seconds": 0.033,
-      "started_at_utc": "2026-10-17T01:09:54.996404+00:00",
-      "status": "SUCCESS"
+      "seconds": 0.0,
+      "started_at_utc": "2026-10-17T01:40:02.366512+00:00",
+      "status": "SKIPPED"
     },
     {
-      "completed_at_utc": "2026-10-17T01:09:55.030210+00:00",
+      "completed_at_utc": "2026-10-17T01:40:02.367196+00:00",
       "exit": null,
       "job": "watchdog",
       "name": "Self-heal stale position monitor by touching dedicated trigger",
       "seconds": 0.0,
-      "started_at_utc": "2026-10-17T01:09:55.029851+00:00",
+      "started_at_utc": "2026-10-17T01:40:02.367073+00:00",
       "status": "SKIPPED"
     },
     {
-      "completed_at_utc": "2026-10-17T01:09:56.317191+00:00",
+      "completed_at_utc": "2026-10-17T01:40:03.739621+00:00",
       "exit": 0,
       "job": "watchdog",
       "name": "Authoritative main read-back",
-      "seconds": 1.287,
-      "started_at_utc": "2026-10-17T01:09:55.030282+00:00",
+      "seconds": 1.372,
+      "started_at_utc": "2026-10-17T01:40:02.367239+00:00",
       "status": "SUCCESS"
     }
   ]
