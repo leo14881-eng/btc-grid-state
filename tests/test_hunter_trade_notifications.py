@@ -11,6 +11,31 @@ def fixture():
 
 
 class NotificationTests(unittest.TestCase):
+    def test_eigen_profit_protection_is_selected_after_stalled_cursor(self):
+        # Pinned ledger identity at main 44327057a565e86faa6eb62465504e34c6fc0b6d.
+        # Offline fixture only: this neither emits a message nor persists an ACK.
+        p = fixture()
+        p['events'] = [dict(type='SHADOW_V2_SELL',
+                           at='2026-10-12T00:57:10.860950+00:00', asset='EIGEN',
+                           shadow_id='SHV2-20261011T222832-EIGEN-edad39', tranches=1,
+                           price=0.27, notional_usdt=1000, net_pnl_usdt=1.89,
+                           reason='PROFIT_PROTECTION')]
+        b = make_batch(p, [], '44327057a565e86faa6eb62465504e34c6fc0b6d',
+                       after='2026-10-06T18:26:30+00:00')
+        self.assertEqual([e['event_id'] for e in b['events']],
+                         ['a90afddfe2b32c9c01bc5497ca2d60928e0eb5b76a0539a809e8e5c78510c767'])
+        self.assertEqual(b['delivery_status'], 'PREPARED_NOT_DELIVERED')
+
+    def test_failed_receipt_preserves_identical_retry(self):
+        p = fixture()
+        acknowledged = []
+        b = make_batch(p, acknowledged, 'a' * 40)
+        before = copy.deepcopy((p, acknowledged, b))
+        with self.assertRaisesRegex(ValueError, 'DELIVERY_RECEIPT_REQUIRED'):
+            acknowledge(b, None)
+        self.assertEqual((p, acknowledged, b), before)
+        self.assertEqual(make_batch(p, acknowledged, 'a' * 40), b)
+
     def test_prepared_is_not_delivered_and_does_not_mutate(self):
         source = fixture(); before = copy.deepcopy(source)
         batch = make_batch(source, [], 'a' * 40)
