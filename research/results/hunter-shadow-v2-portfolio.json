@@ -28,8 +28,8 @@
       ],
       "mfe_pct": 0.8706,
       "mae_pct": -6.9066,
-      "last_price": 0.813,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 0.812,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -45,9 +45,9 @@
         "source": "CAPITAL_REVIEW_FINAL_ACTION",
         "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
       },
-      "holding_hours": 322.18,
-      "degraded_cycles": 10,
-      "health_state": "THESIS_INVALIDATED",
+      "holding_hours": 322.51,
+      "degraded_cycles": 1,
+      "health_state": "WEAKENING",
       "health_reasons": [
         "SCORE_WEAK",
         "SIGNALS_WEAK",
@@ -64,20 +64,20 @@
       "observation_complete": false,
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M",
       "opportunity_backfill_at_utc": "2026-10-04T18:38:50.633672+00:00",
-      "last_health_evidence_id": "8d90f3a10d6c2fd6b8439a68b8b2d716a4eca158b2c928c2931a7f3c251bf6d4",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
-      "recovery_state": "PERSISTENT_INVALIDATION",
+      "last_health_evidence_id": "ef8ae29bc759c4c179d2d1351b02dd42e2b3d65973a8e379d18e479289af5e22",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
+      "recovery_state": "LOSS_RECOVERY",
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -126.28500057092242,
-        "vwap": 0.8103121981454066,
+        "net_pnl_usdt": -124.69457079023209,
+        "vwap": 0.811,
         "quantity": 2314.651802492712,
         "capital": 2000.0,
         "fee_bps": 10,
         "book_mid": 0.812,
-        "fetched_at": "2026-10-17T09:13:32.620108+00:00",
+        "fetched_at": "2026-10-17T09:33:31.329576+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -86,21 +86,12 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 0.813,
-        "last_reference_net_pnl_usdt": -120.06989648885201
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 0.812,
+        "last_reference_net_pnl_usdt": -122.38223363954194
       },
       "health_transitions": [
-        {
-          "from": "THESIS_INVALIDATED",
-          "to": "WEAKENING",
-          "generation_id": "MONITOR_20261016T191810141097Z",
-          "observed_at_utc": "2026-10-16T19:18:10.141097+00:00",
-          "reasons": [
-            "SCORE_WEAK"
-          ]
-        },
         {
           "from": "WEAKENING",
           "to": "DEGRADED",
@@ -415,19 +406,24 @@
             "SCORE_WEAK",
             "SIGNALS_WEAK"
           ]
+        },
+        {
+          "from": "THESIS_INVALIDATED",
+          "to": "WEAKENING",
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "reasons": [
+            "SCORE_WEAK",
+            "SIGNALS_WEAK",
+            "BTC_RELATIVE_NEGATIVE"
+          ]
         }
       ],
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
-        "persistent_invalidation_count": 8,
+        "persistent_invalidation_count": 0,
         "recovery_observations": 0,
         "transitions": [
-          {
-            "from": "PERSISTENT_INVALIDATION",
-            "to": "LOSS_RECOVERY",
-            "generation_id": "MONITOR_20261016T021807111163Z",
-            "at": "2026-10-16T02:18:28.986026+00:00"
-          },
           {
             "from": "LOSS_RECOVERY",
             "to": "PERSISTENT_INVALIDATION",
@@ -613,23 +609,29 @@
             "to": "PERSISTENT_INVALIDATION",
             "generation_id": "MONITOR_20261017T084801916747Z",
             "at": "2026-10-17T08:48:22.666432+00:00"
+          },
+          {
+            "from": "PERSISTENT_INVALIDATION",
+            "to": "LOSS_RECOVERY",
+            "generation_id": "MONITOR_20261017T093309926840Z",
+            "at": "2026-10-17T09:33:31.336258+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "score": 1.0,
-        "independent": 1,
-        "btc_relative_1h": -0.3609,
-        "btc_relative_4h": -0.9745,
-        "relative_acceleration": -0.1172,
+        "score": 0.0,
+        "independent": 0,
+        "btc_relative_1h": -0.2807,
+        "btc_relative_4h": -0.8942,
+        "relative_acceleration": -0.0572,
         "spread_bps": 24.631,
-        "bid_depth": 103169.62,
+        "bid_depth": 100816.61,
         "supply_identity_risk": [
           "ASSET_IDENTITY_NOT_CORROBORATED"
         ],
@@ -639,24 +641,24 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -120.06989648885201,
+          "current_net_pnl_usdt": -122.38223363954194,
           "future_recovery": "UNKNOWN"
         },
         "last_recovered_at_utc": "2026-10-12T15:30:52.163703+00:00",
         "last_recovered_generation_id": "MONITOR_20261012T153030266366Z"
       },
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "degraded_cycles": 10,
-        "recovery_state": "PERSISTENT_INVALIDATION"
+        "degraded_cycles": 1,
+        "recovery_state": "LOSS_RECOVERY"
       },
       "execution_venue": "BINANCE_SPOT",
       "market_symbol": "NEXOUSDT",
@@ -701,8 +703,8 @@
       ],
       "mfe_pct": 0.0,
       "mae_pct": -17.503,
-      "last_price": 0.01921,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 0.01907,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -718,11 +720,12 @@
         "source": "CAPITAL_REVIEW_FINAL_ACTION",
         "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
       },
-      "holding_hours": 306.39,
-      "degraded_cycles": 0,
+      "holding_hours": 306.72,
+      "degraded_cycles": 1,
       "health_state": "WEAKENING",
       "health_reasons": [
-        "SCORE_WEAK"
+        "SCORE_WEAK",
+        "SIGNALS_WEAK"
       ],
       "sample_cohort": "MIGRATION_SAMPLE",
       "holding_mfe_pct": -6.4634,
@@ -735,20 +738,20 @@
       "observation_complete": false,
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M",
       "opportunity_backfill_at_utc": "2026-10-04T18:38:50.633672+00:00",
-      "last_health_evidence_id": "64ca17dff65660b84643331ff1bc1fec8f17229ec19a9b4c417852c05d8bddac",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
+      "last_health_evidence_id": "a0a09040ad98c763fc5a3859b86c7c06db389a83eea29b44bf755914176c2336",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
       "recovery_state": "LOSS_RECOVERY",
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -163.59634589069196,
-        "vwap": 0.01914861917185501,
+        "net_pnl_usdt": -174.8031328043021,
+        "vwap": 0.019031763330129445,
         "quantity": 95998.66598773841,
         "capital": 2000.0,
         "fee_bps": 10,
-        "book_mid": 0.019200000000000002,
-        "fetched_at": "2026-10-17T09:13:33.585403+00:00",
+        "book_mid": 0.019065,
+        "fetched_at": "2026-10-17T09:33:30.391001+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -757,10 +760,10 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 0.01921,
-        "last_reference_net_pnl_usdt": -157.7097607491694
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 0.01907,
+        "last_reference_net_pnl_usdt": -171.1361341742147
       },
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
@@ -960,19 +963,20 @@
             "at": "2026-10-17T07:18:38.596682+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
         "health_state": "WEAKENING",
         "health_reasons": [
-          "SCORE_WEAK"
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
         ],
-        "score": 3.0152,
-        "independent": 3,
-        "btc_relative_1h": 0.8467,
-        "btc_relative_4h": -0.1377,
-        "relative_acceleration": 0.8811,
-        "spread_bps": 10.417,
-        "bid_depth": 29233.27,
+        "score": 1.9678,
+        "independent": 1,
+        "btc_relative_1h": 0.1919,
+        "btc_relative_4h": -0.7869,
+        "relative_acceleration": 0.3887,
+        "spread_bps": 5.245,
+        "bid_depth": 28283.04,
         "supply_identity_risk": [
           "ASSET_IDENTITY_NOT_CORROBORATED"
         ],
@@ -982,21 +986,22 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -157.7097607491694,
+          "current_net_pnl_usdt": -171.1361341742147,
           "future_recovery": "UNKNOWN"
         },
         "last_recovered_at_utc": "2026-10-17T03:38:28.177212+00:00",
         "last_recovered_generation_id": "MONITOR_20261017T033806943411Z"
       },
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
         "health_state": "WEAKENING",
         "health_reasons": [
-          "SCORE_WEAK"
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
         ],
-        "degraded_cycles": 0,
+        "degraded_cycles": 1,
         "recovery_state": "LOSS_RECOVERY"
       },
       "health_transitions": [
@@ -1361,8 +1366,8 @@
       "observation_complete": false,
       "sample_cohort": "NEW_VERSION_SAMPLE",
       "data_provenance": "LIVE_OBSERVATION",
-      "last_price": 33.84,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 33.89,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -1378,27 +1383,28 @@
         "source": "CAPITAL_REVIEW_FINAL_ACTION",
         "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
       },
-      "holding_hours": 290.12,
-      "degraded_cycles": 10,
-      "last_health_evidence_id": "efbc4db3a801c13141901fa0423c451cb8b70ebe5548d2910909ed5cf80d0f11",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
-      "health_state": "THESIS_INVALIDATED",
+      "holding_hours": 290.45,
+      "degraded_cycles": 1,
+      "last_health_evidence_id": "bed0ab45035cad5756c1e4eb3935c52a617b04caec4440e98e00e8f03341b1d0",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
+      "health_state": "WEAKENING",
       "health_reasons": [
         "SCORE_WEAK",
+        "SIGNALS_WEAK",
         "BTC_RELATIVE_NEGATIVE"
       ],
-      "recovery_state": "PERSISTENT_INVALIDATION",
+      "recovery_state": "LOSS_RECOVERY",
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -289.0299516345292,
-        "vwap": 33.8292118226168,
+        "net_pnl_usdt": -285.9431116571095,
+        "vwap": 33.89024466393299,
         "quantity": 50.62733178878082,
         "capital": 2000.0,
         "fee_bps": 10,
-        "book_mid": 33.855000000000004,
-        "fetched_at": "2026-10-17T09:13:33.588404+00:00",
+        "book_mid": 33.915,
+        "fetched_at": "2026-10-17T09:33:30.409659+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -1407,23 +1413,12 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 33.84,
-        "last_reference_net_pnl_usdt": -288.48432117538914
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 33.89,
+        "last_reference_net_pnl_usdt": -285.9554859525397
       },
       "health_transitions": [
-        {
-          "from": "THESIS_INVALIDATED",
-          "to": "WEAKENING",
-          "generation_id": "MONITOR_20261016T193312835598Z",
-          "observed_at_utc": "2026-10-16T19:33:12.835598+00:00",
-          "reasons": [
-            "SCORE_WEAK",
-            "SIGNALS_WEAK",
-            "BTC_RELATIVE_NEGATIVE"
-          ]
-        },
         {
           "from": "WEAKENING",
           "to": "DEGRADED",
@@ -1748,19 +1743,24 @@
             "SIGNALS_WEAK",
             "BTC_RELATIVE_NEGATIVE"
           ]
+        },
+        {
+          "from": "THESIS_INVALIDATED",
+          "to": "WEAKENING",
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "reasons": [
+            "SCORE_WEAK",
+            "SIGNALS_WEAK",
+            "BTC_RELATIVE_NEGATIVE"
+          ]
         }
       ],
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
-        "persistent_invalidation_count": 8,
+        "persistent_invalidation_count": 0,
         "recovery_observations": 0,
         "transitions": [
-          {
-            "from": "NONE",
-            "to": "LOSS_RECOVERY",
-            "generation_id": "MONITOR_20261016T083255529671Z",
-            "at": "2026-10-16T08:33:17.331657+00:00"
-          },
           {
             "from": "LOSS_RECOVERY",
             "to": "PERSISTENT_INVALIDATION",
@@ -1946,22 +1946,29 @@
             "to": "PERSISTENT_INVALIDATION",
             "generation_id": "MONITOR_20261017T084801916747Z",
             "at": "2026-10-17T08:48:22.666432+00:00"
+          },
+          {
+            "from": "PERSISTENT_INVALIDATION",
+            "to": "LOSS_RECOVERY",
+            "generation_id": "MONITOR_20261017T093309926840Z",
+            "at": "2026-10-17T09:33:31.336258+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
+          "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "score": 0.5705,
-        "independent": 2,
-        "btc_relative_1h": -0.2585,
-        "btc_relative_4h": -1.2656,
-        "relative_acceleration": 0.0579,
-        "spread_bps": 2.954,
-        "bid_depth": 61548.01,
+        "score": 1.0432,
+        "independent": 1,
+        "btc_relative_1h": -0.0309,
+        "btc_relative_4h": -1.039,
+        "relative_acceleration": 0.2288,
+        "spread_bps": 2.949,
+        "bid_depth": 60149.45,
         "supply_identity_risk": [],
         "mfe_pct": 0.0,
         "mae_pct": -17.5352,
@@ -1969,23 +1976,24 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -288.48432117538914,
+          "current_net_pnl_usdt": -285.9554859525397,
           "future_recovery": "UNKNOWN"
         },
         "last_recovered_at_utc": "2026-10-16T05:13:20.251685+00:00",
         "last_recovered_generation_id": "MONITOR_20261016T051256728359Z"
       },
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
+          "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "degraded_cycles": 10,
-        "recovery_state": "PERSISTENT_INVALIDATION"
+        "degraded_cycles": 1,
+        "recovery_state": "LOSS_RECOVERY"
       },
       "execution_venue": "BINANCE_SPOT",
       "market_symbol": "GIGGLEUSDT",
@@ -2039,8 +2047,8 @@
       "observation_complete": false,
       "sample_cohort": "NEW_VERSION_SAMPLE",
       "data_provenance": "LIVE_OBSERVATION",
-      "last_price": 0.02916,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 0.0291,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -2056,28 +2064,28 @@
         "source": "CAPITAL_REVIEW_FINAL_ACTION",
         "purpose": "SINGLE_AUTHORITATIVE_ENTRY_DECISION"
       },
-      "holding_hours": 286.89,
-      "degraded_cycles": 10,
-      "last_health_evidence_id": "eedf5c4ebb8170d8921e7632ab8eda1fb1b4ff79ab3f746d79d7b4c1b98d9ad4",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
-      "health_state": "THESIS_INVALIDATED",
+      "holding_hours": 287.22,
+      "degraded_cycles": 1,
+      "last_health_evidence_id": "0374f955bdcfb7dec9d3aa610b3626f7a95a946a850287712923001a2b508435",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
+      "health_state": "WEAKENING",
       "health_reasons": [
         "SCORE_WEAK",
         "SIGNALS_WEAK",
         "BTC_RELATIVE_NEGATIVE"
       ],
-      "recovery_state": "PERSISTENT_INVALIDATION",
+      "recovery_state": "LOSS_RECOVERY",
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -294.3932794688967,
-        "vwap": 0.029130638456520024,
+        "net_pnl_usdt": -296.43452052373937,
+        "vwap": 0.029095775404882476,
         "quantity": 58608.87797272214,
         "capital": 2000.0,
         "fee_bps": 10,
-        "book_mid": 0.02915,
-        "fetched_at": "2026-10-17T09:13:32.604787+00:00",
+        "book_mid": 0.02912,
+        "fetched_at": "2026-10-17T09:33:30.394031+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -2086,23 +2094,12 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 0.02916,
-        "last_reference_net_pnl_usdt": -292.674153197107
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 0.0291,
+        "last_reference_net_pnl_usdt": -296.187169342792
       },
       "health_transitions": [
-        {
-          "from": "THESIS_INVALIDATED",
-          "to": "WEAKENING",
-          "generation_id": "MONITOR_20261016T193312835598Z",
-          "observed_at_utc": "2026-10-16T19:33:12.835598+00:00",
-          "reasons": [
-            "SCORE_WEAK",
-            "SIGNALS_WEAK",
-            "BTC_RELATIVE_NEGATIVE"
-          ]
-        },
         {
           "from": "WEAKENING",
           "to": "DEGRADED",
@@ -2420,19 +2417,24 @@
             "SIGNALS_WEAK",
             "BTC_RELATIVE_NEGATIVE"
           ]
+        },
+        {
+          "from": "THESIS_INVALIDATED",
+          "to": "WEAKENING",
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "reasons": [
+            "SCORE_WEAK",
+            "SIGNALS_WEAK",
+            "BTC_RELATIVE_NEGATIVE"
+          ]
         }
       ],
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
-        "persistent_invalidation_count": 8,
+        "persistent_invalidation_count": 0,
         "recovery_observations": 0,
         "transitions": [
-          {
-            "from": "PERSISTENT_INVALIDATION",
-            "to": "LOSS_RECOVERY",
-            "generation_id": "MONITOR_20261016T032736460569Z",
-            "at": "2026-10-16T03:27:57.819175+00:00"
-          },
           {
             "from": "LOSS_RECOVERY",
             "to": "RECOVERING",
@@ -2618,23 +2620,29 @@
             "to": "PERSISTENT_INVALIDATION",
             "generation_id": "MONITOR_20261017T084801916747Z",
             "at": "2026-10-17T08:48:22.666432+00:00"
+          },
+          {
+            "from": "PERSISTENT_INVALIDATION",
+            "to": "LOSS_RECOVERY",
+            "generation_id": "MONITOR_20261017T093309926840Z",
+            "at": "2026-10-17T09:33:31.336258+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "score": 0.7069,
+        "score": 0.3988,
         "independent": 1,
-        "btc_relative_1h": -0.3009,
-        "btc_relative_4h": -1.2602,
-        "relative_acceleration": 0.0141,
-        "spread_bps": 6.861,
-        "bid_depth": 29313.97,
+        "btc_relative_1h": -0.4259,
+        "btc_relative_4h": -1.3836,
+        "relative_acceleration": -0.08,
+        "spread_bps": 6.868,
+        "bid_depth": 29541.39,
         "supply_identity_risk": [
           "ASSET_IDENTITY_NOT_CORROBORATED"
         ],
@@ -2644,24 +2652,24 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -292.674153197107,
+          "current_net_pnl_usdt": -296.187169342792,
           "future_recovery": "UNKNOWN"
         },
         "last_recovered_at_utc": "2026-10-16T04:38:07.618839+00:00",
         "last_recovered_generation_id": "MONITOR_20261016T043746063385Z"
       },
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "degraded_cycles": 10,
-        "recovery_state": "PERSISTENT_INVALIDATION"
+        "degraded_cycles": 1,
+        "recovery_state": "LOSS_RECOVERY"
       },
       "execution_venue": "BINANCE_SPOT",
       "market_symbol": "ENJUSDT",
@@ -2713,8 +2721,8 @@
       "observation_complete": false,
       "sample_cohort": "NEW_VERSION_SAMPLE",
       "data_provenance": "LIVE_OBSERVATION",
-      "last_price": 0.4531,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 0.4519,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -2748,29 +2756,18 @@
       },
       "shadow_entry_execution_venue": "BINANCE_SPOT",
       "shadow_entry_model_observed_at_utc": "2026-10-11T23:24:20.030357+00:00",
-      "holding_hours": 129.75,
-      "degraded_cycles": 10,
-      "last_health_evidence_id": "3912730f18355666bb6dd3474717d9a84bf1128e0b7e809d58d14e4eb843deec",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
-      "health_state": "THESIS_INVALIDATED",
+      "holding_hours": 130.09,
+      "degraded_cycles": 1,
+      "last_health_evidence_id": "a6a93de73e86a99eb861abb72fc492412d5246f6b880510f137aa4c56c33b33a",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
+      "health_state": "WEAKENING",
       "health_reasons": [
         "SCORE_WEAK",
         "SIGNALS_WEAK",
         "BTC_RELATIVE_NEGATIVE"
       ],
       "health_transitions": [
-        {
-          "from": "WEAKENING",
-          "to": "DEGRADED",
-          "generation_id": "MONITOR_20261016T180809242492Z",
-          "observed_at_utc": "2026-10-16T18:08:09.242492+00:00",
-          "reasons": [
-            "SCORE_WEAK",
-            "SIGNALS_WEAK",
-            "BTC_RELATIVE_NEGATIVE"
-          ]
-        },
         {
           "from": "DEGRADED",
           "to": "THESIS_INVALIDATED",
@@ -3091,18 +3088,29 @@
             "SIGNALS_WEAK",
             "BTC_RELATIVE_NEGATIVE"
           ]
+        },
+        {
+          "from": "THESIS_INVALIDATED",
+          "to": "WEAKENING",
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "reasons": [
+            "SCORE_WEAK",
+            "SIGNALS_WEAK",
+            "BTC_RELATIVE_NEGATIVE"
+          ]
         }
       ],
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -135.18573011275828,
-        "vwap": 0.4532,
+        "net_pnl_usdt": -137.0939698962693,
+        "vwap": 0.45220000000000005,
         "quantity": 1910.1499334445693,
         "capital": 1000.0,
         "fee_bps": 10,
-        "book_mid": 0.45325,
-        "fetched_at": "2026-10-17T09:13:32.615461+00:00",
+        "book_mid": 0.45225,
+        "fetched_at": "2026-10-17T09:33:30.387355+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -3111,22 +3119,16 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 0.4531,
-        "last_reference_net_pnl_usdt": -135.37655409110937
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 0.4519,
+        "last_reference_net_pnl_usdt": -137.6664418313227
       },
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
-        "persistent_invalidation_count": 8,
+        "persistent_invalidation_count": 0,
         "recovery_observations": 0,
         "transitions": [
-          {
-            "from": "PERSISTENT_INVALIDATION",
-            "to": "LOSS_RECOVERY",
-            "generation_id": "MONITOR_20261016T031753015414Z",
-            "at": "2026-10-16T03:18:14.741343+00:00"
-          },
           {
             "from": "LOSS_RECOVERY",
             "to": "PERSISTENT_INVALIDATION",
@@ -3312,23 +3314,29 @@
             "to": "PERSISTENT_INVALIDATION",
             "generation_id": "MONITOR_20261017T084801916747Z",
             "at": "2026-10-17T08:48:22.666432+00:00"
+          },
+          {
+            "from": "PERSISTENT_INVALIDATION",
+            "to": "LOSS_RECOVERY",
+            "generation_id": "MONITOR_20261017T093309926840Z",
+            "at": "2026-10-17T09:33:31.336258+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "score": 0.1816,
-        "independent": 1,
-        "btc_relative_1h": -0.3012,
-        "btc_relative_4h": -0.9647,
-        "relative_acceleration": -0.06,
-        "spread_bps": 2.206,
-        "bid_depth": 397591.62,
+        "score": 0.0285,
+        "independent": 0,
+        "btc_relative_1h": -0.485,
+        "btc_relative_4h": -1.169,
+        "relative_acceleration": -0.1927,
+        "spread_bps": 2.211,
+        "bid_depth": 410025.44,
         "supply_identity_risk": [
           "ASSET_IDENTITY_NOT_CORROBORATED"
         ],
@@ -3338,25 +3346,25 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -135.37655409110937,
+          "current_net_pnl_usdt": -137.6664418313227,
           "future_recovery": "UNKNOWN"
         },
         "last_recovered_at_utc": "2026-10-15T14:37:26.784182+00:00",
         "last_recovered_generation_id": "MONITOR_20261015T143704672954Z"
       },
-      "recovery_state": "PERSISTENT_INVALIDATION",
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_state": "LOSS_RECOVERY",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE"
         ],
-        "degraded_cycles": 10,
-        "recovery_state": "PERSISTENT_INVALIDATION"
+        "degraded_cycles": 1,
+        "recovery_state": "LOSS_RECOVERY"
       }
     },
     {
@@ -3392,8 +3400,8 @@
       "observation_complete": false,
       "sample_cohort": "NEW_VERSION_SAMPLE",
       "data_provenance": "LIVE_OBSERVATION",
-      "last_price": 0.1166,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 0.1162,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -3427,12 +3435,12 @@
       },
       "shadow_entry_execution_venue": "BINANCE_SPOT",
       "shadow_entry_model_observed_at_utc": "2026-10-14T17:24:14.405766+00:00",
-      "holding_hours": 63.79,
-      "degraded_cycles": 10,
-      "last_health_evidence_id": "e747223f5d3c0d6527473d35c41965e488763108d6d0f44cf64d62640d34f85a",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
-      "health_state": "THESIS_INVALIDATED",
+      "holding_hours": 64.12,
+      "degraded_cycles": 1,
+      "last_health_evidence_id": "5cb691dcfe978cc59f21e3b072e2b866f9522fecd00b5d928542ef79460e6ae4",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
+      "health_state": "WEAKENING",
       "health_reasons": [
         "SCORE_WEAK",
         "SIGNALS_WEAK",
@@ -3440,16 +3448,6 @@
         "RELATIVE_MOMENTUM_DECELERATING"
       ],
       "health_transitions": [
-        {
-          "from": "WEAKENING",
-          "to": "DEGRADED",
-          "generation_id": "MONITOR_20261016T205810262204Z",
-          "observed_at_utc": "2026-10-16T20:58:10.262204+00:00",
-          "reasons": [
-            "SCORE_WEAK",
-            "SIGNALS_WEAK"
-          ]
-        },
         {
           "from": "DEGRADED",
           "to": "THESIS_INVALIDATED",
@@ -3750,18 +3748,30 @@
             "SIGNALS_WEAK",
             "RELATIVE_MOMENTUM_DECELERATING"
           ]
+        },
+        {
+          "from": "THESIS_INVALIDATED",
+          "to": "WEAKENING",
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "reasons": [
+            "SCORE_WEAK",
+            "SIGNALS_WEAK",
+            "BTC_RELATIVE_NEGATIVE",
+            "RELATIVE_MOMENTUM_DECELERATING"
+          ]
         }
       ],
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -124.77204268826381,
-        "vwap": 0.11643037461826286,
+        "net_pnl_usdt": -126.4156984731909,
+        "vwap": 0.11621172134378299,
         "quantity": 7524.703620043894,
         "capital": 1000.0,
         "fee_bps": 10,
-        "book_mid": 0.11655,
-        "fetched_at": "2026-10-17T09:13:33.572749+00:00",
+        "book_mid": 0.11635000000000001,
+        "fetched_at": "2026-10-17T09:33:31.322048+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -3770,22 +3780,16 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 0.1166,
-        "last_reference_net_pnl_usdt": -123.49693834497907
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 0.1162,
+        "last_reference_net_pnl_usdt": -126.50380991154861
       },
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
-        "persistent_invalidation_count": 8,
+        "persistent_invalidation_count": 0,
         "recovery_observations": 0,
         "transitions": [
-          {
-            "from": "NONE",
-            "to": "LOSS_RECOVERY",
-            "generation_id": "MONITOR_20261016T063257872405Z",
-            "at": "2026-10-16T06:33:19.788324+00:00"
-          },
           {
             "from": "LOSS_RECOVERY",
             "to": "PERSISTENT_INVALIDATION",
@@ -3971,24 +3975,30 @@
             "to": "PERSISTENT_INVALIDATION",
             "generation_id": "MONITOR_20261017T084801916747Z",
             "at": "2026-10-17T08:48:22.666432+00:00"
+          },
+          {
+            "from": "PERSISTENT_INVALIDATION",
+            "to": "LOSS_RECOVERY",
+            "generation_id": "MONITOR_20261017T093309926840Z",
+            "at": "2026-10-17T09:33:31.336258+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE",
           "RELATIVE_MOMENTUM_DECELERATING"
         ],
-        "score": 0.1467,
+        "score": 0.1205,
         "independent": 1,
-        "btc_relative_1h": -1.2633,
-        "btc_relative_4h": -0.6689,
-        "relative_acceleration": -1.0961,
-        "spread_bps": 8.58,
-        "bid_depth": 97650.76,
+        "btc_relative_1h": -1.5219,
+        "btc_relative_4h": -0.8447,
+        "relative_acceleration": -1.3107,
+        "spread_bps": 8.595,
+        "bid_depth": 96960.14,
         "supply_identity_risk": [
           "ASSET_IDENTITY_NOT_CORROBORATED"
         ],
@@ -3998,26 +4008,26 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -123.49693834497907,
+          "current_net_pnl_usdt": -126.50380991154861,
           "future_recovery": "UNKNOWN"
         },
         "last_recovered_at_utc": "2026-10-16T05:03:01.415624+00:00",
         "last_recovered_generation_id": "MONITOR_20261016T050238291820Z"
       },
-      "recovery_state": "PERSISTENT_INVALIDATION",
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_state": "LOSS_RECOVERY",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "health_state": "THESIS_INVALIDATED",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "health_state": "WEAKENING",
         "health_reasons": [
           "SCORE_WEAK",
           "SIGNALS_WEAK",
           "BTC_RELATIVE_NEGATIVE",
           "RELATIVE_MOMENTUM_DECELERATING"
         ],
-        "degraded_cycles": 10,
-        "recovery_state": "PERSISTENT_INVALIDATION"
+        "degraded_cycles": 1,
+        "recovery_state": "LOSS_RECOVERY"
       }
     },
     {
@@ -4053,8 +4063,8 @@
       "observation_complete": false,
       "sample_cohort": "NEW_VERSION_SAMPLE",
       "data_provenance": "LIVE_OBSERVATION",
-      "last_price": 0.0526,
-      "last_marked_at_utc": "2026-10-17T09:13:33.817611+00:00",
+      "last_price": 0.0525,
+      "last_marked_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "capital_authority": "NONE_SHADOW_ONLY",
       "discovery_gate": "BROAD_FORWARD_SAMPLE",
       "execution_channel": {
@@ -4088,14 +4098,15 @@
       },
       "shadow_entry_execution_venue": "BINANCE_SPOT",
       "shadow_entry_model_observed_at_utc": "2026-10-17T01:53:45.650050+00:00",
-      "holding_hours": 7.3,
-      "degraded_cycles": 0,
-      "last_health_evidence_id": "725779c4c9a4d63d3c3540089703264363f3ded51eb6b2e8bf877bac33a654dc",
-      "last_health_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "last_health_generation_id": "MONITOR_20261017T091311938509Z",
+      "holding_hours": 7.63,
+      "degraded_cycles": 1,
+      "last_health_evidence_id": "775df7cdd75553e5b61d6cedfd308a5e5255040601251369b3aafb8d8de0b227",
+      "last_health_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "last_health_generation_id": "MONITOR_20261017T093309926840Z",
       "health_state": "WEAKENING",
       "health_reasons": [
-        "SCORE_WEAK"
+        "SCORE_WEAK",
+        "SIGNALS_WEAK"
       ],
       "health_transitions": [
         {
@@ -4267,13 +4278,13 @@
       "last_exit_estimate": {
         "status": "SHADOW_RECEIPT_ESTIMATE",
         "venue": "BINANCE_SPOT",
-        "net_pnl_usdt": -40.14264429954608,
-        "vwap": 0.05256130760119902,
+        "net_pnl_usdt": -41.26222359954602,
+        "vwap": 0.0525,
         "quantity": 18279.95188332054,
         "capital": 1000.0,
         "fee_bps": 10,
-        "book_mid": 0.05265,
-        "fetched_at": "2026-10-17T09:13:32.622209+00:00",
+        "book_mid": 0.05255,
+        "fetched_at": "2026-10-17T09:33:31.327235+00:00",
         "source_timestamp": null,
         "historical_execution_verified": false
       },
@@ -4282,10 +4293,10 @@
         "state": "UNARMED",
         "historical_arm_status": "NOT_OBSERVED",
         "transitions": [],
-        "last_generation_id": "MONITOR_20261017T091311938509Z",
-        "last_observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
-        "last_reference_price": 0.0526,
-        "last_reference_net_pnl_usdt": -39.436056406402145
+        "last_generation_id": "MONITOR_20261017T093309926840Z",
+        "last_observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
+        "last_reference_price": 0.0525,
+        "last_reference_net_pnl_usdt": -41.26222359954602
       },
       "loss_recovery_lifecycle": {
         "schema": "hunter_loss_recovery_v1",
@@ -4335,19 +4346,20 @@
             "at": "2026-10-17T08:03:18.265807+00:00"
           }
         ],
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
         "health_state": "WEAKENING",
         "health_reasons": [
-          "SCORE_WEAK"
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
         ],
-        "score": 1.9014,
-        "independent": 3,
-        "btc_relative_1h": 0.3877,
-        "btc_relative_4h": -0.62,
-        "relative_acceleration": 0.5427,
-        "spread_bps": 18.993,
-        "bid_depth": 131902.29,
+        "score": 0.9201,
+        "independent": 1,
+        "btc_relative_1h": 0.0869,
+        "btc_relative_4h": -0.9177,
+        "relative_acceleration": 0.3164,
+        "spread_bps": 19.029,
+        "bid_depth": 133275.34,
         "supply_identity_risk": [],
         "mfe_pct": 0.5495,
         "mae_pct": -4.7619,
@@ -4355,20 +4367,21 @@
         "risk_reduction_authorized": false,
         "counterfactual": {
           "scope": "OBSERVATION_ONLY",
-          "current_net_pnl_usdt": -39.436056406402145,
+          "current_net_pnl_usdt": -41.26222359954602,
           "future_recovery": "UNKNOWN"
         }
       },
       "recovery_state": "LOSS_RECOVERY",
-      "recovery_generation_id": "MONITOR_20261017T091311938509Z",
+      "recovery_generation_id": "MONITOR_20261017T093309926840Z",
       "health_lifecycle_snapshot": {
-        "generation_id": "MONITOR_20261017T091311938509Z",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00",
+        "generation_id": "MONITOR_20261017T093309926840Z",
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
         "health_state": "WEAKENING",
         "health_reasons": [
-          "SCORE_WEAK"
+          "SCORE_WEAK",
+          "SIGNALS_WEAK"
         ],
-        "degraded_cycles": 0,
+        "degraded_cycles": 1,
         "recovery_state": "LOSS_RECOVERY"
       }
     }
@@ -28459,7 +28472,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.04196,
           "max_return_from_initial_buy_pct": 1.206,
           "max_return_from_sell_pct": 0.0,
@@ -28481,7 +28494,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.04378,
           "max_return_from_initial_buy_pct": 5.5958,
           "max_return_from_sell_pct": 4.3375,
@@ -28503,7 +28516,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.04378,
           "max_return_from_initial_buy_pct": 5.5958,
           "max_return_from_sell_pct": 4.3375,
@@ -28525,7 +28538,7 @@
           }
         },
         "48h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.04378,
           "max_return_from_initial_buy_pct": 5.5958,
           "max_return_from_sell_pct": 4.3375,
@@ -28567,7 +28580,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.112284,
       "full_opportunity_capture_ratio": 0.082276,
@@ -28580,8 +28593,8 @@
           "2026-10-14T17:26:17.654928+00:00",
           "2026-10-14T18:16:57.190267+00:00"
         ],
-        "next_open_ms": 1792226100000,
-        "bars_seen": 757,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 768,
         "peaks": {
           "full": {
             "peak_price": 0.04378,
@@ -28625,16 +28638,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-14T17:26:17.654928+00:00",
-        "requested_end_utc": "2026-10-17T08:38:30.746345+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1791999000000,
-        "eligible_end_ms": 1792226100000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 222346,
-        "end_edge_excluded_ms": 210746,
-        "expected_bars": 757,
-        "observed_bars": 757,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 768,
+        "observed_bars": 768,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:38:30.746345+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -28910,7 +28923,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.09371,
           "max_return_from_initial_buy_pct": 12.7677,
           "max_return_from_sell_pct": 8.2477,
@@ -28932,7 +28945,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.09371,
           "max_return_from_initial_buy_pct": 12.7677,
           "max_return_from_sell_pct": 8.2477,
@@ -28954,7 +28967,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.09512,
           "max_return_from_initial_buy_pct": 14.4645,
           "max_return_from_sell_pct": 9.8764,
@@ -28976,7 +28989,7 @@
           }
         },
         "48h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.09512,
           "max_return_from_initial_buy_pct": 14.4645,
           "max_return_from_sell_pct": 9.8764,
@@ -29018,7 +29031,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.471396,
       "full_opportunity_capture_ratio": 0.243935,
@@ -29031,8 +29044,8 @@
           "2026-10-14T19:26:44.825706+00:00",
           "2026-10-14T20:32:10.533159+00:00"
         ],
-        "next_open_ms": 1792226100000,
-        "bars_seen": 733,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 744,
         "peaks": {
           "full": {
             "peak_price": 0.09512,
@@ -29076,16 +29089,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-14T19:26:44.825706+00:00",
-        "requested_end_utc": "2026-10-17T08:38:30.746345+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1792006200000,
-        "eligible_end_ms": 1792226100000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 195175,
-        "end_edge_excluded_ms": 210746,
-        "expected_bars": 733,
-        "observed_bars": 733,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 744,
+        "observed_bars": 744,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:38:30.746345+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -29547,7 +29560,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.003866,
           "max_return_from_initial_buy_pct": 1.4432,
           "max_return_from_sell_pct": 0.1036,
@@ -29569,7 +29582,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.003868,
           "max_return_from_initial_buy_pct": 1.4957,
           "max_return_from_sell_pct": 0.1554,
@@ -29591,7 +29604,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.003868,
           "max_return_from_initial_buy_pct": 1.4957,
           "max_return_from_sell_pct": 0.1554,
@@ -29613,7 +29626,7 @@
           }
         },
         "48h": {
-          "observed_at_utc": "2026-10-17T08:38:30.746345+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.003868,
           "max_return_from_initial_buy_pct": 1.4957,
           "max_return_from_sell_pct": 0.1554,
@@ -29655,7 +29668,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.292564,
       "full_opportunity_capture_ratio": 0.292564,
@@ -29668,8 +29681,8 @@
           "2026-10-14T17:26:17.654928+00:00",
           "2026-10-14T23:12:05.839852+00:00"
         ],
-        "next_open_ms": 1792226100000,
-        "bars_seen": 757,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 768,
         "peaks": {
           "full": {
             "peak_price": 0.00394,
@@ -29713,16 +29726,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-14T17:26:17.654928+00:00",
-        "requested_end_utc": "2026-10-17T08:38:30.746345+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1791999000000,
-        "eligible_end_ms": 1792226100000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 222346,
-        "end_edge_excluded_ms": 210746,
-        "expected_bars": 757,
-        "observed_bars": 757,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 768,
+        "observed_bars": 768,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:38:30.746345+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -30022,7 +30035,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 1.768,
           "max_return_from_initial_buy_pct": 0.6261,
           "max_return_from_sell_pct": 0.1133,
@@ -30044,7 +30057,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 1.768,
           "max_return_from_initial_buy_pct": 0.6261,
           "max_return_from_sell_pct": 0.1133,
@@ -30066,7 +30079,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 1.807,
           "max_return_from_initial_buy_pct": 2.8458,
           "max_return_from_sell_pct": 2.3216,
@@ -30088,7 +30101,7 @@
           }
         },
         "48h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 1.807,
           "max_return_from_initial_buy_pct": 2.8458,
           "max_return_from_sell_pct": 2.3216,
@@ -30130,7 +30143,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.080234,
       "full_opportunity_capture_ratio": 0.038513,
@@ -30143,8 +30156,8 @@
           "2026-10-14T22:28:17.476265+00:00",
           "2026-10-15T01:42:06.148117+00:00"
         ],
-        "next_open_ms": 1792225800000,
-        "bars_seen": 696,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 708,
         "peaks": {
           "full": {
             "peak_price": 1.807,
@@ -30188,16 +30201,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-14T22:28:17.476265+00:00",
-        "requested_end_utc": "2026-10-17T08:33:34.186411+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1792017000000,
-        "eligible_end_ms": 1792225800000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 102524,
-        "end_edge_excluded_ms": 214186,
-        "expected_bars": 696,
-        "observed_bars": 696,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 708,
+        "observed_bars": 708,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:33:34.186411+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -30579,7 +30592,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:28:36.448303+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.0922,
           "max_return_from_initial_buy_pct": 3.2475,
           "max_return_from_sell_pct": 2.49,
@@ -30601,7 +30614,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:28:36.448303+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.0922,
           "max_return_from_initial_buy_pct": 3.2475,
           "max_return_from_sell_pct": 2.49,
@@ -30623,7 +30636,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:28:36.448303+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.09512,
           "max_return_from_initial_buy_pct": 6.5174,
           "max_return_from_sell_pct": 5.7359,
@@ -30645,7 +30658,7 @@
           }
         },
         "48h": {
-          "observed_at_utc": "2026-10-17T08:28:36.448303+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.09512,
           "max_return_from_initial_buy_pct": 6.5174,
           "max_return_from_sell_pct": 5.7359,
@@ -30687,7 +30700,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.039567,
       "full_opportunity_capture_ratio": 0.022095,
@@ -30700,8 +30713,8 @@
           "2026-10-15T06:30:09.654904+00:00",
           "2026-10-15T08:22:35.227614+00:00"
         ],
-        "next_open_ms": 1792225500000,
-        "bars_seen": 598,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 611,
         "peaks": {
           "full": {
             "peak_price": 0.09512,
@@ -30745,16 +30758,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-15T06:30:09.654904+00:00",
-        "requested_end_utc": "2026-10-17T08:28:36.448303+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1792046100000,
-        "eligible_end_ms": 1792225500000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 290346,
-        "end_edge_excluded_ms": 216448,
-        "expected_bars": 598,
-        "observed_bars": 598,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 611,
+        "observed_bars": 611,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:28:36.448303+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -31074,7 +31087,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.1974,
           "max_return_from_initial_buy_pct": 0.6629,
           "max_return_from_sell_pct": 0.3559,
@@ -31096,7 +31109,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.2011,
           "max_return_from_initial_buy_pct": 2.5497,
           "max_return_from_sell_pct": 2.2369,
@@ -31118,7 +31131,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.2045,
           "max_return_from_initial_buy_pct": 4.2835,
           "max_return_from_sell_pct": 3.9654,
@@ -31158,7 +31171,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.01326,
       "full_opportunity_capture_ratio": 0.005407,
@@ -31171,8 +31184,8 @@
           "2026-10-15T09:28:39.835624+00:00",
           "2026-10-15T11:33:00.413043+00:00"
         ],
-        "next_open_ms": 1792225800000,
-        "bars_seen": 564,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 576,
         "peaks": {
           "full": {
             "peak_price": 0.2064,
@@ -31216,16 +31229,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-15T09:28:39.835624+00:00",
-        "requested_end_utc": "2026-10-17T08:33:34.186411+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1792056600000,
-        "eligible_end_ms": 1792225800000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 80165,
-        "end_edge_excluded_ms": 214186,
-        "expected_bars": 564,
-        "observed_bars": 564,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 576,
+        "observed_bars": 576,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:33:34.186411+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -31521,7 +31534,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.2934,
           "max_return_from_initial_buy_pct": 3.3099,
           "max_return_from_sell_pct": 0.342,
@@ -31543,7 +31556,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.2961,
           "max_return_from_initial_buy_pct": 4.2606,
           "max_return_from_sell_pct": 1.2654,
@@ -31565,7 +31578,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.2967,
           "max_return_from_initial_buy_pct": 4.4718,
           "max_return_from_sell_pct": 1.4706,
@@ -31605,7 +31618,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.653103,
       "full_opportunity_capture_ratio": 0.596538,
@@ -31618,8 +31631,8 @@
           "2026-10-15T14:30:01.704321+00:00",
           "2026-10-15T17:33:07.103751+00:00"
         ],
-        "next_open_ms": 1792225800000,
-        "bars_seen": 503,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 515,
         "peaks": {
           "full": {
             "peak_price": 0.2967,
@@ -31663,16 +31676,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-15T14:30:01.704321+00:00",
-        "requested_end_utc": "2026-10-17T08:33:34.186411+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1792074900000,
-        "eligible_end_ms": 1792225800000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 298296,
-        "end_edge_excluded_ms": 214186,
-        "expected_bars": 503,
-        "observed_bars": 503,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 515,
+        "observed_bars": 515,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:33:34.186411+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -31941,7 +31954,7 @@
       },
       "post_exit_observation": {
         "1h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.234,
           "max_return_from_initial_buy_pct": 0.1712,
           "max_return_from_sell_pct": -0.3407,
@@ -31963,7 +31976,7 @@
           }
         },
         "6h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.234,
           "max_return_from_initial_buy_pct": 0.1712,
           "max_return_from_sell_pct": -0.3407,
@@ -31985,7 +31998,7 @@
           }
         },
         "24h": {
-          "observed_at_utc": "2026-10-17T08:33:34.186411+00:00",
+          "observed_at_utc": "2026-10-17T09:33:31.336258+00:00",
           "max_price": 0.234,
           "max_return_from_initial_buy_pct": 0.1712,
           "max_return_from_sell_pct": -0.3407,
@@ -32025,7 +32038,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.060776,
       "full_opportunity_capture_ratio": 0.060776,
@@ -32038,8 +32051,8 @@
           "2026-10-15T18:19:41.768771+00:00",
           "2026-10-15T19:28:03.987870+00:00"
         ],
-        "next_open_ms": 1792225800000,
-        "bars_seen": 458,
+        "next_open_ms": 1792229400000,
+        "bars_seen": 470,
         "peaks": {
           "full": {
             "peak_price": 0.2393,
@@ -32083,16 +32096,16 @@
         "schema": "hunter_completed_5m_coverage_v1",
         "status": "COMPLETE",
         "requested_start_utc": "2026-10-15T18:19:41.768771+00:00",
-        "requested_end_utc": "2026-10-17T08:33:34.186411+00:00",
+        "requested_end_utc": "2026-10-17T09:33:31.336258+00:00",
         "eligible_start_ms": 1792088400000,
-        "eligible_end_ms": 1792225800000,
+        "eligible_end_ms": 1792229400000,
         "start_edge_excluded_ms": 18232,
-        "end_edge_excluded_ms": 214186,
-        "expected_bars": 458,
-        "observed_bars": 458,
+        "end_edge_excluded_ms": 211336,
+        "expected_bars": 470,
+        "observed_bars": 470,
         "missing_bars": 0
       },
-      "opportunity_backfill_at_utc": "2026-10-17T08:33:34.186411+00:00",
+      "opportunity_backfill_at_utc": "2026-10-17T09:33:31.336258+00:00",
       "opportunity_backfill_source": "BINANCE_SPOT_KLINES_5M_COMPLETED_ONLY"
     },
     {
@@ -32470,7 +32483,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.148245,
       "full_opportunity_capture_ratio": 0.048422,
@@ -32899,7 +32912,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.129966,
       "full_opportunity_capture_ratio": 0.030861,
@@ -33510,7 +33523,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.454616,
       "full_opportunity_capture_ratio": 0.028898,
@@ -34392,7 +34405,7 @@
       },
       "observation_market_data": {
         "status": "AVAILABLE",
-        "observed_at_utc": "2026-10-17T09:13:33.817611+00:00"
+        "observed_at_utc": "2026-10-17T09:33:31.336258+00:00"
       },
       "holding_profit_capture_ratio": 0.438275,
       "full_opportunity_capture_ratio": 0.438275,
@@ -37902,306 +37915,9 @@
       "execution_identity_scope": "CURRENT_SHADOW_EXECUTION_MODEL"
     }
   ],
-  "updated_at_utc": "2026-10-17T09:13:33.817611+00:00",
-  "last_cycle_generation_id": "MONITOR_20261017T091311938509Z",
+  "updated_at_utc": "2026-10-17T09:33:31.336258+00:00",
+  "last_cycle_generation_id": "MONITOR_20261017T093309926840Z",
   "decisions": [
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261005T070625-GIGGLE-267291",
-      "asset": "GIGGLE",
-      "action": "HOLD",
-      "price": 34.29,
-      "reasons": [
-        "SCORE_WEAK",
-        "INSUFFICIENT_INDEPENDENT_SIGNALS",
-        "BTC_RELATIVE_WEAK",
-        "DEPTH_INSUFFICIENT",
-        "POSITION_HEALTH_THESIS_INVALIDATED",
-        "SCORE_WEAK",
-        "SIGNALS_WEAK"
-      ],
-      "evidence": {
-        "asset": "GIGGLE",
-        "score": 1.3462,
-        "independent": 1,
-        "btc_rel_1h": 0.351,
-        "btc_rel_4h": 0.1393,
-        "rel_accel": 0.3162,
-        "spread_bps": 5.833,
-        "bid_depth_2pct_usdt": 43022.08,
-        "ask_depth_2pct_usdt": 26217.14,
-        "buy_slippage_bps": 9.28,
-        "estimated_rr": 1.789,
-        "supply_verified": false,
-        "supply_status": "UNKNOWN",
-        "supply_confirmed_major_risk": false,
-        "return_1h": 0.41,
-        "return_4h": 0.0292,
-        "blockers": [],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "5836d34ff4570f396f03cca9d5370657b20b0f478fd5a016a54eac30d1902901"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:28.315857+00:00"
-      },
-      "tranches": 2,
-      "notional_usdt": 2000.0
-    },
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261005T070625-GIGGLE-267291",
-      "asset": "GIGGLE",
-      "action": "HOLD",
-      "price": 34.29,
-      "reasons": [
-        "LOSS_RECOVERY",
-        "NO_MECHANICAL_LOSS_EXIT"
-      ],
-      "evidence": {
-        "asset": "GIGGLE",
-        "score": 1.3462,
-        "independent": 1,
-        "btc_rel_1h": 0.351,
-        "btc_rel_4h": 0.1393,
-        "rel_accel": 0.3162,
-        "spread_bps": 5.833,
-        "bid_depth_2pct_usdt": 43022.08,
-        "ask_depth_2pct_usdt": 26217.14,
-        "buy_slippage_bps": 9.28,
-        "estimated_rr": 1.789,
-        "supply_verified": false,
-        "supply_status": "UNKNOWN",
-        "supply_confirmed_major_risk": false,
-        "return_1h": 0.41,
-        "return_4h": 0.0292,
-        "blockers": [],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "5836d34ff4570f396f03cca9d5370657b20b0f478fd5a016a54eac30d1902901"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:28.315857+00:00"
-      },
-      "tranches": 2,
-      "notional_usdt": 2000.0
-    },
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261005T102019-ENJ-7276ab",
-      "asset": "ENJ",
-      "action": "HOLD",
-      "price": 0.02946,
-      "reasons": [
-        "SCORE_WEAK",
-        "INSUFFICIENT_INDEPENDENT_SIGNALS",
-        "BTC_RELATIVE_WEAK",
-        "DEPTH_INSUFFICIENT",
-        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
-        "POSITION_HEALTH_THESIS_INVALIDATED",
-        "SCORE_WEAK",
-        "SIGNALS_WEAK"
-      ],
-      "evidence": {
-        "asset": "ENJ",
-        "score": 0.0762,
-        "independent": 0,
-        "btc_rel_1h": -0.1268,
-        "btc_rel_4h": 0.0762,
-        "rel_accel": -0.1458,
-        "spread_bps": 3.395,
-        "bid_depth_2pct_usdt": 30372.92,
-        "ask_depth_2pct_usdt": 26551.57,
-        "buy_slippage_bps": 13.284,
-        "estimated_rr": 1.75,
-        "supply_verified": false,
-        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-        "supply_confirmed_major_risk": false,
-        "return_1h": -0.0678,
-        "return_4h": -0.0339,
-        "blockers": [
-          "ASSET_IDENTITY_NOT_CORROBORATED"
-        ],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "2fc174386c95c1eccd72a07f45437004063be0facd08a867506a41a5e9632ecc"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:27.331629+00:00"
-      },
-      "tranches": 2,
-      "notional_usdt": 2000.0
-    },
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261005T102019-ENJ-7276ab",
-      "asset": "ENJ",
-      "action": "HOLD",
-      "price": 0.02946,
-      "reasons": [
-        "LOSS_RECOVERY",
-        "NO_MECHANICAL_LOSS_EXIT"
-      ],
-      "evidence": {
-        "asset": "ENJ",
-        "score": 0.0762,
-        "independent": 0,
-        "btc_rel_1h": -0.1268,
-        "btc_rel_4h": 0.0762,
-        "rel_accel": -0.1458,
-        "spread_bps": 3.395,
-        "bid_depth_2pct_usdt": 30372.92,
-        "ask_depth_2pct_usdt": 26551.57,
-        "buy_slippage_bps": 13.284,
-        "estimated_rr": 1.75,
-        "supply_verified": false,
-        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-        "supply_confirmed_major_risk": false,
-        "return_1h": -0.0678,
-        "return_4h": -0.0339,
-        "blockers": [
-          "ASSET_IDENTITY_NOT_CORROBORATED"
-        ],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "2fc174386c95c1eccd72a07f45437004063be0facd08a867506a41a5e9632ecc"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:27.331629+00:00"
-      },
-      "tranches": 2,
-      "notional_usdt": 2000.0
-    },
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261011T232823-ONDO-513505",
-      "asset": "ONDO",
-      "action": "HOLD",
-      "price": 0.4566,
-      "reasons": [
-        "SCORE_WEAK",
-        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
-        "POSITION_HEALTH_WEAKENING",
-        "SCORE_WEAK"
-      ],
-      "evidence": {
-        "asset": "ONDO",
-        "score": 3.254,
-        "independent": 4,
-        "btc_rel_1h": 0.8028,
-        "btc_rel_4h": 0.5944,
-        "rel_accel": 0.6542,
-        "spread_bps": 2.19,
-        "bid_depth_2pct_usdt": 448343.62,
-        "ask_depth_2pct_usdt": 267903.94,
-        "buy_slippage_bps": 2.466,
-        "estimated_rr": 1.846,
-        "supply_verified": false,
-        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-        "supply_confirmed_major_risk": false,
-        "return_1h": 0.8617,
-        "return_4h": 0.4843,
-        "blockers": [
-          "ASSET_IDENTITY_NOT_CORROBORATED"
-        ],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "f6960fe5abd4fe3af2cc24736911f007a0b5f287c15ed1d9d73cb508391c3312"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:27.343204+00:00"
-      },
-      "tranches": 1,
-      "notional_usdt": 1000
-    },
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261014T172617-AVNT-f9bc48",
-      "asset": "AVNT",
-      "action": "HOLD",
-      "price": 0.1166,
-      "reasons": [
-        "SCORE_WEAK",
-        "BTC_RELATIVE_WEAK",
-        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
-        "POSITION_HEALTH_WEAKENING",
-        "SCORE_WEAK"
-      ],
-      "evidence": {
-        "asset": "AVNT",
-        "score": 2.5624,
-        "independent": 2,
-        "btc_rel_1h": 0.719,
-        "btc_rel_4h": -0.0611,
-        "rel_accel": 0.7342,
-        "spread_bps": 8.573,
-        "bid_depth_2pct_usdt": 67123.09,
-        "ask_depth_2pct_usdt": 70208.92,
-        "buy_slippage_bps": 17.538,
-        "estimated_rr": 1.748,
-        "supply_verified": false,
-        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
-        "supply_confirmed_major_risk": false,
-        "return_1h": 0.7779,
-        "return_4h": -0.1712,
-        "blockers": [
-          "ASSET_IDENTITY_NOT_CORROBORATED"
-        ],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "811246784e9d277a23693a10a744009a89ace50514c158fcda4652e1d7c4dbf2"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:27.323329+00:00"
-      },
-      "tranches": 1,
-      "notional_usdt": 1000
-    },
-    {
-      "at": "2026-10-17T04:33:28.317933+00:00",
-      "shadow_id": "SHV2-20261017T015533-PHA-e41fe5",
-      "asset": "PHA",
-      "action": "HOLD",
-      "price": 0.0531,
-      "reasons": [
-        "SCORE_WEAK",
-        "INSUFFICIENT_INDEPENDENT_SIGNALS",
-        "BTC_RELATIVE_WEAK",
-        "RELATIVE_MOMENTUM_DECELERATING",
-        "POSITION_HEALTH_THESIS_INVALIDATED",
-        "SCORE_WEAK",
-        "SIGNALS_WEAK",
-        "BTC_RELATIVE_NEGATIVE",
-        "RELATIVE_MOMENTUM_DECELERATING"
-      ],
-      "evidence": {
-        "asset": "PHA",
-        "score": 0.2857,
-        "independent": 1,
-        "btc_rel_1h": -1.1762,
-        "btc_rel_4h": -0.4516,
-        "rel_accel": -1.0633,
-        "spread_bps": 18.886,
-        "bid_depth_2pct_usdt": 142543.88,
-        "ask_depth_2pct_usdt": 126121.81,
-        "buy_slippage_bps": 9.425,
-        "estimated_rr": 1.688,
-        "supply_verified": false,
-        "supply_status": "UNKNOWN",
-        "supply_confirmed_major_risk": false,
-        "return_1h": -1.1173,
-        "return_4h": -0.5618,
-        "blockers": [],
-        "signal_evidence": {
-          "generation_id": "MONITOR_20261017T043306424478Z",
-          "observed_at_utc": "2026-10-17T04:33:06.424478+00:00",
-          "evidence_id": "5bacc69e1252aa8b51230b45be854effef80d3f49dfa0b76e6a11054dac8655e"
-        },
-        "book_observed_at_utc": "2026-10-17T04:33:28.276795+00:00"
-      },
-      "tranches": 1,
-      "notional_usdt": 1000
-    },
     {
       "at": "2026-10-17T04:33:28.317933+00:00",
       "shadow_id": "SHV2-20261017T015533-PHA-e41fe5",
@@ -59113,6 +58829,325 @@
       },
       "tranches": 1,
       "notional_usdt": 1000
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261003T230244-NEXO-8dc4a0",
+      "asset": "NEXO",
+      "action": "HOLD",
+      "price": 0.812,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK",
+        "BTC_RELATIVE_NEGATIVE"
+      ],
+      "evidence": {
+        "asset": "NEXO",
+        "score": 0.0,
+        "independent": 0,
+        "btc_rel_1h": -0.2807,
+        "btc_rel_4h": -0.8942,
+        "rel_accel": -0.0572,
+        "spread_bps": 24.631,
+        "bid_depth_2pct_usdt": 100816.61,
+        "ask_depth_2pct_usdt": 108950.26,
+        "buy_slippage_bps": 22.778,
+        "estimated_rr": 1.775,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "supply_confirmed_major_risk": false,
+        "return_1h": -0.3676,
+        "return_4h": -0.7326,
+        "blockers": [
+          "ASSET_IDENTITY_NOT_CORROBORATED"
+        ],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "ef8ae29bc759c4c179d2d1351b02dd42e2b3d65973a8e379d18e479289af5e22"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:31.329576+00:00"
+      },
+      "tranches": 2,
+      "notional_usdt": 2000.0
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261004T145018-HAEDAL-30e750",
+      "asset": "HAEDAL",
+      "action": "HOLD",
+      "price": 0.01907,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "DEPTH_INSUFFICIENT",
+        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK"
+      ],
+      "evidence": {
+        "asset": "HAEDAL",
+        "score": 1.9678,
+        "independent": 1,
+        "btc_rel_1h": 0.1919,
+        "btc_rel_4h": -0.7869,
+        "rel_accel": 0.3887,
+        "spread_bps": 5.245,
+        "bid_depth_2pct_usdt": 28283.04,
+        "ask_depth_2pct_usdt": 29222.66,
+        "buy_slippage_bps": 25.604,
+        "estimated_rr": 1.717,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "supply_confirmed_major_risk": false,
+        "return_1h": 0.105,
+        "return_4h": -0.6253,
+        "blockers": [
+          "ASSET_IDENTITY_NOT_CORROBORATED"
+        ],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "a0a09040ad98c763fc5a3859b86c7c06db389a83eea29b44bf755914176c2336"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:30.391001+00:00"
+      },
+      "tranches": 2,
+      "notional_usdt": 2000.0
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261005T070625-GIGGLE-267291",
+      "asset": "GIGGLE",
+      "action": "HOLD",
+      "price": 33.89,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "DEPTH_INSUFFICIENT",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK",
+        "BTC_RELATIVE_NEGATIVE"
+      ],
+      "evidence": {
+        "asset": "GIGGLE",
+        "score": 1.0432,
+        "independent": 1,
+        "btc_rel_1h": -0.0309,
+        "btc_rel_4h": -1.039,
+        "rel_accel": 0.2288,
+        "spread_bps": 2.949,
+        "bid_depth_2pct_usdt": 60149.45,
+        "ask_depth_2pct_usdt": 24639.03,
+        "buy_slippage_bps": 11.68,
+        "estimated_rr": 1.808,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "supply_confirmed_major_risk": false,
+        "return_1h": -0.1179,
+        "return_4h": -0.8774,
+        "blockers": [],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "bed0ab45035cad5756c1e4eb3935c52a617b04caec4440e98e00e8f03341b1d0"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:30.409659+00:00"
+      },
+      "tranches": 2,
+      "notional_usdt": 2000.0
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261005T102019-ENJ-7276ab",
+      "asset": "ENJ",
+      "action": "HOLD",
+      "price": 0.0291,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "DEPTH_INSUFFICIENT",
+        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK",
+        "BTC_RELATIVE_NEGATIVE"
+      ],
+      "evidence": {
+        "asset": "ENJ",
+        "score": 0.3988,
+        "independent": 1,
+        "btc_rel_1h": -0.4259,
+        "btc_rel_4h": -1.3836,
+        "rel_accel": -0.08,
+        "spread_bps": 6.868,
+        "bid_depth_2pct_usdt": 29541.39,
+        "ask_depth_2pct_usdt": 25340.23,
+        "buy_slippage_bps": 12.918,
+        "estimated_rr": 1.747,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "supply_confirmed_major_risk": false,
+        "return_1h": -0.5128,
+        "return_4h": -1.222,
+        "blockers": [
+          "ASSET_IDENTITY_NOT_CORROBORATED"
+        ],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "0374f955bdcfb7dec9d3aa610b3626f7a95a946a850287712923001a2b508435"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:30.394031+00:00"
+      },
+      "tranches": 2,
+      "notional_usdt": 2000.0
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261011T232823-ONDO-513505",
+      "asset": "ONDO",
+      "action": "HOLD",
+      "price": 0.4519,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK",
+        "BTC_RELATIVE_NEGATIVE"
+      ],
+      "evidence": {
+        "asset": "ONDO",
+        "score": 0.0285,
+        "independent": 0,
+        "btc_rel_1h": -0.485,
+        "btc_rel_4h": -1.169,
+        "rel_accel": -0.1927,
+        "spread_bps": 2.211,
+        "bid_depth_2pct_usdt": 410025.44,
+        "ask_depth_2pct_usdt": 272696.12,
+        "buy_slippage_bps": 3.626,
+        "estimated_rr": 1.845,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "supply_confirmed_major_risk": false,
+        "return_1h": -0.5719,
+        "return_4h": -1.0074,
+        "blockers": [
+          "ASSET_IDENTITY_NOT_CORROBORATED"
+        ],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "a6a93de73e86a99eb861abb72fc492412d5246f6b880510f137aa4c56c33b33a"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:30.387355+00:00"
+      },
+      "tranches": 1,
+      "notional_usdt": 1000
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261014T172617-AVNT-f9bc48",
+      "asset": "AVNT",
+      "action": "HOLD",
+      "price": 0.1162,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "RELATIVE_MOMENTUM_DECELERATING",
+        "BLOCKER:ASSET_IDENTITY_NOT_CORROBORATED",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK",
+        "BTC_RELATIVE_NEGATIVE",
+        "RELATIVE_MOMENTUM_DECELERATING"
+      ],
+      "evidence": {
+        "asset": "AVNT",
+        "score": 0.1205,
+        "independent": 1,
+        "btc_rel_1h": -1.5219,
+        "btc_rel_4h": -0.8447,
+        "rel_accel": -1.3107,
+        "spread_bps": 8.595,
+        "bid_depth_2pct_usdt": 96960.14,
+        "ask_depth_2pct_usdt": 78202.99,
+        "buy_slippage_bps": 21.949,
+        "estimated_rr": 1.739,
+        "supply_verified": false,
+        "supply_status": "MATERIAL_NONCIRCULATING_SUPPLY_REQUIRES_UNLOCK_RESEARCH",
+        "supply_confirmed_major_risk": false,
+        "return_1h": -1.6088,
+        "return_4h": -0.6832,
+        "blockers": [
+          "ASSET_IDENTITY_NOT_CORROBORATED"
+        ],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "5cb691dcfe978cc59f21e3b072e2b866f9522fecd00b5d928542ef79460e6ae4"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:31.322048+00:00"
+      },
+      "tranches": 1,
+      "notional_usdt": 1000
+    },
+    {
+      "at": "2026-10-17T09:33:31.336258+00:00",
+      "shadow_id": "SHV2-20261017T015533-PHA-e41fe5",
+      "asset": "PHA",
+      "action": "HOLD",
+      "price": 0.0525,
+      "reasons": [
+        "SCORE_WEAK",
+        "INSUFFICIENT_INDEPENDENT_SIGNALS",
+        "BTC_RELATIVE_WEAK",
+        "POSITION_HEALTH_WEAKENING",
+        "SCORE_WEAK",
+        "SIGNALS_WEAK"
+      ],
+      "evidence": {
+        "asset": "PHA",
+        "score": 0.9201,
+        "independent": 1,
+        "btc_rel_1h": 0.0869,
+        "btc_rel_4h": -0.9177,
+        "rel_accel": 0.3164,
+        "spread_bps": 19.029,
+        "bid_depth_2pct_usdt": 133275.34,
+        "ask_depth_2pct_usdt": 129907.75,
+        "buy_slippage_bps": 9.515,
+        "estimated_rr": 1.719,
+        "supply_verified": false,
+        "supply_status": "UNKNOWN",
+        "supply_confirmed_major_risk": false,
+        "return_1h": 0.0,
+        "return_4h": -0.7561,
+        "blockers": [],
+        "signal_evidence": {
+          "generation_id": "MONITOR_20261017T093309926840Z",
+          "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+          "evidence_id": "775df7cdd75553e5b61d6cedfd308a5e5255040601251369b3aafb8d8de0b227"
+        },
+        "book_observed_at_utc": "2026-10-17T09:33:31.327235+00:00"
+      },
+      "tranches": 1,
+      "notional_usdt": 1000
     }
   ],
   "overfilter_guard_status": "NORMAL",
@@ -59172,7 +59207,7 @@
     "币安人生",
     "牛来"
   ],
-  "decision_history_truncated": 127036,
+  "decision_history_truncated": 127043,
   "excluded_non_crypto_decisions": [
     {
       "at": "2026-10-03T22:44:31.564845+00:00",
@@ -140370,7 +140405,7 @@
     }
   },
   "policy_version": "shadow-consistent-v2-leading-risk-phase1",
-  "observation_backfill_cursor": 41,
+  "observation_backfill_cursor": 50,
   "systemic_risk": {
     "level": "NORMAL",
     "raw_level": "NORMAL",
@@ -140378,9 +140413,9 @@
       "MARKET_BREADTH_ELEVATED"
     ],
     "entered_at_utc": "2026-10-16T18:58:20.128626+00:00",
-    "updated_at_utc": "2026-10-17T09:13:33.817611+00:00",
-    "last_observation_id": "5ec1c72055e2e460f4c1d21d661374910eb3011becff94649c6cc6609a57532d",
-    "last_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
+    "updated_at_utc": "2026-10-17T09:33:31.336258+00:00",
+    "last_observation_id": "a7c310d9b728ad9144d28c3c9dcb68e0b4b597506737252978c6ff07262061c8",
+    "last_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
     "recovery_observations": 0,
     "recovery_required": 4,
     "recovery_mode": false,
@@ -140389,23 +140424,23 @@
     "risk_release_fraction": 1.0,
     "evidence": {
       "schema": "hunter_systemic_risk_evidence_v1",
-      "observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
-      "observation_id": "5ec1c72055e2e460f4c1d21d661374910eb3011becff94649c6cc6609a57532d",
-      "scan_generation_id": "MONITOR_20261017T091311938509Z",
-      "scan_as_of_utc": "2026-10-17T09:13:11.938509+00:00",
+      "observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
+      "observation_id": "a7c310d9b728ad9144d28c3c9dcb68e0b4b597506737252978c6ff07262061c8",
+      "scan_generation_id": "MONITOR_20261017T093309926840Z",
+      "scan_as_of_utc": "2026-10-17T09:33:09.926840+00:00",
       "scan_fresh": true,
       "btc_short": {
-        "return_5m_pct": 0.0106,
-        "return_15m_pct": 0.0359,
-        "return_1h_pct": 0.0163,
-        "last_completed_close_utc": "2026-10-17T09:09:59.999000+00:00"
+        "return_5m_pct": -0.0735,
+        "return_15m_pct": -0.0888,
+        "return_1h_pct": -0.0736,
+        "last_completed_close_utc": "2026-10-17T09:29:59.999000+00:00"
       },
       "btc_fetch_error": null,
       "breadth": {
         "sample_count": 697,
-        "negative_fraction": 0.8121,
-        "loss_5pct_fraction": 0.231,
-        "loss_10pct_fraction": 0.099
+        "negative_fraction": 0.8235,
+        "loss_5pct_fraction": 0.2382,
+        "loss_10pct_fraction": 0.1004
       },
       "liquidity": {
         "fresh_sample_count": 80,
@@ -140415,12 +140450,12 @@
       },
       "stablecoins": {
         "prices": {
-          "USDCUSDT": 1.00125,
+          "USDCUSDT": 1.00128,
           "FDUSDUSDT": 0.9986,
           "TUSDUSDT": 1.0001
         },
         "deviation_pct": {
-          "USDCUSDT": 0.125,
+          "USDCUSDT": 0.128,
           "FDUSDUSDT": 0.14,
           "TUSDUSDT": 0.01
         },
@@ -140520,11 +140555,11 @@
       "4bfedff69b37b7439a881c10b23d674f5f1b467a55a39771bb139fb221ff03dc",
       "1a14258a3c84adda4f22d2362f07f9543e6e9a18a2618e96b8e650c12352adf0"
     ],
-    "last_recovery_seen_at_utc": "2026-10-17T09:13:33.817611+00:00",
-    "last_recovery_seen_observed_at_utc": "2026-10-17T09:13:11.938509+00:00",
+    "last_recovery_seen_at_utc": "2026-10-17T09:33:31.336258+00:00",
+    "last_recovery_seen_observed_at_utc": "2026-10-17T09:33:09.926840+00:00",
     "last_recovery_counted_observed_at_utc": "2026-10-16T18:57:58.526993+00:00"
   },
-  "active_observation_generation_id": "MONITOR_20261017T091311938509Z",
+  "active_observation_generation_id": "MONITOR_20261017T093309926840Z",
   "circuit_breaker": {
     "status": "NORMAL",
     "consecutive_loss_exits": 0,
@@ -142345,7 +142380,7 @@
     "streak_start_sequence": null,
     "pending_principal_usdt": 0.0,
     "rolling_realized_loss_usdt": 0.0,
-    "evaluated_at_utc": "2026-10-17T09:13:33.817611+00:00",
+    "evaluated_at_utc": "2026-10-17T09:33:31.336258+00:00",
     "loss_threshold_met": false,
     "market_confirmation": {
       "state": "NOT_BAD",
@@ -142353,7 +142388,7 @@
       "btc_rapid_drop": false,
       "broad_altcoin_weakness": false,
       "confirmed": false,
-      "observation_id": "5ec1c72055e2e460f4c1d21d661374910eb3011becff94649c6cc6609a57532d"
+      "observation_id": "a7c310d9b728ad9144d28c3c9dcb68e0b4b597506737252978c6ff07262061c8"
     }
   }
 }
