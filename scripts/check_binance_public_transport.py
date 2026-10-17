@@ -11,7 +11,7 @@ sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
 sys.dont_write_bytecode=True
 
 
-def main():
+def main(pattern='test_hunter_binance_transport*.py',expected=36,expected_failures=0):
     with tempfile.TemporaryDirectory(prefix='public-http-offline-') as directory:
         scratch=Path(directory).resolve();tempfile.tempdir=str(scratch)
         helper=(ROOT/'tests/fixtures/binance_http_child.py').resolve()
@@ -48,10 +48,11 @@ def main():
             if event=='os.rename':inside(args[0]);inside(args[1])
             if event in ('os.symlink','os.link'):reject('LINK_FORBIDDEN')
         sys.addaudithook(guard)
-        suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_hunter_binance_transport*.py')
+        suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern=pattern)
         result=unittest.TextTestRunner(verbosity=2).run(suite)
-        good=result.wasSuccessful() and result.testsRun==15 and not result.skipped and not blocked
-        print('BINANCE_TRANSPORT_OFFLINE_ACCEPTANCE',dict(tests=result.testsRun,blocked_effects=len(blocked),passed=good))
+        good=(result.wasSuccessful() and result.testsRun==expected and not result.skipped and not blocked
+              and len(result.expectedFailures)==expected_failures)
+        print('BINANCE_TRANSPORT_OFFLINE_ACCEPTANCE',dict(tests=result.testsRun,expected_failures=len(result.expectedFailures),blocked_effects=len(blocked),passed=good))
         return 0 if good else 1
 
 
