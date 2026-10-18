@@ -24,10 +24,25 @@ def selected():
 
 
 class Frozen:
-    def __init__(self,generation):
+    def __init__(self,generation,checked_at=None):
         if generation.get('status')!='READY':
             raise ValueError('BINANCE_CACHE_UNKNOWN:'+str(generation.get('reason','UNAVAILABLE')))
         self.generation=copy.deepcopy(generation)
+        if generation.get('health_contract'):
+            from research.hunter_binance_health_store import valid_proof,CONTRACT
+            from research.hunter_binance_stream_store import content_hash
+            if generation['health_contract']!=CONTRACT:raise ValueError('BINANCE_CACHE_VALIDITY_CONTRACT')
+            now=time.time_ns()//1_000_000 if checked_at is None else checked_at
+            meta=dict(epoch=generation['epoch'],scope_hash=generation['manifest_sha256'],
+                      roster_hash=generation['roster_hash'],health_epoch_started=generation['epoch_started_ms'])
+            for name,window in generation['windows'].items():
+                evidence=window.get('validity',{})
+                payload={k:v for k,v in window.items() if k!='validity'}
+                if (not valid_proof(evidence,'kline',name,meta,now)
+                        or not valid_proof(window.get('instrument_validity',{}),'instrument',name,meta,now)
+                        or evidence['generation_end_ms']!=generation['generation_end_ms']
+                        or evidence['window_sha256']!=content_hash(payload)):
+                    raise ValueError('BINANCE_CACHE_VALIDITY_MISSING_EXPIRED_OR_MISMATCHED')
 
     def rows(self,symbol,interval,count=None):
         rows=self.generation['windows'][topic(symbol,interval)]['rows']
@@ -52,7 +67,7 @@ def read(names,now,reader=None,clock=lambda:time.time_ns()//1_000_000,expected_r
     finished=clock()
     if finished<started or not 0<=finished-cut<=FRESH_MS:
         raise ValueError('BINANCE_CACHE_READ_FINISHED_STALE_OR_CLOCK_ROLLBACK')
-    return Frozen(generation)
+    return Frozen(generation,checked_at=finished)
 
 
 def signal_inputs(scan,symbols):

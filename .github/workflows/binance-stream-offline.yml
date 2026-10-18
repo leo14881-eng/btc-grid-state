@@ -18,7 +18,7 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
@@ -26,13 +26,76 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Reproduce stale cancellation against the prior deployed code
+        run: |
+          python -B - <<'PY'
+          import io,os,shutil,subprocess,sys,tarfile,tempfile
+          from pathlib import Path
+          sha='99836e5362340725f806d5df6df1ca9835065bdd'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+          names+=['tests/test_hunter_binance_transport_ack.py','tests/fixtures/binance_http_child.py']
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder)
+              with tarfile.open(fileobj=io.BytesIO(data)) as archive:archive.extractall(root)
+              for name in ('scripts/check_binance_public_transport.py','tests/test_hunter_binance_transport_session.py'):
+                  shutil.copyfile(name,root/name)
+              env=dict(os.environ,BINANCE_DEPLOYED_REPRO='1',PYTHONDONTWRITEBYTECODE='1')
+              subprocess.run([sys.executable,'-B','-c',
+                  "from scripts.check_binance_public_transport import main; raise SystemExit(main(pattern='test_hunter_binance_transport_session.py',expected=3))"],
+                  cwd=root,env=env,check=True)
+              print('PRIOR_DEPLOYED_STALE_CANCEL_REPRODUCED',sha)
+          PY
+      - name: Prove the review races on the rejected head
+        run: |
+          python -B - <<'PY'
+          import io,os,shutil,subprocess,sys,tarfile,tempfile
+          from pathlib import Path
+          sha='133f7422cd66204131f57afaaa5f4d3414e676c0'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/','tests/'))]
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder)
+              with tarfile.open(fileobj=io.BytesIO(data)) as archive:archive.extractall(root)
+              for name in ('scripts/check_binance_public_transport.py','tests/test_hunter_binance_transport_races.py'):
+                  shutil.copyfile(name,root/name)
+              env=dict(os.environ,BINANCE_REVIEWED_REPRO='1',PYTHONDONTWRITEBYTECODE='1')
+              subprocess.run([sys.executable,'-B','-c',
+                  "from scripts.check_binance_public_transport import main; raise SystemExit(main(pattern='test_hunter_binance_transport_races.py',expected=4,expected_failures=4))"],
+                  cwd=root,env=env,check=True)
+              print('REJECTED_HEAD_RACES_REPRODUCED',sha)
+          PY
       - name: Guarded cache and consumer regressions
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
+      - name: Bounded evidence and commit-versus-ingress regressions
+        run: python -B -m unittest discover -s tests -p test_hunter_binance_observability.py -v
+      - name: Full 1228-topic bounded initialization with real SQLite and queues
+        run: |
+          python -B - <<'PY'
+          import sys,unittest
+          blocked=[]
+          def guard(event,args):
+              if event.startswith('socket.') or event in ('subprocess.Popen','os.system','os.posix_spawn','os.fork','os.forkpty') or event.startswith(('os.exec','os.spawn')):
+                  blocked.append(event);raise RuntimeError('NETWORK_OR_PROCESS_FORBIDDEN')
+          sys.addaudithook(guard)
+          result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_hunter_binance_initialization.py'))
+          good=result.wasSuccessful() and result.testsRun==13 and not result.skipped and not blocked
+          print('INITIALIZATION_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
+          if not good:raise SystemExit(1)
+          PY
       - name: Real loopback cancellation and denial regressions
         run: python -I -B -X utf8 scripts/check_binance_public_transport.py
+      - name: Install pinned WebSocket runtime for loopback-only health checks
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: Guarded collector health, consumer validity and shutdown partition
+        run: python -I -B -X utf8 scripts/check_binance_health_offline.py
       - name: Deployment shell syntax only
         run: bash -n scripts/hunter_binance_preflight.sh scripts/hunter_binance_stage.sh
