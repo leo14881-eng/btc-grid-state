@@ -109,7 +109,8 @@ def output_paths(job):
           "hunter-api-cooldown.json", *PORTFOLIOS, "hunter-shadow-summary.json", "hunter-shadow-v2-summary.json",
           "hunter-shadow-v2-overfilter-guard.json", "hunter-tail-risk-replay.json",
           "hunter-leading-risk-replay.json", "hunter-bybit-availability.json", "hunter-bybit-spot-cache.json",
-          "hunter-shadow-candidate-ledger.json", "hunter-shadow-rules.json", "hunter-shadow-optimizer-audit.jsonl"]
+          "hunter-shadow-candidate-ledger.json", "hunter-shadow-rules.json", "hunter-shadow-optimizer-audit.jsonl",
+          "hunter-research-ownership.json"]
  if job == "blind-replay":
   return ["hunter-blind-replay-summary.json", "hunter-blind-replay-events.csv",
           "hunter-blind-replay-controls.csv", "hunter-archive-symbol-manifest.json"]
@@ -164,6 +165,23 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
  except (OSError, ValueError, KeyError, RuntimeError) as exc:
   print("HUNTER_LOCAL_JOB_HEALTH_FAILED", job, safe_diagnostic(str(exc)), flush=True)
  raw = json.dumps(doc, indent=2, sort_keys=True) + "\n"
+ if job == "research":
+  from scripts.hunter_generation_admission import ClaimStore, fail_owned, publish_owned_health
+  owner = os.environ.get("HUNTER_RESEARCH_OWNER")
+  if status == "SUCCESS":
+   published = publish_owned_health(ClaimStore(), doc["scan_generation_id"], owner, raw)
+   print("HUNTER_RESEARCH_HEALTH_PUBLISHED" if published else
+         "HUNTER_RESEARCH_HEALTH_SUPERSEDED_LOCAL_RECEIPT_RETAINED", flush=True)
+  else:
+   # The local receipt above and main's nonzero exit retain failure evidence.
+   # A contender/expired owner must not invalidate the incumbent's inputs by
+   # publishing an unfenced runtime-health file. Valid owner failures instead
+   # transition their own claim atomically, allowing a fresh retry.
+   failed = fail_owned(ClaimStore(), doc["scan_generation_id"], owner,
+                       safe_diagnostic((error_details or {}).get("message") or error or status))
+   print("HUNTER_RESEARCH_FAILED_CLAIM_RECORDED" if failed else
+         "HUNTER_RESEARCH_FAILURE_LOCAL_RECEIPT_RETAINED", flush=True)
+  return
  last_push = None
  for attempt in range(5):
   git("fetch", "origin", "main")
@@ -205,6 +223,9 @@ def condition(step, outputs):
  value = step.get("if")
  if not value: return True
  if value == "always()": return True
+ # Server exceptions leave run_job immediately and main records the failed
+ # owned claim. The workflow's failure-only tail is for GitHub Actions.
+ if value == "failure()": return False
  if "steps.observe.outputs." in value:
   keys = re.findall(r"steps.observe.outputs\.(\w+)\s*==\s*'true'", value)
   require(bool(keys), "UNSUPPORTED_WATCHDOG_CONDITION")
@@ -509,6 +530,25 @@ def main():
  started = dt.datetime.now(dt.timezone.utc)
  rows = []
  try:
+  if args.job == "research" and not args.preview:
+   from scripts.hunter_generation_admission import server_acquire
+   admitted = time.monotonic()
+   row = dict(job="research", name="Acquire shared Research generation ownership", status="RUNNING", exit=None,
+              started_at_utc=dt.datetime.now(dt.timezone.utc).isoformat())
+   rows.append(row)
+   try:
+    acquired = server_acquire()
+    row.update(status="SUCCESS" if acquired else "ALREADY_PUBLISHED", exit=0)
+   except Exception as exc:
+    row.update(status="FAILURE", error_details=exception_details(exc))
+    raise
+   finally:
+    row.update(seconds=round(time.monotonic()-admitted, 3), completed_at_utc=dt.datetime.now(dt.timezone.utc).isoformat())
+    print("HUNTER_RESEARCH_ADMISSION", json.dumps(row), flush=True)
+   if not acquired:
+    # Already published is not a fresh successful computation/readback. Preserve
+    # previous failure receipts, and emit the explicit outcome in the journal.
+    return
   for job in (["discovery", "research"] if args.job == "pipeline" else [args.job]):
    run_job(job, args.preview, rows)
   if not args.preview: publish_health(args.job, "SUCCESS", started, rows)
