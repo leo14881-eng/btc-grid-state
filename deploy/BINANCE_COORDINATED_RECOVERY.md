@@ -1,0 +1,609 @@
+# Coordinated Binance recovery: review candidate
+
+This change is **not deployed or enabled**. It starts from main
+`6ceef0cea2d3689f49d651c6c8c20cde1ffafb3e` and includes PR130
+`52f7545814c1aa0313a800abf0c23c2d6a7bbd59`, preserving the PR126 reader
+composition. Obtain the exact candidate from the draft PR head; the Binance
+acceptance workflow checks out that head, not the synthetic merge commit. Existing deployment/export bundles
+are unchanged. Do not merge, install or restart from this document without the
+separately authorized server entry point and deployment review.
+
+## Gap addressed
+
+Legacy HTTP ownership and market writes shared one SQLite writer. An HTTP
+response could be complete and its child reaped while retirement remained
+unconfirmed. Neither a process heartbeat nor received=committed WS totals
+prove HTTP retirement or consumer readiness. The previously observed legacy
+request/lease remains a deployment blocker; this patch never deletes it.
+
+The optional `--coordinated-control` mode adds an independent `control.sqlite3`
+with short serialized transactions for admission, rate charges, ownership,
+quarantine, publication intents and per-topic revocation versions. No control
+transaction waits for HTTP, a market transaction or a Future. There is no
+dedicated writer daemon/thread. The existing collector process owns the work.
+
+Coordinated market writes enter a FIFO queue shared by Store instances for the
+same canonical database path within one process. Continuous WS batches cannot
+overtake an already queued directory/history publication. Admission has its own
+explicit deadline, at most two seconds and no longer than the caller's timeout;
+the SQLite busy timeout remains at most 250ms, with no hidden BEGIN retry.
+Waiting holds no database transaction or HTTP owner. Reads and an existing
+publication's nested helpers bypass the queue. Diagnostics distinguish queue
+admission from SQLite begin/body/commit failures. This provides local writer
+ordering, not cross-process fairness or a two-second transaction-duration bound.
+
+The second full-load failure was queue exhaustion, with no corresponding BEGIN
+lock error. A paired scratch measurement isolated the effect of simultaneous
+whole-roster reads: generic snapshot `deepcopy` dominated the reader profile
+and write-body time increased while BEGIN remained below 1ms on average.
+The follow-up avoids unused bar columns and one repeated same-frame topic
+query, and uses a detached JSON snapshot copy for plain JSON trees. Unusual
+Python values retain the old deepcopy path. Public copies, proof/hash checks,
+delivery fences, per-frame savepoints, revision retention and receipt accounting
+remain intact. Neither queue capacity nor publication frequency is relaxed.
+Rejected delivery audit copies also use the already-owned JSON snapshot;
+non-JSON graphs retain deepcopy behavior. This is a copy-cost reduction, not
+evidence that the sustained queue-capacity failure has been resolved.
+The per-frame history gate now returns aggregate scalars from SQLite instead
+of materializing every stored history row. Its exact needed-start set, history
+floor and confirmation truthiness remain equivalent; malformed stored starts
+use the old Python path. Tests compare all durable tables and frozen outputs
+against the immutable prior hot path, including invalid and duplicate frames.
+
+The next candidate copies ordinary revision rows through SQLite JSON aggregation
+instead of returning each row separately to Python. It retains the same query,
+400-topic chunks and single read transaction; JSON decoding and revision-map
+construction occur after that transaction closes. Exact column layout and
+storage-type checks select this copy path. REAL/BLOB, non-ASCII or otherwise
+unusual values use the original row copy in that same transaction. Only an
+explicitly missing JSON function permits a capability fallback; lock, I/O and
+corruption errors are not retried or hidden. All candle/source/proof/hash and
+final fence checks still run. This has no persistent cache or schema migration.
+The profile optionally compares original and candidate revision copies under
+the unchanged continuous full-reader load on the same restored seed. Results
+for a prior head do not validate this candidate; its strict gate must pass
+before the real-hour job can run. SQLite JSON functions can be omitted at build
+time, so their presence is not assumed from a version number alone; see the
+[SQLite JSON function contract](https://www.sqlite.org/json1.html).
+
+Each database reports its own phase histogram, count, maximum and cumulative
+microseconds. P99 is explicitly a histogram bucket upper bound over the Store
+or Control instance lifetime, not an exact percentile or sliding window.
+Connection observations include configured timeout, BEGIN type, and measured
+`PRAGMA busy_timeout`/journal mode. Failures preserve the original extended
+SQLite error code/name where Python exposes them; missing values are unknown.
+The observed Linux starvation error was SQLITE_BUSY (5), not proof of
+SQLITE_BUSY_SNAPSHOT (517). A scratch-only stale-snapshot regression tests 517
+reporting without claiming it happened on the server. Python added the error
+attributes in 3.11; `Connection.setconfig` (3.12) is not an error-code switch.
+See the [Python exception attributes](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Error)
+and [connection configuration API](https://docs.python.org/3.12/library/sqlite3.html#sqlite3.Connection.setconfig).
+
+The loopback reconnect fixture captures the original collector traceback and
+connection context, plus independent in-memory phase metrics from both files.
+It does not perform extra competing database reads after each watcher BUSY.
+Final cleanup reads retain unknown counts when unavailable, and all watcher
+SQLite failures still fail acceptance. Bounded, hashed log chunks preserve
+large failure records without relying on one oversized CI assertion line.
+Control intent and scope JSON decoding now happens after copying rows from
+one read transaction and closing it. Native owner checks remain inside the
+snapshot, and the independent gate and final fence checks remain active.
+Event-controlled regressions show that paused decoding no longer pins a
+competing commit. This does not establish the sole cause of the Linux BUSY5.
+
+Market publication has three steps: durable intent and scope revocation;
+atomic market rows plus receipt; control reconciliation. Replaying a committed
+receipt is idempotent. A quiet-bar mismatch commits its corrective rows and
+reverification latch with an UNKNOWN receipt; it cannot release the scope.
+Only a subsequent valid verification can recover it. Monotonic intent order
+prevents replaying an old success from clearing a newer failure. Directory evidence binds
+the complete dependent symbol/interval scope and the canonical status/filter
+payload. Missing identities, symbols or required filters fail closed.
+
+Four classes share four workers: directory, initial history, gap repair, quiet
+verification. Each eligible class gets a turn in a four-class rotation. Shared
+rate limits, acknowledgement and retry backoff can delay admission; there is
+no guaranteed wall-clock completion time. The original 600 weight/minute pacing
+and official directory weight 20 are retained; 21 directory batches use 420
+weight, leaving limited history/quiet capacity. Full-scope production convergence
+must be measured, not inferred from four active workers. REST remains necessary for official
+directory data and bounded history/repair. No Worker fallback is introduced.
+
+Only continuously held native owner identity, response/completion evidence and
+confirmed child reaping permit retirement. A recoverable cleanup problem
+quarantines the exact scope, permanently discards that response and grants one
+explicit re-verification attempt after safe resource reclamation. Missing or
+ambiguous proof, orphan owners, control corruption or a failed recovery stop
+the collector. There is no TTL lease deletion. Shutdown uses a shared deadline;
+unfinished work is recorded as unresolved, never as successfully reaped.
+
+Re-verification retains the original job key, kind and dependency scope even
+when newer WS observations remove the ordinary quiet/repair condition. The
+same acknowledgement, backoff, per-topic exclusion and shared admission limits
+still apply. The one re-verification opportunity also respects the existing
+three-failure ceiling; reaching that ceiling or failing after the recovery
+claim stops explicitly with the gate preserved, rather than leaving hidden
+pending work or granting another recovery attempt.
+
+Consumers take a fresh control fence before freezing market rows, then a new
+market/control read after computation and before delivery. Revocation ABA,
+epoch/manifest/roster changes, expiry, missing topics and draining invalidate
+the result. Early and Monitor also recheck immediately before their actual
+use boundary. Immutable local evidence is checked without re-freezing history.
+Monitor carries an optional guard into the shared existing-position manager:
+each position checks before its decision, immediately before ADD, and after
+identity I/O before signal-dependent exit/recovery evaluation. A rejected
+frozen generation stays rejected for that invocation, including its copied
+signal/health fields and deferred ADD. Independent book/supply invalidation
+and profit protection remain available. The default path without a cache
+guard keeps its existing behavior. Early also rechecks after history parsing
+and after temporary-file verification, before replacement.
+Old readers reject the v2 contract. Keep the collector and readers on the same
+reviewed source; a mixed-version installation is not an acceptance test.
+
+These checks establish validity at their observation points; they do not hold
+a database transaction across a portfolio action or filesystem publication.
+Do not describe them as atomic with those writes, or reuse a cached signal for
+later actions without the action's own check. Natural production consumer
+publication remains a separate acceptance requirement.
+
+## Scope and invariants
+
+Subscribe to all actual native intervals: roster symbols 15m/1h/1d and BTCUSDT
+5m. For 409 symbols this is 1,228 topics; 4h remains derived from 1h. Early's
+whole required set, Monitor's existing management selection plus BTC, Daily's
+existing rotation and BTC's closed 5m history remain unchanged. Quiet REST does
+not refresh the 90-second WS clock. A single stale required topic can keep an
+entire consumer set UNKNOWN. `collector_inventory` and actual consumer
+acceptance are reported separately by the ops checker.
+
+The receipt boundary is arrival after protocol parsing, before queue admission.
+A queue-rejected market frame is still received and must become a durable
+`unprocessed_recorded` receipt with its exact scope and event identity. It is
+never counted as accepted/committed. Deterministic tests exercise the real
+session pump with a one-entry queue, check revocation before drain, and verify
+scoped repair in the same and a new epoch without clearing another topic's
+unresolved receipt. The full-load acceptance queue remains 4,096 entries.
+
+SHADOW ONLY; real trading false; capital authority NONE_SHADOW_ONLY. No changes
+to V2 20000/17000/3000, SingleWriter, CAS, generation, the five-minute Monitor,
+deduplication, historical ledger, Sentinel or trading workflows. The separate
+historical event-range REST reader retains its original page budget; this does
+not establish one governor for every process sharing a public IP.
+
+The old Fast Watch bookTicker/aggTrade service is not a kline collector. Bybit's
+separate 15m/60m work is not enabled by this change; the official Worker snapshot
+and its batch counts must not be presented as completed server migration.
+
+## Reproduce the candidate without server access
+
+Run from an isolated Linux checkout of the exact draft PR head. These commands
+write only test scratch directories and allow only guarded loopback fixtures:
+
+```sh
+git rev-parse HEAD
+python -c 'import sys,sqlite3; print(sys.version); print(sqlite3.sqlite_version)'
+python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+python -I -B -X utf8 scripts/check_binance_stream_offline.py
+python -I -B -X utf8 scripts/check_binance_quarantine_regression.py
+python -I -B -X utf8 scripts/check_binance_signal_use_regression.py
+python -I -B -X utf8 scripts/check_binance_public_transport.py
+python -I -B -X utf8 scripts/check_binance_health_offline.py
+python -I -B -X utf8 scripts/check_binance_coordinated_offline.py
+# Same fixture, with only three cache hot-path modules pinned to ec3d49b9:
+python -I -B -X utf8 scripts/check_binance_write_load.py --prior-cache
+# Separate one-hour wall-clock run; followed by the real WS process reconnect:
+python -I -B -X utf8 scripts/check_binance_write_load.py --seconds 3600
+```
+
+The coordinated suite requires Linux and zero skips. It exercises real native
+locks, child HTTP exit, crash-before/after-market-commit, full-topic WS writes,
+WAL checkpoint pressure, UTC midnight/Vietnam 07:00, interval boundaries and
+actual consumer use fences. Synthetic timestamps do not prove a production
+midnight observation. Windows portable SQLite tests are supplementary evidence.
+The two regression scripts intentionally require four assertion failures on
+the immutable `0b15bd7dde4d90519f316f1a146fd13da6f6b91a` modules: two scheduler
+cases and two actual V2 Monitor/engine cases. Cache fixtures and other
+dependencies are from the candidate; this is not a replay of the complete
+prior deployment. Import errors, skipped cases or blocked effects fail these
+scripts instead of counting as a reproduction.
+
+The additional whole-roster test fully initializes all 1,228 histories before
+at least 30 wall-clock seconds of queued writes, whole-scope reads, checkpoints
+and directory/quiet/repair work. Linux uses real rate-governed HTTP children;
+the Windows body fixture does not reproduce that transport or its pacing.
+Its metrics report initialized rows, READY scopes, queue delays, SQLite errors
+and ownership terminals. Initial full-roster history uses fixture bodies and
+real dual-database publication; it does not time a cold 1,228-topic REST backfill.
+A separate Linux collector process subscribes three topics over two epochs:
+it must reconnect to a loopback WS server, reject the first epoch's frozen
+read, acknowledge and seed the second epoch, and close both sessions with
+conserved receipts and retired HTTP owners. Neither fixture establishes a
+natural UTC boundary or full-roster collector WS reconnection.
+
+Ordinary discovery keeps a 32-second load target. The one-hour command opts
+into 3,600 real elapsed seconds at the same 1,228-topic/0.8-second offered
+cadence, 4,096-entry queue, 100-frame batches and checkpoint pressure. It uses
+a declared fixed UTC origin plus real elapsed time, with explicit prior-bar
+WS closes across synthetic 15m/1h boundaries. It is not natural-clock evidence.
+Logs include periodic progress, failure-safe drain observations, all-sample
+receipt/batch latency histograms, quiet completion waits and per-topic receipt
+partitions. Reader rejections and non-READY durations remain visible; occasional
+READY reads must not be described as continuous readiness. The dedicated
+PR131 Linux job waits for the short acceptance jobs and uses the same head.
+Workers share a start gate after HTTP and thread preparation; setup time is
+excluded from the load target. Batch and consumer read/delivery CPU and wall
+time are separate, and checkpoints sample maximum WAL size. Thread CPU clock
+resolution is reported, so zero samples on a coarse clock are not zero cost.
+Test collection explicitly orders the load before the real-process reconnect,
+including in the one-hour mode; it does not rely on alphabetical class order.
+
+The prior-cache comparison loads only the immutable ec3d49b9 stream store,
+health store and consumer modules. Candidate coordination, diagnostics and
+fixtures are retained to measure the same offered load. It is not a replay
+of the complete prior deployment. A queue-capacity failure is the expected
+comparison outcome; unrelated exceptions, missing tests or blocked effects
+cannot count as that reproduction. No benchmark result permits deployment.
+
+The PR131 `contention-profile` CI job is a separate diagnostic, not an
+acceptance gate. It seeds one scratch database pair, restores the same paths
+and file identities before each eight-second leg, and compares writes with
+and without a continuous full-scope reader. Both legs retain 1,228 topics per
+0.8-second target round, the 4,096-entry queue, 100-frame batch limit and
+0.2-second PASSIVE checkpoints. HTTP and the recovery scheduler are absent.
+Queue saturation remains an explicit outcome with its actual elapsed time;
+it does not count as eight completed seconds or permission to run the hour gate.
+The `binance-contention-<python>-<head>` artifact contains `paired8-report.json`
+with actual offered/processed counts, queue and WAL samples, batch boundaries,
+thread/process CPU, nested read-phase timings and per-topic receipt partitions.
+Samples are not cross-thread atomic, phase timings are inclusive, and the
+fixed no-reader-first order does not establish GIL causation. Source hashes
+and the real checkout SHA are separate from synthetic fixture identities.
+Use this evidence to select the next bounded experiment; do not relax the
+full-load gate or infer production behavior from the diagnostic.
+The optional `--probe-switch-interval 0.0005` adds one full-reader leg in the
+same process, restoring the same seed and changing only Python's diagnostic
+thread-switch interval. The original interval is restored in `finally`; both
+actual values are recorded. This tests scheduling sensitivity without
+changing production settings. Improvement cannot establish GIL as the only
+cause; absence of improvement cannot exclude long C operations holding it.
+The separate `--probe-snapshot-codec` option checks copy compatibility and
+measures a private, in-memory binary-copy candidate against the existing JSON
+copy using the same generation. It adds a full-reader leg at the original
+switch interval. Only bytes produced from the accepted plain-tree input in
+that process are decoded; no binary cache is loaded from a file or network.
+All generation/window hashes, proof, time and delivery fence checks remain.
+The candidate is applied only within this diagnostic and restored afterwards;
+faster copying alone does not establish sustainable writer throughput.
+The separate `--probe-consumer-cost` option measures actual Research and
+Monitor read segments on the initialized scratch cache before writer load.
+It uses the original selection rules, rows/packet/proof/fence code and signal
+formulas, with only cache selection, scratch reader and fixture clock bound
+by the harness. It excludes external enrichment/order books, ledger access
+and publication. These isolated segment timings are not whole-job timings,
+concurrent-writer measurements or multiple-user capacity acceptance. The
+continuous full-reader pair and strict acceptance remain separate and unchanged.
+It now compares the two original full-table delivery-query algorithms from
+`6a5c8590ea6b38e7f9d1fd3fb1c7573b334db887` with the requested-scope SQL
+projection in the same process and seeded databases. All other production
+logic is the candidate's in both legs. Outputs, scopes, generation hashes and
+method counts must match exactly; measured non-overlapping Research and
+Monitor segment wall costs must not increase. This fixed-order single pair
+is not an exact old-deployment replay or statistical tail benchmark.
+
+## Performance and multiple-user boundary
+
+The current full-load gate has not passed. At candidate
+`0f89ab505b30676680866fff7cec8df5875f7386`, strict Python 3.10/3.12 each ran
+183 tests with one `SOAK_QUEUE_FULL` failure. The 32-second target stopped at
+7.046/8.301 seconds. Queue high water was 4096; receipt-to-commit maximum was
+4508/3435 ms and its P99 histogram upper bound was 5000 ms on both. Full-scope
+read maximum was 2118.628/1233.193 ms (P99 upper bound 5000/2000 ms). Both
+subsequent real-process reconnects completed two READY epochs and retired all
+eight attempts with no recorded SQLite error. The hour gate was skipped.
+See [exact-head CI](https://github.com/leo14881-eng/btc-grid-state/actions/runs/38429609562).
+
+At the subsequent unmodified-production head `6a5c8590`, the real 25-asset
+Research regular-rotation segment took 0.728/0.765 seconds on Python 3.10/3.12.
+The 80-pair/160-topic Monitor segment took 58.542/59.481 seconds across its
+non-overlapping top-level calls, although its initial read took only
+0.146/0.136 seconds. Its original 64-thread formula stages repeatedly read
+the entire roster for each delivery fence. These are isolated read segments,
+not the full Research/Early pipeline or complete Monitor job.
+
+The candidate queries only each delivery's original complete requested set
+for market topic state and control versions, using at most 400 parameters per
+query inside the same existing transaction. It projects only used market
+columns and retains the original Python truthiness/identity checks. Every
+delivery still checks every originally requested topic, global state, owner,
+pending publication, quarantine, revocation and proof expiry. No fence result
+is cached; the initial freeze still verifies the complete stored roster.
+This addresses measured delivery overhead, but its performance result and the
+unchanged continuous full-reader acceptance must be checked independently.
+The first same-seed comparison at `1552e948` measured Monitor 47.201 to
+7.114 seconds on Python 3.10 and 58.474 to 8.929 seconds on 3.12; Research
+was 0.558 to 0.426 and 0.758 to 0.504 seconds. Output/generation/scope and
+all 1250 instrumented calls matched. Both subsequent continuous full-reader
+legs still filled the collector queue. These are the single-pair measurements
+described above, not completed sustained-load acceptance.
+
+Each algorithm has only one measured 80-pair Monitor batch, with no concurrent
+writer. Its quoted seconds sum seven non-overlapping groups: one
+management_inputs (including the initial read), one rolling 1h, one rolling 4h,
+one micro pass, the sum of 80 score_row calls, and two final delivery checks.
+Each formula pass submits 80 tasks to the existing 64-worker executor. The
+1250 records are nested method observations per algorithm (200 Research and
+1050 Monitor), not repeated Monitor batches, SQL statements or network calls.
+Do not add their durations together. Selection, seed, diagnostic output checks,
+external data and the rest of Monitor are excluded. A batch sample size of one
+does not establish batch p50/p95; within-method distributions describe only
+that batch's calls. The old profile field seed_seconds includes the optional
+probes and backup; a separate initialization-before-probes field now makes
+that boundary explicit.
+
+Real consumer history scopes differ from the full load fixture. Early requests
+scan symbols plus BTC at 15m/1h (818 topics for 409 symbols); Research performs
+one 1d read per selected asset; Monitor requests management_selection plus BTC
+at 15m/1h. Monitor includes every eligible V2 priority position, so its actual
+set can exceed the nominal V1 rotation budget. Complete roster state is still
+checked, but revision history is selected only for the requested topics. The
+1228-topic whole-generation reader is the strict contention fixture and the
+collector's complete health sample, not every consumer's read scope. A Frozen
+object may reuse its owned immutable payload/encoding, while each delivery
+must still check current expiry and revocation for its original scope. No
+independently timed chunk transactions are assembled into one generation.
+
+Each side runs exactly one 80-pair Monitor read segment. The reported seconds
+sum management_inputs once, rolling(1h) once, rolling(4h) once, micro once,
+80 score_row calls and two final checks. They exclude initialization, Research,
+selection/setup, helper output checks and the rest of Monitor. Every formula
+stage submits 80 tasks to the unchanged 64-worker executor. The 1250 records
+per side are nested method observations (200 Research, 1050 Monitor), not
+1250 independent jobs or SQL queries. Do not add their inclusive totals again.
+One full-batch sample cannot establish a batch p50/p95. Per-method distributions
+are reported with their individual counts and are not cross-run batch tails.
+In that first comparison initial management_inputs stayed near 0.12 seconds;
+the three formula stages each fell from about 15.6 to 2.3 seconds on 3.10,
+and about 19.4 to 2.9 seconds on 3.12. The old delivery scans, not initialization
+or network access, explain the measured formula-stage reduction. SQL/decoding/
+hash components were not separately timed in that historical measurement.
+
+Actual history scope is selected before copying: Early requests each scan
+symbol's 15m/1h windows (818 topics for 409 symbols), Research requests one
+selected asset's 1d window at a time, and Monitor requests its management
+selection plus BTC at 15m/1h. Monitor's V2 priority set can exceed the nominal
+80-item V1 rotation budget. The snapshot still reads complete topic states to
+verify roster identity, but its history queries are already scoped. It does
+not first copy all 1228 histories and then filter each small consumer. The
+continuous stress fixture and collector health sample explicitly request the
+full roster. All history chunks remain inside a single consistent transaction.
+
+The paired scheduling probe at `e2b52ab788cabb3cdd2d7669a2081547955d683a`
+did not solve the backlog: changing only the diagnostic switch interval from
+5 to 0.5 ms changed load-period committed throughput from 577 to 488 frames/s
+on Python 3.10, and 913 to 1005 on 3.12. Both 3.10 legs refused a frame;
+both 3.12 legs retained 4196 accepted frames at load stop. The default interval
+was restored. The later owned-copy codec probe at `0f89ab5` changed 725 to
+769 frames/s and 448 to 514 respectively; all four reader legs refused a
+frame before eight seconds. The codec remains diagnostic-only. Neither probe
+is a production fix, an exact prior-version benchmark, or permission to start
+the hour gate. Drain throughput is excluded from these rates.
+
+The production collector also has a synchronous read cost: coordinated/health
+`sample()` freezes the complete scope every ten seconds before its main loop
+can receive another batch; legacy initialization and the roughly thirty-second
+audit also freeze data. Research and Monitor are separate CLI processes in
+the checked-in service design, but the installed server units and selectors
+remain unverified. Separate processes do not eliminate SQLite, memory or CPU
+contention. A safe change must measure the complete read path and its effect
+on the writer, not just copy/encode time. A same-epoch cache key is insufficient:
+cut, observations, proof and generation hash can change within that epoch.
+
+There is no tested capacity claim for 1000 users or 1000 concurrent requests.
+This repository has no multi-user display/service entry point; that capacity
+question concerns a future serving layer, not an established production fault.
+Public collection is shared once. Public indicators and public display results
+can also be reused by exact data version; displaying a result does not require
+starting another Research job or constructing another whole-roster snapshot.
+User-specific holdings analysis is a separate workload with separate
+authorization and ledger boundaries. The following request rates are inputs
+for that future service, not a claim that every request repeats Research.
+Registration count, active users, request frequency and simultaneous requests
+are different inputs. For example, 1000 active users requesting once per five
+minutes average about 3.33 requests/s but can still create a simultaneous
+1000-request burst; requesting every second implies 1000 requests/s.
+
+The repository provides a shared public market cache, a finite collector
+queue, bounded exchange HTTP work and budget, independent consumer CLIs, and
+the existing five-minute Monitor timer/SingleWriter/CAS. It does not provide
+a user-facing bounded read service, tenant quotas, measured overload rejection
+or verified reserved Monitor CPU/memory/read slots. A job timeout is not a
+resource reservation. Do not create a subscription or a full 1228-topic
+snapshot for every user request. Reuse can cover only an exactly identified,
+immutable public result; each use must still pass current freshness and
+revocation checks. User authorizations, portfolios and ledgers cannot be
+stored or shared as part of that public cache.
+
+After the present writer gate passes, a separate offline capacity matrix
+should vary active users (1/10/100/1000), concurrent requests (1/4/16/64),
+frequency (five minutes/one minute/one second), actual Research and Monitor
+scopes, equal versus changing cuts, and bursts. These are test targets, not
+promised capacity. Measure accepted and rejected reads, queue depth and age,
+read/receipt-to-commit distributions, writer admission/BEGIN/BODY/COMMIT/CLOSE,
+proof expiry, per-topic receipts and Monitor completion deadlines. Preserve
+the original full-scope collector load, queue limit and per-use checks. No
+production pressure test, multi-tenant rewrite or service activation is part
+of this patch.
+
+The proposed future stocks/crypto data center is outside this repair: share
+public collection and indicators by complete venue/market/instrument/interval
+keys, coalesce identical history-fill work, and publish versioned signal
+events with event identity and expiry. A separate execution service would
+persist consumption, enforce per-account/action idempotency and unique
+writers, handle reordering/redelivery/crash recovery, and reconcile unknown
+outcomes before retrying. Receipt of a signal would still require account
+risk authorization and a current-price check. None of that future protocol,
+cross-service deduplication or real execution has been implemented or accepted
+here; shadow mode, strategy and capital limits remain unchanged.
+
+## Third-party review boundaries and pending evidence
+
+The completed [b44c950 Linux run](https://github.com/leo14881-eng/btc-grid-state/actions/runs/38444757783)
+is not accepted: both Python versions passed 213 of 214 strict cases and failed
+only the unchanged full-scope soak after about 8.3 seconds with queue high-water
+4096. Its hour gate was skipped. All thirteen formula and four process-death
+cases passed on that head. Both real reconnect checks retired all eight HTTP
+attempts and ended with zero owners, requests, orphan children or native SQLite
+errors. A subsequent head must be checked separately.
+
+That head's separate real-session experiment ran production synchronous
+`health.session` sample/tick and the same queue, batch size and offered rate.
+Without an external reader, each version completed 25 seconds: Python 3.10
+committed 38,279 frames during load and 1,017 during drain; Python 3.12 committed
+38,275 during load and 1,021 during drain. Each recorded two load-period health
+samples. These are synthetic offered-load results, not maximum capacity.
+
+With a separate continuous full-scope reader process, the same experiment
+failed at market `ws_receipts` COMMIT after 0.903 seconds (3.10) and 2.004 seconds
+(3.12). Both scratch databases used DELETE journal mode; the failed writer
+connection had a 250ms busy timeout. The reader's first market connection was
+observed at 10 seconds before lazy control attachment; its control connection
+was 250ms. The first-connection observations are not every-connection samples.
+Python 3.12 exposed native `5/SQLITE_BUSY`; Python 3.10 did not expose a native
+code. No 517 was observed. The failures preceded the first load-period health
+sample, so neither same-process GIL contention nor duplicate health sampling
+alone explains these failures. The maximum reader transaction-body observations
+were about 287/279ms and failed COMMIT observations about 251/256ms. Aggregated
+durations do not prove the exact overlapping transaction or SQL statement;
+connection and transaction timelines are required before selecting a fix.
+The two legs have independent synthetic seeds, not a restored identical seed,
+and the full-scope reader is pressure coverage, not the actual Monitor entry.
+
+The third-party review used `e8b0b8f5`, not the later revision-copy candidate
+`cb820829`. On that latter exact head, Linux Python 3.12 passed all 197 strict
+cases and its 32.506-second short load; Python 3.10 still failed only
+`SOAK_QUEUE_FULL` after 7.764 seconds. The hour job was skipped. Both real
+reconnect checks reached two READY epochs and retired all eight HTTP calls.
+These are prior-head facts, not acceptance of subsequent formula changes.
+
+The cb820829 no-reader diagnostic committed 12,280 frames in 8.000360 seconds
+on Python 3.10 (1534.93 frames/s), and in 8.000145 seconds on Python 3.12
+(1534.97 frames/s), with zero rejected frames and zero pending frames at load
+stop. This offered-load-limited, eight-second synthetic experiment establishes
+neither maximum capacity nor the production arrival rate. The suggested
+614 frames/s is a nominal schedule calculation, not a measured peak. A future
+approved log export must retain per-second arrival bins, maximum bursts,
+ordinary/close/UTC-00 boundaries and reconnect bursts, with source and time
+range. No production rate estimate is substituted for the unchanged load gate.
+
+The current narrow formula change keeps public `Frozen.rows/packet` delivery
+checks intact. Only `rolling/micro` use an internal calculation view, with
+owned copies, packet validation, per-use immutable proof/hash and freshness
+checks. After all workers join, each formula checks the complete original
+scope before returning. A swallowed local validity failure stays latched for
+that formula. Existing Early publication checks and Monitor management,
+decision, exit and add guards remain. Research and TailRisk keep the public
+interface. This change targets actual formula cost; the continuous full-reader
+writer load does not call these formulas and cannot be declared fixed by it.
+
+The remaining suggestions require these proofs before implementation:
+
+| Suggestion | Current finding and boundary |
+| --- | --- |
+| Remove the in-session health freeze | `sample` uses it to publish data status and downgrade HEALTHY to DEGRADED. The external checker independently freezes and fences, but currently only downgrades. A safe removal must explicitly publish unverified data as UNKNOWN and let the checker derive its own status; simply deleting the freeze changes health semantics. The collector's current freeze/tick/sample remain in place for the topology diagnostic. |
+| Separate writer and supervisor | Measure the real `health.session` call chain and a separate reader process first. Preserve the original same-process full-reader gate. A fixture seed, loopback transport and synthetic frequency are not production deployment evidence. Thread/process lifecycle and stale-result rejection would need separate proofs. |
+| Remove repeated epoch checks or move trimming | Prove every persistent table, receipt, malformed/rejected frame and out-of-order input equivalent, including failure boundaries. Moving trimming can change what a later frame in the same batch observes. No production change is made here. |
+| Replace readiness/grouped revision queries or add indexes | Need cut, ordering, missing-row, duplicate/revision and retention equivalence, plus actual query-plan/cost evidence. Metadata LIKE rewriting also needs exact escaping/collation semantics. Not implemented. |
+| Persist an in-memory overflow record in a later batch | Same-transaction publication proves only simultaneous visibility after commit. It does not revoke readers before commit and SIGKILL can lose the in-memory audit. This proposal remains unproven and is not implemented. |
+| Check only revocation before push, then mark TAINTED | This leaves a check-to-push race and omits decision age. Archiving a historical decision is not fresh execution authorization. Existing use-time freshness stays unchanged; a 240-second job timeout is not permission to extend it. Not implemented. |
+| Change CPUWeight or add cross-call caching | No machine evidence supports scheduler changes. Short-lived consumers may not benefit from cross-call caching; complete identity and current expiry/revocation remain required. Neither change is implemented. |
+
+The process-death diagnostic distinguishes a queued normal frame, the current
+durably recorded queue refusal, and an explicitly hypothetical memory-only
+overflow marker. It also separates an active HTTP owner from an epoch with no
+such owner. A collector `flock` release is not itself a reader check; an orphan
+HTTP owner can be rejected by the control fence earlier than proof expiry.
+Tests use an actual SIGKILL and reap, then explicit injected millisecond times
+to inspect expiry boundaries. They do not wait 90 real seconds or prove that
+all failures wait exactly 90 seconds. Test success means the observed behavior
+is accounted for, not that losing uncommitted queue frames is crash-safe.
+
+## Offline provisioning and reviewed installation
+
+These are reviewable commands for a **future authorized deployment**, not
+actions performed by this PR. First establish the exact stopped service,
+invocation, candidate checkout, state path and existing account/group access
+through the approved server entry point. Retain source head, journal and
+read-only SQLite backup evidence. Do not enter previously denied SSH, WSL or
+stock runtime paths and do not expand permissions.
+
+The existing `hunter_binance_stage.sh` is first-install-only: it deliberately
+refuses an existing code directory, release-head or unit. It is not an upgrade
+command for the currently installed collector. An upgrade package must be
+prepared against the actual source/unit hashes and existing approved paths,
+with conditional replacement and retained rollback artifacts, after those
+read-only facts are available. This PR does not authorize guessed paths or
+overwriting the installed package.
+
+The available Ops connector has rejected reading the actual Binance unit and
+service journal. Obtain a fixed, redacted evidence export through an approved
+maintenance entry before deployment: unit/drop-ins and service identity;
+code/release hashes; Python/SQLite/websockets versions and journal modes;
+directory ACLs, file identities and disk capacity; legacy request/lease,
+budget/boot/epoch records; and the matching invocation/process/lock evidence.
+Absence of a PID alone cannot prove response completion or child reaping. An
+unverifiable request stays unresolved; neither deleting its marker nor creating
+a new state database is an approved migration path.
+
+Provisioning requires the existing collector.lock, exclusive offline ownership,
+`connected != 1`, no legacy requests/leases/halt, matching boot identity and no
+unexpired cooldown. It carries forward spacing and conservatively charges a
+legacy window whose usage cannot be established. An orphan, stale boot, missing
+access or partial provisioning is a manual-review blocker, not permission to
+delete state, choose a fresh database or reset the rate budget.
+
+```sh
+# In the approved candidate checkout, using its approved service identity:
+python -B scripts/provision_binance_control.py \
+  --state /var/lib/hunter-binance-stream/state.sqlite3
+```
+
+This creates the sibling control DB and gate but does not start a service.
+Review `deploy/systemd/hunter-binance-coordinated.conf.example` against the
+actual unit. Its only feature switch adds `--coordinated-control` to health
+supervision; Restart=no and control-group shutdown remain. No unit install,
+daemon-reload or restart is automated here. Do not activate a consumer selector
+as part of collector installation. Verify its separate authorization first.
+
+The patch does not change journal mode or filesystem permissions. Inspect the
+actual runtime SQLite version and modes before considering WAL. WAL still has
+one writer per database and does not make two databases atomic. Any WAL rollout
+must use a runtime containing the SQLite WAL-reset fix (3.51.3+, or the relevant
+3.44.6/3.50.7 backport) and reviewed read-only WAL/SHM permissions. No forced
+checkpoint runs on the collector request hot path. Keep control audit size and
+disk free space visible; this version retains control audit records and does
+not install an automatic retention/deletion policy.
+
+## Acceptance and rollback boundary
+
+Record exact source SHA, service invocation/PID, boot, epoch, manifest hash,
+roster hash, topic count and actual consumer scope. Preserve HTTP call/attempt
+terminal counts and hashes, unresolved/held owners, quiet/repair queue waits,
+transaction phase timings and SQLite error codes. Require WS receipt
+conservation, complete terminal partition and zero unexplained held work.
+Health supervision alone cannot grant data READY. Check each actual consumer
+scope and its final delivery fence using the ops checker; preserve UNKNOWN
+reasons and do not shrink a failing required set.
+
+Observe initial history, reconnect, a real native close boundary and the
+separately approved five-minute consumer run before claiming migration. A
+successful offline suite establishes code behavior, not these server facts.
+On failure, stop via the approved service control, keep both databases and the
+gate/owner evidence, and leave consumers UNKNOWN. Do not revert a selector to
+Worker to hide incomplete migration. Do not downgrade over an active v2 epoch,
+delete the control DB, clear a halt, or reset budget/lease records automatically.
+
+References: [SQLite transactions](https://www.sqlite.org/lang_transaction.html),
+[snapshot isolation](https://www.sqlite.org/isolation.html),
+[WAL caveats and fixes](https://www.sqlite.org/wal.html),
+[Binance Spot REST contract](https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md).
