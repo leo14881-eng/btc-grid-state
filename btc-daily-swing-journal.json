@@ -270,6 +270,103 @@
         "failed_reason": null,
         "status": "PENDING_VALID_FUTURE_EVIDENCE"
       }
+    },
+    {
+      "day_id": "BTC-DAILY-SWING-2026-10-25",
+      "local_date": "2026-10-25",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "BITGET_SPOT_REFERENCE_ONLY",
+      "strategy_version": "CONDITIONAL_RESEARCH_STALE_ACCOUNT_20261025",
+      "plan": {
+        "status": "CONDITIONAL_RESEARCH_ONLY__NO_NEW_CAPITAL_ACTION",
+        "observation_window": "2026-10-25 08:00 Asia/Ho_Chi_Minh",
+        "reference_spot_price_usdt": 80871.6,
+        "reference_spot_time": "2026-10-25T07:52:14.109+07:00",
+        "reference_market_source": "Bitget official spot BTCUSDT ticker",
+        "direction": "SPOT_BUY_THEN_SELL_ONLY_IF_FRESH_H1_M15_CONFIRMATION",
+        "first_buy_price_usdt": 80250,
+        "first_buy_all_in_budget_usdt": 3000,
+        "first_take_profit_price_usdt": 81150,
+        "second_take_profit_price_usdt": 81700,
+        "take_profit_split": [
+          0.5,
+          0.5
+        ],
+        "conditional_add_price_usdt": 79250,
+        "conditional_add_all_in_budget_usdt": 4000,
+        "uncommitted_planned_swing_budget_usdt": 8000,
+        "activation_requires": "Independent fresh 15m/1h support reclaim, confirmed liquidity, user-verified available USDT and open orders. If price never re-tests planned limit, do not chase.",
+        "add_requires": "Independent new absorption and falling liquidation/leverage risk after test near 79200, not merely first trade drawdown. Not active today without evidence.",
+        "cancel_unfilled_if": "New weakness with h1 closing below 79800 or renewed low under 79200 with selling pressure; price rally above first TP without entry; exchange abnormality/data stale. No automatic cancellation.",
+        "costs_per_side_fraction": 0.0014,
+        "modeled_outcomes": {
+          "first_only": {
+            "capital_usdt": 3000,
+            "bought_btc": 0.03733091,
+            "tp1_net_usdt": 25.16,
+            "tp2_net_usdt": 45.67,
+            "split50_net_usdt": 35.41,
+            "stress_78500_net_usdt": -73.63,
+            "stress_76000_net_usdt": -166.82,
+            "stress_72000_net_usdt": -315.94
+          },
+          "first_plus_conditional_add": {
+            "capital_usdt": 7000,
+            "bought_btc": 0.08773354,
+            "tp1_net_usdt": 109.61,
+            "tp2_net_usdt": 157.79,
+            "split50_net_usdt": 133.7,
+            "stress_78500_net_usdt": -122.56,
+            "stress_76000_net_usdt": -341.59,
+            "stress_72000_net_usdt": -692.03
+          }
+        },
+        "probability_weighted_expected_net_usdt": null,
+        "executable": false,
+        "automatic_order_placement": false,
+        "funding": "BTC_UNIFIED_POOL_STANDBY_USDT__AVAILABLE_BALANCE_UNKNOWN",
+        "funding_note": "Budget is not actual free account balance. Existing 84200 TP and 84500 sell order statuses unknown."
+      },
+      "evidence": {
+        "yesterday_20261024_low_bitget": 80513.94,
+        "current_exchange_24h_low_bitget": 79238.01,
+        "current_exchange_24h_high_bitget": 81102.14,
+        "current_exchange_24h_volume_btc_bitget": 2664.541859,
+        "current_exchange_24h_low_binance": 79220.74,
+        "etf_last_complete_day": "2026-10-22",
+        "etf_last_complete_usd_millions": -635.6,
+        "etf_20261023_preliminary_usd_millions": -137.9,
+        "etf_20261023_complete": false,
+        "m15_h1_h4_full_ohlcv": "UNKNOWN__OFFICIAL_ENDPOINT_NOT_ACCESSIBLE",
+        "daily_technical_context": "2026-10-24 21:00UTC third-party RSI14 43.2, MACD histogram -309.43, supportive lower pivot 79535, 784? UNKNOWN",
+        "live_orderbook_depth": "UNKNOWN__ONLY_TOP_OF_BOOK",
+        "onexchange_open_orders": "UNKNOWN",
+        "spot_bid": 80871.6,
+        "spot_ask": 80871.61,
+        "derivatives": "Aggregator asof 2026-10-25T00:32Z, 24h liquidations 196M USD, longs 179M, aggregate OI 29.9B USD +0.9%, average 8h funding +0.0067%; NOT CO-LOCATED OR FULLY VALIDATED",
+        "sentiment": "DOWNSIDE_RISK_WITH_UNCONFIRMED_REBOUND",
+        "source_account_snapshot": "STALE_PORTFOLIO_2026-10-03; SENTINEL_2026-10-11",
+        "prior_plan_invalidated_reason": "Independent fresh 24h low 79220-79238 below yesterday 80513 low and prior 80300 reference; 23Oct ETF partial flow worsened from -27.6 to -137.9m, still provisional",
+        "fees_slippage": "Assumption 0.10% fee + 0.04% price slippage each side, not verified actual user tier"
+      },
+      "actual": {
+        "buy_filled": null,
+        "sell_filled": null,
+        "confirmed_btc_quantity": null,
+        "realized_net_profit_usdt": null,
+        "open_exchange_orders": null,
+        "status": "NO_USER_CONFIRMATION__UNKNOWN"
+      },
+      "review": {
+        "mfe_usdt": null,
+        "mae_usdt": null,
+        "net_profitable_window": null,
+        "sold_too_early": null,
+        "rebuy_missed": null,
+        "failed_reason": null,
+        "status": "PENDING_VALID_FUTURE_EVIDENCE"
+      }
     }
   ],
   "aggregates": {
