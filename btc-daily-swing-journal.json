@@ -773,6 +773,149 @@
         "failed_reason": null,
         "status": "PENDING_VERIFIABLE_FUTURE_EVIDENCE"
       }
+    },
+    {
+      "day_id": "BTC-DAILY-SWING-2026-10-30",
+      "local_date": "2026-10-30",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "BITGET_SPOT_REFERENCE_ONLY__USER_TRADES_NONE_BY_AUTOMATION",
+      "strategy_version": "CONDITIONAL_RESEARCH__BINANCE_SECURITY_SYSTEMIC_RISK__STATE_STALE_20261030",
+      "plan": {
+        "status": "SYSTEMIC_RISK__STATE_STALE__NO_NEW_CAPITAL_ACTION__CONDITIONAL_RESEARCH_ONLY",
+        "observation_window": "2026-10-30 08:00 Asia/Ho_Chi_Minh",
+        "reference_spot_price_usdt": 77136.35,
+        "reference_spot_time": "2026-10-30T07:45:36.503+07:00",
+        "reference_market_source": "Bitget official spot BTCUSDT ticker (snapshot not continuous live quote)",
+        "main_path": "DOWNSIDE_AND_EXCHANGE_CONTAGION_RISK__SUSPEND_NEW_SWING_ENTRIES_UNTIL_EXCHANGE_STABILITY_AND_FRESH_KLINES_PASS",
+        "first_buy_price_usdt": 76900,
+        "first_buy_all_in_budget_usdt": 2000,
+        "first_take_profit_price_usdt": 77900,
+        "second_take_profit_price_usdt": 78650,
+        "take_profit_split": [
+          0.5,
+          0.5
+        ],
+        "conditional_add_price_usdt": 75200,
+        "conditional_add_all_in_budget_usdt": 2000,
+        "conditional_add_status": "DISABLED__NOT_A_PREPLACED_AVERAGING_ORDER__INDEPENDENT_NEW_EVIDENCE_NEEDED",
+        "reference_uncommitted_swing_budget_usdt": 11000,
+        "activation_requires": "First resolve exchange/security counterparty and stablecoin-network risk; verify user venue deposits/withdrawals, free USDT/order reservations; independently refresh M15/H1/H4/D1 candles+volume and multi-depth; confirm selloff low around 76775 is followed by absorption and reclaim above 77500 (reference condition only), then revisit 76900 only if reasonably executable; do not chase a bounce. Any confirmed unresolved security incident continues NO_NEW_CAPITAL_ACTION.",
+        "add_requires": "Entirely independent later flush near 75200 followed by verifiable absorption, H1 reversal and improved OI/funding/liquidation data plus resolved exchange-risk gate; not automatically enabled by first lot losing money; current quote alone cannot validate 75200 as structural support.",
+        "cancel_unfilled_if": "Security breach remains unresolved, withdrawals disrupted or cross-venue spreads abnormal; repeat downside break through 76775 without credible reclaim; stale indicators/orderbook; or rally above 77900 without entry. No real order placed or cancelled.",
+        "fees_each_side_fraction": 0.001,
+        "slippage_each_side_fraction": 0.0004,
+        "modeled_outcomes": {
+          "first_only": {
+            "capital_usdt": 2000,
+            "modeled_btc": 0.02597144,
+            "net_tp1_77900_usdt": 20.34,
+            "net_tp2_78650_usdt": 39.79,
+            "net_50_50_usdt": 30.07,
+            "break_even_exit_price_usdt": 77115.62,
+            "stress_exit_76000_usdt": -28.93,
+            "stress_exit_74000_usdt": -80.8,
+            "stress_exit_70000_usdt": -184.54,
+            "foregone_gain_if_80000_after_full_tp_usdt": 44.74
+          },
+          "first_plus_add": {
+            "capital_usdt": 4000,
+            "modeled_btc": 0.05253001,
+            "net_tp1_77900_usdt": 86.36,
+            "net_tp2_78650_usdt": 125.7,
+            "net_50_50_usdt": 106.03,
+            "break_even_exit_price_usdt": 76253.71,
+            "stress_exit_76000_usdt": -13.31,
+            "stress_exit_74000_usdt": -118.22,
+            "stress_exit_70000_usdt": -328.05,
+            "foregone_gain_if_80000_after_full_tp_usdt": 90.49
+          }
+        },
+        "probability_weighted_expected_net_usdt": null,
+        "core_position_action": "HOLD__NO_MECHANICAL_BEAR_MARKET_SELL__MONITOR_COUNTERPARTY_NOT_ASSUME_VENUE_SAFETY",
+        "extreme_crash_reserve_action": "NO_USE__INCIDENT_MAY_BE_SYSTEMIC_BUT_FLASH_CRASH_RESERVE_GATE_NOT_VERIFIED",
+        "portfolio_state_effect_if_first_only": "Core BTC unchanged; model swing BTC +0.02597144, standby USDT -2000; ACTUAL BALANCE UNKNOWN",
+        "portfolio_state_effect_if_both": "Core BTC unchanged; model swing BTC +0.05253001, standby USDT -4000; ACTUAL BALANCE UNKNOWN",
+        "funding_source": "160K_BTC_UNIFIED_POOL_STANDBY_USDT__ACTUAL_FREE_BALANCE_UNKNOWN",
+        "executable": false,
+        "automatic_order_placement": false
+      },
+      "evidence": {
+        "bitget_spot_asof": "2026-10-30T07:45:36.503+07:00",
+        "bitget_spot_last_usdt": 77136.35,
+        "bitget_24h_high_usdt": 81970.38,
+        "bitget_24h_low_usdt": 76775.3,
+        "bitget_24h_volume_btc": 5482.356205,
+        "bitget_bid_ask_usdt": [
+          77136.35,
+          77136.36
+        ],
+        "bitget_best_bid_size_btc": 0.01348,
+        "bitget_best_ask_size_btc": 0.062682,
+        "full_m15_h1_h4_d1_ohlcv": "UNKNOWN__BITGET_OFFICIAL_CANDLE_ENDPOINT_NOT_ACCESSIBLE",
+        "spot_orderbook_multilevel": "UNKNOWN__BITGET_DEPTH_ENDPOINT_NOT_ACCESSIBLE",
+        "etf_last_complete_session": "2026-10-28",
+        "etf_last_complete_net_usd_m": 137.3,
+        "etf_prior_complete_sessions": [
+          {
+            "date": "2026-10-27",
+            "flow_usd_m": 176
+          },
+          {
+            "date": "2026-10-26",
+            "flow_usd_m": 110.3
+          }
+        ],
+        "etf_2026_10_29": "PROVISIONAL__IBIT_AND_HODL_NOT_REPORTED__DISPLAY_TOTAL_4.4M_NOT_COMPLETE",
+        "etf_observation": "Flows measured BEFORE post-US-close Binance incident; stale as signal for incident response.",
+        "derivatives_source_conflict": "2026-10-29 21:32Z Liqwall $29.5B OI, $306M 24h liq vs 21:45Z TradRadar $34.97B 7-venue OI, >=$243.02M 5-venue 24h liq; different provider, venue coverage and definitions, NOT COMPARABLE; both BEFORE 07:45 local snapshot and too stale for action gate.",
+        "derivatives_available_example": "TradRadar 2026-10-29T21:45Z 7-exch OI 34.97B USD -2.75% in 24h; OI-weighted 8h funding +0.0054%; liquidations >=243.02M 5 venues, long >=199.88M. NOT LIVE EXECUTION EVIDENCE.",
+        "macro": "2026-10-29 FT Nasdaq 100 -1.4% on AI capex concerns, 10Y UST around 4.94%; DXY current UNKNOWN; FOMC Oct28 held 3.75%-4.00% with 2 dissents for hike",
+        "counterparty_risk": "2026-10-29/30 Binance publicly investigating potential security incident; Reuters/AP ~2.54B of incident-linked tokens frozen by stablecoin issuers and partners, NOT confirmed recovered or net losses. Reports say withdrawals paused pending checks; later network-specific status varies, so live withdrawal reliability remains UNKNOWN.",
+        "sharp_selloff_event": "Oct29-30 Binance security event and BTC ~4.9% lower over prior 24h Bitget ticker; range low 76775; broader systemic risk candidate, not automatically confirmed permanent contagion.",
+        "account_state": "STALE__portfolio_updated_2026-10-03__decision_journal_2026-09-28__sentinel_2026-10-11",
+        "server_evidence": "sentinel-evidence-live.json attempt ERROR_TOOL_FAILED_INTERNALLY; not treated as evidence",
+        "older_confirmed_execution": "2026-10-08 two BTC buys aggregate 0.072342 BTC previously user confirmed, later sell statuses still UNKNOWN; previous positions reclassified to core by user, not silently treated as daily swing inventory.",
+        "prior_plan_revision": "2026-10-29 conditional 80650 buy/81450/81850 TP, 79900 disabled add is invalid as fresh executable proposal: current verified Bitget last 77136, 24h low 76775 and Binance security report/withdrawal risk are materially new evidence. NEVER silently carry yesterday orders. Real fill status UNKNOWN.",
+        "yesterday_review": "Previous 80650 entry appears within last 24h 76775-81970 but 24h range does not establish timing of activation, fills or TP; NO inference about profits/MFE/MAE.",
+        "risk_qualification": "Broader exchange incident may meet qualitative systemic risk watch, but user 20K extreme reserve remains isolated without verified abnormal depth/liquidity and platform health",
+        "source_urls": [
+          "https://api.bitget.com/api/v2/spot/market/tickers?symbol=BTCUSDT",
+          "https://farside.co.uk/btc/",
+          "https://www.reuters.com/legal/transactional/tether-circle-freeze-238-billion-after-binance-reports-security-incident-2026-10-29/",
+          "https://www.reuters.com/technology/bitcoin-cryptocurrency-prices-fall-after-binance-reports-security-issue-2026-10-30/",
+          "https://apnews.com/article/39cda8ceb8095e036334a18549d3d20d",
+          "https://tradradar.io/markets/btc",
+          "https://liqwall.com/coins/btc",
+          "https://www.ft.com/content/1639620b-99e7-47ed-8484-49646816489e"
+        ]
+      },
+      "actual": {
+        "buy_filled": null,
+        "sell_filled": null,
+        "confirmed_btc_quantity": null,
+        "sell_filled_quantity_btc": null,
+        "realized_net_profit_usdt": null,
+        "open_exchange_orders": null,
+        "status": "NO_USER_CONFIRMATION__UNKNOWN"
+      },
+      "review": {
+        "mfe_usdt": null,
+        "mae_usdt": null,
+        "net_profitable_window": null,
+        "sold_too_early": null,
+        "rebuy_missed": null,
+        "failed_reason": null,
+        "status": "PENDING_VERIFIABLE_FUTURE_EVIDENCE"
+      },
+      "weekly_audit": {
+        "verified_closed_trades": 0,
+        "win_rate": "UNKNOWN",
+        "profit_factor": "UNKNOWN",
+        "max_drawdown": "UNKNOWN",
+        "opportunity_capture": "UNKNOWN",
+        "note": "No user-confirmed fully closed and fee-reconciled swing lots. Missing candle paths prohibit ex-post MFE/MAE from range data."
+      }
     }
   ],
   "aggregates": {
