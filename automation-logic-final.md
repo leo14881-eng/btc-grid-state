@@ -2,9 +2,9 @@
 
 Version: 2026-10-11 v1.6
 Timezone: Asia/Ho_Chi_Minh
-Status: FROZEN under “10-Year Wealth Compounding Architecture FINAL”
+Status: ACTIVE RULE REFERENCE. Current capital authority: 4-year-wealth-architecture.md §0 (effective 2026-10-11); superseded sections are historical and non-executable.
 
-This is the single canonical logic source for the five active investment automations. Every run must read the matching task section plus Shared Global Rules. If this file or the required section is unavailable, output `LOGIC SOURCE UNAVAILABLE` and issue no new capital action.
+This is a canonical investment-automation rule reference, not a registry of currently enabled tasks. Each enabled investment task must read its matching section plus Shared Global Rules. If this file or the required section is unavailable, output `LOGIC SOURCE UNAVAILABLE` and issue no new capital action.
 
 ## Canonical state sources
 
