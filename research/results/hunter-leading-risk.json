@@ -1,20 +1,20 @@
 {
   "schema": "hunter_leading_risk_state_v1",
-  "updated_at_utc": "2026-11-01T00:53:24.489780+00:00",
+  "updated_at_utc": "2026-11-01T06:58:12.418491+00:00",
   "current": {
     "level": "WATCH",
     "raw_level": "WATCH",
     "score": 20,
     "groups": {
-      "breadth": true,
-      "relative": false,
+      "breadth": false,
+      "relative": true,
       "liquidity": false,
       "btc_structure": false,
       "leverage": false,
       "stablecoin": false
     },
     "reasons": [
-      "LEADING_BREADTH_DETERIORATION"
+      "LEADING_RELATIVE_DETERIORATION"
     ],
     "candidate_level": null,
     "candidate_count": 0,
@@ -22,59 +22,59 @@
     "recovery_observations": 0,
     "last_recovery_counted_at_utc": null,
     "last_transition_observation_at_utc": "2026-10-30T19:42:13.855269+00:00",
-    "last_observation_id": "cef28f81ab6616cca9c09cc1dd69be4fbde043490ad213a66077400378aa4b23",
-    "updated_at_utc": "2026-11-01T00:53:24.489780+00:00",
+    "last_observation_id": "31419e42c4d5206deb7656e2eef0af51c52edfa4b8ad6d20254ba167e4fd9fc4",
+    "updated_at_utc": "2026-11-01T06:58:12.418491+00:00",
     "evidence": {
       "schema": "hunter_leading_risk_evidence_v1",
-      "observed_at_utc": "2026-11-01T00:53:24.489780+00:00",
-      "observation_id": "cef28f81ab6616cca9c09cc1dd69be4fbde043490ad213a66077400378aa4b23",
+      "observed_at_utc": "2026-11-01T06:58:12.418491+00:00",
+      "observation_id": "31419e42c4d5206deb7656e2eef0af51c52edfa4b8ad6d20254ba167e4fd9fc4",
       "breadth": {
         "sample_count": 707,
-        "negative_fraction": 0.6846,
-        "loss_5pct_fraction": 0.1499,
-        "negative_acceleration": 0.21928274398868458
+        "negative_fraction": 0.4639,
+        "loss_5pct_fraction": 0.14,
+        "negative_acceleration": -0.22066789250353608
       },
       "relative": {
-        "sample_1h": 277,
-        "negative_1h_fraction": 0.4079,
-        "sample_4h": 277,
-        "negative_4h_fraction": 0.5884,
-        "negative_1h_acceleration": -0.15555776173285196
+        "sample_1h": 232,
+        "negative_1h_fraction": 0.6164,
+        "sample_4h": 232,
+        "negative_4h_fraction": 0.6336,
+        "negative_1h_acceleration": 0.20847931034482764
       },
       "liquidity": {
         "sample_count": 80,
-        "median_spread_bps": 12.837,
-        "median_bid_depth_usdt": 40836.990000000005,
-        "median_book_imbalance": 0.11566940962647329,
-        "spread_acceleration_bps": 0.26500000000000057,
-        "bid_depth_change_pct": -11.8527
+        "median_spread_bps": 11.780000000000001,
+        "median_bid_depth_usdt": 47389.07,
+        "median_book_imbalance": 0.14256516856813067,
+        "spread_acceleration_bps": -1.0569999999999986,
+        "bid_depth_change_pct": 16.0445
       },
       "leverage": {
         "source": "OKX_PUBLIC",
-        "open_interest": 3456451.630000022,
-        "funding_rate": 0.0001,
-        "basis_pct": -0.02485,
-        "open_interest_change_pct": -0.0967
+        "open_interest": 3478089.810000021,
+        "funding_rate": 7.55417293615e-05,
+        "basis_pct": -0.02667,
+        "open_interest_change_pct": 0.626
       },
       "leverage_fetch_error": null,
       "btc_structure": {
-        "return_5m_pct": 0.0225,
-        "return_15m_pct": -0.0275,
-        "return_1h_pct": 0.1734,
-        "last_completed_close_utc": "2026-11-01T00:49:59.999000+00:00"
+        "return_5m_pct": 0.059,
+        "return_15m_pct": 0.1155,
+        "return_1h_pct": 0.1643,
+        "last_completed_close_utc": "2026-11-01T06:54:59.999000+00:00"
       },
       "stablecoins": {
         "prices": {
-          "USDCUSDT": 1.00118,
-          "FDUSDUSDT": 0.9985,
+          "USDCUSDT": 1.00111,
+          "FDUSDUSDT": 0.9983,
           "TUSDUSDT": 0.9998
         },
         "deviation_pct": {
-          "USDCUSDT": 0.118,
-          "FDUSDUSDT": 0.15,
+          "USDCUSDT": 0.111,
+          "FDUSDUSDT": 0.17,
           "TUSDUSDT": 0.02
         },
-        "max_deviation_pct": 0.15,
+        "max_deviation_pct": 0.17,
         "fetch_error": null
       },
       "missing_or_stale": [],
@@ -85,39 +85,6 @@
     "capital_authority": "NONE_SHADOW_ONLY"
   },
   "history": [
-    {
-      "at_utc": "2026-10-15T22:32:46.372767+00:00",
-      "level": "NORMAL",
-      "raw_level": "NORMAL",
-      "score": 0,
-      "groups": {
-        "breadth": false,
-        "relative": false,
-        "liquidity": false,
-        "btc_structure": false,
-        "leverage": false,
-        "stablecoin": false
-      },
-      "data_uncertain": false,
-      "used_exposure_usdt": 12000.0,
-      "shadow_derisk": {
-        "A_GENTLE": {
-          "target_fraction": 1.0,
-          "target_exposure_usdt": 12000.0,
-          "counterfactual_reduction_usdt": 0.0
-        },
-        "B_BALANCED": {
-          "target_fraction": 1.0,
-          "target_exposure_usdt": 12000.0,
-          "counterfactual_reduction_usdt": 0.0
-        },
-        "C_DEFENSIVE": {
-          "target_fraction": 1.0,
-          "target_exposure_usdt": 12000.0,
-          "counterfactual_reduction_usdt": 0.0
-        }
-      }
-    },
     {
       "at_utc": "2026-10-15T22:37:32.584457+00:00",
       "level": "NORMAL",
@@ -16581,6 +16548,39 @@
         "C_DEFENSIVE": {
           "target_fraction": 1.0,
           "target_exposure_usdt": 15000.0,
+          "counterfactual_reduction_usdt": 0.0
+        }
+      }
+    },
+    {
+      "at_utc": "2026-11-01T06:58:12.418491+00:00",
+      "level": "WATCH",
+      "raw_level": "WATCH",
+      "score": 20,
+      "groups": {
+        "breadth": false,
+        "relative": true,
+        "liquidity": false,
+        "btc_structure": false,
+        "leverage": false,
+        "stablecoin": false
+      },
+      "data_uncertain": false,
+      "used_exposure_usdt": 14000.0,
+      "shadow_derisk": {
+        "A_GENTLE": {
+          "target_fraction": 1.0,
+          "target_exposure_usdt": 14000.0,
+          "counterfactual_reduction_usdt": 0.0
+        },
+        "B_BALANCED": {
+          "target_fraction": 1.0,
+          "target_exposure_usdt": 14000.0,
+          "counterfactual_reduction_usdt": 0.0
+        },
+        "C_DEFENSIVE": {
+          "target_fraction": 1.0,
+          "target_exposure_usdt": 14000.0,
           "counterfactual_reduction_usdt": 0.0
         }
       }
