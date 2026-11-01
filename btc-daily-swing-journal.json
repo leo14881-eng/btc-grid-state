@@ -1062,6 +1062,148 @@
         "opportunity_capture": "UNKNOWN",
         "note": "No user-confirmed fully closed swing lots. Incomplete candles/orders prohibit MFE/MAE and net P&L attribution."
       }
+    },
+    {
+      "day_id": "BTC-DAILY-SWING-2026-11-01",
+      "local_date": "2026-11-01",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "BITGET_SPOT_REFERENCE_ONLY",
+      "strategy_version": "CONDITIONAL_RESEARCH__SYSTEMIC_COUNTERPARTY_RISK__STATE_STALE_20261101",
+      "plan": {
+        "status": "SYSTEMIC_RISK_STILL_OPEN__STATE_STALE__NO_NEW_CAPITAL_ACTION__CONDITIONAL_RESEARCH_ONLY",
+        "observation_window": "2026-11-01 08:00 Asia/Ho_Chi_Minh",
+        "reference_spot_price_usdt": 77619.91,
+        "reference_spot_time": "2026-11-01T07:41:40.432+07:00",
+        "crosscheck_spot_price_usdt": 77622.41,
+        "crosscheck_spot_time": "2026-11-01T07:46:26+07:00",
+        "reference_market_source": "Bitget official BTCUSDT ticker; Bitget exchange BTC price page crosscheck at different times",
+        "main_path": "WEAK_SIDEWAYS_WITH_DOWNSIDE_EVENT_RISK__NO_CONFIRMED_RECOVERY",
+        "direction": "SPOT_LONG_ONLY_AFTER_INDEPENDENT_EVIDENCE_AND_COUNTERPARTY_REOPENING",
+        "first_buy_price_usdt": 76700,
+        "first_buy_all_in_budget_usdt": 2000,
+        "first_take_profit_price_usdt": 77700,
+        "second_take_profit_price_usdt": 78400,
+        "take_profit_split": [
+          0.5,
+          0.5
+        ],
+        "conditional_add_price_usdt": 75200,
+        "conditional_add_all_in_budget_usdt": 2000,
+        "add_enabled": false,
+        "candidate_uncommitted_swing_budget_usdt": 11000,
+        "activation_requires": "Recent 15m and 1h completed candles with sufficient volume and genuine spot depth must confirm bounce/absorption in 76300-76700 area and regain 77000; subsequent retest must still make 76700 limit realistic. Verifiable exchange withdrawals/custody functioning and account free USDT/open orders required; while unavailable NO NEW CAPITAL ACTION. No prediction of execution.",
+        "add_requires": "Independent NEW downside flush near 75200 with strong 1h reclaim, verified buy-side orderflow and improving OI/funding/liquidation plus clear exchange systemic/counterparty recovery; initial position drawdown or touch alone is not enough.",
+        "cancel_unfilled_if": "Withdrawal service remains unverified or further shock; 76310/76700 loses spot bid support with 1h breakdown/volume, depth spreads widen, fresh ETF/credit shock, quote/position data stale, or TP1 reached without entry. Never imply actual cancel.",
+        "costs": {
+          "fee_per_side_fraction": 0.001,
+          "adverse_slippage_per_side_fraction": 0.0004,
+          "model": "BUY_BUDGET_INCLUDES_ENTRY_FEE_AND_ADVERSE_SLIPPAGE__SELL_PROCEEDS_AFTER_FEE_AND_ADVERSE_SLIPPAGE",
+          "actual_fee_tier": "UNKNOWN"
+        },
+        "modeled_outcomes": {
+          "first_only": {
+            "capital_usdt": 2000,
+            "bought_btc": 0.026039154100000003,
+            "break_even_price": 76915.06,
+            "tp1_net_usdt": 20.41,
+            "tp2_net_usdt": 38.61,
+            "tp_split50_net_usdt": 29.51,
+            "stress_76000_net_usdt": -23.79,
+            "stress_74000_net_usdt": -75.8,
+            "stress_72000_net_usdt": -127.8,
+            "stress_70000_net_usdt": -179.81,
+            "missed_upside_if_exit_78050_vs_80000_usdt": 50.71
+          },
+          "first_plus_add": {
+            "capital_usdt": 4000,
+            "bought_btc": 0.0525977061,
+            "break_even_price": 76155.53,
+            "tp1_net_usdt": 81.12,
+            "tp2_net_usdt": 117.89,
+            "tp_split50_net_usdt": 99.51,
+            "stress_76000_net_usdt": -8.17,
+            "stress_74000_net_usdt": -113.22,
+            "stress_72000_net_usdt": -218.27,
+            "stress_70000_net_usdt": -323.31,
+            "missed_upside_if_exit_78050_vs_80000_usdt": 102.42
+          }
+        },
+        "probability_weighted_expected_net_usdt": null,
+        "risk_notes": "Large security incident and full withdrawal/PoR proof not verified; realized losses may be larger than modeled due to exchange gaps, no forced stop, limited liquidity; profits are conditional not expected realized profit.",
+        "executable": false,
+        "automatic_order_placement": false,
+        "order_cancellation_placed": false,
+        "funding": "BTC_UNIFIED_POOL_STANDBY_USDT__AVAILABLE_BALANCE_UNKNOWN"
+      },
+      "evidence": {
+        "bitget_spot_asof": "2026-11-01T07:41:40.432+07:00",
+        "bitget_spot_last_usdt": 77619.91,
+        "bitget_24h_high_usdt": 77783.99,
+        "bitget_24h_low_usdt": 77097.97,
+        "bitget_24h_volume_btc": 1745.41959,
+        "bitget_bid_usdt": 77619.9,
+        "bitget_ask_usdt": 77619.91,
+        "bitget_best_bid_size_btc": 2.297991,
+        "bitget_best_ask_size_btc": 0.515883,
+        "bitget_price_page_last_usdt": 77622.41,
+        "bitget_price_page_asof": "2026-11-01T07:46:26+07:00",
+        "m15_h1_h4_d1_full_ohlcv": "UNKNOWN__OFFICIAL_CANDLE_ENDPOINTS_NOT_ACCESSIBLE",
+        "spot_multilevel_order_book": "UNKNOWN__DEPTH_ENDPOINT_NOT_ACCESSIBLE",
+        "etf_last_complete_session": "2026-10-30",
+        "etf_last_complete_net_usd_m": -643.2,
+        "etf_previous_complete_session": "2026-10-29",
+        "etf_previous_complete_net_usd_m": 17.2,
+        "derivatives_asof": "2026-11-01T00:32:00Z__LIQWALL_THIRD_PARTY_COVERAGE",
+        "liqwall_btc_open_interest_usd_b": 29.9,
+        "liqwall_oi_change_24h_pct": -0.6,
+        "liqwall_avg_8h_funding_pct": 0.0088,
+        "liqwall_btc_liquidations_24h_usd_m": 7.4,
+        "liqwall_btc_long_liquidations_24h_usd_m": 2.3,
+        "liqwall_btc_short_liquidations_24h_usd_m": 5.1,
+        "binance_funding_8h_pct": 0.01,
+        "coinglass_reported_oi_usd_b": 52.88,
+        "oi_source_comparison": "SOURCE_DEFINITION_DIFFERENCE / COVERAGE_UNRECONCILED: CoinGlass 52.88B vs Liqwall 29.9B; never mix or treat as same all-exchange numerator.",
+        "counterparty": "Official Binance 2026-10-31 Recovery Update #3 says replenishment 90% including 100% top10 token backing per company, 2026-10-31 00:00UTC PoR snapshot posted but ZK verification due 2026-11-03 and withdrawal restart TARGET 2026-11-01 NOT confirmed completed by this run. Announced replenishment does not prove verified withdrawals or audited reserves.",
+        "macro": "US market most recent completed session Oct30 risk-off / large Nasdaq decline; latest synchronized DXY and UST term structure not independently verified. Crypto weekend gap risk.",
+        "account": "portfolio-state updated 2026-10-03 (STALE), decision-journal 2026-09-28, sentinel successful 2026-10-11 (STALE), actual free USDT/core and swing quantities/current open orders UNKNOWN; live server evidence read failed internally",
+        "prev_plan_comparison": "Retain 2026-10-31 76700/77700/78400 and inactive 75200 add because Binance 90% replenishment is encouraging but withdrawals/full PoR not confirmed and latest 2026-10-30 complete ETF flow -643.2M worsens demand; no fresh orderflow/candle evidence to justify repricing. 24h 77097 low does not prove 76700 was touched after prior advice; cannot infer fills.",
+        "source_urls": [
+          "https://api.bitget.com/api/v2/spot/market/tickers?symbol=BTCUSDT",
+          "https://www.bitget.com/price/bitcoin",
+          "https://farside.co.uk/btc/",
+          "https://www.binance.com/en/support/announcement/detail/1fdf1f61559c401da0435895ffcccb62",
+          "https://liqwall.com/coins/btc",
+          "https://fibonomy.com/en/futures/binance/btcusdt",
+          "https://www.reuters.com/legal/transactional/tether-circle-freeze-238-billion-after-binance-reports-security-incident-2026-10-29/"
+        ]
+      },
+      "actual": {
+        "buy_filled": null,
+        "sell_filled": null,
+        "confirmed_btc_quantity": null,
+        "sell_filled_quantity_btc": null,
+        "realized_net_profit_usdt": null,
+        "open_exchange_orders": null,
+        "status": "NO_USER_CONFIRMATION__UNKNOWN"
+      },
+      "review": {
+        "mfe_usdt": null,
+        "mae_usdt": null,
+        "net_profitable_window": null,
+        "sold_too_early": null,
+        "rebuy_missed": null,
+        "failed_reason": null,
+        "status": "PENDING_VALID_INTRA_DAY_CANDLES_AND_CONFIRMED_FILLS"
+      },
+      "weekly_audit": {
+        "verified_closed_trades": 0,
+        "win_rate": "UNKNOWN",
+        "profit_factor": "UNKNOWN",
+        "max_drawdown": "UNKNOWN",
+        "opportunity_capture": "UNKNOWN",
+        "note": "Research snapshots are not filled trades. No user-confirmed closed swing lots since available journal start; missing original order fills, fees and time series."
+      }
     }
   ],
   "aggregates": {
