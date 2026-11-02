@@ -1204,6 +1204,147 @@
         "opportunity_capture": "UNKNOWN",
         "note": "Research snapshots are not filled trades. No user-confirmed closed swing lots since available journal start; missing original order fills, fees and time series."
       }
+    },
+    {
+      "day_id": "BTC-DAILY-SWING-2026-11-02",
+      "local_date": "2026-11-02",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "BITGET_SPOT_REFERENCE_ONLY",
+      "strategy_version": "CONDITIONAL_RESEARCH__RISK_PARTIAL_RECOVERY__STATE_STALE_20261102",
+      "plan": {
+        "status": "EXCHANGE_WITHDRAWALS_RESUMING_IN_PHASES__STATE_STALE__NO_NEW_CAPITAL_ACTION__CONDITIONAL_RESEARCH_ONLY",
+        "observation_window": "2026-11-02 08:00 Asia/Ho_Chi_Minh",
+        "market_snapshot_time": "2026-11-02T07:49:38.004+07:00",
+        "market_snapshot_price_usdt": 78142.41,
+        "direction": "SPOT_LONG_ONLY_IF_NEW_INTRADAY_CONFIRMATION",
+        "main_path": "SHORT_TERM_RECOVERY_ATTEMPT_BUT_UNCONFIRMED_WITH_SIGNIFICANT_COUNTERPARTY_AND_ETF_RISK",
+        "first_buy_price_usdt": 77650,
+        "first_buy_all_in_budget_usdt": 2000,
+        "first_take_profit_price_usdt": 78450,
+        "second_take_profit_price_usdt": 79050,
+        "take_profit_split": [
+          0.5,
+          0.5
+        ],
+        "conditional_add_price_usdt": 76700,
+        "conditional_add_all_in_budget_usdt": 2000,
+        "add_enabled": false,
+        "activation_requires": "Fresh complete 15m/1h/4h volume candles, confirmed spot multi-level depth and venue withdrawal/custody health. A 77600-77650 test must hold with spot buying, 15m reclaim 78050 and a second reasonable retest toward 77650 for any limit fill; check actual free USDT and pre-existing orders before action. Until satisfied, model is not executable.",
+        "add_requires": "NEW independent 76700 area flush and 1h reclaim above 77100 with verifiable spot absorption, leverage easing, safe settlement and balances; never average down based on drawdown or touch alone.",
+        "cancel_unfilled_if": "A confirmed 1h high-volume breakdown under 77500 with ongoing spot selling, deeper failure under 76300, renewed exchange suspension/withdrawal failures, abnormal book spreads, stale data/account state, or price runs above 78450 without entry. All cancellations require user action.",
+        "costs": {
+          "entry_fee_fraction": 0.001,
+          "exit_fee_fraction": 0.001,
+          "entry_adverse_slippage_fraction": 0.0004,
+          "exit_adverse_slippage_fraction": 0.0004,
+          "budget_includes_buy_side_costs": true,
+          "actual_fee_and_slippage": "UNKNOWN"
+        },
+        "modeled_outcomes": {
+          "first_only": {
+            "capital_usdt": 2000,
+            "btc_quantity_approx": 0.025720591299999998,
+            "break_even_sell_price_usdt": 77867.72,
+            "tp1_net_usdt": 14.96,
+            "tp2_net_usdt": 30.37,
+            "split50_net_usdt": 22.66,
+            "stress_77500_net_usdt": -9.44,
+            "stress_75500_net_usdt": -60.81,
+            "stress_74000_net_usdt": -99.34,
+            "stress_72000_net_usdt": -150.71,
+            "stress_70000_net_usdt": -202.08,
+            "opportunity_cost_if_80000_after_avg_exit_usdt": 32.11
+          },
+          "first_plus_conditionally_enabled_add": {
+            "capital_usdt": 4000,
+            "btc_quantity_approx": 0.0517597558,
+            "break_even_sell_price_usdt": 77388.46,
+            "tp1_net_usdt": 54.87,
+            "tp2_net_usdt": 85.88,
+            "split50_net_usdt": 70.37,
+            "stress_77500_net_usdt": 5.77,
+            "stress_75500_net_usdt": -97.61,
+            "stress_74000_net_usdt": -175.14,
+            "stress_72000_net_usdt": -278.51,
+            "stress_70000_net_usdt": -381.89,
+            "opportunity_cost_if_80000_after_avg_exit_usdt": 64.61
+          }
+        },
+        "probability_weighted_expected_net_usdt": null,
+        "risks": "Binance restored withdrawals only in phases; $3.64B net outflow estimated by Reuters, PoR cryptographic verification and all network statuses not validated. Large ETF outflow on last complete session; low weekend volume; modeled losses can exceed stress scenarios due to exchange gaps. MFE/MAE and real fills UNKNOWN.",
+        "executable": false,
+        "automatic_order_placement": false,
+        "order_cancellation_placed": false,
+        "capital_authority": "USER_ONLY",
+        "funding": "BTC_UNIFIED_POOL_STANDBY_USDT__AVAILABLE_BALANCE_UNKNOWN",
+        "core_btc_change": "NONE_IF_ONLY_NEW_SWING_BUYS",
+        "extreme_crash_reserve_action": "NONE"
+      },
+      "evidence": {
+        "source_quote": "Bitget BTCUSDT official ticker",
+        "spot_asof": "2026-11-02T07:49:38.004+07:00",
+        "spot_last_usdt": 78142.41,
+        "spot_24h_high_usdt": 78516.13,
+        "spot_24h_low_usdt": 77600.9,
+        "spot_24h_volume_btc": 949.865626,
+        "spot_bid_usdt": 78142.4,
+        "spot_ask_usdt": 78142.41,
+        "spot_best_bid_size_btc": 0.371873,
+        "spot_best_ask_size_btc": 0.452475,
+        "m15_h1_h4_d1_full_ohlcv": "UNKNOWN__OFFICIAL_MULTI_PARAM_CANDLE_ENDPOINT_ACCESS_FAILED",
+        "spot_multilevel_order_book": "UNKNOWN__OFFICIAL_DEPTH_ENDPOINT_ACCESS_FAILED",
+        "etf_last_complete_session": "2026-10-30",
+        "etf_last_complete_flow_usd_m": -643.2,
+        "etf_previous_complete_session": "2026-10-29",
+        "etf_previous_complete_flow_usd_m": 17.2,
+        "derivatives_asof": "2026-11-02T00:52:00Z__LIQWALL_THIRD_PARTY",
+        "liqwall_oi_usd_b": 29.8,
+        "liqwall_oi_24h_pct": -1.1,
+        "liqwall_mean_funding_8h_pct": 0.0076,
+        "liqwall_binance_funding_8h_pct": 0.01,
+        "liqwall_liquidations_24h_usd_m": 22.8,
+        "liqwall_longs_liquidated_usd_m": 5.8,
+        "liqwall_shorts_liquidated_usd_m": 17,
+        "macro": "Nasdaq -2.86% and S&P500 -1.82% on Oct30 (latest completed US session), AI spending concerns; October30 10Y close independent precise reference not cross-verified from primary Treasury in this run, current DXY UNKNOWN.",
+        "counterparty": "Binance official update #4 Nov1 says recovery/procurement 95% and phased withdrawal resumption on Nov1; Reuters Nov1 verifies phases begun and $3.64B net withdrawals. Platform-wide all asset/network normal and completed cryptographic PoR still UNKNOWN.",
+        "account": "portfolio-state.json last updated Oct3, decision-journal Sep28, sentinel Oct11; free USDT, current open order inventory, exact core/swing BTC, NAV and realized net USDT UNKNOWN; on-demand Sentinel server evidence tool internally failed",
+        "prev_plan_comparison": "Nov1 research 76700 buy/77700 and 78400 TP is not carried as an executable setup. New verified Bitget 24h low 77600.9, high 78516.13, partial withdrawal reopening, 95% replenishment support a bounded recovery-test research price 77650, not a chase at 78142. Last completed ETF session still -643.2M and unknown candles/orderbook/portfolio prevent actual capital action. No evidence that earlier conditional buys or TP filled.",
+        "source_urls": [
+          "https://api.bitget.com/api/v2/spot/market/tickers?symbol=BTCUSDT",
+          "https://farside.co.uk/btc/",
+          "https://liqwall.com/coins/btc",
+          "https://www.binance.com/en/square/post/383447089416749",
+          "https://www.reuters.com/legal/government/binance-resumes-bitcoin-withdrawals-after-covering-bulk-stolen-63-billion-2026-11-01/",
+          "https://www.reuters.com/business/nasdaq-futures-tumble-amazon-intel-results-deepen-ai-spending-woes-2026-10-30/"
+        ]
+      },
+      "actual": {
+        "buy_filled": null,
+        "sell_filled": null,
+        "confirmed_btc_quantity": null,
+        "sell_filled_quantity_btc": null,
+        "realized_net_profit_usdt": null,
+        "open_exchange_orders": null,
+        "status": "NO_USER_CONFIRMATION__UNKNOWN"
+      },
+      "review": {
+        "mfe_usdt": null,
+        "mae_usdt": null,
+        "net_profitable_window": null,
+        "sold_too_early": null,
+        "rebuy_missed": null,
+        "failed_reason": null,
+        "status": "PENDING_VALID_CANDLE_SERIES_AND_CONFIRMED_USER_TRADES"
+      },
+      "weekly_audit": {
+        "verified_closed_trades": 0,
+        "win_rate": "UNKNOWN",
+        "profit_factor": "UNKNOWN",
+        "max_drawdown": "UNKNOWN",
+        "opportunity_capture": "UNKNOWN",
+        "note": "User-confirmed closed lots and full filled fee data absent; cannot calculate genuine performance statistics."
+      }
     }
   ],
   "aggregates": {
