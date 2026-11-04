@@ -4,6 +4,7 @@ import datetime as dt,json,math,os,pathlib,time,urllib.request,urllib.parse
 from research import hunter_shadow_trader_v2 as eng
 from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
+from research import hunter_binance_stream_consumer as binance_cache
 from research import hunter_liquidity_probe as books
 from research import hunter_leading_risk as leading
 from research import hunter_manual_stop_once as manual_stop
@@ -58,7 +59,7 @@ def configure_lane(v1_mode):
  if v1_mode:
   v1.configure_v1();return
  eng.STATE=V2;eng.SUMMARY=V2_SUMMARY;eng.GUARD=V2_GUARD;eng.CAPITAL_POOL_USDT=LANES["V2"]["capital_pool_usdt"];eng.ENTRY_MODE=LANES["V2"]["entry_mode"];eng.DISCOVERY_MIN_SCORE=LANES["V2"]["discovery_min_score"];eng.DISCOVERY_MIN_INDEPENDENT=C["DISCOVERY_MIN_INDEPENDENT"];eng.STRATEGY_ID=LANES["V2"]["strategy"];eng.ID_PREFIX="SHV2";eng.EVENT_PREFIX="SHADOW_V2"
-def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None,risk_evidence=None):
+def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None,regime_scan=None,risk_evidence=None,signal_guard=None):
  state=load(path);excluded=set(excluded or [])
  phase='v1' if v1_mode else 'v2'
  # Both lanes get their own bounded observation budget in this shared process.
@@ -86,7 +87,8 @@ def run_lane(path,label,market,review,liq,supply,now,v1_mode=False,excluded=None
   pending_manual=[p for p in state['open_positions'] if p.get('shadow_id') in target_ids]
   position_order={p.get('shadow_id'):i for i,p in enumerate(state['open_positions'])}
   state['open_positions']=[p for p in state['open_positions'] if p.get('shadow_id') not in target_ids]
- timed(phase+'_management_decisions',eng.manage_existing_positions,state,scan,review,liq,supply,now,btc,capital_proposals)
+ timed(phase+'_management_decisions',eng.manage_existing_positions,state,scan,review,liq,supply,now,btc,capital_proposals,
+       **({} if signal_guard is None else {'signal_guard':signal_guard}))
  if pending_manual:
   state['open_positions']=sorted(state['open_positions']+pending_manual,key=lambda p:position_order[p.get('shadow_id')])
  # V2 ADDs are intentionally deferred here. The 5-minute monitor owns health/exit
@@ -144,18 +146,39 @@ def management_selection(states,cursor,budget):
  selected=priority+[ordinary[(cursor+i)%len(ordinary)] for i in range(count)] if ordinary else priority
  return selected,(cursor+count)%len(ordinary) if ordinary else 0
 
-def refresh_management_evidence(states,market,review,liq,now):
+def check_cache_delivery(cached):
+ """Keep the known pre-control reader compatible; never downgrade v2 gates."""
+ check=getattr(cached,'check_delivery',None)
+ if callable(check):return check()
+ generation=getattr(cached,'generation',None)
+ if (type(cached) is not binance_cache.Frozen
+     or callable(getattr(type(cached),'check_delivery',None))
+     or not isinstance(generation,dict)
+     or generation.get('schema')!='binance_stream_generation_v1'
+     or generation.get('status')!='READY'
+     or generation.get('health_contract') not in (None,'binance_health_v1')
+     or generation.get('control_contract') is not None):
+  raise ValueError('BINANCE_CACHE_DELIVERY_FENCE_REQUIRED')
+ # PR126 Frozen already checked its immutable v1 proofs at read completion.
+ # It has no independent control fence; this branch preserves only that API.
+
+def refresh_management_evidence(states,market,review,liq,now,guard_sink=None):
  """Refresh bounded rotating holdings, including names no longer EARLY. No entry path."""
  import copy
  review=copy.deepcopy(review);liq=copy.deepcopy(liq)
  wanted=sorted({p.get("asset") for st in states for p in st.get("open_positions") or [] if p.get("asset")})
  previous=load(OUT);cursor=int(previous.get("evidence_refresh_cursor") or 0)
  selected,next_cursor=management_selection(states,cursor,C["MONITOR_EVIDENCE_BATCH"])
- pairs=[a+"USDT" for a in selected]+["BTCUSDT"]
+ pairs=sorted({a+"USDT" for a in selected}|{"BTCUSDT"})
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
  current={};failures={};raw_books={}
  try:
-  r1=timed("evidence_1h",signals.rolling,pairs,"1h");r4=timed("evidence_4h",signals.rolling,pairs,"4h");micro=timed("evidence_micro",signals.micro,pairs)
+  cached=binance_cache.management_inputs(pairs,now)
+  cache_args=() if cached is None else (cached,)
+  r1=timed("evidence_1h",signals.rolling,pairs,"1h",*cache_args);r4=timed("evidence_4h",signals.rolling,pairs,"4h",*cache_args);micro=timed("evidence_micro",signals.micro,pairs,*cache_args)
+  if cached is not None:
+   check_cache_delivery(cached)
+   if guard_sink is not None:guard_sink.append((cached,tuple(selected)))
   for a in selected:
    row=signals.score_row(a+"USDT",a,r1,r4,r1.get("BTCUSDT"),r4.get("BTCUSDT"),micro)
    if row:current[a]=row
@@ -193,6 +216,37 @@ def refresh_management_evidence(states,market,review,liq,now):
                    "observed_raw_books":raw_books,
                    "evidence_refresh_cursor":next_cursor,"policy_version":VERSION}
 
+def revalidate_management_evidence(guards,review,refresh):
+ """Revoke only the original signal evidence before a lane consumes it."""
+ for cached,selected in guards:
+  try:check_cache_delivery(cached)
+  except Exception as exc:
+   reject_management_signals(selected,review,refresh,"SIGNAL_REFRESH_FAILED:"+type(exc).__name__)
+
+def reject_management_signals(selected,review,refresh,reason):
+ by={row.get('asset'):row for row in review.get('candidates') or []}
+ for asset in selected:
+  row=by.setdefault(asset,{'asset':asset,'blockers':[]})
+  row['signal_evidence']={};row['management_refresh_error']=reason
+  refresh.setdefault('failures',{})[asset]=reason
+ review['candidates']=list(by.values())
+
+def management_signal_guard(guards,review,refresh):
+ """Check the original scope at each use; a rejected frozen read stays rejected."""
+ if not guards:return None
+ rejected=set()
+ def check(asset,stage):
+  good=True
+  for index,(cached,selected) in enumerate(guards):
+   if asset not in selected:continue
+   if index in rejected:good=False;continue
+   try:check_cache_delivery(cached)
+   except Exception as exc:
+    rejected.add(index);good=False
+    reject_management_signals(selected,review,refresh,"SIGNAL_REFRESH_FAILED:"+type(exc).__name__)
+  return good
+ return check
+
 def main():
  TIMINGS.clear();monitor_started=time.perf_counter()
  states=[load(V1),load(V2)];wanted=assets(states);now=dt.datetime.now(dt.timezone.utc)
@@ -210,7 +264,9 @@ def main():
  observation_missing=sorted(set(assets(binance_states))-required-set(market))
  observation_market_data={'status':'MARKET_DATA_MISSING' if observation_missing else 'AVAILABLE','missing_assets':observation_missing,'scope':'CLOSED_OBSERVATIONS_ONLY'}
  liq=load(LIQ);supply=load(SUPPLY);review=load(REVIEW);excluded=crypto_exclusions()
- review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now)
+ cache_guards=[]
+ review,liq,refresh=timed('management_evidence',refresh_management_evidence,states,market,review,liq,now,cache_guards)
+ signal_guard=management_signal_guard(cache_guards,review,refresh)
  persisted_universe=load(UNIVERSE)
  regime_scan={"schema":"hunter_monitor_market_snapshot_v1","generation_id":refresh["generation_id"],"as_of_utc":now.isoformat(),"coins":market,"binance_complete":True}
  from research.hunter_bybit_management import collect as collect_bybit_management
@@ -255,7 +311,10 @@ def main():
  # Evaluate after acquisitions finish: a just-fetched book must not appear to
  # come from the future relative to the scan's initial clock snapshot.
  evaluated_at=dt.datetime.now(dt.timezone.utc)
- results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence),timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence)]
+ revalidate_management_evidence(cache_guards,review,refresh)
+ results=[timed("v1_lifecycle",run_lane,V1,"SHADOW_V1",market,review,liq,supply,evaluated_at,True,excluded,regime_scan,risk_evidence,signal_guard)]
+ revalidate_management_evidence(cache_guards,review,refresh)
+ results.append(timed("v2_lifecycle",run_lane,V2,"SHADOW_V2",market,review,liq,supply,evaluated_at,False,excluded,regime_scan,risk_evidence,signal_guard))
  TIMINGS["monitor_total"]=round(time.perf_counter()-monitor_started,6)
  # Observe subscription drift after authoritative lifecycle updates. The resident
  # stream owns its 30-second subscription self-healing; this never writes its state.

@@ -7,8 +7,18 @@ on:
       - 'research/hunter_forward_research.py'
       - 'research/hunter_tail_risk.py'
       - 'research/hunter_signal_provenance.py'
+      - 'research/hunter_position_monitor.py'
+      - 'research/hunter_shadow_trader_v2.py'
       - 'tests/test_hunter_binance*.py'
       - 'tests/fixtures/binance_http_child.py'
+      - 'tests/fixtures/binance_coordinated_crash.py'
+      - 'tests/fixtures/binance_ws_reconnect.py'
+      - 'tests/fixtures/binance_reconnect_diagnostics.py'
+      - 'tests/fixtures/binance_snapshot_codec_probe.py'
+      - 'tests/fixtures/binance_consumer_cost_probe.py'
+      - 'tests/fixtures/binance_process_death.py'
+      - 'tests/fixtures/binance_session_reader.py'
+      - 'tests/fixtures/binance_wal_lifecycle_child.py'
       - 'scripts/*binance*'
       - 'deploy/*binance*'
       - 'deploy/systemd/*binance*'
@@ -18,7 +28,9 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
+    env:
+      CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -26,13 +38,219 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Reproduce stale cancellation against the prior deployed code
+        run: |
+          python -B - <<'PY'
+          import io,os,shutil,subprocess,sys,tarfile,tempfile
+          from pathlib import Path
+          sha='99836e5362340725f806d5df6df1ca9835065bdd'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/'))]
+          names+=['tests/test_hunter_binance_transport_ack.py','tests/fixtures/binance_http_child.py']
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder)
+              with tarfile.open(fileobj=io.BytesIO(data)) as archive:archive.extractall(root)
+              for name in ('scripts/check_binance_public_transport.py','tests/test_hunter_binance_transport_session.py'):
+                  shutil.copyfile(name,root/name)
+              env=dict(os.environ,BINANCE_DEPLOYED_REPRO='1',PYTHONDONTWRITEBYTECODE='1')
+              subprocess.run([sys.executable,'-B','-c',
+                  "from scripts.check_binance_public_transport import main; raise SystemExit(main(pattern='test_hunter_binance_transport_session.py',expected=3))"],
+                  cwd=root,env=env,check=True)
+              print('PRIOR_DEPLOYED_STALE_CANCEL_REPRODUCED',sha)
+          PY
+      - name: Prove the review races on the rejected head
+        run: |
+          python -B - <<'PY'
+          import io,os,shutil,subprocess,sys,tarfile,tempfile
+          from pathlib import Path
+          sha='133f7422cd66204131f57afaaa5f4d3414e676c0'
+          names=subprocess.check_output(['git','ls-tree','-r','--name-only',sha],text=True).splitlines()
+          names=[p for p in names if p.endswith('.py') and p.startswith(('research/','scripts/','tests/'))]
+          data=subprocess.check_output(['git','archive',sha,'--',*names])
+          with tempfile.TemporaryDirectory() as folder:
+              root=Path(folder)
+              with tarfile.open(fileobj=io.BytesIO(data)) as archive:archive.extractall(root)
+              for name in ('scripts/check_binance_public_transport.py','tests/test_hunter_binance_transport_races.py'):
+                  shutil.copyfile(name,root/name)
+              env=dict(os.environ,BINANCE_REVIEWED_REPRO='1',PYTHONDONTWRITEBYTECODE='1')
+              subprocess.run([sys.executable,'-B','-c',
+                  "from scripts.check_binance_public_transport import main; raise SystemExit(main(pattern='test_hunter_binance_transport_races.py',expected=4,expected_failures=4))"],
+                  cwd=root,env=env,check=True)
+              print('REJECTED_HEAD_RACES_REPRODUCED',sha)
+          PY
       - name: Guarded cache and consumer regressions
         run: python -I -B -X utf8 scripts/check_binance_stream_offline.py
+      - name: Reproduce lost quiet and repair recovery on the immutable prior scheduler
+        run: python -I -B -X utf8 scripts/check_binance_quarantine_regression.py
+      - name: Reproduce stale-signal actions on the immutable prior Monitor and engine
+        run: python -I -B -X utf8 scripts/check_binance_signal_use_regression.py
+      - name: Bounded evidence and commit-versus-ingress regressions
+        run: python -B -m unittest discover -s tests -p test_hunter_binance_observability.py -v
+      - name: Full 1228-topic bounded initialization with real SQLite and queues
+        run: |
+          python -B - <<'PY'
+          import sys,unittest
+          blocked=[]
+          def guard(event,args):
+              if event.startswith('socket.') or event in ('subprocess.Popen','os.system','os.posix_spawn','os.fork','os.forkpty') or event.startswith(('os.exec','os.spawn')):
+                  blocked.append(event);raise RuntimeError('NETWORK_OR_PROCESS_FORBIDDEN')
+          sys.addaudithook(guard)
+          result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.discover('tests',pattern='test_hunter_binance_initialization.py'))
+          good=result.wasSuccessful() and result.testsRun==13 and not result.skipped and not blocked
+          print('INITIALIZATION_OFFLINE',result.testsRun,len(result.skipped),len(blocked),good)
+          if not good:raise SystemExit(1)
+          PY
+      - name: Exact PR126 health reader and Monitor compatibility only
+        run: |
+          git fetch --depth=1 --no-tags origin 33abf19c7a91855ba2efc2e65e1d383055494d75
+          python -I -B -X utf8 scripts/check_binance_monitor_health_compat.py
       - name: Real loopback cancellation and denial regressions
         run: python -I -B -X utf8 scripts/check_binance_public_transport.py
+      - name: Install pinned WebSocket runtime for loopback-only health checks
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: Guarded collector health, consumer validity and shutdown partition
+        run: python -I -B -X utf8 scripts/check_binance_health_offline.py
+      - name: Independent control, crash recovery, final fences and full-scope load
+        run: python -I -B -X utf8 scripts/check_binance_coordinated_offline.py
+      - name: Same-load comparison against immutable prior cache hot paths
+        run: python -I -B -X utf8 scripts/check_binance_write_load.py --prior-cache
       - name: Deployment shell syntax only
         run: bash -n scripts/hunter_binance_preflight.sh scripts/hunter_binance_stage.sh
+  contention-profile:
+    # Diagnostic comparison, independent of the failing acceptance gate. It
+    # cannot authorize the hour load, deployment, or any production action.
+    if: github.event.pull_request.number == 131
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Paired scratch throughput and CPU diagnosis without HTTP
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$CHECKOUT_SHA"
+          python -I -B -X utf8 scripts/profile_binance_contention.py \
+            --repo "$GITHUB_WORKSPACE" --source-head "$CHECKOUT_SHA" \
+            --probe-consumer-cost --probe-revision-copy \
+            | tee "$RUNNER_TEMP/binance-contention.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binance-contention-${{ matrix.python }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/binance-paired8-*/paired8-report.json
+            ${{ runner.temp }}/binance-contention.log
+          if-no-files-found: error
+  session-topology:
+    # Additional diagnosis, never a replacement for offline or hour-load.
+    if: github.event.pull_request.number == 131
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pinned loopback WebSocket runtime
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: Real session with synchronous health and separate full-reader process
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          python -I -B -X utf8 scripts/profile_binance_session_topology.py \
+            | tee "$RUNNER_TEMP/binance-session-topology.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binance-session-topology-${{ matrix.python }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/binance-session-topology-*/**/*.json
+            ${{ runner.temp }}/binance-session-topology-*/*.json
+            ${{ runner.temp }}/binance-session-topology-*/**/*.stdout
+            ${{ runner.temp }}/binance-session-topology-*/**/*.stderr
+            ${{ runner.temp }}/binance-session-topology.log
+          if-no-files-found: error
+  wal-lifecycle:
+    # Scratch-only locking/lifecycle evidence; cannot authorize production WAL
+    # or replace the unchanged offline/hour gates.
+    if: github.event.pull_request.number == 131
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Scratch DELETE and WAL with independent reader and writer processes
+        shell: bash
+        env:
+          CHECKOUT_SHA: ${{ github.event.pull_request.head.sha }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          python -I -B -X utf8 scripts/profile_binance_wal_lifecycle.py \
+            | tee "$RUNNER_TEMP/binance-wal-lifecycle.log"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binance-wal-lifecycle-${{ matrix.python }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            ${{ runner.temp }}/binance-wal-lifecycle-*/wal-lifecycle-report.json
+            ${{ runner.temp }}/binance-wal-lifecycle-*/**/*.stderr.log
+            ${{ runner.temp }}/binance-wal-lifecycle.log
+          if-no-files-found: error
+  hour-load:
+    if: github.event.pull_request.number == 131
+    needs: offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned loopback WebSocket runtime
+        run: python -m pip install -r deploy/hunter-binance-stream-requirements.txt
+      - name: One real hour at full scope followed by real-process WS reconnect
+        run: python -I -B -X utf8 scripts/check_binance_write_load.py --seconds 3600

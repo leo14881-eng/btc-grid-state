@@ -2,6 +2,7 @@
 """Hunter v4 PRE_MOVE funnel: multi-horizon volume/structure/BTC-relative signals; research only."""
 import datetime as dt,json,math,os,pathlib,urllib.parse,urllib.request
 from concurrent.futures import ThreadPoolExecutor,as_completed
+from contextlib import nullcontext
 try:
  from research.hunter_policy import C,LANES,VERSION,POLICY,fresh,stamp,chase_blockers
  from research.hunter_signal_provenance import capture as capture_source
@@ -23,6 +24,12 @@ def finite(v):
     try:
         x=float(v);return x if math.isfinite(x) else None
     except (TypeError,ValueError,OverflowError):return None
+
+def _formula_cache(cache):
+    # Existing pre-control readers and REST retain their original interfaces.
+    # Each formula owns its own joined-worker/final-fence boundary.
+    return cache._formula() if callable(getattr(type(cache),'_formula',None)) else nullcontext(cache)
+
 def rolling(symbols,window,cache=None):
     """Derive 1h/4h return from Binance spot klines with bounded concurrency."""
     interval="1h";bars=2 if window=="1h" else 5
@@ -36,15 +43,16 @@ def rolling(symbols,window,cache=None):
                    "source_provenance":cache.packet(sym,interval,bars) if cache else capture_source(rows,sym,interval,dt.datetime.now(dt.timezone.utc)),
                    "quote_volume":sum(finite(x[7]) or 0 for x in rows)}
     out={}
-    with ThreadPoolExecutor(max_workers=64) as ex:
-        futs={ex.submit(one,s):s for s in symbols}
-        for fut in as_completed(futs):
-            try:
-                row=fut.result()
-                if row:out[row[0]]=row[1]
-            except Exception:
-                continue
-    if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
+    with _formula_cache(cache) as cache:
+        with ThreadPoolExecutor(max_workers=64) as ex:
+            futs={ex.submit(one,s):s for s in symbols}
+            for fut in as_completed(futs):
+                try:
+                    row=fut.result()
+                    if row:out[row[0]]=row[1]
+                except Exception:
+                    continue
+        if "BTCUSDT" not in out:raise RuntimeError("BTC benchmark kline unavailable")
     return out
 
 def micro(symbols,cache=None):
@@ -71,13 +79,14 @@ def micro(symbols,cache=None):
                     "source_provenance":cache.packet(sym,"15m",25) if cache else capture_source(rows,sym,"15m",dt.datetime.now(dt.timezone.utc)),
                     "return_15m_pct":mom15,"return_60m_pct":mom60,"range_position":range_pos}
     out={}
-    with ThreadPoolExecutor(max_workers=64) as ex:
-        futs={ex.submit(one,s):s for s in symbols}
-        for fut in as_completed(futs):
-            try:
-                row=fut.result()
-                if row:out[row[0]]=row[1]
-            except Exception:continue
+    with _formula_cache(cache) as cache:
+        with ThreadPoolExecutor(max_workers=64) as ex:
+            futs={ex.submit(one,s):s for s in symbols}
+            for fut in as_completed(futs):
+                try:
+                    row=fut.result()
+                    if row:out[row[0]]=row[1]
+                except Exception:continue
     return out
 
 def score_row(sym,base,r1,r4,btc1,btc4,microdata=None):
@@ -131,7 +140,7 @@ def build(scan,r1,r4,microdata,now,regional_signals=None):
     report["bybit_only_unscored"]=unscored
     report["bybit_only_signal_count"]=len(bybit_only)-len(unscored)
     return report
-def persist_first_early(report):
+def persist_first_early(report,check_delivery=None):
     """Durable first-seen EARLY evidence for lead-time/missed-opportunity audits."""
     try: hist=json.loads(HISTORY.read_text())
     except (OSError,ValueError): hist={"schema":"hunter_early_signal_history_v1","assets":{}}
@@ -143,7 +152,11 @@ def persist_first_early(report):
         rec["observations"]=int(rec.get("observations") or 0)+1
         rec["last_early_at_utc"]=now; rec["last_early_price"]=p; rec["last_signal"]=row
     hist["updated_at_utc"]=now
-    tmp=HISTORY.with_suffix(".json.tmp"); tmp.write_text(json.dumps(hist,ensure_ascii=False,indent=2)+"\n"); json.loads(tmp.read_text()); tmp.replace(HISTORY)
+    tmp=HISTORY.with_suffix(".json.tmp"); payload=json.dumps(hist,ensure_ascii=False,indent=2)+"\n"
+    if check_delivery is not None:check_delivery()
+    tmp.write_text(payload); json.loads(tmp.read_text())
+    if check_delivery is not None:check_delivery()
+    tmp.replace(HISTORY)
 
 def main():
     scan=json.loads(SCAN.read_text())
@@ -161,6 +174,7 @@ def main():
         r1=rolling(symbols,"1h");r4=rolling(symbols,"4h");microdata=micro(symbols)
     else:
         r1=rolling(symbols,"1h",cached);r4=rolling(symbols,"4h",cached);microdata=micro(symbols,cached)
+        cached.check_delivery()
     regional_signals={}
     if scan.get("bybit_complete"):
         expected_source=(scan.get("venue_status") or {}).get("bybit",{}).get("source")
@@ -187,7 +201,10 @@ def main():
         if 0 <= (dt.datetime.now(dt.timezone.utc)-captured).total_seconds() <= 900:
             regional_signals=snapshot.get("early_signals") or {}
     report=build(scan,r1,r4,microdata,dt.datetime.now(dt.timezone.utc),regional_signals)
-    OUT.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
-    persist_first_early(report)
+    payload=json.dumps(report,ensure_ascii=False,indent=2)+"\n"
+    if cached is not None:cached.check_delivery()
+    OUT.write_text(payload)
+    if cached is None:persist_first_early(report)
+    else:persist_first_early(report,cached.check_delivery)
     print(json.dumps({"early_count":report["early_count"],"top":report["early"][:10]}))
 if __name__=="__main__":main()
