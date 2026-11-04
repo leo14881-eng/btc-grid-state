@@ -9,13 +9,15 @@ import datetime as dt
 import time
 
 try:
-    from research.hunter_bybit_stream_store import Store, LIMITS, FRESH_MS, content_hash, roster_hash, topic, valid_row
+    from research.hunter_bybit_stream_store import LIMITS, FRESH_MS, content_hash, roster_hash, topic, valid_row
+    from research.hunter_bybit_health_store import Store, validate_generation
     from research.hunter_bybit_signal_capture import capture
     from research.hunter_signal_provenance import hash_value, capture as provenance, validate_cache_packet
 except ModuleNotFoundError as exc:
     if exc.name != 'research':
         raise
-    from hunter_bybit_stream_store import Store, LIMITS, FRESH_MS, content_hash, roster_hash, topic, valid_row
+    from hunter_bybit_stream_store import LIMITS, FRESH_MS, content_hash, roster_hash, topic, valid_row
+    from hunter_bybit_health_store import Store, validate_generation
     from hunter_bybit_signal_capture import capture
     from hunter_signal_provenance import hash_value, capture as provenance, validate_cache_packet
 
@@ -67,6 +69,9 @@ def collect(required, now, reader=None, clock=None):
     finished = clock()
     if generation['status'] == 'READY' and (finished < read_at or not 0 <= finished-end <= FRESH_MS):
         generation.update(status='UNKNOWN', windows={}, reason='CACHE_READ_FINISHED_STALE_OR_CLOCK_ROLLBACK')
+    if generation['status'] == 'READY' and (not validate_generation(generation,finished)
+            or hasattr(reader,'completed_generation') and not reader.completed_generation(generation,finished,clock=clock)):
+        generation.update(status='UNKNOWN',windows={},reason='BYBIT_HEALTH_READ_FENCE_FAILED')
     generation['generation_sha256'] = content_hash({k:v for k,v in generation.items() if k != 'generation_sha256'})
     if generation['status'] != 'READY':
         return {}, {s: 'CACHE_UNKNOWN:'+generation['reason']
@@ -130,6 +135,7 @@ def validate(snapshot):
                 or status.get('signal_complete') is not False):
             raise ValueError('CACHE_UNKNOWN_NOT_PROPAGATED')
     elif generation.get('status') == 'READY':
+        if not validate_generation(generation,end): raise ValueError('BYBIT_HEALTH_GENERATION_INVALID')
         if (set(generation.get('windows', {})) != set(names) or set(signals) != set(bases)
                 or failures or status.get('signal_complete') is not True):
             raise ValueError('CACHE_READY_COVERAGE_INVALID')
