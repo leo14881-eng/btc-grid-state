@@ -1950,6 +1950,149 @@
         "failed_reason": null,
         "yesterday_20261105_plan_review": "Original 79800 conditional research was non-executable; Nov 5 price decline and Nov 6 lows invalidate reuse as fresh proposal. 24h high/low cannot confirm conditions/fills. Actual user order placement/execution, MFE/MAE path, net profit and orderbook remain UNKNOWN. No retroactive labeling of fill or win."
       }
+    },
+    {
+      "day_id": "BTC-DAILY-SWING-2026-11-07",
+      "local_date": "2026-11-07",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "OKX_SPOT_REFERENCE__USER_VENUE_UNVERIFIED",
+      "strategy_version": "CONDITIONAL_RESEARCH_STATE_SYNC_BLOCK",
+      "plan": {
+        "status": "STATE_SYNC_VIOLATION__PORTFOLIO_STALE__NO_NEW_CAPITAL_ACTION__CONDITIONAL_RESEARCH_ONLY",
+        "observation_window": "2026-11-07 08:00 Asia/Ho_Chi_Minh",
+        "reference_spot_price_usdt": 75927.1,
+        "reference_spot_time": "2026-11-07T07:43:20.473+07:00",
+        "reference_market_source": "OKX official BTC-USDT spot ticker",
+        "cross_check": {
+          "venue": "Binance spot BTCUSDT",
+          "price_usdt": 75935.07,
+          "timestamp": "2026-11-07T07:32:53.013+07:00",
+          "price_change_pct_24h": -0.429,
+          "high_24h": 76416.24,
+          "low_24h": 74888,
+          "base_volume_btc": 16798.87738,
+          "quote_volume_usdt": 1273094996.23514
+        },
+        "top_of_book": {
+          "okx_bid": 75927,
+          "okx_ask": 75927.1,
+          "timestamp": "2026-11-07T07:43:20.473+07:00",
+          "bid_depth_multilevel": "UNKNOWN",
+          "ask_depth_multilevel": "UNKNOWN"
+        },
+        "main_path": "WEAK_TO_SIDEWAYS__RETEST_74888_75050_POSSIBLE__4H_BEARISH_D1_NEUTRAL_WEAK__NO_REVERSAL_CONFIRMED",
+        "first_buy_price_usdt": 74950,
+        "first_buy_all_in_budget_usdt": 2000,
+        "first_take_profit_price_usdt": 75850,
+        "second_take_profit_price_usdt": 77400,
+        "take_profit_split": [
+          0.5,
+          0.5
+        ],
+        "conditional_add_price_usdt": 73900,
+        "conditional_add_all_in_budget_usdt": 2000,
+        "add_enabled": false,
+        "activation_requires": "Only after a test of 74888-75100 with verified spot bid absorption, completed M15 reclaim above 75250, completed H1 hold/reclaim above 75400, then an orderly second retrace making 74950 plausibly fillable. Must verify the user's actual venue, withdrawals, free USDT, all open/reserved orders, and multilevel depth. Touch alone is not activation.",
+        "add_requires": "Independent fresh flush around 73900 near daily S1 73892, followed by completed H1 reclaim above 74300, renewed spot bid absorption, OI/liquidation pressure easing and funding normalizing; must pass venue and account gates. Never average down solely because the first leg is underwater.",
+        "cancel_unfilled_if": "Completed H1 close below 74800 with expanding spot sell volume and no reclaim; 73892 breaks and fails to reclaim; macro/venue dislocation; abnormal spread or insufficient multilevel depth; stale candles/account state; or price rallies through 75850 without first entry. Any real exchange order cancellation remains user-only.",
+        "costs": {
+          "buy_fee_per_side_fraction": 0.001,
+          "sell_fee_per_side_fraction": 0.001,
+          "buy_adverse_slippage_fraction": 0.0004,
+          "sell_adverse_slippage_fraction": 0.0004,
+          "budget_includes_buy_side_costs": true,
+          "actual_fee_tier": "UNKNOWN"
+        },
+        "modeled_outcomes": {
+          "first_only": {
+            "capital_usdt": 2000,
+            "bought_btc_approx": 0.02664715,
+            "break_even_exit_price_usdt": 75160,
+            "tp1_net_usdt": 18.36,
+            "tp2_net_usdt": 59.6,
+            "split_50_50_net_usdt": 38.98,
+            "stress_74888_net_usdt": -7.24,
+            "stress_74000_net_usdt": -30.87,
+            "stress_73892_net_usdt": -33.75,
+            "stress_72000_net_usdt": -84.09,
+            "stress_70000_net_usdt": -137.31,
+            "foregone_upside_if_80000_after_both_tp_usdt": 89.81,
+            "extra_usdt_to_rebuy_same_btc_at_80000": 95.78
+          },
+          "first_plus_conditionally_enabled_add": {
+            "capital_usdt": 4000,
+            "bought_btc_approx": 0.05367291,
+            "weighted_average_entry_usdt": 74525.49,
+            "break_even_exit_price_usdt": 74630,
+            "tp1_net_usdt": 65.39,
+            "tp2_net_usdt": 148.47,
+            "split_50_50_net_usdt": 106.93,
+            "stress_74888_net_usdt": 13.83,
+            "stress_74000_net_usdt": -33.76,
+            "stress_73892_net_usdt": -39.55,
+            "stress_72000_net_usdt": -140.96,
+            "stress_70000_net_usdt": -248.16,
+            "foregone_upside_if_80000_after_both_tp_usdt": 180.89,
+            "extra_usdt_to_rebuy_same_btc_at_80000": 192.92
+          }
+        },
+        "probability_weighted_expected_net_usdt": null,
+        "executable": false,
+        "automatic_order_placement": false,
+        "order_cancellation_placed": false,
+        "funding": "160K_BTC_UNIFIED_POOL_STANDBY_USDT__AVAILABLE_BALANCE_UNKNOWN__ALLOCATION_GATE_BLOCKED",
+        "core_btc_change": "NONE_IF_ONLY_NEW_SWING_BUYS",
+        "extreme_crash_reserve_action": "NONE"
+      },
+      "evidence": {
+        "spot_quote_asof": "2026-11-07T07:43:20.473+07:00",
+        "m15_h1_ohlcv": "UNKNOWN__PRIMARY_EXCHANGE_KLINE_ENDPOINT_NOT_RETRIEVED",
+        "h4": "SECONDARY_TECHNICAL_SOURCE_STRONG_BEARISH__RSI_38.3__ASOF_2026-11-07",
+        "daily": "SECONDARY_TECHNICAL_SOURCE_NEUTRAL_WITH_DOWNTREND__RSI_38.1__MACD_BEARISH__ASOF_2026-11-07",
+        "support_resistance": "75,688 support; 74,542 secondary support; 73,892 daily S1; 76,612 first resistance; 77,405 daily pivot",
+        "spot_orderbook": "ONLY TOP_OF_BOOK_VERIFIED__MULTILEVEL_DEPTH_UNKNOWN",
+        "etf_last_complete_day": "2026-11-05",
+        "etf_last_complete_day_flow_usd_millions": -430.2,
+        "etf_seven_final_sessions_flow_usd_millions": -1358.5,
+        "etf_nov06": "NOT_FINALIZED_OR_NOT_AVAILABLE_AT_RUN_TIME",
+        "derivatives_asof": "2026-11-06T21:25:00Z",
+        "derivatives": {
+          "open_interest_usd_billions": 36.35,
+          "oi_change_24h_pct": 0.09,
+          "funding_pct_per_8h": 0.0098,
+          "liquidations_24h_usd_millions_at_least": 85.21,
+          "long_liquidations_usd_millions": 69,
+          "short_liquidations_usd_millions": 16.21,
+          "long_short_ratio": 2.89,
+          "long_account_share_pct": 74.3
+        },
+        "macro": "2026-11-06 US payroll +165k vs 59k consensus; unemployment 4.1%; Nasdaq +1.1% Friday but -3.4% weekly; S&P +0.32% Friday but -2.7% weekly; stronger USD and higher Dec rate-hike pricing are headwinds.",
+        "exchange_risk": "Binance 6.3bn security incident and staged recovery remain market-wide counterparty context; user's actual venue unconfirmed. Latest Bybit/Sentinel server evidence unavailable this run.",
+        "portfolio_state_updated_at": "2026-10-03",
+        "decision_journal_updated_at": "2026-09-28",
+        "sentinel_last_successful_scan_at": "2026-10-11T04:35:12.046Z",
+        "portfolio_sync_issue": "0.072342 BTC user-confirmed Oct 8 buy fills appear in swing journal but are absent from portfolio-state and decision-journal; current classification follows user's later core/main-holding designation but SSOT reconciliation is incomplete. Earlier 0.047498 BTC Sep 25/27 swing lots also remain in portfolio SSOT with fees/funding/classification unverified."
+      },
+      "actual": {
+        "buy_filled": null,
+        "sell_filled": null,
+        "confirmed_btc_quantity": null,
+        "sell_filled_quantity_btc": null,
+        "realized_net_profit_usdt": null,
+        "open_exchange_orders": null,
+        "status": "NO_NEW_USER_CONFIRMATION__UNKNOWN"
+      },
+      "review": {
+        "status": "PENDING_COMPLETE_INTRADAY_CANDLES_AND_PORTFOLIO_RECONCILIATION",
+        "mfe_usdt": null,
+        "mae_usdt": null,
+        "net_profitable_window": null,
+        "sold_too_early": null,
+        "rebuy_missed": null,
+        "failed_reason": "NO_CONFIRMED_TRADE; research only",
+        "prior_20261106_plan_review": "No user-confirmed fill. Actual path/MFE/MAE unknown; do not infer from 24h high/low."
+      }
     }
   ],
   "aggregates": {
