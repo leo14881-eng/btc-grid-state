@@ -85,7 +85,15 @@
       "cash_tbill": "Historical snapshot field only; current component name is 待命USDT and current free balance must be reconciled.",
       "structural": "Retired; no separate Structural capital pool.",
       "asymmetric": "Historical label only; all current altcoin exposure belongs to Hunter."
-    }
+    },
+    "schema_role": "LEGACY_HISTORICAL_SNAPSHOT_ARCHIVE_ONLY",
+    "current_component_names": [
+      "核心BTC",
+      "波段BTC",
+      "待命USDT"
+    ],
+    "legacy_field_usage": "btc_core, btc_swing and cash_tbill are historical field labels only. They must not be read as current balances, current component names, allocation controls or available capital.",
+    "current_balance_status": "UNKNOWN_PENDING_VERIFIED_LIVE_BALANCES_OPEN_ORDERS_FEES_AND_TRANSACTION_RECONCILIATION"
   },
   "btc_cycle_policy": {
     "status": "ACTIVE_CURRENT_RULE",
@@ -353,7 +361,9 @@
         "波段BTC",
         "待命USDT"
       ],
-      "cap_usdt": 160000
+      "cap_usdt": 160000,
+      "component_names_policy": "ONLY_核心BTC_波段BTC_待命USDT",
+      "legacy_field_policy": "Legacy btc_core/btc_swing/cash_tbill fields are archive-only and non-executable."
     },
     "no_separate_structural_pool": true,
     "no_separate_asymmetric_pool": true
@@ -383,7 +393,8 @@
         "波段BTC",
         "待命USDT"
       ],
-      "allocation": "DYNAMIC"
+      "allocation": "DYNAMIC",
+      "component_names_policy": "ONLY_核心BTC_波段BTC_待命USDT"
     },
     "hunter_pool_cap_usdt": 20000,
     "extreme_crash_reserve_usdt": 20000,
@@ -396,7 +407,7 @@
     "execution_authority": "USER_ONLY",
     "current_main_nav_usdt": null,
     "nav_status": "UNKNOWN_PENDING_VERIFIED_BALANCES_AND_TRANSACTION_RECONCILIATION",
-    "legacy_allocation_fields": "HISTORICAL_NON_EXECUTABLE",
+    "legacy_allocation_fields": "HISTORICAL_ARCHIVE_ONLY_NON_EXECUTABLE",
     "hunter_existing_axs_reported_cost_usdt_approx": 6000,
     "hunter_new_live_buy_add_enabled": false
   },
