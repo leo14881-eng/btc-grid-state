@@ -1,7 +1,7 @@
-# 4-Year Wealth Architecture — FINAL v1.1
+# 4-Year Wealth Architecture — FINAL v1.2
 
 Status: ACTIVE / FROZEN
-Effective date: 2026-10-11
+Effective date: 2026-11-08
 Horizon: 4 years
 Role: Highest-level capital architecture above BTC Sentinel, Grid, Hunter and Structural modules.
 Execution authority: USER ONLY.
@@ -31,40 +31,19 @@ This versioned amendment supersedes conflicting historical L1/L2/L3, A/B/C/D/E, 
 4. BTC is the primary wealth engine. Strategic BTC quantity target is >= 4 BTC, but this is NOT a calendar deadline and must never force buying at unattractive conditions.
 5. Active strategies are return enhancers, not substitutes for the core architecture.
 
-## 2. Capital layers and ownership
+## 2. Capital structure and ownership
 
-Portfolio-state.json remains the balance/allocation SSOT. Module state files own only their module runtime state.
+`portfolio-state.json` is the balance/allocation SSOT. Module state files own only their module runtime state. Budgets are caps/mandates, not proof of current cash or NAV.
 
-L0 CRISIS RESERVE
-- Current reference: USD 50,000.
-- Strictly isolated.
-- Default investable amount: USD 0.
-- Must not be counted as BTC dry powder or Hunter/Structural capital.
-- Use requires an explicit user decision that the capital is no longer crisis reserve.
-
-L1 STRATEGIC POOL
-- Current reference: approximately USD 200,000.
-- Primary future deployment pool.
-- Not automatically deployable merely because it exists.
-- Deployment requires regime + portfolio Allocation Gate.
-
-L2 ORDINARY DRY POWDER
-- Current user-confirmed reference: 18,425 USDT.
-- Available for approved ordinary portfolio deployment.
-- Must remain subject to dry-powder preservation rules.
-
-L3 BTC CORE
-- Current reference: 0.27803703 BTC.
-- First permanent-floor milestone: 0.5 BTC.
-- Long-term strategic target: >= 4 BTC.
-- While below 0.5 BTC, ordinary cycle distribution must not reduce BTC holdings.
-- After exceeding 0.5 BTC, only BTC above the permanent floor may become cycle-sellable under the existing BTC cycle policy.
-
-L4 ACTIVE STRATEGIES
-- BTC Spot Grid current capital: 14,000 USDT.
-- Grid hard cap: 20,000 USDT.
-- Structural and Asymmetric/Hunter positions require their own gates plus the portfolio-level gate.
-- Active strategies may never raid L0.
+- **Main investment budget: 200,000 USDT** = **160,000 USDT BTC unified pool** (only three components: **核心BTC / 波段BTC / 待命USDT**, dynamic proportions) + **20,000 USDT Hunter altcoin pool** + **20,000 USDT extreme-crash reserve**.
+- **BTC Grid: 14,000 USDT**, independent of the 200,000 USDT main investment budget. Grid's current configuration is read only from `state.json`; exchange-live balances/status must be separately verified. The 20,000 USDT Grid hard cap remains a ceiling, not an allocation target.
+- **Crisis/living reserve: 50,000 USD**, strictly isolated, non-investable by default and never included in main-investment NAV. It is not the 20,000 USDT extreme-crash reserve.
+- There is no separate 200,000 USD strategic term-deposit layer, no additional 18,425 USDT ordinary dry-powder layer, and no separate Structural/Asymmetric capital pool in the current architecture.
+- Core BTC is managed by valuation and historical drawdown; trend controls pacing. Ordinary short-term bearishness is not a reason to casually sell core BTC.
+- Swing BTC is managed by realized net USDT profit after fees and reasonable slippage. BTC quantity change, BTC Buy&Hold-relative return and missed-upside cost are diagnostics only; none is a minimum-profit veto.
+- Hunter's total active acquisition cost plus live pending buy reservations must not exceed 20,000 USDT. The existing approximately 6,000U AXS position is part of Hunter; no new live altcoin BUY/ADD or mechanical averaging down until AXS exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence. Unknown balances/orders mean available capacity is UNKNOWN.
+- The 20,000 USDT extreme-crash reserve is only for flash crashes, systemic liquidity shocks or severe mispricing; ordinary 5%-10% volatility does not qualify.
+- Only the user executes real trades. No automation may auto-trade or change any capital cap.
 
 ## 3. BTC Accumulation Regime
 
@@ -101,33 +80,23 @@ Forbidden behavior:
 - assuming any fixed bottom such as 33K must occur.
 If the market does not offer acceptable risk/reward, holding cash is valid.
 
-## 5. Grid mandate
+## 5. BTC Grid mandate
 
-Grid is an ACTIVE RETURN ENHANCER:
-- range/reference currently 72,000–86,000 USDT;
-- 28 grids;
-- current capital 14,000 USDT;
-- hard capital cap 20,000 USDT.
-Grid goals:
-1. monetize volatility;
-2. accumulate BTC during declines.
-Grid capital is isolated from ordinary allocation accounting.
-Grid BTC is not added to permanent BTC Core until the strategy is closed/settled and the resulting BTC is user-confirmed and synchronized into portfolio-state.json.
-Counterparty Risk Gate overrides grid profitability.
+BTC Grid is a separate module outside the 200,000 USDT main investment budget:
+- configured capital: 14,000 USDT;
+- configured range and grid count: read only from `state.json` (latest repository configuration shows 75,000–89,000 USDT and 28 grids, last confirmed 2026-09-25; exchange-live status is not verified);
+- hard capital ceiling: 20,000 USDT, not an allocation target.
+Grid capital, orders and P&L must be audited separately and must never be merged into the main-investment NAV until a user-confirmed close/settlement and explicit synchronization. The 50,000 USD crisis/living reserve is never Grid funding. Counterparty Risk Gate overrides Grid profitability.
 
-## 6. Hunter / Asymmetric mandate
+## 6. Hunter altcoin-pool mandate
 
-Hunter discovers asymmetric opportunities; it has no independent capital authority.
-Required chain before any capital proposal:
-Hunter research gate -> BTC-relative forward opportunity gate -> module capital gate -> Portfolio Allocation Gate -> Portfolio Drawdown Gate -> user approval.
-PRE_MOVE or candidate status alone is never a BUY signal.
-A single altcoin must never be allowed to threaten BTC Core, L0, or portfolio survival.
+Hunter is the only current altcoin capital pool and has a 20,000 USDT hard cap based on active acquisition cost plus live pending buy reservations. Hunter has no independent execution authority.
+Required chain before any future capital proposal: research gate -> BTC-relative forward opportunity gate -> supply/value-capture/liquidity/risk gates -> pool-capacity reconciliation -> Portfolio Allocation Gate -> Portfolio Drawdown Gate -> user approval.
+PRE_MOVE or candidate status alone is never a BUY signal. Until the existing approximately 6,000U AXS position exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence, new live altcoin BUY/ADD and mechanical averaging down remain blocked. Research and shadow validation may continue.
 
-## 7. Structural mandate
+## 7. Retired Structural capital lane
 
-Structural positions are multi-year thesis positions, separate from Hunter.
-A Hunter candidate may be promoted to Structural only after durable fundamental/value-capture evidence and explicit portfolio reclassification.
-Buying an asset does not automatically make it Structural.
+The former separate Structural 15% allocation and 5% single-asset limit are retired and non-executable. There is no separate Structural capital pool in the current 200,000 USDT architecture. Research may continue as general diligence, but any altcoin capital exposure must be accounted for inside the Hunter 20,000 USDT pool and remains subject to the AXS/profit-evidence lock.
 
 ## 8. Counterparty Risk Veto
 
@@ -144,16 +113,15 @@ Every new capital proposal must include a portfolio stress test before approval.
 Minimum stress scenario:
 - BTC: -50%
 - Grid risk asset exposure: -40%
-- Hunter/Asymmetric: -70%
-- Structural: -50%
-- Cash/L0: nominally stable unless the proposal itself introduces custody/stablecoin risk.
+- Hunter altcoin pool: -70%
+- 待命USDT / 50,000 USD crisis reserve: nominally stable, but the crisis reserve remains isolated and excluded from investable NAV.
 
 Required outputs:
 - stressed portfolio loss in USD;
 - stressed portfolio loss as % of investable net worth;
 - remaining dry powder;
-- L0 status;
-- BTC Core status;
+- crisis/living-reserve isolation status;
+- core BTC status;
 - counterparty concentration.
 
 Until a separate empirically justified numeric maximum-drawdown budget is explicitly approved by the user, the Drawdown Gate is CONSERVATIVE / NO-FABRICATED-THRESHOLD: it must calculate and disclose stress loss but may not invent a hard percentage limit.
@@ -175,8 +143,8 @@ Monthly architecture scorecard:
 2. BTC Quantity
 3. BTC Average Cost (only from verified cost data; UNKNOWN if not reconstructable)
 4. Dry Powder
-5. Permanent/Crisis Reserve
-6. Active Risk Exposure (Grid + Hunter + Structural)
+5. 50,000 USD crisis/living reserve isolation (excluded from investment NAV)
+6. Active risk exposure (BTC Grid + Hunter + extreme-crash reserve)
 7. Maximum Drawdown from verified portfolio history
 8. BTC-relative Performance
 
@@ -207,7 +175,8 @@ Partial failure must be surfaced as STATE SYNC DEGRADED/FAILURE.
 - >=4 BTC is a strategic target, never a forced calendar target.
 - Always preserve dry powder.
 - BTC Grid <= 20,000 USDT.
-- Hunter/altcoin risk may never threaten BTC Core or portfolio survival.
+- Hunter altcoin risk may never exceed its 20,000 USDT cost-plus-pending-reservation cap or threaten core BTC and portfolio survival.
+- No separate Structural/Asymmetric capital pool exists.
 - Counterparty Risk Gate can veto every return strategy.
 - Never force trades to hit annual return targets.
 - Every capital action must pass the Portfolio Allocation Gate.
@@ -218,7 +187,7 @@ Partial failure must be surfaced as STATE SYNC DEGRADED/FAILURE.
 
 4-Year Wealth Architecture
   -> Portfolio Allocation / Drawdown / Counterparty Gates
-    -> BTC Sentinel / Grid / Hunter / Structural
+    -> BTC Sentinel / BTC Grid / Hunter
       -> Capital Proposal
         -> User Approval
           -> Execution
