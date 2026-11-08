@@ -108,21 +108,34 @@ jobs:
           git push origin HEAD:main
           echo 'HUNTER_WATCHDOG_MONITOR_RECOVERY_TRIGGER_PUSHED'
 
-      # A push made with GITHUB_TOKEN does not start another workflow. Dispatch
-      # the recovery workflow explicitly after publishing the auditable trigger.
-      - name: Dispatch stale Hunter recovery workflows explicitly
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DISCOVERY_STALE: ${{ steps.observe.outputs.discovery_stale }}
-          DOWNSTREAM_STALE: ${{ steps.observe.outputs.downstream_stale }}
-          MONITOR_STALE: ${{ steps.observe.outputs.monitor_stale }}
-        run: |
-          set -euo pipefail
-          if [[ "$DISCOVERY_STALE" == "true" || "$DOWNSTREAM_STALE" == "true" ]]; then
-            gh workflow run hunter-cex-universe.yml --ref main
-            echo "HUNTER_WATCHDOG_DISCOVERY_DISPATCHED"
-          fi
-          if [[ "$MONITOR_STALE" == "true" ]]; then
-            gh workflow run hunter-position-monitor.yml --ref main -f trigger_source=watchdog
-            echo "HUNTER_WATCHDOG_MONITOR_DISPATCHED"
-          fi
+      # GITHUB_TOKEN pushes are not a reliable downstream workflow trigger.
+      # GitHub-hosted recovery uses workflow_dispatch; the Vultr local runner
+      # skips these uses: steps and performs its own systemd recovery above.
+      - name: Dispatch stale discovery workflow explicitly
+        if: ${{ steps.observe.outputs.discovery_stale == 'true' || steps.observe.outputs.downstream_stale == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "hunter-cex-universe.yml",
+              ref: "main"
+            });
+            core.info("HUNTER_WATCHDOG_DISCOVERY_DISPATCHED");
+
+      - name: Dispatch stale position monitor explicitly
+        if: ${{ steps.observe.outputs.monitor_stale == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "hunter-position-monitor.yml",
+              ref: "main",
+              inputs: { trigger_source: "watchdog" }
+            });
+            core.info("HUNTER_WATCHDOG_MONITOR_DISPATCHED");
