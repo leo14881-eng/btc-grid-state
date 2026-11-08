@@ -4,26 +4,10 @@
   "updated_at": "2026-10-03",
   "purpose": "Single Source of Truth for real-time Allocation Gate. User-confirmed execution data overrides estimates; unknown values must never be fabricated.",
   "architecture": {
-    "btc_core_base_pct": 45,
-    "btc_core_range_pct": [
-      30,
-      60
-    ],
-    "cash_tbill_base_pct": 35,
-    "cash_tbill_range_pct": [
-      20,
-      55
-    ],
-    "structural_base_pct": 15,
-    "structural_range_pct": [
-      0,
-      30
-    ],
-    "structural_single_asset_hard_cap_pct": 5,
-    "asymmetric_base_pct": "SUPERSEDED_BY_FIXED_ALT_POOL_20000_USDT",
-    "asymmetric_hard_cap_pct": "SUPERSEDED_BY_FIXED_ALT_POOL_20000_USDT",
-    "asymmetric_single_asset_hard_cap_pct": "NO_FIXED_PERCENT_CAP__PER_ASSET_MAX_DECIDED_BY_RESEARCH_AND_RISK_GATES",
-    "same_correlation_bucket_guideline_cap_pct": "GUIDELINE_ONLY__MUST_NOT_OVERRIDE_FIXED_ALT_POOL_AND_ASSET_SPECIFIC_RISK_DECISION"
+    "status": "RETIRED_HISTORICAL_NON_EXECUTABLE",
+    "active_authority": false,
+    "superseded_by": "current_capital_architecture",
+    "note": "Historical 45/35/15 weights, Structural percentage ranges and prior allocation fields must not be read as current allocation controls."
   },
   "ordinary_portfolio": {
     "valuation_timestamp": "2026-09-26T00:15:00+07:00",
@@ -32,12 +16,12 @@
       "usd": 21480.42,
       "weight_pct": null,
       "btc_quantity": 0.27803703,
-      "permanent_floor_target_btc": 0.5,
-      "permanent_floor_status": "BUILDING_NOT_YET_REACHED",
-      "cycle_position_btc": 0,
-      "cycle_position_definition": "Only BTC above the 0.5 BTC permanent floor target is cycle-sellable under ordinary bull-market distribution rules.",
+      "permanent_floor_target_btc": null,
+      "permanent_floor_status": "RETIRED_HISTORICAL_NON_EXECUTABLE",
+      "cycle_position_btc": null,
+      "cycle_position_definition": "Historical field only; no active 0.5 BTC floor or automatic cycle-sellable calculation.",
       "reference_price_usd": 77257.43,
-      "data_status": "USER_CONFIRMED_PRIOR_CORE_QUANTITY__SEPARATE_SWING_RECORDED"
+      "data_status": "STALE_HISTORICAL_QUANTITY__CURRENT_BALANCE_UNVERIFIED"
     },
     "cash_tbill": {
       "usd": null,
@@ -53,10 +37,10 @@
       "data_status": "NO_USER_CONFIRMED_POSITION_RECORDED"
     },
     "asymmetric": {
-      "usd": 0,
+      "usd": null,
       "weight_pct": null,
       "positions": [],
-      "data_status": "USER_CONFIRMED_STX_FULL_EXIT__FEE_QUANTITY_RECONCILIATION_PENDING"
+      "data_status": "STX_HISTORICAL_EXIT_ONLY__CURRENT_AXS_APPROX_6000U_USER_REPORTED_NOT_RECONCILED__NOT_ZERO_POSITION"
     },
     "btc_swing": {
       "btc_quantity_gross": 0.047498,
@@ -91,22 +75,23 @@
           "sleeve": "UNASSIGNED"
         }
       ]
-    }
+    },
+    "snapshot_status": "STALE_HISTORICAL_SNAPSHOT_NOT_CURRENT_NAV",
+    "snapshot_not_for_current_allocation": true
   },
   "btc_cycle_policy": {
-    "principle": "ACCUMULATE_IN_BEAR_MARKET_DISTRIBUTE_IN_BULL_MARKET",
-    "ordinary_short_term_trading": true,
-    "permanent_floor_target_btc": 0.5,
-    "never_fully_exit_btc": true,
-    "while_total_btc_below_floor": "Ordinary cycle distribution must not reduce BTC holdings; priority is staged bear-market accumulation toward 0.5 BTC.",
-    "after_total_btc_exceeds_floor": "Only BTC above 0.5 BTC is cycle-sellable. Bull-market distribution must never reduce total BTC below 0.5 BTC.",
-    "sell_regime": "Bull-market overvaluation/overheating/cycle-top distribution only, except fundamental long-term BTC thesis impairment.",
-    "buy_regime": "Bear-market staged accumulation with dry-powder preservation and existing accumulation/risk gates.",
-    "future_ordinary_btc_buys": "Increase total BTC and first build the permanent 0.5 BTC floor; BTC above the floor becomes cycle position.",
-    "historical_cost_basis": "UNKNOWN_RECONSTRUCTION_PENDING",
-    "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward.",
-    "status": "SUPERSEDED_FOR_CURRENT_EXECUTION_BY_2026_10_03_CURRENT_CAPITAL_ARCHITECTURE",
-    "current_rule": "CORE_PLUS_SWING; core governed by valuation/drawdown; swing eligible on positive expected net USDT after fees/slippage; user executes."
+    "status": "ACTIVE_CURRENT_RULE",
+    "core_btc_management": "VALUATION_AND_HISTORICAL_DRAWDOWN",
+    "trend_role": "CONTROLS_EXECUTION_PACING",
+    "ordinary_short_term_bearishness": "DO_NOT_CASUALLY_SELL_CORE_BTC",
+    "swing_btc_primary_kpi": "REALIZED_NET_USDT_PROFIT_AFTER_FEES_AND_REASONABLE_SLIPPAGE",
+    "swing_btc_diagnostics": [
+      "BTC_QUANTITY_CHANGE",
+      "BTC_BUY_AND_HOLD_RELATIVE_RETURN",
+      "MISSED_UPSIDE_COST"
+    ],
+    "minimum_profit_gate": null,
+    "retired_legacy_floor": "0.5 BTC permanent floor is historical and non-executable; it is not an automatic veto."
   },
   "execution_state": {
     "last_confirmed_execution": "BTC-BUY-ORDER-86442752",
@@ -201,21 +186,25 @@
   },
   "allocation_gate_policy": {
     "required_checks": [
-      "current_portfolio_weights_and_ranges",
-      "altcoin_pool_locked_cost_and_available_capacity",
-      "all_live_pending_alt_order_reservations",
+      "current_verified_balances_and_live_order_reservations",
+      "btc_unified_pool_cap_and_component_accounting",
+      "btc_core_valuation_and_historical_drawdown",
+      "btc_swing_realized_net_usdt_after_fees_and_reasonable_slippage",
+      "hunter_locked_acquisition_cost_plus_live_pending_reservations",
+      "axs_net_profitable_exit_and_hunter_profit_evidence_gate",
+      "extreme_crash_activation_conditions",
+      "grid_isolation",
+      "crisis_living_reserve_isolation",
       "funding_source",
       "risk_budget",
       "correlation_exposure",
-      "opportunity_cost_vs_btc_or_cash_tbill",
-      "capital_readiness_gate",
-      "strategy_lock_status",
-      "btc_permanent_floor_protection",
-      "crisis_reserve_protection"
+      "counterparty_risk",
+      "strategy_lock_status"
     ],
-    "btc_sell_floor_rule": "No ordinary cycle BTC sale may reduce total BTC below 0.5 BTC.",
+    "btc_sell_floor_rule": "RETIRED_HISTORICAL_NON_EXECUTABLE__CORE_BTC_IS_MANAGED_BY_VALUATION_AND_HISTORICAL_DRAWDOWN; ORDINARY_SHORT_TERM_BEARISHNESS_DOES_NOT_CASUALLY_SELL_CORE",
     "execution_authority": "USER_ONLY",
-    "altcoin_pool_rule": "All non-BTC crypto capital proposals must use altcoin_pool. Total active locked acquisition cost may never exceed 20,000 USDT. Per-asset size is research/risk determined, not a fixed percentage."
+    "altcoin_pool_rule": "All altcoin capital is in Hunter only. ACTIVE_LOCKED_ACQUISITION_COST + LIVE_PENDING_BUY_RESERVATIONS <= 20000 USDT. Existing approximately 6000U AXS must exit net profitable after fees and Hunter must show sufficient independently reviewable profit evidence before any new live altcoin BUY/ADD.",
+    "btc_unified_pool_rule": "160000 USDT maximum across exactly three components: 核心BTC, 波段BTC, 待命USDT; internal proportions dynamic; no separate daily/large swing pool."
   },
   "update_rules": {
     "user_confirmed_execution_overrides_prior_state": true,
@@ -246,7 +235,18 @@
     "execution_authority": "USER_ONLY",
     "source": "AXS_APPROX_6000U_USER_REPORTED__EXACT_COST_AND_ORDERS_UNVERIFIED",
     "realized_profit_note": "STX gross proceeds 1488.0028 minus prior recorded cost 1400 = 88.0028 gross estimate, not final net; historical sold/acquired quantity differs and fees unknown.",
-    "capacity_status": "BLOCKED_PENDING_AXS_REAL_POSITION_AND_ORDER_RECONCILIATION"
+    "capacity_status": "BLOCKED_PENDING_AXS_NET_PROFIT_EXIT_HUNTER_PROFIT_EVIDENCE_AND_LIVE_ORDER_RECONCILIATION",
+    "reported_existing_position": {
+      "asset": "AXS",
+      "reported_cost_usdt_approx": 6000,
+      "exact_quantity": null,
+      "exact_cost_usdt": null,
+      "fees": null,
+      "live_order_reservations": null,
+      "source": "USER_REPORTED",
+      "status": "UNRECONCILED__BLOCK_NEW_LIVE_ALTCOIN_BUY_ADD"
+    },
+    "new_live_buy_add_enabled": false
   },
   "isolated_sleeve_ledger_v1": {
     "status": "RETIRED_HISTORICAL_NON_EXECUTABLE",
@@ -309,21 +309,22 @@
     "ab_unit_policy": "Only user-designated positions; B must enter independently; full combined exit proposal only on positive realizable net P&L after fees/slippage; keep A and B P&L separate; do not infer trades",
     "existing_btc_swing_classification": "TWO_CONFIRMED_ORDERS_UNASSIGNED_PENDING_USER_CONFIRMATION",
     "no_double_counting": true,
-    "crisis_reserve_separate_usd": 50000
+    "crisis_reserve_separate_usd": 50000,
+    "do_not_use_for_execution_or_allocation": true
   },
   "current_capital_architecture": {
     "status": "USER_CONFIRMED_CURRENT_OVERRIDE",
     "main_investment_cap_usdt": 200000,
     "btc_unified_pool_usdt": 160000,
     "btc_unified_pool_components": [
-      "CORE_BTC",
-      "SWING_BTC",
-      "STANDBY_USDT"
+      "核心BTC",
+      "波段BTC",
+      "待命USDT"
     ],
     "btc_internal_split": "DYNAMIC_NO_FIXED_120K_40K",
     "hunter_alt_pool_usdt": 20000,
     "hunter_existing_axs_usdt_approx": 6000,
-    "hunter_live_new_position_status": "PAUSED_UNTIL_AXS_NET_PROFIT_EXIT_AND_HUNTER_PROFIT_EVIDENCE",
+    "hunter_live_new_position_status": "BLOCKED_UNTIL_AXS_NET_PROFIT_EXIT_AND_HUNTER_PROFIT_EVIDENCE",
     "extreme_crash_reserve_usdt": 20000,
     "extreme_crash_scope": "FLASH_CRASH_SYSTEMIC_LIQUIDITY_SHOCK_SEVERE_MISPRICING_ONLY",
     "btc_grid_usdt": 14000,
@@ -336,7 +337,8 @@
       "FIXED_120K_CORE_PLUS_40K_SWING",
       "45_35_15_PORTFOLIO_WEIGHT_AS_CURRENT_CONTROL"
     ],
-    "execution_authority": "USER_ONLY"
+    "execution_authority": "USER_ONLY",
+    "hunter_existing_axs_status": "USER_REPORTED_UNRECONCILED"
   },
   "current_kpi_policy": {
     "btc_swing_primary_kpi": "REALIZED_NET_USDT_PROFIT_AFTER_FEES_AND_REASONABLE_SLIPPAGE",
@@ -352,16 +354,16 @@
       "guaranteed": false
     }
   },
-  "architecture_status": "LEGACY_FIELDS_HISTORICAL_NON_EXECUTABLE__CURRENT_CAPITAL_ARCHITECTURE_CONTROLS",
+  "architecture_status": "CURRENT_CAPITAL_ARCHITECTURE_ONLY__LEGACY_WEIGHTS_AND_A_E_FIELDS_HISTORICAL_NON_EXECUTABLE",
   "capital_architecture_current": {
     "effective_date": "2026-10-11",
     "main_investment_budget_usdt": 200000,
     "btc_unified_pool": {
       "cap_usdt": 160000,
       "components": [
-        "core BTC",
-        "swing BTC",
-        "standby USDT"
+        "核心BTC",
+        "波段BTC",
+        "待命USDT"
       ],
       "allocation": "DYNAMIC"
     },
@@ -375,7 +377,47 @@
     "target_date": "2028-03",
     "execution_authority": "USER_ONLY",
     "current_main_nav_usdt": null,
-    "nav_status": "UNKNOWN_PENDING_VERIFIED_BALANCES",
-    "legacy_allocation_fields": "HISTORICAL_NON_EXECUTABLE"
+    "nav_status": "UNKNOWN_PENDING_VERIFIED_BALANCES_AND_TRANSACTION_RECONCILIATION",
+    "legacy_allocation_fields": "HISTORICAL_NON_EXECUTABLE",
+    "hunter_existing_axs_reported_cost_usdt_approx": 6000,
+    "hunter_new_live_buy_add_enabled": false
+  },
+  "policy_updated_at": "2026-11-08",
+  "legacy_architecture_historical_non_executable": {
+    "btc_core_base_pct": 45,
+    "btc_core_range_pct": [
+      30,
+      60
+    ],
+    "cash_tbill_base_pct": 35,
+    "cash_tbill_range_pct": [
+      20,
+      55
+    ],
+    "structural_base_pct": 15,
+    "structural_range_pct": [
+      0,
+      30
+    ],
+    "structural_single_asset_hard_cap_pct": 5,
+    "asymmetric_base_pct": "SUPERSEDED_BY_FIXED_ALT_POOL_20000_USDT",
+    "asymmetric_hard_cap_pct": "SUPERSEDED_BY_FIXED_ALT_POOL_20000_USDT",
+    "asymmetric_single_asset_hard_cap_pct": "NO_FIXED_PERCENT_CAP__PER_ASSET_MAX_DECIDED_BY_RESEARCH_AND_RISK_GATES",
+    "same_correlation_bucket_guideline_cap_pct": "GUIDELINE_ONLY__MUST_NOT_OVERRIDE_FIXED_ALT_POOL_AND_ASSET_SPECIFIC_RISK_DECISION"
+  },
+  "legacy_btc_cycle_policy_historical_non_executable": {
+    "principle": "ACCUMULATE_IN_BEAR_MARKET_DISTRIBUTE_IN_BULL_MARKET",
+    "ordinary_short_term_trading": true,
+    "permanent_floor_target_btc": 0.5,
+    "never_fully_exit_btc": true,
+    "while_total_btc_below_floor": "Ordinary cycle distribution must not reduce BTC holdings; priority is staged bear-market accumulation toward 0.5 BTC.",
+    "after_total_btc_exceeds_floor": "Only BTC above 0.5 BTC is cycle-sellable. Bull-market distribution must never reduce total BTC below 0.5 BTC.",
+    "sell_regime": "Bull-market overvaluation/overheating/cycle-top distribution only, except fundamental long-term BTC thesis impairment.",
+    "buy_regime": "Bear-market staged accumulation with dry-powder preservation and existing accumulation/risk gates.",
+    "future_ordinary_btc_buys": "Increase total BTC and first build the permanent 0.5 BTC floor; BTC above the floor becomes cycle position.",
+    "historical_cost_basis": "UNKNOWN_RECONSTRUCTION_PENDING",
+    "performance_measurement_rule": "Do not fabricate pre-baseline cost basis; record confirmed executions precisely from SSOT baseline forward.",
+    "status": "SUPERSEDED_FOR_CURRENT_EXECUTION_BY_2026_10_03_CURRENT_CAPITAL_ARCHITECTURE",
+    "current_rule": "CORE_PLUS_SWING; core governed by valuation/drawdown; swing eligible on positive expected net USDT after fees/slippage; user executes."
   }
 }
