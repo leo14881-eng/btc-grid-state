@@ -21,7 +21,7 @@ GitHub Actions 使用 `GITHUB_TOKEN` 推送的 commit 不会自动触发另一�
 - 每 10 分钟运行一次；
 - 保留 trigger 文件作为审计痕迹；
 - 通过具备 `actions: write` 权限的 `gh workflow run` 显式分发 `hunter-position-monitor.yml` 和 `hunter-cex-universe.yml`；
-- Discovery 恢复后由 `workflow_run` 继续启动 Research。
+- 由定时/普通 push 启动的 Discovery 继续通过 `workflow_run` 启动 Research；Watchdog 手动分发的 Discovery 在完成后显式 `workflow_dispatch` Research，避免 GITHUB_TOKEN 事件链中断。Vultr 本地 runner 会跳过 GitHub-only `uses:` 分发步骤，仍使用本地 systemd 自愈。
 
 ## 3. 服务器主调度状态
 
