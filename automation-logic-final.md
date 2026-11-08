@@ -45,6 +45,7 @@ This section is the current authoritative capital/KPI override and supersedes co
 - Hunter's 20,000 USDT cap is active acquisition cost plus live pending buy reservations. The existing approximately 6,000U AXS position is user-reported but not fully reconciled. Until it exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence, no new live altcoin BUY/ADD and no mechanical averaging down. Unknown capacity remains UNKNOWN.
 - The 20,000 USDT extreme-crash reserve is not for ordinary 5%-10% volatility; it is reserved for flash crashes, systemic liquidity shocks or severe mispricing.
 - Historical records and transaction evidence must not be rewritten. Legacy labels may remain in immutable history only and cannot authorize or size a current action.
+- Monthly BTC DCA is a sub-plan of the 160,000 USDT BTC unified pool, not a separate budget. It may use only verified 待命USDT after real pending-order reservations. The first-six-month 40% progress target is diagnostic only; never force catch-up buys or use Hunter, extreme-crash, Grid or crisis/living-reserve funds.
 
 ## 0. Retired execution architecture (historical)
 
