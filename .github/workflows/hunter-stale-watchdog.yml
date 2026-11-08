@@ -2,9 +2,10 @@ name: Hunter Stale-Result Watchdog
 on:
   workflow_dispatch:
   schedule:
-    - cron: '07,37 * * * *'
+    - cron: '*/10 * * * *'
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: hunter-watchdog-main
   cancel-in-progress: true
@@ -102,3 +103,23 @@ jobs:
           git commit -m 'ops: self-heal stale Hunter position monitor'
           git push origin HEAD:main
           echo 'HUNTER_WATCHDOG_MONITOR_RECOVERY_TRIGGER_PUSHED'
+
+      # A push made with GITHUB_TOKEN does not start another workflow. Dispatch
+      # the recovery workflow explicitly after publishing the auditable trigger.
+      - name: Dispatch stale Hunter recovery workflows explicitly
+        if: ${{ steps.observe.outputs.discovery_stale == 'true' || steps.observe.outputs.downstream_stale == 'true' || steps.observe.outputs.monitor_stale == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCOVERY_STALE: ${{ steps.observe.outputs.discovery_stale }}
+          DOWNSTREAM_STALE: ${{ steps.observe.outputs.downstream_stale }}
+          MONITOR_STALE: ${{ steps.observe.outputs.monitor_stale }}
+        run: |
+          set -euo pipefail
+          if [[ "$DISCOVERY_STALE" == "true" || "$DOWNSTREAM_STALE" == "true" ]]; then
+            gh workflow run hunter-cex-universe.yml --ref main
+            echo "HUNTER_WATCHDOG_DISCOVERY_DISPATCHED"
+          fi
+          if [[ "$MONITOR_STALE" == "true" ]]; then
+            gh workflow run hunter-position-monitor.yml --ref main -f trigger_source=watchdog
+            echo "HUNTER_WATCHDOG_MONITOR_DISPATCHED"
+          fi
