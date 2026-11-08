@@ -23,7 +23,7 @@ This is a canonical investment-automation rule reference, not a registry of curr
 This section is the current authoritative capital/KPI override and supersedes contradictory A/B/C/D/E, daily-short-term/larger-swing, fixed 120K+40K, permanent 0.5-BTC floor, 45/35/15 portfolio-weight, and “no ordinary BTC swing” language elsewhere in this historical file.
 
 - Main investment capital = **200,000 USDT**: **160,000 USDT BTC unified pool + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve**.
-- BTC unified pool accounting is only **core BTC + swing BTC + standby USDT = 160,000 USDT**. Internal proportions are dynamic. There is no “large swing” module and no fixed 120K core + 40K swing split.
+- BTC unified pool accounting uses only **核心BTC + 波段BTC + 待命USDT = 160,000 USDT**. Internal proportions are dynamic. There is no “large swing” module and no fixed 120K core + 40K swing split.
 - **14,000 USDT BTC Grid is separate and outside the 200K main investment capital.**
 - **50,000 USD crisis/living reserve is separate and never investment NAV.**
 - Core BTC exposure is governed by valuation/historical drawdown; trend controls execution pace. Ordinary short-term bearish forecasts do not casually liquidate core.
@@ -284,7 +284,7 @@ The former Structural 15% allocation, 0%-30% tactical range, 5% single-asset cap
 
 ---
 
-# TASK 5 — Asymmetric Opportunity Scoring (v5.1)
+# TASK 5 — Hunter Opportunity Scoring (legacy evidence-class taxonomy v5.1)
 
 Schedule: daily 09:00 Asia/Ho_Chi_Minh.
 
@@ -554,6 +554,8 @@ Within ±3 of a threshold, mark `BORDERLINE` and require human review. `DUAL-STR
 ## 12. Class — evidence-driven migration only
 
 Allowed classes: `A / B / HYBRID / B-DEVELOPMENT`.
+
+These are research evidence grades only; they are not A/B/C/D/E capital sleeves, portfolio allocation buckets or independent funding authority.
 
 `A` = fundamental-backed. `B` = reflexive/narrative. `HYBRID` = material verified fundamental + reflexive/entry characteristics. `B-DEVELOPMENT` = current thesis still primarily EA/catalyst driven while A-like features remain conditional/pending.
 
