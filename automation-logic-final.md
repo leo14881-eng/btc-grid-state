@@ -1,8 +1,8 @@
 # Investment Automations — Canonical Logic FINAL
 
-Version: 2026-10-11 v1.6
+Version: 2026-11-08 v1.7
 Timezone: Asia/Ho_Chi_Minh
-Status: ACTIVE RULE REFERENCE. Current capital authority: 4-year-wealth-architecture.md §0 (effective 2026-10-11); superseded sections are historical and non-executable.
+Status: ACTIVE RULE REFERENCE. Current capital authority: 4-year-wealth-architecture.md §0 (effective 2026-11-08); all superseded capital definitions and module mandates are historical and non-executable.
 
 This is a canonical investment-automation rule reference, not a registry of currently enabled tasks. Each enabled investment task must read its matching section plus Shared Global Rules. If this file or the required section is unavailable, output `LOGIC SOURCE UNAVAILABLE` and issue no new capital action.
 
@@ -18,7 +18,7 @@ This is a canonical investment-automation rule reference, not a registry of curr
 
 # Shared Global Rules
 
-## 0A. CURRENT CAPITAL + KPI OVERRIDE — 2026-10-03
+## 0A. CURRENT CAPITAL + KPI OVERRIDE — 2026-11-08
 
 This section is the current authoritative capital/KPI override and supersedes contradictory A/B/C/D/E, daily-short-term/larger-swing, fixed 120K+40K, permanent 0.5-BTC floor, 45/35/15 portfolio-weight, and “no ordinary BTC swing” language elsewhere in this historical file.
 
@@ -34,8 +34,17 @@ This section is the current authoritative capital/KPI override and supersedes co
 - Unified management objective: manage the 200K main-investment capital toward approximately **600,000 USDT by 2028-03**. This is a management target, not a guaranteed return. Track verifiable main-investment NAV, cumulative realized net USDT profit, module contribution, and gap/completion versus 600K; unknown values remain UNKNOWN.
 - User remains sole trade executor. No automation may auto-trade or change these capital caps.
 
-**Compatibility rule:** whenever any later section conflicts with this 0A override, 0A wins. Old A/B/C/D/E and historical portfolio-weight text remains only as history until fully retired and must not control new recommendations.
+**Compatibility rule:** whenever any later section conflicts with this 0A override, 0A wins. Old A/B/C/D/E, 10K/20K swing buckets, fixed 120K+40K, 45/35/15, separate Structural/Asymmetric pools, and the permanent 0.5-BTC floor are historical only and must not control current recommendations or capital gates.
 
+## 0B. CANONICAL NAMES + LIVE-CAPITAL LOCK — 2026-11-08
+
+- The BTC unified pool has exactly three current components: **核心BTC / 波段BTC / 待命USDT**. Do not introduce a fourth BTC sleeve or use historical labels such as `BTC_TACTICAL`, “large swing”, or A/B buckets as current module names.
+- The only current capital structure is 200,000 USDT main investment = 160,000 USDT BTC unified pool + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve. BTC Grid 14,000 USDT is separate. The 50,000 USD crisis/living reserve is strictly isolated and excluded from investment NAV.
+- No separate Structural/Asymmetric allocation or 200,000 USD strategic term-deposit layer exists in the current architecture.
+- The former permanent 0.5 BTC floor is historical and non-executable; core BTC is governed by valuation and historical drawdown, with trend controlling pacing. Ordinary short-term bearishness is not a reason to casually sell core BTC.
+- Hunter's 20,000 USDT cap is active acquisition cost plus live pending buy reservations. The existing approximately 6,000U AXS position is user-reported but not fully reconciled. Until it exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence, no new live altcoin BUY/ADD and no mechanical averaging down. Unknown capacity remains UNKNOWN.
+- The 20,000 USDT extreme-crash reserve is not for ordinary 5%-10% volatility; it is reserved for flash crashes, systemic liquidity shocks or severe mispricing.
+- Historical records and transaction evidence must not be rewritten. Legacy labels may remain in immutable history only and cannot authorize or size a current action.
 
 ## 0. Retired execution architecture (historical)
 
@@ -45,13 +54,13 @@ The previous A/B/C/D/E execution architecture was retired on 2026-10-11. No lega
 
 ## 1. State ownership
 
-`portfolio-state.json` is the only source of truth for portfolio BTC quantity, portfolio weights, ordinary cash/USDT balance, 0.5 BTC permanent-core status, cycle-sellable BTC and portfolio-layer usage.
+`portfolio-state.json` is the only source of truth for verified holdings, BTC unified-pool components (核心BTC / 波段BTC / 待命USDT), ordinary USDT balance, Hunter locked acquisition cost and live pending reservations. Legacy weight fields and permanent-floor fields are historical only.
 
 `sentinel-state.json` stores only Sentinel-owned market/signal state. It must not duplicate portfolio holdings, weights, cash, permanent-core quantity or cycle holdings. It may store portfolio source/version/update timestamp/content SHA references only.
 
 `state.json` is the only source of truth for actual Bybit Grid state. It must contain Grid-owned state only. Ordinary portfolio cash, strategic term deposit, crisis reserve or other portfolio-layer capital must not be stored there.
 
-`opportunity-hunter-state.json` is the Hunter research/position ledger. An empty `assets` object is valid when portfolio SSOT and the Decision Journal confirm there are no Asymmetric positions. Empty assets alone is NOT an uninitialized-state error. If a confirmed position/execution should exist but is missing, treat that as a sync violation.
+`opportunity-hunter-state.json` is the Hunter research/shadow ledger. Candidate assets are not confirmed live holdings. Any user-reported or journal-confirmed live position, including the existing approximately 6,000U AXS, must be reconciled against portfolio SSOT and live orders; if missing or unverified, mark capacity UNKNOWN and block new live altcoin BUY/ADD.
 
 User-confirmed actual execution data has priority. Never infer missing balances, quantities, execution prices or timestamps.
 
@@ -84,35 +93,30 @@ Before any BUY / ADD / REDUCE / SELL / major term-deposit action inspect all con
 
 ## 4. Portfolio architecture
 
-BTC benchmark 45%, range 30%-60%.
-Cash/T-bill benchmark 35%, range 20%-55%.
-Structural benchmark 15%, tactical range 0%-30%, single Structural asset hard cap 5%.
-Asymmetric allocation follows its own authorization and hard limits.
-$50,000 Crisis Reserve is strictly isolated.
+- Main investment budget: 200,000 USDT = 160,000 USDT BTC unified pool (核心BTC / 波段BTC / 待命USDT, dynamic) + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve.
+- BTC Grid: 14,000 USDT separately outside the 200,000 USDT main investment budget.
+- 50,000 USD crisis/living reserve: strictly isolated, non-investable by default and excluded from main-investment NAV.
+- There is no active 45/35/15 allocation, separate Structural/Asymmetric pool, fixed 120K+40K split, or separate 200K strategic term-deposit layer.
+- BTC core is governed by valuation/historical drawdown; trend controls pacing. Swing BTC's primary KPI is realized net USDT after fees and reasonable slippage; BTC quantity and Buy&Hold-relative performance are diagnostics only.
+- Hunter total active acquisition cost plus live pending buy reservations <= 20,000 USDT. New live altcoin BUY/ADD remains blocked until AXS exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence.
 
-BTC allocation range governs risk/new funding only; it never mechanically triggers BTC selling.
+## 5. BTC core and swing rules
 
-## 5. BTC permanent-core rule — highest priority
+核心BTC is managed by valuation and historical drawdown; trend controls execution pace. Do not casually sell 核心BTC because of ordinary short-term bearish forecasts. The historical 0.5 BTC floor is not an active hard veto.
 
-Accumulate BTC in bear markets and distribute only cycle inventory late in confirmed bull-market overvaluation/overheating/top conditions. No ordinary short-term high-sell/low-buy trading.
+波段BTC is a separate accounting component inside the 160,000 USDT BTC unified pool. Its primary KPI is realized net USDT profit after fees and reasonable slippage. BTC quantity change, BTC Buy&Hold-relative return and missed-upside cost are diagnostics only; they must not hide losses or veto a net-USDT-positive swing by imposing an invented minimum-profit threshold.
 
-Permanent BTC core target = 0.5 BTC.
-
-If total BTC < 0.5 BTC: permanent-core building stage; ordinary cycle distribution may not sell BTC; cycle-sellable BTC = 0; future ordinary BTC buys first build the permanent core.
-
-If total BTC > 0.5 BTC: only BTC above 0.5 is cycle inventory; ordinary cycle selling requires confirmed bull-market top/overheat conditions; no ordinary cycle sale may reduce total BTC below 0.5.
-
-Only a fundamental break in BTC’s long-term thesis may trigger reassessment of the permanent-core rule.
+待命USDT is the uncommitted cash component of the same 160,000 USDT BTC unified pool. Current free balance and open-order reservations must be verified; budget is not available cash.
 
 ## 6. Capital authority / Allocation Gate
 
 Automations discover, analyze and recommend. User is the sole executor.
 
-Every proposed capital action must pass an immediate Allocation Gate using live `portfolio-state.json`: current weights/ranges, authorized funding source, risk budget, correlation exposure, opportunity cost versus BTC/Cash-T-bill, fund-layer isolation, permanent-core protection and crisis-reserve protection.
+Every proposed capital action must pass an immediate Allocation Gate using fresh `portfolio-state.json`: verified balances, BTC unified-pool cap and component accounting, Hunter active cost plus live pending reservations, extreme-crash activation conditions, Grid isolation, crisis-reserve isolation, risk budget, correlation/counterparty exposure and opportunity cost. Unknown balances/orders block capacity claims; legacy weights and the 0.5 BTC floor are not active gates.
 
 ## 7. Post-execution state chain
 
-After a user-confirmed BTC/Structural/Asymmetric trade or major term-deposit decision: append Decision Journal -> update portfolio-state with confirmed execution -> update relevant cooldown/position/strategy ledger -> reread and verify. Missing price, quantity or time remains unknown; never guess.
+After a user-confirmed BTC core / swing BTC / Hunter / Grid execution: append Decision Journal -> update portfolio-state with confirmed execution -> update relevant module ledger -> reread and verify. Missing price, quantity or time remains unknown; never guess.
 
 Decision Journal automation-runtime write ability is not considered proven until the first real journal-required event successfully completes this chain. Do not create fake transactions merely to test writes.
 
@@ -179,7 +183,7 @@ If evidence is incomplete, output the strongest supported leading state plus `DA
 ### Left-side capital policy
 Traditional right-side confirmation is **not required** for an A1 / early-accumulation small staged proposal when leading evidence meets the independence rule and Portfolio Allocation Gate + Drawdown Budget + Counterparty Gate all pass. Larger A2/A3/A4 deployment still requires progressively stronger multi-domain evidence. A single price level, FOMO or a single ETF print never authorizes capital.
 
-While total BTC remains below the 0.5 BTC permanent-core floor, early downside/distribution warnings may stop additions and protect dry powder, but ordinary BTC core selling remains prohibited by the permanent-core rule.
+Early downside/distribution warnings may change the pace of new BTC exposure and protect 待命USDT. They do not create a mechanical sell rule for 核心BTC; any core reduction requires a separate valuation and historical-drawdown review, not an ordinary short-term bearish forecast.
 
 ### Anti-hindsight
 Forbidden: explaining a large move after it occurs and relabeling the move itself as the signal. Persist `primary_state`, `first_detected_at`, `main_path`, `leading_evidence`, `reversal_triggers`, `early_action`, `confirmation_status` and `data_gaps` in Sentinel-owned runtime state so Detection Lead/Lag can be audited later.
@@ -212,7 +216,7 @@ If a domain lacks reliable evidence, mark UNKNOWN and state whether that gap blo
 Track valuation, trend deviation, crowding/leverage and marginal-demand risk as NORMAL / ELEVATED / EXTREME / UNKNOWN.
 0-1 EXTREME: hold. 2: stop chasing / distribution watch. 3: only in confirmed bull overvaluation/overheat/top, recommend 10%-15% of cycle inventory. 4 + price acceleration: only in confirmed bull top, additional 10%-20% of cycle inventory.
 
-If total BTC <=0.5, cycle-sellable=0 and only `BULL-TOP RISK WATCH` is allowed. If >0.5, sale cap=total BTC-0.5. Sale proceeds return to cash for a future bear cycle; no FOMO rebuy.
+Do not use the retired 0.5 BTC floor to determine cycle-sellable quantity. Evaluate 核心BTC under valuation/historical-drawdown rules and 波段BTC under its net-USDT KPI; do not casually sell core on ordinary short-term bearishness. Sale proceeds return to cash for a future bear cycle; no FOMO rebuy.
 
 ## Pre-triggers
 
@@ -220,15 +224,15 @@ Maintain upside squeeze, downside liquidation and liquidity-turn pre-triggers. A
 
 ## Systemic risk
 
-Monitor credit, Treasury/rates market function, dollar funding, banks, macro liquidity and deleveraging. Higher systemic stress => smaller/pause ordinary bear buys. $50K Crisis Reserve is deployment-eligible only after genuine systemic-liquidity shock + BTC extreme selloff + initial stabilization, staged.
+Monitor credit, Treasury/rates market function, dollar funding, banks, macro liquidity and deleveraging. Higher systemic stress => smaller/pause ordinary BTC exposure. The 50,000 USD crisis/living reserve remains strictly isolated and is never an investment or dip-buy source. The separate 20,000 USDT extreme-crash reserve may be considered only for a flash crash, systemic liquidity shock or severe mispricing, not ordinary 5%-10% volatility.
 
-## $200K strategic term deposit
+## Retired strategic term-deposit layer
 
-Consider early break only if expected opportunity cost clearly exceeds the several-thousand-dollar interest loss. Allowed verdicts: `NOT WORTH BREAKING EARLY`, `CLOSE TO WORTH IT — WAIT FOR CONFIRMATION`, `WORTH BREAKING EARLY`.
+The former separate 200,000 USD strategic term-deposit layer is not part of the current capital architecture and has no independent allocation authority. Any actual deposit or cash balance must be verified and included only in the correct current pool; do not infer it from historical references.
 
 ## Notification
 
-Notify only on material changes affecting BTC accumulation/distribution, cash allocation, Grid risk, strategic deposit or systemic risk. Include BTC price/time, regime, leading/confirming signals, four distribution dimensions, Allocation Gate, explicit action, cooldown, invalidation, 0.5 BTC core status and data-quality labels.
+Notify only on material changes affecting 核心BTC, 波段BTC, 待命USDT, Hunter, the extreme-crash reserve, Grid or systemic/counterparty risk. Include verified timestamp, evidence, current Allocation Gate, user-only action status, invalidation and data-quality labels; never report the retired 0.5 BTC floor as an active constraint.
 
 ---
 
@@ -242,11 +246,11 @@ Role: post-hoc portfolio-health, state-governance and return-attribution audit. 
 
 Audit every confirmed execution since prior successful quarterly audit: Journal -> Portfolio -> relevant ledger/cooldown. Any break => `STATE SYNC VIOLATION`. Check shared-cash competition among strategies; Grid capital is isolated.
 
-Quarterly checks: allocations/ranges; 0.5 BTC core; Accumulation discipline; Distribution discipline; cash cushion; Structural qualification; Asymmetric authorization/correlation/opportunity cost; Grid net benefit after fees/slippage/opportunity cost; custody/counterparty; tax/legal readiness; journal discipline; state sync; shared-cash competition; duplicate/non-owned fields across state files.
+Quarterly checks: 160K BTC unified-pool accounting; 核心BTC / 波段BTC / 待命USDT balances; 20K Hunter locked cost and live pending reservations; AXS net-profitable exit/profit-evidence gate; 20K extreme-crash activation discipline; separate Grid NAV; 50K crisis-reserve isolation; custody/counterparty; fees/slippage; journal discipline; state sync; shared-cash competition; duplicate/non-owned fields across state files.
 
 When safe deterministic state-governance defects are discovered, recommend/perform repair only when the data owner is unambiguous and no investment fact must be guessed; reread and verify. Never rewrite investment history.
 
-Return attribution when data permits: BTC market return, BTC allocation contribution, cash, Structural, Asymmetric, Grid, fees, slippage, realized tax cost. Historical BTC cost unknown => `HISTORICAL COST BASIS RECONSTRUCTION REQUIRED`.
+Return attribution when data permits: 核心BTC, 波段BTC, 待命USDT, Hunter, extreme-crash reserve, separate Grid, fees, slippage and realized tax cost. Historical BTC cost unknown => `HISTORICAL COST BASIS RECONSTRUCTION REQUIRED`.
 
 Benchmarks when data permits: 100% BTC; 60/40 BTC-cash annual rebalance; 50% BTC/30% broad equities/20% cash; actual strategy. Call differences incremental strategy return, not true Alpha.
 
@@ -274,25 +278,9 @@ Maintain 12-24m forward test versus Simple BTC + Cash after fees/slippage/opport
 
 ---
 
-# TASK 4 — Next-Stage Structural Asset Radar — FINAL Architecture
+# TASK 4 — RETIRED SEPARATE STRUCTURAL CAPITAL LANE
 
-Schedule: Monday 09:00 Asia/Ho_Chi_Minh, flexible.
-
-Read `portfolio-state.json`, `decision-journal.json`, then this file. Use live Structural usage/room/positions/correlation; never infer balances.
-
-Role: discover rare structural assets before consensus fully prices them, while maintaining valuation/risk discipline. Research universe includes AI/compute/semis, robotics/automation, cybersecurity, nuclear/uranium/power/grid/storage, space/defense, advanced manufacturing, biotech, copper/rare earths, stablecoin/RWA/payments infrastructure and emerging sectors.
-
-Research chain: Structural Change -> Industry Economics -> Value Chain -> Winner -> Value Capture -> Competitive Durability -> Financial Quality -> Reverse Valuation -> Remaining Upside vs Permanent Loss -> Opportunity Cost.
-
-Tiers: WATCH -> RESEARCH -> CANDIDATE -> HIGH CONVICTION. Maintain immutable first-discovery record plus append-only upgrades/downgrades.
-
-Structural BASE 15%, tactical 0%-30%, single asset <=5%; never force-fill. Funding from authorized Cash/T-bill above cushion, tactical BTC distribution cash or new capital; never permanent BTC core, Asymmetric budget, Grid or Crisis Reserve.
-
-Radar must actively search for underappreciated structural change and attractive valuation before full consensus. HIGH CONVICTION remains required for normal 2%-3% deployment; early WATCH/CANDIDATE status is not itself executable. Do not wait for price breakout as proof of thesis.
-
-Executable action requires HIGH CONVICTION + reasonable Reverse Valuation + Allocation Gate PASS. Initial 2%-3%, add toward 3%-5% only as evidence strengthens and valuation remains attractive.
-
-Notify only for material candidate/tier/valuation/thesis/Allocation-Gate changes. Output asset, sector, why now, valuation, thesis, value capture, financial quality, reverse valuation, permanent-loss risk, thesis kill, correlation bucket, BTC/T-bill opportunity cost, Gate, weight/funding/invalidation.
+The former Structural 15% allocation, 0%-30% tactical range, 5% single-asset cap and separate funding lane are retired and non-executable. This is not an enabled capital task. General fundamental research may continue, but any altcoin capital exposure belongs only to the Hunter 20,000 USDT pool and is subject to the AXS/profit-evidence lock in section 0B. No Structural BUY/ADD amount may be proposed from a separate pool.
 
 ---
 
@@ -300,9 +288,9 @@ Notify only for material candidate/tier/valuation/thesis/Allocation-Gate changes
 
 Schedule: daily 09:00 Asia/Ho_Chi_Minh.
 
-Read `portfolio-state.json`, `decision-journal.json`, `opportunity-hunter-state.json`, then this file. A ledger with `status=ACTIVE_INITIALIZED`, a valid timestamp and `assets={}` is healthy when Portfolio SSOT and Journal confirm zero Asymmetric positions. If a position/execution exists elsewhere but is absent from Hunter ledger, output `STATE SYNC VIOLATION` and block new actions until repaired.
+Read `portfolio-state.json`, `decision-journal.json`, `opportunity-hunter-state.json`, then this file. A Hunter ledger is valid only when its research/shadow state reconciles with portfolio SSOT and the Decision Journal. Candidate assets are not live holdings. The user-reported approximately 6,000U AXS position must be reconciled; until then mark locked cost, pending reservations and available capacity UNKNOWN and block new live altcoin BUY/ADD.
 
-Capital: total Asymmetric nominal hard cap 10,000 USDT; legacy C-Class single asset <=1,000 and all C-Class <=3,000 remain conservative references. When portfolio-level percentage caps are stricter, the stricter applicable cap governs. Never use BTC core/dip-buy cash, Grid, Structural, $200K term deposit or $50K Crisis Reserve without explicit reallocation.
+Capital: the only altcoin pool is Hunter, hard cap 20,000 USDT measured as active acquisition cost plus live pending buy reservations. No separate Asymmetric/Structural pool, no legacy C-Class limits and no 8%/2% percentage caps are active. Until the existing approximately 6,000U AXS position exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence, no new live altcoin BUY/ADD and no mechanical averaging down. Exact AXS cost, fees, quantity and live orders are UNKNOWN until reconciled; available capacity must remain UNKNOWN. Never use the BTC unified pool, Grid, 20K extreme-crash reserve or 50K crisis/living reserve as Hunter funding.
 
 Goal: identify genuine early repricing opportunities before/early in a move whose **prospective risk-adjusted return can outperform BTC over the same evaluation/holding horizon**. Large absolute multiples (3x-20x) remain valuable upside cases but are **not a minimum qualification threshold**. A candidate may qualify with a lower absolute return when evidence supports meaningful BTC-relative excess return after dilution, downside/permanent-loss risk, liquidity and opportunity cost. Typical evaluation window is weeks to ~3-18 months; 3-5y assesses upside ceiling/durability only. `NO QUALIFIED BUY` must never suppress the research watchlist.
 
@@ -577,7 +565,7 @@ Migration `B-DEVELOPMENT → HYBRID → A` may occur only from already-observed 
 - Hybrid: interpolate conservatively from FQ/EA/EM/FF.
 - B/B-Development: max size materially below A; position <= legacy C-Class cap; FF LOW/NONE applies an additional 0.5 risk-budget multiplier; EM UNPROVEN reduces further.
 
-Hard caps always use the strictest applicable rule: Portfolio Asymmetric 8% / single asset 2% / Hunter C-Class limits. No cap creates permission to buy.
+Only the Hunter 20,000 USDT cost-plus-pending-reservation hard cap applies to altcoin capital. Legacy 8%/2% and C-Class caps are historical and non-executable. No cap creates permission to buy.
 
 ## 14. B-Class Capital Eligibility
 
