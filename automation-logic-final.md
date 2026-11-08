@@ -26,7 +26,7 @@ This section is the current authoritative capital/KPI override and supersedes co
 - BTC unified pool accounting uses only **核心BTC + 波段BTC + 待命USDT = 160,000 USDT**. Internal proportions are dynamic. There is no “large swing” module and no fixed 120K core + 40K swing split.
 - **14,000 USDT BTC Grid is separate and outside the 200K main investment capital.**
 - **50,000 USD crisis/living reserve is separate and never investment NAV.**
-- Core BTC exposure is governed by valuation/historical drawdown; trend controls execution pace. Ordinary short-term bearish forecasts do not casually liquidate core.
+- 核心BTC exposure is governed by valuation/historical drawdown; trend controls execution pace. Ordinary short-term bearish forecasts do not casually liquidate core.
 - BTC swing primary KPI is **realized net USDT profit after fees and reasonable slippage**. BTC-quantity change and BTC Buy&Hold-relative return are diagnostic opportunity-cost metrics only, not minimum-profit gates.
 - A swing is eligible whenever current verifiable evidence supports **positive expected net USDT profit after fees/slippage and executable liquidity**. There is **no minimum profit amount or percentage threshold** and small profit alone must not cause NO TRADE. Size remains dynamic by opportunity quality, structure, remaining cash, and sell-fly/rebuy risk.
 - Hunter capital is one **20,000 USDT altcoin pool**. Existing ~6,000U AXS is an existing Hunter-pool position. Until AXS exits net profitable after fees and Hunter has sufficient reviewable profit evidence, no new altcoin live BUY/ADD/amount and no mechanical AXS averaging-down; research/shadow continues.
@@ -41,7 +41,7 @@ This section is the current authoritative capital/KPI override and supersedes co
 - The BTC unified pool has exactly three current components: **核心BTC / 波段BTC / 待命USDT**. Do not introduce a fourth BTC sleeve or use historical labels such as `BTC_TACTICAL`, “large swing”, or A/B buckets as current module names.
 - The only current capital structure is 200,000 USDT main investment = 160,000 USDT BTC unified pool + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve. BTC Grid 14,000 USDT is separate. The 50,000 USD crisis/living reserve is strictly isolated and excluded from investment NAV.
 - No separate Structural/Asymmetric allocation or 200,000 USD strategic term-deposit layer exists in the current architecture.
-- The former permanent 0.5 BTC floor is historical and non-executable; core BTC is governed by valuation and historical drawdown, with trend controlling pacing. Ordinary short-term bearishness is not a reason to casually sell core BTC.
+- The former permanent 0.5 BTC floor is historical and non-executable; 核心BTC is governed by valuation and historical drawdown, with trend controlling pacing. Ordinary short-term bearishness is not a reason to casually sell 核心BTC.
 - Hunter's 20,000 USDT cap is active acquisition cost plus live pending buy reservations. The existing approximately 6,000U AXS position is user-reported but not fully reconciled. Until it exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence, no new live altcoin BUY/ADD and no mechanical averaging down. Unknown capacity remains UNKNOWN.
 - The 20,000 USDT extreme-crash reserve is not for ordinary 5%-10% volatility; it is reserved for flash crashes, systemic liquidity shocks or severe mispricing.
 - Historical records and transaction evidence must not be rewritten. Legacy labels may remain in immutable history only and cannot authorize or size a current action.
@@ -98,10 +98,10 @@ Before any BUY / ADD / REDUCE / SELL / major term-deposit action inspect all con
 - BTC Grid: 14,000 USDT separately outside the 200,000 USDT main investment budget.
 - 50,000 USD crisis/living reserve: strictly isolated, non-investable by default and excluded from main-investment NAV.
 - There is no active 45/35/15 allocation, separate Structural/Asymmetric pool, fixed 120K+40K split, or separate 200K strategic term-deposit layer.
-- BTC core is governed by valuation/historical drawdown; trend controls pacing. Swing BTC's primary KPI is realized net USDT after fees and reasonable slippage; BTC quantity and Buy&Hold-relative performance are diagnostics only.
+- 核心BTC is governed by valuation/historical drawdown; trend controls pacing. 波段BTC的 primary KPI is realized net USDT after fees and reasonable slippage; BTC quantity and Buy&Hold-relative performance are diagnostics only.
 - Hunter total active acquisition cost plus live pending buy reservations <= 20,000 USDT. New live altcoin BUY/ADD remains blocked until AXS exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence.
 
-## 5. BTC core and swing rules
+## 5. 核心BTC and swing rules
 
 核心BTC is managed by valuation and historical drawdown; trend controls execution pace. Do not casually sell 核心BTC because of ordinary short-term bearish forecasts. The historical 0.5 BTC floor is not an active hard veto.
 
@@ -117,7 +117,7 @@ Every proposed capital action must pass an immediate Allocation Gate using fresh
 
 ## 7. Post-execution state chain
 
-After a user-confirmed BTC core / swing BTC / Hunter / Grid execution: append Decision Journal -> update portfolio-state with confirmed execution -> update relevant module ledger -> reread and verify. Missing price, quantity or time remains unknown; never guess.
+After a user-confirmed 核心BTC / 波段BTC / Hunter / Grid execution: append Decision Journal -> update portfolio-state with confirmed execution -> update relevant module ledger -> reread and verify. Missing price, quantity or time remains unknown; never guess.
 
 Decision Journal automation-runtime write ability is not considered proven until the first real journal-required event successfully completes this chain. Do not create fake transactions merely to test writes.
 
@@ -841,7 +841,7 @@ Feed all `research_leads` into the existing NEW_DISCOVERY_QUEUE and compare exis
 3. **Two equal entry lanes:** (A) pre-catalyst accumulation when evidence supports a material upcoming rerating; (B) proven-catalyst continuation when the project has already rallied but a credible second/third rerating leg remains. Both can lead to small staged LEFT-SIDE entries at favorable risk/reward relative to the future catalyst; price breakout alone is NOT a buy signal.
 4. **Continuous re-evaluation:** every market scan checks ALL listed eligible pairs and all existing Hunter candidates; material price changes, catalyst developments, revised revenues, supply events or new relative-value changes cause a fresh CURRENT-price FRM. Do not dismiss previous candidates because they moved; do not mechanically chase because they moved.
 5. **Mandatory outputs:** exchange coverage and freshness, forward-upside candidate shortlist regardless of historical return, current-price forward return map with downside and BTC comparator, catalyst thesis and invalidation, supply/unlock/venue status, proposed entry zone/tranches ONLY if every capital gate passes, and explicit missed-opportunity audit. A price-only screening lead is NOT a capital proposal.
-6. **Capital controls unchanged:** fixed 20,000 USDT altcoin original-cost hard cap including locked cost and live pending reservations; BTC core and 50,000 USD crisis reserve remain protected. Execution is USER ONLY. Preserve prior immutable snapshots and record this change prospectively; do not backdate any old discovery.
+6. **Capital controls unchanged:** fixed 20,000 USDT altcoin original-cost hard cap including locked cost and live pending reservations; 核心BTC and 50,000 USD crisis reserve remain protected. Execution is USER ONLY. Preserve prior immutable snapshots and record this change prospectively; do not backdate any old discovery.
 7. **Coverage honesty:** Binance-only 490/490 scan with Bybit 403 remains Binance-complete/union-incomplete. Full union claims require both venues verified; no fallback hand-picked baskets or fabricated prices.
 
 ## v2.17.5 — Forward Upside First: Past Returns Are NOT an Eligibility Gate (2026-09-26 user correction)
@@ -853,7 +853,7 @@ Feed all `research_leads` into the existing NEW_DISCOVERY_QUEUE and compare exis
 3. **Prior rallies:** +100% previously can still qualify if prospective value capture and remaining upside justify the CURRENT entry price; a -90% token can fail if no credible catalyst or dilution dominates. Do not infer future return from prior percentage gain/loss alone.
 4. **Entry timing:** Prefer evidence-backed entry *ahead of the next catalyst/repricing*, not necessarily before the token's first rally. Evaluate current entry, pullback limit, and catalyst-event entry against expected forward payoff, liquidity and invalidation. Avoid both FOMO and a rigid no-chase ban; a strong current-price FRM can justify an entry after prior appreciation if all capital gates pass.
 5. **Outputs:** Distinguish `FULL_CEX_MARKET_COVERAGE` (listed-asset data collection), `FORWARD_UPSIDE_RESEARCH_COVERAGE` (candidates with evidence-backed terminal maps), `CAPITAL_READY`, `DATA_BLOCKED` and `REJECTED`. Do not claim all assets have been deeply researched merely because prices were scanned.
-6. **Execution authority and caps unchanged:** No automatic orders. All original-cost altcoin positions plus pending orders plus new proposed order <=20,000 USDT; preserve crisis reserve, BTC core, and existing frozen material supply/portfolio gates.
+6. **Execution authority and caps unchanged:** No automatic orders. All original-cost altcoin positions plus pending orders plus new proposed order <=20,000 USDT; preserve crisis reserve, 核心BTC, and existing frozen material supply/portfolio gates.
 
 Collector implementation: `research/hunter_cex_scan.py` now emits all scanned assets into `research_leads` without stage-based ranking/truncation; `stage` remains a descriptive price-only alert label, not investment eligibility. This code change does NOT by itself implement automated fundamental/FRM research across all assets. Verify tests and next live collector run independently.
 
