@@ -12,11 +12,11 @@ Automation budget: ZERO new scheduled tasks.
 
 This versioned amendment supersedes conflicting historical L1/L2/L3, A/B/C/D/E, 10K daily swing, 20K larger swing, fixed 120K core + 40K swing, historical 45/35/15 allocation, and old grid range references. Historical figures below are not executable allocation instructions.
 
-- Main investment budget: **200,000 USDT = 160,000 USDT BTC unified pool (core BTC + swing BTC + standby USDT; dynamic proportions) + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve**. Budgets are not verified current balances.
+- Main investment budget: **200,000 USDT = 160,000 USDT BTC unified pool (核心BTC + 波段BTC + 待命USDT; dynamic proportions) + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve**. Budgets are not verified current balances.
 - BTC Grid: **14,000 USDT separately**, outside the main 200K, hard cap 20,000 USDT. Only state.json is the current configuration source; 72K–86K below is a historical reference, not current settings.
 - Crisis/living reserve: **50,000 USD strictly isolated**, excluded from main-investment NAV and investable capital.
 - 核心BTC: governed by valuation and historical drawdowns, with trend controlling pacing; do not casually sell core on ordinary short-term bearish predictions. Historical 0.5 BTC floor is not an automatic veto on independently justified swing actions.
-- Swing BTC: primary KPI is **realized net USDT P&L after fees and reasonable slippage**. BTC quantity, BTC Buy&Hold comparison and missed upside are diagnostics only, never a minimum-profit veto.
+- 波段BTC: primary KPI is **realized net USDT P&L after fees and reasonable slippage**. BTC quantity, BTC Buy&Hold comparison and missed upside are diagnostics only, never a minimum-profit veto.
 - Extreme-crash reserve: only flash crashes, systemic liquidity shocks or severe mispricing, not ordinary 5–10% volatility.
 - Hunter: active acquisition cost plus actual pending-order reservations <= 20,000 USDT. Existing approximately 6,000U AXS belongs to Hunter; until it exits net profitable and Hunter demonstrates sufficient verifiable profit evidence, no new live altcoin buy/add and no mechanical averaging down. Missing position reconciliation blocks claims of available capital.
 - Management objective: from a 200,000 USDT starting budget toward approximately 600,000 USDT by 2028-03, not guaranteed. Report current verified main-investment NAV, realized net profit, module contribution, gap/progress and UNKNOWN for missing evidence.
@@ -26,7 +26,7 @@ This versioned amendment supersedes conflicting historical L1/L2/L3, A/B/C/D/E, 
 ## 1. Objective hierarchy
 
 1. Avoid permanent capital impairment and ruin.
-2. Preserve liquidity and dry powder so the portfolio is never forced to sell core BTC for ordinary cash needs.
+2. Preserve liquidity and dry powder so the portfolio is never forced to sell 核心BTC for ordinary cash needs.
 3. Maximize four-year net worth on a risk-controlled basis.
 4. BTC is the primary wealth engine. Strategic BTC quantity target is >= 4 BTC, but this is NOT a calendar deadline and must never force buying at unattractive conditions.
 5. Active strategies are return enhancers, not substitutes for the core architecture.
@@ -39,8 +39,8 @@ This versioned amendment supersedes conflicting historical L1/L2/L3, A/B/C/D/E, 
 - **BTC Grid: 14,000 USDT**, independent of the 200,000 USDT main investment budget. Grid's current configuration is read only from `state.json`; exchange-live balances/status must be separately verified. The 20,000 USDT Grid hard cap remains a ceiling, not an allocation target.
 - **Crisis/living reserve: 50,000 USD**, strictly isolated, non-investable by default and never included in main-investment NAV. It is not the 20,000 USDT extreme-crash reserve.
 - There is no separate 200,000 USD strategic term-deposit layer, no additional 18,425 USDT ordinary dry-powder layer, and no separate Structural/Asymmetric capital pool in the current architecture.
-- Core BTC is managed by valuation and historical drawdown; trend controls pacing. Ordinary short-term bearishness is not a reason to casually sell core BTC.
-- Swing BTC is managed by realized net USDT profit after fees and reasonable slippage. BTC quantity change, BTC Buy&Hold-relative return and missed-upside cost are diagnostics only; none is a minimum-profit veto.
+- 核心BTC is managed by valuation and historical drawdown; trend controls pacing. Ordinary short-term bearishness is not a reason to casually sell 核心BTC.
+- 波段BTC is managed by realized net USDT profit after fees and reasonable slippage. BTC quantity change, BTC Buy&Hold-relative return and missed-upside cost are diagnostics only; none is a minimum-profit veto.
 - Hunter's total active acquisition cost plus live pending buy reservations must not exceed 20,000 USDT. The existing approximately 6,000U AXS position is part of Hunter; no new live altcoin BUY/ADD or mechanical averaging down until AXS exits net profitable after fees and Hunter has sufficient independently reviewable profit evidence. Unknown balances/orders mean available capacity is UNKNOWN.
 - The 20,000 USDT extreme-crash reserve is only for flash crashes, systemic liquidity shocks or severe mispricing; ordinary 5%-10% volatility does not qualify.
 - Only the user executes real trades. No automation may auto-trade or change any capital cap.
@@ -121,7 +121,7 @@ Required outputs:
 - stressed portfolio loss as % of investable net worth;
 - remaining dry powder;
 - crisis/living-reserve isolation status;
-- core BTC status;
+- 核心BTC status;
 - counterparty concentration.
 
 Until a separate empirically justified numeric maximum-drawdown budget is explicitly approved by the user, the Drawdown Gate is CONSERVATIVE / NO-FABRICATED-THRESHOLD: it must calculate and disclose stress loss but may not invent a hard percentage limit.
@@ -175,7 +175,7 @@ Partial failure must be surfaced as STATE SYNC DEGRADED/FAILURE.
 - >=4 BTC is a strategic target, never a forced calendar target.
 - Always preserve dry powder.
 - BTC Grid <= 20,000 USDT.
-- Hunter altcoin risk may never exceed its 20,000 USDT cost-plus-pending-reservation cap or threaten core BTC and portfolio survival.
+- Hunter altcoin risk may never exceed its 20,000 USDT cost-plus-pending-reservation cap or threaten 核心BTC and portfolio survival.
 - No separate Structural/Asymmetric capital pool exists.
 - Counterparty Risk Gate can veto every return strategy.
 - Never force trades to hit annual return targets.
