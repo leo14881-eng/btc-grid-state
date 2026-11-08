@@ -1219,7 +1219,7 @@
     ],
     "N_MIN": 30
   },
-  "capital_authority": "USER_ONLY__FUNDAMENTAL_PROPOSAL_LANE_ENABLED__QUANT_SHADOW_ZERO",
+  "capital_authority": "USER_ONLY__NO_NEW_LIVE_ALTCOIN_BUY_ADD_UNTIL_AXS_NET_PROFIT_EXIT_AND_HUNTER_PROFIT_EVIDENCE__SHADOW_ONLY",
   "persistence_schema": {
     "version": "2.13.3",
     "state_role": "BOUNDED_CURRENT_STATE",
@@ -1253,7 +1253,8 @@
     "anti_overfit_rule": "Do not tune V1 on the already-opened 2024/2025 OOS windows and relabel it validated.",
     "next_research_track": "V2_FORWARD_SHADOW",
     "v2_objective": "Prospective BTC-relative remaining-upside discovery using causal non-price evidence plus valuation/dilution/liquidity/risk; prior price appreciation is a risk/valuation input, not an automatic rejection.",
-    "v2_validation": "Forward-only shadow observations; no capital authority until independent evidence demonstrates positive BTC-relative incremental value."
+    "v2_validation": "Forward-only shadow observations; no capital authority until independent evidence demonstrates positive BTC-relative incremental value.",
+    "real_trading_enabled": false
   },
   "fundamental_early_entry_lane": {
     "status": "ENABLED_USER_APPROVED_2026-09-25",
@@ -1320,21 +1321,33 @@
     }
   },
   "altcoin_capital_pool": {
-    "status": "STX_EXIT_CONFIRMED__THEORETICAL_CAPACITY_ONLY__CASH_UNKNOWN",
+    "status": "BLOCKED_AXS_UNRECONCILED_AND_HUNTER_PROFIT_EVIDENCE_NOT_ESTABLISHED",
     "hard_cap_cost_usdt": 20000,
-    "locked_cost_usdt": 0,
-    "pending_reservations_usdt": 0,
-    "available_after_reservations_usdt": 20000,
-    "sizing_authority": "ASSET_SPECIFIC_RESEARCH_AND_RISK_GATES__NO_FIXED_PER_ASSET_CAP",
-    "lock_basis": "CONFIRMED_EXECUTED_ACQUISITION_COST",
+    "locked_cost_usdt": null,
+    "pending_reservations_usdt": null,
+    "available_after_reservations_usdt": null,
+    "sizing_authority": "NO_NEW_LIVE_BUY_OR_ADD_UNTIL_AXS_NET_PROFIT_EXIT_AND_HUNTER_PROFIT_EVIDENCE",
+    "lock_basis": "ACTIVE_EXECUTED_ACQUISITION_COST_PLUS_LIVE_PENDING_BUY_RESERVATIONS",
     "profitable_sale_release": "RELEASE_PROPORTIONAL_ORIGINAL_COST_BASIS__PROFIT_RECORDED_SEPARATELY__CAP_REMAINS_20000",
     "overbooking_formula": "LOCKED_COST + PENDING_RESERVATIONS + NEW_PROPOSED_ORDER <= 20000",
     "execution_authority": "USER_ONLY",
     "last_reconciled_journal_sha": "29ff3d2a5315c029a2ce6e292ddebb7b80321541",
-    "capital_action": "BLOCKED_PORTFOLIO_CASH_AND_FEES_RECONCILIATION"
+    "capital_action": "BLOCKED_UNTIL_AXS_NET_PROFIT_EXIT_AND_INDEPENDENTLY_REVIEWABLE_HUNTER_PROFIT_EVIDENCE",
+    "capacity_status": "UNKNOWN__DO_NOT_TREAT_AS_AVAILABLE_CAPITAL",
+    "new_live_buy_enabled": false,
+    "new_live_add_enabled": false,
+    "reported_existing_axs_position": {
+      "reported_cost_usdt_approx": 6000,
+      "exact_quantity": null,
+      "exact_cost_usdt": null,
+      "fees": null,
+      "live_pending_orders": null,
+      "source": "USER_REPORTED",
+      "status": "UNRECONCILED"
+    }
   },
   "capital_readiness_gate": {
-    "status": "ENABLED_V2_17",
+    "status": "GLOBAL_LIVE_CAPITAL_BLOCKED_PENDING_AXS_EXIT_AND_HUNTER_PROFIT_EVIDENCE",
     "required_before_concrete_buy_or_add_sizing": true,
     "material_unknown_blocks_capital": true,
     "primary_secondary_source_conflict_blocks_capital": true,
@@ -1355,7 +1368,12 @@
       "PERMANENT_LOSS_INVALIDATION",
       "CORRELATION_CONCENTRATION",
       "ALT_POOL_CAPACITY"
-    ]
+    ],
+    "research_enabled": true,
+    "shadow_enabled": true,
+    "live_buy_add_enabled": false,
+    "axs_net_profitable_exit_required": true,
+    "independently_reviewable_hunter_profit_evidence_required": true
   },
   "strategy_lock_policy": {
     "status": "ENABLED_V2_17",
@@ -1619,5 +1637,17 @@
       "ENTRY_NOW_VS_PULLBACK"
     ],
     "execution": "USER_ONLY_ALL_EXISTING_CAPITAL_GATES"
+  },
+  "policy_updated_at": "2026-11-08",
+  "real_trading_enabled": false,
+  "current_live_position_reconciliation": {
+    "status": "UNKNOWN__HUNTER_LEDGER_DOES_NOT_RECONCILE_USER_REPORTED_AXS",
+    "axs_reported_cost_usdt_approx": 6000,
+    "exact_quantity": null,
+    "exact_cost_usdt": null,
+    "fees": null,
+    "open_orders": null,
+    "available_hunter_capacity_usdt": null,
+    "blocks_new_live_altcoin_buy_add": true
   }
 }
