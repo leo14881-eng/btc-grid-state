@@ -1,5 +1,9 @@
 # 10-Year Wealth Compounding Architecture — FINAL
 
+> **ARCHIVED / NON-EXECUTABLE — 2026-11-08.** This document is retained for historical context only and is superseded by [4-year-wealth-architecture.md](4-year-wealth-architecture.md) v1.2 and the current capital/KPI rules in [automation-logic-final.md](automation-logic-final.md). Do not use the former 45/35/15 weights, separate Structural/Asymmetric allocations, old capital layers, permanent-core percentages, or term-deposit references in this document for current allocation, NAV, sizing or execution decisions. Current caps are 200,000 USDT main investment = 160,000 USDT BTC unified pool + 20,000 USDT Hunter + 20,000 USDT extreme-crash reserve; BTC Grid 14,000 USDT is separate; 50,000 USD crisis/living reserve is isolated.
+
+---
+
 **Status: FROZEN**  
 **Purpose: Execution, not continual redesign**
 
