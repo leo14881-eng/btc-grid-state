@@ -20,6 +20,7 @@ on:
       - '.github/hunter-discovery-recovery-trigger'
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: hunter-discovery-main
   cancel-in-progress: false
@@ -80,3 +81,24 @@ jobs:
           PY
       - name: Atomically persist discovery outputs only
         run: python -m scripts.hunter_aux_persist discovery
+
+      # workflow_run may not fire for a run started with GITHUB_TOKEN.
+      # Explicitly dispatch downstream research only for watchdog/manual runs;
+      # scheduled and push runs continue through the workflow_run trigger.
+      - name: Dispatch research after watchdog/manual discovery
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            if (context.eventName !== "workflow_dispatch") {
+              core.info("Research follows workflow_run for scheduled/push discovery");
+              return;
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "hunter-research-pipeline.yml",
+              ref: "main",
+              inputs: { force: "false" }
+            });
+            core.info("HUNTER_RESEARCH_DISPATCHED_AFTER_MANUAL_DISCOVERY");
