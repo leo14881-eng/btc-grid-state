@@ -20,15 +20,15 @@ This is a canonical investment-automation rule reference, not a registry of curr
 
 ## 0A. CURRENT CAPITAL + KPI OVERRIDE — 2026-11-08
 
-This section is the current authoritative capital/KPI override and supersedes contradictory A/B/C/D/E, daily-short-term/larger-swing, fixed 120K+40K, permanent 0.5-BTC floor, 45/35/15 portfolio-weight, and “no ordinary BTC swing” language elsewhere in this historical file.
+This section is the current authoritative capital/KPI override and supersedes contradictory A/B/C/D/E, daily-short-term/larger-swing, fixed 120K+40K, permanent 0.5-BTC floor, 45/35/15 portfolio-weight, and “no ordinary 波段BTC” language elsewhere in this historical file.
 
 - Main investment capital = **200,000 USDT**: **160,000 USDT BTC unified pool + 20,000 USDT Hunter altcoin pool + 20,000 USDT extreme-crash reserve**.
 - BTC unified pool accounting uses only **核心BTC + 波段BTC + 待命USDT = 160,000 USDT**. Internal proportions are dynamic. There is no “large swing” module and no fixed 120K core + 40K swing split.
 - **14,000 USDT BTC Grid is separate and outside the 200K main investment capital.**
 - **50,000 USD crisis/living reserve is separate and never investment NAV.**
-- 核心BTC exposure is governed by valuation/historical drawdown; trend controls execution pace. Ordinary short-term bearish forecasts do not casually liquidate core.
-- BTC swing primary KPI is **realized net USDT profit after fees and reasonable slippage**. BTC-quantity change and BTC Buy&Hold-relative return are diagnostic opportunity-cost metrics only, not minimum-profit gates.
-- A swing is eligible whenever current verifiable evidence supports **positive expected net USDT profit after fees/slippage and executable liquidity**. There is **no minimum profit amount or percentage threshold** and small profit alone must not cause NO TRADE. Size remains dynamic by opportunity quality, structure, remaining cash, and sell-fly/rebuy risk.
+- 核心BTC exposure is governed by valuation/historical drawdown; trend controls execution pace. Ordinary short-term bearish forecasts do not casually sell 核心BTC.
+- 波段BTC primary KPI is **realized net USDT profit after fees and reasonable slippage**. BTC-quantity change and BTC Buy&Hold-relative return are diagnostic opportunity-cost metrics only, not minimum-profit gates.
+- 波段BTC is eligible whenever current verifiable evidence supports **positive expected net USDT profit after fees/slippage and executable liquidity**. There is **no minimum profit amount or percentage threshold** and small profit alone must not cause NO TRADE. Size remains dynamic by opportunity quality, structure, remaining cash, and sell-fly/rebuy risk.
 - Hunter capital is one **20,000 USDT altcoin pool**. Existing ~6,000U AXS is an existing Hunter-pool position. Until AXS exits net profitable after fees and Hunter has sufficient reviewable profit evidence, no new altcoin live BUY/ADD/amount and no mechanical AXS averaging-down; research/shadow continues.
 - Extreme-crash 20K is isolated from normal BTC volatility and reserved for flash crash/systemic-liquidity-shock/severe mispricing conditions.
 - Unified management objective: manage the 200K main-investment capital toward approximately **600,000 USDT by 2028-03**. This is a management target, not a guaranteed return. Track verifiable main-investment NAV, cumulative realized net USDT profit, module contribution, and gap/completion versus 600K; unknown values remain UNKNOWN.
@@ -513,7 +513,7 @@ A candidate may reach `FUNDAMENTAL_EARLY_ENTRY_PROPOSAL_ELIGIBLE` only when ALL 
 4. without using the uncalibrated k, the candidate has a defensible prospective BTC-relative edge in BASE and no fatal BEAR/permanent-loss disadvantage; uncertainty must be stated rather than converted into a fabricated probability;
 5. Risk Governor is ALLOW or REDUCE_SIZE, never WAIT/VETO;
 6. Portfolio Allocation Gate + Portfolio Drawdown Gate + Counterparty Gate pass;
-7. funding source excludes the $50,000 Crisis Reserve and respects BTC Core / dry-powder protections;
+7. funding source excludes the $50,000 Crisis Reserve and respects 核心BTC / dry-powder protections;
 8. proposal is explicitly staged: first tranche only. Later tranches require better price structure or new independent thesis confirmation, never mechanical averaging down;
 9. user remains the sole executor. `PROPOSAL_ELIGIBLE != BUY_EXECUTED`.
 
@@ -671,7 +671,7 @@ Purpose: prevent Hunter from repeatedly discovering a valid opportunity early bu
    Cancelled/unfilled orders release only their reservation.
 5. On a **realized profitable sale**, release the proportional original cost basis of the sold quantity from locked cost. Record realized profit separately. **Profit does not increase the 20,000 USDT pool cap** and may not silently compound the cap above 20,000.
 6. If a position is closed at a realized loss, remove the closed quantity from active locked cost, record the realized loss/proceeds, and require portfolio reconciliation before treating loss-attributable capacity as reusable. Never fabricate replenishment.
-7. Crisis Reserve remains excluded. BTC Core and BTC Grid are not part of this altcoin pool.
+7. Crisis Reserve remains excluded. 核心BTC and BTC Grid are not part of this altcoin pool.
 8. Every capital proposal MUST print: `ALT_POOL_CAP / LOCKED_COST / PENDING_RESERVATIONS / AVAILABLE_AFTER_RESERVATIONS / PROPOSED_ORDER / POST_ORDER_LOCKED_OR_RESERVED`.
 
 ### B. Capital Readiness Gate — mandatory before any BUY/ADD sizing
