@@ -111,7 +111,6 @@ jobs:
       # A push made with GITHUB_TOKEN does not start another workflow. Dispatch
       # the recovery workflow explicitly after publishing the auditable trigger.
       - name: Dispatch stale Hunter recovery workflows explicitly
-        if: ${{ steps.observe.outputs.discovery_stale == 'true' || steps.observe.outputs.downstream_stale == 'true' || steps.observe.outputs.monitor_stale == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           DISCOVERY_STALE: ${{ steps.observe.outputs.discovery_stale }}
