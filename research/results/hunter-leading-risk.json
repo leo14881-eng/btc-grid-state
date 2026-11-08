@@ -1,77 +1,76 @@
 {
   "schema": "hunter_leading_risk_state_v1",
-  "updated_at_utc": "2026-11-08T02:38:24.651845+00:00",
+  "updated_at_utc": "2026-11-08T08:05:39.690148+00:00",
   "current": {
     "level": "WATCH",
-    "raw_level": "PRE_CRASH_1",
-    "score": 40,
+    "raw_level": "WATCH",
+    "score": 20,
     "groups": {
       "breadth": true,
-      "relative": true,
+      "relative": false,
       "liquidity": false,
       "btc_structure": false,
       "leverage": false,
       "stablecoin": false
     },
     "reasons": [
-      "LEADING_BREADTH_DETERIORATION",
-      "LEADING_RELATIVE_DETERIORATION"
+      "LEADING_BREADTH_DETERIORATION"
     ],
-    "candidate_level": "PRE_CRASH_1",
-    "candidate_count": 1,
-    "last_candidate_observation_at_utc": "2026-11-08T02:38:24.651845+00:00",
+    "candidate_level": null,
+    "candidate_count": 0,
+    "last_candidate_observation_at_utc": null,
     "recovery_observations": 0,
     "last_recovery_counted_at_utc": null,
     "last_transition_observation_at_utc": "2026-10-30T19:42:13.855269+00:00",
-    "last_observation_id": "a0d2e6193b396227a9062e1b1812905a56e74538c92b9c4716e0f6f9e4b6532b",
-    "updated_at_utc": "2026-11-08T02:38:24.651845+00:00",
+    "last_observation_id": "670ce136a02645494b36879ae93e9b1ecf97887625cf40db42a39cd5340a1412",
+    "updated_at_utc": "2026-11-08T08:05:39.690148+00:00",
     "evidence": {
       "schema": "hunter_leading_risk_evidence_v1",
-      "observed_at_utc": "2026-11-08T02:38:24.651845+00:00",
-      "observation_id": "a0d2e6193b396227a9062e1b1812905a56e74538c92b9c4716e0f6f9e4b6532b",
+      "observed_at_utc": "2026-11-08T08:05:39.690148+00:00",
+      "observation_id": "670ce136a02645494b36879ae93e9b1ecf97887625cf40db42a39cd5340a1412",
       "breadth": {
         "sample_count": 707,
-        "negative_fraction": 0.7878,
-        "loss_5pct_fraction": 0.1612,
-        "negative_acceleration": -0.024064073550212117
+        "negative_fraction": 0.7624,
+        "loss_5pct_fraction": 0.1513,
+        "negative_acceleration": -0.025423762376237558
       },
       "relative": {
         "sample_1h": 222,
-        "negative_1h_fraction": 0.7387,
+        "negative_1h_fraction": 0.6306,
         "sample_4h": 222,
-        "negative_4h_fraction": 0.6847,
-        "negative_1h_acceleration": 0.38583873873873875
+        "negative_4h_fraction": 0.6577,
+        "negative_1h_acceleration": -0.1080693693693694
       },
       "liquidity": {
         "sample_count": 80,
-        "median_spread_bps": 11.816500000000001,
-        "median_bid_depth_usdt": 52270.265,
-        "median_book_imbalance": 0.11024554485781238,
-        "spread_acceleration_bps": 0.7125000000000021,
-        "bid_depth_change_pct": 12.7233
+        "median_spread_bps": 12.021,
+        "median_bid_depth_usdt": 40058.479999999996,
+        "median_book_imbalance": 0.089204440929021,
+        "spread_acceleration_bps": 0.20449999999999946,
+        "bid_depth_change_pct": -23.3628
       },
       "leverage": {
         "source": "OKX_PUBLIC",
-        "open_interest": 3443801.3500000164,
-        "funding_rate": 6.73416614686e-05,
-        "basis_pct": -0.04462,
-        "open_interest_change_pct": 0.1454
+        "open_interest": 3448681.590000015,
+        "funding_rate": 3.29228756094e-05,
+        "basis_pct": -0.05437,
+        "open_interest_change_pct": 0.1417
       },
       "leverage_fetch_error": null,
       "btc_structure": {
-        "return_5m_pct": -0.0026,
-        "return_15m_pct": 0.0192,
-        "return_1h_pct": -0.0805,
-        "last_completed_close_utc": "2026-11-08T02:34:59.999000+00:00"
+        "return_5m_pct": -0.0406,
+        "return_15m_pct": 0.002,
+        "return_1h_pct": 0.1134,
+        "last_completed_close_utc": "2026-11-08T08:04:59.999000+00:00"
       },
       "stablecoins": {
         "prices": {
-          "USDCUSDT": 1.00118,
+          "USDCUSDT": 1.00123,
           "FDUSDUSDT": 0.9978,
           "TUSDUSDT": 0.9997
         },
         "deviation_pct": {
-          "USDCUSDT": 0.118,
+          "USDCUSDT": 0.123,
           "FDUSDUSDT": 0.22,
           "TUSDUSDT": 0.03
         },
@@ -86,39 +85,6 @@
     "capital_authority": "NONE_SHADOW_ONLY"
   },
   "history": [
-    {
-      "at_utc": "2026-10-16T01:07:27.241587+00:00",
-      "level": "NORMAL",
-      "raw_level": "NORMAL",
-      "score": 0,
-      "groups": {
-        "breadth": false,
-        "relative": false,
-        "liquidity": false,
-        "btc_structure": false,
-        "leverage": false,
-        "stablecoin": false
-      },
-      "data_uncertain": false,
-      "used_exposure_usdt": 12000.0,
-      "shadow_derisk": {
-        "A_GENTLE": {
-          "target_fraction": 1.0,
-          "target_exposure_usdt": 12000.0,
-          "counterfactual_reduction_usdt": 0.0
-        },
-        "B_BALANCED": {
-          "target_fraction": 1.0,
-          "target_exposure_usdt": 12000.0,
-          "counterfactual_reduction_usdt": 0.0
-        },
-        "C_DEFENSIVE": {
-          "target_fraction": 1.0,
-          "target_exposure_usdt": 12000.0,
-          "counterfactual_reduction_usdt": 0.0
-        }
-      }
-    },
     {
       "at_utc": "2026-10-16T01:12:31.323833+00:00",
       "level": "NORMAL",
@@ -16561,6 +16527,39 @@
       "groups": {
         "breadth": true,
         "relative": true,
+        "liquidity": false,
+        "btc_structure": false,
+        "leverage": false,
+        "stablecoin": false
+      },
+      "data_uncertain": false,
+      "used_exposure_usdt": 14000.0,
+      "shadow_derisk": {
+        "A_GENTLE": {
+          "target_fraction": 1.0,
+          "target_exposure_usdt": 14000.0,
+          "counterfactual_reduction_usdt": 0.0
+        },
+        "B_BALANCED": {
+          "target_fraction": 1.0,
+          "target_exposure_usdt": 14000.0,
+          "counterfactual_reduction_usdt": 0.0
+        },
+        "C_DEFENSIVE": {
+          "target_fraction": 1.0,
+          "target_exposure_usdt": 14000.0,
+          "counterfactual_reduction_usdt": 0.0
+        }
+      }
+    },
+    {
+      "at_utc": "2026-11-08T08:05:39.690148+00:00",
+      "level": "WATCH",
+      "raw_level": "WATCH",
+      "score": 20,
+      "groups": {
+        "breadth": true,
+        "relative": false,
         "liquidity": false,
         "btc_structure": false,
         "leverage": false,
