@@ -2463,6 +2463,262 @@
         "rebuy_missed": null,
         "failed_reason": "NO_CONFIRMED_TRADE__RESEARCH_ONLY"
       }
+    },
+    {
+      "day_id": "BTC-DAILY-SWING-2026-11-10",
+      "day_number": 18,
+      "local_date": "2026-11-10",
+      "asset": "BTC",
+      "pair": "BTC/USDT",
+      "venue": "BINANCE_SPOT_REFERENCE_ONLY__CROSS_SOURCE_PRICE_CONFLICT",
+      "strategy_version": "CONDITIONAL_RESEARCH_ONLY__CPI_EVENT__STALE_PORTFOLIO_STATE",
+      "plan": {
+        "status": "STATE_SYNC_VIOLATION__PORTFOLIO_STALE__NO_NEW_CAPITAL_ACTION__CONDITIONAL_RESEARCH_ONLY",
+        "observation_window": "2026-11-10 08:00 Asia/Ho_Chi_Minh",
+        "report_generated_at": "2026-11-10T07:58:31+07:00",
+        "reference_spot_price_usdt": 75154,
+        "reference_spot_time": "2026-11-10T07:24:00+07:00",
+        "reference_market_source": "BitcoinMargin page snapshot of Binance BTCUSDT spot at 2026-11-10 00:24 UTC",
+        "cross_venue_checks": {
+          "coinotag_technical_snapshot_price": 75414,
+          "coinotag_timestamp": "2026-11-10T07:44:00+07:00",
+          "borearis_btcusd_price": 74966.4,
+          "borearis_timestamp": "2026-11-10T07:36:00+07:00",
+          "status": "SOURCE_CONFLICT__NOT_SYNCHRONOUS_AND_USD_USDT_QUOTES_MIXED__USE_FRESH_USER_VENUE_QUOTE_BEFORE_ANY_ORDER"
+        },
+        "market_24h": {
+          "high_usdt": 75599.22,
+          "low_usdt": 73750,
+          "change_pct": 0.15,
+          "coinglass_spot_volume_usd": 5970000000,
+          "coinglass_futures_volume_usd": 66560000000,
+          "volume_scope_note": "Provider snapshot; per-candle spot volume unavailable; cross-provider volume not harmonized."
+        },
+        "candles": {
+          "m15_last_closed": {
+            "start_utc": "2026-11-10T00:00:00Z",
+            "open": 75368.41,
+            "high": 75442.01,
+            "low": 75300,
+            "close": 75300,
+            "volume": "UNKNOWN"
+          },
+          "m15_latest_partial": {
+            "start_utc": "2026-11-10T00:15:00Z",
+            "observed_at_utc": "2026-11-10T00:24:00Z",
+            "open": 75300,
+            "high": 75300,
+            "low": 75124,
+            "close": 75154.01,
+            "volume": "UNKNOWN"
+          },
+          "h1_derived_from_15m": {
+            "start_utc": "2026-11-09T23:00:00Z",
+            "end_utc": "2026-11-10T00:00:00Z",
+            "open": 75290,
+            "high": 75397.28,
+            "low": 75102,
+            "close": 75368.41,
+            "volume": "UNKNOWN",
+            "method": "AGGREGATED_FROM_FOUR_15M_BARS"
+          },
+          "h4_derived_from_15m": {
+            "start_utc": "2026-11-09T20:00:00Z",
+            "end_utc": "2026-11-10T00:00:00Z",
+            "open": 74878.01,
+            "high": 75397.28,
+            "low": 74675.88,
+            "close": 75368.41,
+            "volume": "UNKNOWN",
+            "method": "AGGREGATED_FROM_SIXTEEN_15M_BARS"
+          },
+          "d1_last_sealed": {
+            "date_utc": "2026-11-09",
+            "open": 74850.1,
+            "high": 75622,
+            "low": 73729,
+            "close": 75368.41,
+            "volume_btc": 27881,
+            "source": "ChartExchange composite; alternate Binance summary differs on high/low/volume; volume SOURCE_CONFLICT"
+          },
+          "primary_candle_source": "BitcoinMargin Binance BTCUSDT 15m OHLC rows; latest rows end at 00:24 UTC. H1/H4 are derived, not direct native exchange intervals."
+        },
+        "main_path": "4H_STRONG_BEARISH__D1_NEUTRAL_WEAK__WEEKLY_STRONG_BULLISH__CPI_EVENT_VOLATILITY__NO_INTRADAY_REVERSAL_CONFIRMED",
+        "direction": "SPOT_LONG_ONLY_IF_74200_SUPPORT_ABSORPTION_AND_ACCOUNT_GATE_PASS",
+        "first_buy_price_usdt": 74200,
+        "first_buy_all_in_budget_usdt": 2000,
+        "first_take_profit_price_usdt": 76200,
+        "second_take_profit_price_usdt": 77400,
+        "take_profit_split": [
+          0.5,
+          0.5
+        ],
+        "conditional_add_price_usdt": 71800,
+        "conditional_add_all_in_budget_usdt": 2000,
+        "add_enabled": false,
+        "activation_requires": "Only after a fresh retest of 74179-74213, verified multi-level spot sell absorption, completed M15 reclaim above 74350 and completed H1 close/reclaim above 74850, followed by an orderly retest to 74200 remaining plausible. Recheck actual venue, free USDT, all open/reserved orders and depth. Touch alone is not activation.",
+        "add_requires": "Only after a NEW independent flush near 71785-71800 (confluence of strong support/Fibonacci 61.8/weekly S1), followed by completed H1 reclaim above 72200, renewed spot bid absorption, OI deleveraging or easing liquidation pressure and funding/long crowding cooling. No add within 60 minutes before the US CPI release; account/venue gates must pass. Never add merely because first leg is underwater.",
+        "cancel_unfilled_if": "Completed H1 closes below 74179 with expanding spot sell volume and no prompt reclaim; 73384 support fails and cannot be reclaimed; venue/custody or settlement issue; abnormal spread or insufficient depth; quote/candle/account data stale; or price rallies through 76200 before first entry. Cancel any still-unfilled research order by 19:30 Asia/Ho_Chi_Minh, 60 minutes before the 20:30 CPI release, then reassess after release. Research cancellation only; user alone cancels actual exchange orders.",
+        "costs": {
+          "buy_fee_per_side_fraction": 0.001,
+          "sell_fee_per_side_fraction": 0.001,
+          "buy_adverse_slippage": 0.0004,
+          "sell_adverse_slippage": 0.0004,
+          "total_adverse_cost_per_side_fraction": 0.0014,
+          "budget_includes_buy_side_costs": true,
+          "actual_fee_tier": "UNKNOWN"
+        },
+        "modeled_outcomes": {
+          "first_only": {
+            "capital_usdt": 2000,
+            "bought_btc_approx": 0.026916494804847337,
+            "break_even_exit_price_usdt": 74408.0512717805,
+            "tp1_all_net_usdt": 48.17,
+            "tp2_all_net_usdt": 80.42,
+            "split_50_50_net_usdt": 64.29,
+            "stress_73501_5_net_usdt": -24.37,
+            "stress_73384_net_usdt": -27.53,
+            "stress_72164_net_usdt": -60.32,
+            "stress_71785_net_usdt": -70.5,
+            "stress_70000_net_usdt": -118.48,
+            "stress_68000_net_usdt": -172.24,
+            "foregone_upside_if_79000_after_both_tp_usdt": 59.13,
+            "extra_usdt_to_rebuy_same_btc_at_79000": 65.09,
+            "foregone_upside_if_80000_after_both_tp_usdt": 86.01,
+            "extra_usdt_to_rebuy_same_btc_at_80000": 92.04
+          },
+          "first_plus_independently_enabled_add": {
+            "capital_usdt": 4000,
+            "bought_btc_approx": 0.054732705313477875,
+            "break_even_exit_price_usdt": 73184.90522347725,
+            "tp1_all_net_usdt": 164.79,
+            "tp2_all_net_usdt": 230.38,
+            "split_50_50_net_usdt": 197.59,
+            "stress_73501_5_net_usdt": 17.3,
+            "stress_73384_net_usdt": 10.88,
+            "stress_72164_net_usdt": -55.8,
+            "stress_71785_net_usdt": -76.51,
+            "stress_70000_net_usdt": -174.07,
+            "stress_68000_net_usdt": -283.39,
+            "foregone_upside_if_79000_after_both_tp_usdt": 120.24,
+            "extra_usdt_to_rebuy_same_btc_at_79000": 132.35,
+            "foregone_upside_if_80000_after_both_tp_usdt": 174.9,
+            "extra_usdt_to_rebuy_same_btc_at_80000": 187.16,
+            "weighted_average_entry_usdt": 73082.45
+          },
+          "probability_weighted_expected_net_usdt": null,
+          "probability_weighted_expected_net_status": "UNKNOWN__NO_VERIFIED_CLOSED_SWING_SAMPLE"
+        },
+        "executable": false,
+        "automatic_order_placement": false,
+        "order_cancellation_placed": false,
+        "funding": "160K_BTC_UNIFIED_POOL_STANDBY_USDT__ACTUAL_FREE_BALANCE_UNKNOWN__ALLOCATION_GATE_BLOCKED",
+        "core_action": "HOLD__NO_ORDINARY_SHORT_TERM_CORE_SELL",
+        "portfolio_model_if_first_only": "Core BTC unchanged; theoretical new swing +0.02691649 BTC and standby USDT -2000; actual balances unchanged/unknown.",
+        "portfolio_model_if_both": "Core BTC unchanged; theoretical new swing +0.05473271 BTC and standby USDT -4000; actual balances unchanged/unknown.",
+        "extreme_crash_reserve_action": "NONE__20K_RESERVED_FOR_FLASH_CRASH_SYSTEMIC_LIQUIDITY_SHOCK_OR_SEVERE_MISPRICING_ONLY",
+        "risks": "4H strong bearish while weekly strong bullish; 15m/H1/H4 volume unavailable; latest exchange quote 34 minutes old at report time and cross-source price conflict; full multilevel orderbook unavailable; ETF Nov9 session final flow not yet published; OI/funding elevated with source coverage differences; US CPI due 20:30 HCMC; user venue, free USDT, fees, current BTC components and 2026-10-08 open sell-order status remain UNKNOWN."
+      },
+      "evidence": {
+        "technical_source": "https://en.coinotag.com/cryptocurrencies/spot/BTC/technical-analysis",
+        "technical_asof_utc": "2026-11-10T00:44:00Z",
+        "technical_summary": {
+          "h4": "STRONG_BEARISH",
+          "h4_rsi": 43.4,
+          "d1": "NEUTRAL",
+          "d1_rsi": 38,
+          "weekly": "STRONG_BULLISH",
+          "weekly_rsi": 48.5
+        },
+        "daily_levels": {
+          "support_1": 74179,
+          "support_2": 73384,
+          "support_3": 71785,
+          "resistance_1": 76846,
+          "resistance_2": 78034,
+          "resistance_3": 79651,
+          "pivot": 74906,
+          "pivot_s1": 74213,
+          "pivot_s2": 73057,
+          "pivot_r1": 76062,
+          "pivot_r2": 76755,
+          "pivot_r3": 77911
+        },
+        "etf": {
+          "latest_complete_us_session": "2026-11-09",
+          "latest_finalized_flow_date": "2026-11-06",
+          "latest_finalized_net_flow_usd_millions": -411.9,
+          "nov5_net_flow_usd_millions": -430.2,
+          "nov2_to_nov6_net_flow_usd_millions": -1281.7,
+          "nov9_flow": "UNKNOWN_NOT_FINALIZED_IN_AVAILABLE_FARSIDE_DERIVED_FEEDS"
+        },
+        "derivatives": {
+          "coinglass_oi_usd_billions": 52.22,
+          "oi_change_24h_pct": 4.13,
+          "funding_rate_8h_pct": 0.0093,
+          "futures_volume_24h_usd_billions": 66.56,
+          "spot_volume_24h_usd_billions": 5.97,
+          "coinglass_liquidations_24h_usd_millions": 80.79,
+          "swolecharts_liquidations_24h_usd_millions": 44.29,
+          "liquidation_status": "SOURCE_CONFLICT__DIFFERENT_EXCHANGE_COVERAGE"
+        },
+        "macro": {
+          "us_cpi_october_release_time_local": "2026-11-10T20:30:00+07:00",
+          "headline_mom_consensus_range_pct": [
+            0.23,
+            0.4
+          ],
+          "core_mom_consensus_range_pct": [
+            0.22,
+            0.3
+          ],
+          "consensus_source_conflict": true,
+          "latest_yields_asof": "2026-11-06",
+          "us_2y_pct": 4.51,
+          "us_10y_pct": 4.86,
+          "us_30y_pct": 5.26,
+          "dxy": "UNKNOWN"
+        },
+        "counterparty": "Binance Oct29 $6.3B incident; withdrawals resumed in phases Nov1 and Reuters reported 95% affected assets replenished Nov3. User's actual venue and withdrawal status UNKNOWN. Gopax suspended withdrawals Nov6 as a separate sector counterparty warning.",
+        "sources": [
+          "https://bitcoinmargin.com/zh-Hans/btc-usdt",
+          "https://chartexchange.com/symbol/crypto-btcusdt/historical/",
+          "https://en.coinotag.com/cryptocurrencies/spot/BTC/technical-analysis",
+          "https://www.tftc.io/bitcoin-etf-flows",
+          "https://www.coinglass.com/it/currencies/BTC/futures",
+          "https://swolecharts.com/liquidations/BTC/24h",
+          "https://www.markets.com/news/us-cpi-preview-november-9",
+          "https://www.reuters.com/world/asia-pacific/binance-co-ceo-says-company-is-very-strong-financial-health-after-63-billion-2026-11-03/"
+        ],
+        "data_gaps": [
+          "15m/1h/4h native volume",
+          "full multilevel spot orderbook and CVD",
+          "latest finalized Nov9 ETF flow",
+          "DXY current snapshot",
+          "actual user venue withdrawal state",
+          "fresh portfolio balance and open orders",
+          "exact actual fee tier"
+        ]
+      },
+      "actual": {
+        "buy_filled": null,
+        "sell_filled": null,
+        "confirmed_btc_quantity": null,
+        "sell_filled_quantity_btc": null,
+        "realized_net_profit_usdt": null,
+        "open_exchange_orders": null,
+        "status": "NO_NEW_USER_CONFIRMATION__UNKNOWN"
+      },
+      "review": {
+        "status": "PENDING_USER_FILL_CONFIRMATION_AND_PORTFOLIO_RECONCILIATION",
+        "mfe_usdt": null,
+        "mae_usdt": null,
+        "net_profitable_window": null,
+        "sold_too_early": null,
+        "rebuy_missed": null,
+        "failed_reason": "NO_CONFIRMED_TRADE__RESEARCH_ONLY",
+        "prior_20261109_plan_review": "No user-confirmed order or fill for the 2026-11-09 74850 research entry. Intraday high/low ranges do not prove a fill; MFE/MAE and net outcome remain UNKNOWN. Today's 74200 level is a fresh daily S1/support confluence, not a mechanical carry-forward."
+      }
     }
   ],
   "aggregates": {
@@ -2490,5 +2746,6 @@
     "post_write_main_readback_required": true,
     "avoid_overwriting_other_writers": true
   },
-  "policy_updated_at": "2026-11-08"
+  "policy_updated_at": "2026-11-08",
+  "updated_at": "2026-11-10T07:58:31+07:00"
 }
