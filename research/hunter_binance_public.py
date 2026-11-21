@@ -158,7 +158,7 @@ class Client:
             denied = False
             try:
                 check()
-                with tracked(self.store, token, deadline, cancelled) as orphan:
+                with tracked(self.store, token, deadline, cancelled, cleanup_timeout=1) as orphan:
                     release = False  # tracked commits marker+lease removal together.
                     def on_denial():
                         nonlocal denied
@@ -190,15 +190,18 @@ class Client:
                         # Marker can be removed only after denial is durable.
                         status = 403
                     elif not_sent is None:
-                        check()
                         if status == 200:
                             body = json.loads(payload)
                             if not isinstance(body,list):
                                 raise ValueError('BINANCE_PUBLIC_RESPONSE_SHAPE_INVALID')
-                            check()
-                            return body
-                        decision = self.budget.failure(status,'',retry_after=max(retry,2**attempt),timeout=0)
+                        else:
+                            decision = self.budget.failure(status,'',retry_after=max(retry,2**attempt),timeout=0)
                 if not_sent is not None: raise not_sent
+                if status == 200:
+                    # The child has been reaped and its complete response
+                    # validated. Retire ownership before rejecting late data.
+                    check()
+                    return body
             except (UnreapedRequestError,UncertainRequestError,DurableStopError,sqlite3.Error,ValueError):
                 release = False  # Persistent orphan marker is a global stop.
                 raise
