@@ -1,0 +1,7 @@
+# Candidate only. Do not install over the sealed PR124 attempt/guard.
+# Requires separately reviewed deployment and the new read-only health checker.
+[Service]
+ExecStart=
+ExecStart=/opt/hunter-binance-stream/venv/bin/python -B -m research.hunter_binance_stream --manifest /var/lib/hunter-binance-stream/manifest.json --source-head-file /opt/hunter-binance-stream/release-head --collect --health-supervision
+# Covers bounded after-GO HTTP drain, socket close/join, queue drain and audit commit.
+TimeoutStopSec=90
