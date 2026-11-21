@@ -4,6 +4,7 @@ import datetime as dt,json,math,os,pathlib,time,urllib.request,urllib.parse
 from research import hunter_shadow_trader_v2 as eng
 from research import hunter_shadow_trader as v1
 from research import hunter_early_signals as signals
+from research import hunter_binance_stream_consumer as binance_cache
 from research import hunter_liquidity_probe as books
 from research import hunter_leading_risk as leading
 from research import hunter_manual_stop_once as manual_stop
@@ -151,11 +152,13 @@ def refresh_management_evidence(states,market,review,liq,now):
  wanted=sorted({p.get("asset") for st in states for p in st.get("open_positions") or [] if p.get("asset")})
  previous=load(OUT);cursor=int(previous.get("evidence_refresh_cursor") or 0)
  selected,next_cursor=management_selection(states,cursor,C["MONITOR_EVIDENCE_BATCH"])
- pairs=[a+"USDT" for a in selected]+["BTCUSDT"]
+ pairs=sorted({a+"USDT" for a in selected}|{"BTCUSDT"})
  generation="MONITOR_"+now.strftime("%Y%m%dT%H%M%S%fZ")
  current={};failures={};raw_books={}
  try:
-  r1=timed("evidence_1h",signals.rolling,pairs,"1h");r4=timed("evidence_4h",signals.rolling,pairs,"4h");micro=timed("evidence_micro",signals.micro,pairs)
+  cached=binance_cache.management_inputs(pairs,now)
+  cache_args=() if cached is None else (cached,)
+  r1=timed("evidence_1h",signals.rolling,pairs,"1h",*cache_args);r4=timed("evidence_4h",signals.rolling,pairs,"4h",*cache_args);micro=timed("evidence_micro",signals.micro,pairs,*cache_args)
   for a in selected:
    row=signals.score_row(a+"USDT",a,r1,r4,r1.get("BTCUSDT"),r4.get("BTCUSDT"),micro)
    if row:current[a]=row

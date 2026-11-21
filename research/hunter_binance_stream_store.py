@@ -9,12 +9,12 @@ import uuid
 
 try:
     from research.hunter_bybit_stream_store import (
-        Store as CoordinationStore, Budget, budget_state, request_gate, content_hash,
+        Store as CoordinationStore, Budget as SharedBudget, budget_state, budget_time, request_gate, content_hash,
         FRESH_MS, HISTORY_MS, MAX_REVISIONS)
 except ModuleNotFoundError as exc:
     if exc.name != 'research': raise
     from hunter_bybit_stream_store import (
-        Store as CoordinationStore, Budget, budget_state, request_gate, content_hash,
+        Store as CoordinationStore, Budget as SharedBudget, budget_state, budget_time, request_gate, content_hash,
         FRESH_MS, HISTORY_MS, MAX_REVISIONS)
 
 STATE_PATH = Path('/var/lib/hunter-binance-stream/state.sqlite3')
@@ -24,6 +24,26 @@ WS_SOURCE = 'OFFICIAL_BINANCE_SPOT_WS'
 REST_SOURCE = 'OFFICIAL_BINANCE_SPOT_REST'
 CACHE_SOURCE = 'OFFICIAL_BINANCE_SPOT_CACHE'
 SCHEMA = 'binance_stream_generation_v1'
+
+
+class Budget(SharedBudget):
+    """Same four owners; directory weight consumes proportionally more spacing."""
+    def acquire(self,now_ms=None,timeout=10,*,weight=2):
+        if type(weight) is not int or weight not in (2,20):raise ValueError('BINANCE_WEIGHT_INVALID')
+        with self.store.db(timeout=timeout) as db:
+            b=db.execute('SELECT * FROM budget WHERE id=1').fetchone()
+            now_ms=budget_time(db,b,now_ms)
+            if now_ms<b['last_ms']:raise RuntimeError('CLOCK_ROLLBACK')
+            db.execute('UPDATE budget SET last_ms=? WHERE id=1',(now_ms,))
+            if b['halt']:raise RuntimeError(b['halt'])
+            gate=request_gate(self.store,db)
+            if gate:raise RuntimeError(gate)
+            if now_ms<max(b['next_ms'],b['cooldown_ms']):return None
+            if db.execute('SELECT COUNT(*) FROM leases').fetchone()[0]>=4:return None
+            token=uuid.uuid4().hex
+            db.execute('INSERT INTO leases VALUES(?,?)',(token,now_ms))
+            db.execute('UPDATE budget SET next_ms=? WHERE id=1',(now_ms+100*weight,))
+            return token
 
 
 def topic(symbol, interval):
@@ -197,6 +217,10 @@ class Store(CoordinationStore):
                     return dict(out,reason='BINANCE_DISCONNECTED_OR_GLOBAL_STOP')
                 windows = {}
                 for name in sorted(names):
+                    if meta.get('health_contract'):
+                        from research.hunter_binance_health_store import topic_gate
+                        denial=topic_gate(db,name,cut,meta)
+                        if denial:return dict(out,reason=denial,failed_topic=name)
                     current = states[name]
                     state = db.execute('''SELECT * FROM readiness WHERE topic=? AND observed<=?
                         ORDER BY observed DESC,id DESC LIMIT 1''',(name,cut)).fetchone()
@@ -236,7 +260,17 @@ class Store(CoordinationStore):
                         source_clock='EXCHANGE_EVENT' if r['origin']==WS_SOURCE else 'LOCAL_REQUEST_CUTOFF',
                         confirm=bool(r['confirmed']),confirmation='WS_EXPLICIT' if r['origin']==WS_SOURCE else 'REST_INFERRED',
                         session=r['epoch']) for r,_ in chosen])
+                    if meta.get('health_contract'):
+                        from research.hunter_binance_health_store import proof
+                        window=windows[name]
+                        window['instrument_validity']=json.loads(db.execute(
+                            "SELECT payload FROM bn_validity WHERE kind='instrument' AND topic=?",(name,)).fetchone()[0])
+                        window['validity']=proof('kline',name,meta,WS_SOURCE,last['observed'],cut,
+                            min(min(last['observed'],last['source_time'])+FRESH_MS,window['instrument_validity']['expires_at']),'VALID',None,
+                            generation_end_ms=cut,ws_event_time=last['source_time'],window_sha256=content_hash(window))
                 out.update(status='READY',windows=windows)
+                if meta.get('health_contract'):
+                    out.update(health_contract=meta['health_contract'],epoch_started_ms=int(meta['health_epoch_started']))
                 out['generation_sha256'] = content_hash(out)
                 return out
         except (OSError,sqlite3.Error,ValueError,TypeError,KeyError,AttributeError,OverflowError):
