@@ -1,0 +1,36 @@
+name: Binance Exact Upgrade Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_binance_upgrade.py'
+      - 'scripts/check_binance_upgrade_offline.py'
+      - 'tests/test_hunter_binance_upgrade.py'
+      - '.github/workflows/binance-upgrade-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Guarded upgrade and rollback fixtures only
+        run: python -I -B scripts/check_binance_upgrade_offline.py
+      - name: Verify exact release objects and runtime whitelist without staging
+        run: |
+          python -B - <<'PY'
+          from pathlib import Path
+          from scripts.hunter_binance_upgrade import releases, OLD, NEW, CHANGED
+          old,new=releases(Path.cwd())
+          print('EXACT_RUNTIME_PACKAGE_VERIFIED',OLD,NEW,len(old),sorted(CHANGED))
+          PY
