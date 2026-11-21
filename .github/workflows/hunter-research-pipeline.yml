@@ -30,7 +30,7 @@ jobs:
         run: |
           git fetch origin main
           git checkout --detach origin/main
-          python -m scripts.hunter_runtime_gate research
+          python -m scripts.hunter_generation_admission --runtime-gate
   bind:
     needs: runtime
     if: ${{ needs.runtime.outputs.run == 'true' && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
@@ -38,6 +38,7 @@ jobs:
     outputs:
       should_run: ${{ steps.bind.outputs.should_run }}
       generation: ${{ steps.bind.outputs.generation }}
+      owner: ${{ steps.bind.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +58,8 @@ jobs:
     if: ${{ needs.bind.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      HUNTER_RESEARCH_OWNER: ${{ needs.bind.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,6 +76,7 @@ jobs:
           assert d.get('generation_id')==os.environ['EXPECTED'], f"ADMITTED_GENERATION_SUPERSEDED expected={os.environ['EXPECTED']} actual={d.get('generation_id')}"
           print('DOWNSTREAM_BOUND_GENERATION',d['generation_id'])
           PY
+          python -m scripts.hunter_generation_admission --check-owner
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -390,6 +394,7 @@ jobs:
             git status --short --ignored
             exit 1
           fi
+          python -m scripts.hunter_generation_admission --stage-publication
           git commit -m 'research: Hunter downstream potential-candidate analysis'
           git stash push --all -m 'hunter-nonpersistent-runtime-files' || true
           # Computed state is revision-bound. Never rebase stale research JSON onto
@@ -405,7 +410,7 @@ jobs:
           fi
           git rebase origin/main
           for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then
+            if python -m scripts.hunter_generation_admission --push-owned; then
               echo "HUNTER_STATE_PUSH_VERIFIED attempt=$attempt"
               break
             fi
@@ -442,6 +447,12 @@ jobs:
           import json,os; scan=json.load(open('/tmp/scan.json')); expected=os.environ['EXPECTED']; assert scan.get('generation_id')==expected, f'MAIN_READBACK_GENERATION_MISMATCH expected={expected} actual={scan.get("generation_id")}'; scan_at=scan['as_of_utc']; forward=json.load(open('/tmp/forward.json')); health=json.load(open('/tmp/health.json')); identity=json.load(open('/tmp/identity.json')); liquidity=json.load(open('/tmp/liquidity.json')); supply=json.load(open('/tmp/supply.json')); review=json.load(open('/tmp/review.json')); a=json.load(open('/tmp/shadow.json')); sa=json.load(open('/tmp/shadow-summary.json')); b=json.load(open('/tmp/shadow-v2.json')); sb=json.load(open('/tmp/shadow-v2-summary.json')); assert forward.get('universe_scan_as_of_utc')==scan_at; assert health.get('scan_as_of_utc')==scan_at; assert identity.get('scan_as_of_utc')==scan_at; assert liquidity.get('scan_as_of_utc')==scan_at; assert supply.get('scan_as_of_utc')==scan_at; assert review.get('scan_generation_id')==expected; assert set(review.get('executable_buy') or [])=={x.get('asset') for x in review.get('candidates') or [] if x.get('trade_action')=='BUY'}; assert (a.get('open_positions') or a.get('events')); assert b.get('schema')=='hunter_shadow_v2_portfolio_v2' and b.get('mode')=='SIMULATION_ONLY_NO_REAL_ORDERS'; assert len({x.get('asset') for x in b.get('open_positions') or []})==len(b.get('open_positions') or []); assert sa.get('open_positions')==len(a.get('open_positions') or []) and sa.get('closed_positions')==len(a.get('closed_positions') or []); assert sb.get('open_positions')==len(b.get('open_positions') or []) and sb.get('closed_positions')==len(b.get('closed_positions') or []); used=sum(sum(float(t.get('notional_usdt') or 0) for t in x.get('tranches') or []) for x in b.get('open_positions') or []); assert used<=20000.000001; print('HUNTER_MAIN_READBACK_E2E_OK',expected,'v1_open',len(a.get('open_positions') or []),'v2_open',len(b.get('open_positions') or []),'v2_used',round(used,2))
           PY
           exit 0
+
+      - name: Record failed Research ownership without replacing another owner
+        if: failure()
+        env:
+          EXPECTED: ${{ needs.bind.outputs.generation }}
+        run: python -m scripts.hunter_generation_admission --fail-owned
 
 # activate downstream pipeline
 # run current workflow definition

@@ -1,0 +1,31 @@
+name: Hunter Research Ownership Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_generation_admission.py'
+      - 'scripts/hunter_job_runner.py'
+      - 'scripts/hunter_research_rebind.py'
+      - 'tests/test_hunter_research_ownership.py'
+      - 'tests/test_hunter_job_runner_diagnostics.py'
+      - '.github/workflows/hunter-research-pipeline.yml'
+      - '.github/workflows/hunter-research-ownership-validation.yml'
+permissions:
+  contents: read
+jobs:
+  exact-head-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm exact candidate and run offline admission and writer regressions
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          python -B -X utf8 -m unittest tests.test_hunter_generation_admission tests.test_hunter_research_ownership tests.test_hunter_research_rebind tests.test_hunter_research_lock tests.test_hunter_job_runner tests.test_hunter_job_runner_diagnostics -v
