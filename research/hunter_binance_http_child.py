@@ -5,6 +5,7 @@ Linux parent-death signalling prevents an orphan HTTP socket after a crash.
 """
 import base64
 import ctypes
+import email.utils
 import http.client
 import json
 import os
@@ -20,12 +21,23 @@ MAX_BODY = 1024 * 1024
 
 def allowed(url):
     value = urllib.parse.urlsplit(url)
-    if (value.scheme != 'https' or value.netloc != HOST or value.path != '/api/v3/klines'
+    if (value.scheme != 'https' or value.netloc != HOST or value.path not in ('/api/v3/klines','/api/v3/exchangeInfo')
             or value.fragment or not value.query):
         raise ValueError('BINANCE_PUBLIC_ENDPOINT_REQUIRED')
     pairs = urllib.parse.parse_qsl(value.query, strict_parsing=True)
     params = dict(pairs)
     import re
+    if value.path=='/api/v3/exchangeInfo':
+        if (len(params)!=len(pairs) or set(params)!={'symbols','showPermissionSets'}
+                or params['showPermissionSets']!='false'):
+            raise ValueError('BINANCE_PUBLIC_DIRECTORY_SCOPE_INVALID')
+        symbols=json.loads(params['symbols'])
+        if (not isinstance(symbols,list) or not 1<=len(symbols)<=20
+                or len(symbols)!=len(set(symbols)) or any(not isinstance(s,str)
+                or not s.endswith('USDT') or not 1<=len(s[:-4])<=30 or not s.isalnum()
+                or s.upper()!=s or s.lower().upper()!=s for s in symbols)):
+            raise ValueError('BINANCE_PUBLIC_DIRECTORY_SCOPE_INVALID')
+        return value
     limits = {'5m':16, '15m':25, '1h':5, '1d':35}
     if (len(params) != len(pairs) or set(params) != {'symbol','interval','limit','endTime'}
             or not params['symbol'].endswith('USDT') or not 1 <= len(params['symbol'][:-4]) <= 30
@@ -57,7 +69,19 @@ def exchange(url, send=emit):
     except urllib.error.HTTPError as error:
         response = error
     status = response.code
-    send(dict(kind='headers',status=status))  # Known denial precedes body parsing.
+    header=dict(kind='headers',status=status)
+    used=response.headers.get('X-MBX-USED-WEIGHT-1M')
+    date=response.headers.get('Date')
+    # Only a complete, bounded, server-window attribution can calibrate the
+    # governor. Missing or malformed optional headers never invent a window.
+    if used and used.isdigit() and len(used)<=9 and date:
+        try:
+            stamp=email.utils.parsedate_to_datetime(date)
+            if stamp.tzinfo is not None:
+                header.update(weight_used=int(used),weight_window_ms=int(stamp.timestamp())//60*60000)
+        except (ValueError,TypeError,OverflowError):
+            pass
+    send(header)  # Known denial precedes body parsing.
     try:
         with response:
             payload = response.read(MAX_BODY+1)
