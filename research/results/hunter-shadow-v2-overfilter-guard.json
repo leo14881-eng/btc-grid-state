@@ -2,13 +2,6 @@
   "schema": "hunter_shadow_v2_overfilter_guard_v1",
   "cycles": [
     {
-      "at_utc": "2026-11-19T10:20:30.743728+00:00",
-      "generation_id": "20261119T101418361753Z",
-      "buys": 0,
-      "safe_misses": [],
-      "risk_blocked": false
-    },
-    {
       "at_utc": "2026-11-19T13:04:27.497755+00:00",
       "generation_id": "20261119T130010645613Z",
       "buys": 0,
@@ -93,13 +86,42 @@
       "buys": 0,
       "safe_misses": [],
       "risk_blocked": false
+    },
+    {
+      "at_utc": "2026-11-21T19:59:51.272181+00:00",
+      "generation_id": "20261121T195229720726Z",
+      "buys": 0,
+      "safe_misses": [
+        {
+          "asset": "ORCA",
+          "change_24h_pct": 11.385,
+          "reasons": [
+            "SCORE_WEAK",
+            "BTC_RELATIVE_WEAK"
+          ],
+          "estimated_rr": 1.738
+        },
+        {
+          "asset": "牛来",
+          "change_24h_pct": 10.245,
+          "reasons": [
+            "SCORE_WEAK",
+            "BTC_RELATIVE_WEAK"
+          ],
+          "estimated_rr": 1.762
+        }
+      ],
+      "risk_blocked": false
     }
   ],
-  "status": "NORMAL",
-  "as_of_utc": "2026-11-21T12:47:05.114489+00:00",
-  "consecutive_zero_buy_cycles": 9,
-  "recent_safe_missed_assets": [],
-  "optimizer_action": "NONE",
+  "status": "OVER_FILTERING",
+  "as_of_utc": "2026-11-21T19:59:51.272181+00:00",
+  "consecutive_zero_buy_cycles": 10,
+  "recent_safe_missed_assets": [
+    "ORCA",
+    "牛来"
+  ],
+  "optimizer_action": "RELAX_ONE_SHADOW_DIMENSION_AND_AB_TEST",
   "live_capital_rules_changed": false,
   "capital_authority": "NONE_SHADOW_ONLY"
 }
