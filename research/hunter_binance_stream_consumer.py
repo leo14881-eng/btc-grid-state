@@ -63,6 +63,18 @@ def signal_inputs(scan,symbols):
     return read(names,now,expected_roster=expected)
 
 
+def management_inputs(symbols,now):
+    """One frozen set for the original holdings batch plus its BTC benchmark.
+
+    Monitor runs every five minutes; its holdings are independent of Discovery's
+    30-minute scan admission age. The cache still checks every requested topic,
+    its full stored roster binding, bar closure, source and 90-second freshness.
+    """
+    if selected()=='REST': return None
+    names=sorted(topic(s,i) for s in set(symbols)|{'BTCUSDT'} for i in ('15m','1h'))
+    return read(names,now)
+
+
 def window(symbol,interval,now):
     if selected()=='REST': return None
     return read([topic(symbol,interval)],now)
