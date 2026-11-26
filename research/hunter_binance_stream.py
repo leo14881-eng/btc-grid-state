@@ -13,11 +13,104 @@ from threading import Event, Lock, Thread
 import time
 
 from research.hunter_binance_stream_store import Store, Budget, STATE_PATH, LIMITS, FRESH_MS, roster, roster_hash, split_topic, content_hash
-from research.hunter_binance_public import Client, DurableStopError
+from research.hunter_binance_public import Client, DurableStopError, UncertainRequestError, UnreapedRequestError
 
 WS_URL = 'wss://data-stream.binance.vision/ws'
 SHARD_SIZE = 500
 MAX_SHARDS = 8
+INITIALIZATION_SECONDS = 900
+TOPIC_PAGE_SIZE = 16
+AUDIT_LOCK = Lock()
+AUDIT_FAILURES = 0
+
+
+def emit(value):
+    global AUDIT_FAILURES
+    with AUDIT_LOCK:
+        try: print(json.dumps(value,sort_keys=True),flush=True)
+        except Exception:
+            # Diagnostics cannot mask a denial, uncertain owner or unreaped child.
+            AUDIT_FAILURES+=1
+
+
+class ObservedQueue(queue.Queue):
+    """High-water is measured under Queue's own mutex, including concurrent drains."""
+    def __init__(self, maxsize):
+        super().__init__(maxsize); self.high_water=0
+
+    def _put(self, item):
+        super()._put(item); self.high_water=max(self.high_water,self._qsize())
+
+
+class SessionEvidence:
+    """Bounded counters only; receipt/processing observations never confer readiness."""
+    def __init__(self, epoch, names):
+        self.epoch=epoch; self.lock=Lock(); self.serial=0
+        self.topics={name:dict(received=0,processed=0,changed=0,last_rx=0,last_processed_rx=0)
+                     for name in names}
+        self.batches=0; self.batch_max_us=0; self.receipt_to_processing_max_ms=0
+        self.receipt_clock_anomalies=0; self.acked_batches=0
+
+    def received(self, name, received):
+        with self.lock:
+            row=self.topics[name]; row['received']+=1; row['last_rx']=max(row['last_rx'],received)
+
+    def committed(self, batch, changed, elapsed_ns):
+        now=millis()
+        with self.lock:
+            self.batches+=1; self.batch_max_us=max(self.batch_max_us,elapsed_ns//1000)
+            for (message,received),did_change in zip(batch,changed):
+                row=self.topics[split_message_topic(message)]
+                row['processed']+=1; row['changed']+=int(bool(did_change))
+                row['last_processed_rx']=max(row['last_processed_rx'],received)
+                if now<received:self.receipt_clock_anomalies+=1
+                else:self.receipt_to_processing_max_ms=max(self.receipt_to_processing_max_ms,now-received)
+
+    def acked(self, shard, batch, received):
+        with self.lock:self.acked_batches+=1
+        emit(dict(event='BINANCE_ACK_COMMITTED',epoch=self.epoch,shard=shard,
+                  subscribe_batch=batch,received=received))
+
+    def request_observer(self, name):
+        with self.lock:self.serial+=1; serial=self.serial
+        row={}
+        def observe(event, **fields):
+            if event=='ATTEMPT':row.clear();row.update(attempt=fields['attempt'],go=False,
+                response_complete=False,process_reaped=False,owner_retired=False)
+            elif event=='GO':row['go']=True
+            elif event=='HEADERS':row['http_status']=fields['status']
+            elif event=='RESPONSE':row.update(response_complete=True,http_status=fields['status'])
+            elif event=='REAPED':row['process_reaped']=True
+            elif event=='RETIRED':row['owner_retired']=True
+            elif event=='ERROR':row['error_type']=fields['error_type']
+            elif event=='END':
+                emit(dict(event='BINANCE_HTTP_LIFECYCLE',epoch=self.epoch,request_number=serial,
+                          topic=name,**row))
+        return observe
+
+    def snapshot(self, messages, active_repairs, *, final=False):
+        with self.lock:
+            rows=[dict(topic=name,**row) for name,row in self.topics.items()]
+            summary=dict(event='BINANCE_SESSION_METRICS',epoch=self.epoch,final=final,
+                topics=len(rows),received=sum(r['received'] for r in rows),
+                processed=sum(r['processed'] for r in rows),zero_received=sum(r['received']==0 for r in rows),
+                zero_processed=sum(r['processed']==0 for r in rows),acked_batches=self.acked_batches,
+                committed_batches=self.batches,batch_commit_max_us=self.batch_max_us,
+                receipt_to_commit_max_ms=self.receipt_to_processing_max_ms,
+                receipt_clock_anomalies=self.receipt_clock_anomalies,queued=messages.qsize(),
+                queue_high_water=messages.high_water,active_repairs=active_repairs)
+            summary['audit_output_failures']=AUDIT_FAILURES
+        emit(summary)
+        if final:
+            # Bound actual serialized bytes: legal symbols include Unicode,
+            # which json.dumps escapes. A row-count bound alone is insufficient.
+            offset=0
+            while offset<len(rows):
+                page=dict(event='BINANCE_TOPIC_METRICS',epoch=self.epoch,
+                          offset=offset,total=len(rows),topics=rows[offset:offset+TOPIC_PAGE_SIZE])
+                while len(json.dumps(page,sort_keys=True).encode())>4000:
+                    page['topics'].pop()
+                emit(page);offset+=len(page['topics'])
 
 
 def millis(): return time.time_ns()//1_000_000
@@ -54,12 +147,35 @@ class RecoveryBudget:
         return 5*2**(self.failures-1)
 
 
+class InitializationTimeout(TimeoutError):
+    """An exhausted bootstrap is terminal, not a new reconnect allowance."""
+
+
+class InitializationWindow:
+    def __init__(self, steady):
+        self.deadline=steady+INITIALIZATION_SECONDS; self.ready=False
+
+    def check(self, steady):
+        if not self.ready and steady>=self.deadline:
+            raise InitializationTimeout('BINANCE_INITIALIZATION_DEADLINE')
+
+    def observe(self, store, names, now, clock, steady, epoch):
+        self.check(steady())
+        frozen=store.freeze(names,now,now); finished=clock()
+        self.check(steady())
+        if frozen['status']=='READY' and frozen.get('epoch')==epoch and 0<=finished-now<=FRESH_MS:
+            self.ready=True
+            emit(dict(event='BINANCE_INITIALIZATION_READY',epoch=frozen['epoch']))
+
+
 class Protocol:
     def __init__(self, store, names, manifest, now):
         plan(names)
         self.store=store; self.epoch=store.begin_session(names,manifest)
         self.started=now; self.pending={}; self.requests=[]
         self.sent={}; self.arrivals={}; self.lock=Lock()
+        self.market_arrivals={}; self.topic_shards={}
+        self.evidence=SessionEvidence(self.epoch,names); self.topic_batches={}
         serial=0
         for offset in range(0,len(names),SHARD_SIZE):
             batch=[]
@@ -67,9 +183,22 @@ class Protocol:
                 serial+=1
                 request_id=self.epoch+f'{serial:03d}'
                 args=names[start:min(start+100,offset+SHARD_SIZE,len(names))]
+                self.topic_shards.update((name,offset//SHARD_SIZE) for name in args)
+                self.topic_batches.update((name,(start-offset)//100) for name in args)
                 self.pending[request_id]=(offset//SHARD_SIZE,args)
                 batch.append(dict(method='SUBSCRIBE',params=args,id=request_id))
             self.requests.append(batch)
+
+    def note_market_arrival(self, shard, message, received):
+        # Receipt only, not validation/readiness. A queued frame must not be
+        # mistaken for an idle connection while the SQLite writer catches up.
+        name=split_message_topic(message)
+        if self.topic_shards.get(name)!=shard: raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
+        with self.lock:self.market_arrivals[name]=max(received,self.market_arrivals.get(name,0))
+        self.evidence.received(name,received)
+
+    def market_arrival(self, name):
+        with self.lock:return self.market_arrivals.get(name,0)
 
     def mark_sent(self, shard, request_id, now):
         # The pump records the start of this send, not the first shard's dial.
@@ -107,12 +236,14 @@ class Protocol:
                 del self.pending[request_id]
                 self.arrivals.pop(request_id,None)
             self.store.ack(self.epoch,pending[1])
+            self.evidence.acked(shard,self.topic_batches[pending[1][0]],now)
         else:
             from research.hunter_binance_stream_store import topic
             name=topic(message['s'],message['k']['i'])
-            if name not in {n for request in self.requests[shard] for n in request['params']}:
+            if self.topic_shards.get(name)!=shard:
                 raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
-            self.store.ingest_ws(self.epoch,message,now)
+            started=time.monotonic_ns(); changed=self.store.ingest_ws(self.epoch,message,now)
+            self.evidence.committed([(message,now)],[changed],time.monotonic_ns()-started)
 
     def tick(self, now):
         with self.lock:
@@ -125,17 +256,24 @@ class Protocol:
         from research.hunter_binance_stream_store import topic
         batch=[]
         def flush():
-            if batch:self.store.ingest_ws_batch(self.epoch,batch);batch.clear()
+            if batch:
+                started=time.monotonic_ns(); changed=self.store.ingest_ws_batch(self.epoch,batch)
+                self.evidence.committed(batch,changed,time.monotonic_ns()-started);batch.clear()
         for shard,message,received in observations:
             if isinstance(message,BaseException):raise message
             if 'id' in message:
                 flush();self.receive(shard,message,received)
             else:
                 name=topic(message['s'],message['k']['i'])
-                if name not in {n for request in self.requests[shard] for n in request['params']}:
+                if self.topic_shards.get(name)!=shard:
                     raise ValueError('BINANCE_MESSAGE_SHARD_MISMATCH')
                 batch.append((message,received))
         flush()
+
+
+def split_message_topic(message):
+    from research.hunter_binance_stream_store import topic
+    return topic(message['s'],message['k']['i'])
 
 
 def open_ws():
@@ -146,28 +284,37 @@ def open_ws():
                    ping_interval=None,max_size=262144,max_queue=1024)
 
 
-def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, client=None):
+def repair(store, epoch, name, deadline, cancelled=lambda:False, clock=millis, client=None, observe=None):
     symbol,interval=split_topic(name)
     def active():
         if cancelled(): raise RuntimeError('BINANCE_RECOVERY_CANCELLED')
         with store.db(readonly=True) as db: store.check_epoch(db,epoch)
     active(); requested=clock()
     if requested>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
+    options={'observe':observe} if observe is not None else {}
     rows=(client or Client(store)).request('/api/v3/klines',dict(symbol=symbol,
         interval=interval,limit=LIMITS[interval],endTime=requested),
-        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled)
+        timeout=min(30,(deadline-requested)/1000),cancelled=cancelled,drain_on_cancel=True,**options)
     active(); received=clock()
     if received>=deadline: raise TimeoutError('BINANCE_RECOVERY_DEADLINE')
     store.ingest_rest(epoch,name,rows,requested,received)
 
 
 def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sleep,
-            repairer=repair,observer=None,on_nonready=lambda *_:None):
+            repairer=repair,observer=None,on_nonready=lambda *_:None,
+            initialization=None,steady=time.monotonic):
+    initialization=initialization or InitializationWindow(steady())
+    initialization.check(steady())
     protocol=Protocol(store,names,manifest,clock())
     on_nonready('SESSION_STARTED')
-    cancelled=Event(); messages=queue.Queue(maxsize=4096); threads=[]; jobs={}; completed=set()
-    deadline=clock()+900_000; last_check=last_audit=0
+    cancelled=Event(); messages=ObservedQueue(maxsize=4096); threads=[]; jobs={}; completed=set()
+    deadline=clock()+int(max(0,initialization.deadline-steady())*1000)
+    last_check=last_audit=0
     def stopping(): return cancelled.is_set() or stop()
+    def repair_stopping():
+        # Workers recheck this through shared-budget admission immediately
+        # before GO, even while the main thread is blocked on SQLite/audit IO.
+        return stopping() or (not initialization.ready and steady()>=initialization.deadline)
     def pump(index,ws,requests):
         try:
             for request in requests:
@@ -179,6 +326,7 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 except TimeoutError: continue
                 received=clock();message=json.loads(raw)
                 if 'id' in message:protocol.note_arrival(index,message,received)
+                else:protocol.note_market_arrival(index,message,received)
                 messages.put((index,message,received),timeout=.5)
         except BaseException as error:
             if not stopping():
@@ -200,11 +348,13 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
     try:
         for index,requests in enumerate(protocol.requests):
             if stopping(): return
+            initialization.check(steady())
             drain();protocol.tick(clock())
             ws=stack.enter_context(connect())
             thread=Thread(target=pump,args=(index,ws,requests),daemon=False)
             threads.append(thread); thread.start()
         while not stopping():
+            initialization.check(steady())
             drain()
             now=clock()
             protocol.tick(now)
@@ -215,18 +365,39 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 if state['halt'] or state['cooldown_ms']-now>=590_000:
                     raise RuntimeError(state['halt'] or 'BINANCE_GLOBAL_COOLDOWN')
                 for name,job in list(jobs.items()):
+                    initialization.check(steady())
                     if job.done(): job.result(); completed.add(name); del jobs[name]
+                candidate=True
                 for state in store.states():
                     name=state['topic']
                     if (not state['ack'] or state['gap'] or state['epoch']!=protocol.epoch
                             or any(not 0<=now-state[k]<=FRESH_MS for k in ('ws_rx','ws_ts'))):
+                        candidate=False
                         on_nonready('TOPIC_ACK_GAP_OR_FRESHNESS_UNKNOWN')
                     if state['ack'] and state['gap'] and name not in jobs and len(jobs)<4:
+                        initialization.check(steady())
                         if name in completed: raise RuntimeError('BINANCE_NEW_GAP_RECONNECT')
-                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=stopping)
-                    if state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
-                        raise TimeoutError('BINANCE_TOPIC_STALE')
+                        options={'observe':protocol.evidence.request_observer(name)} if repairer is repair else {}
+                        jobs[name]=pool.submit(repairer,store,protocol.epoch,name,deadline,cancelled=repair_stopping,**options)
+                    if initialization.ready and state['ack'] and now-protocol.started>FRESH_MS and now-state['ws_rx']>FRESH_MS:
+                        ingress=protocol.market_arrival(name)
+                        ingress_now=clock()  # Receipt can occur after the scan's now.
+                        if ingress and 0<=ingress_now-ingress<=FRESH_MS:
+                            on_nonready('CACHE_WRITER_LAG')  # freeze still rejects stale stored data.
+                        else:
+                            emit(dict(event='BINANCE_TOPIC_STALE_DETAIL',epoch=protocol.epoch,
+                                topic=name,shard=protocol.topic_shards[name],session_age_ms=now-protocol.started,
+                                ws_rx=state['ws_rx'],ws_ts=state['ws_ts'],ingress_rx=ingress,
+                                ack=state['ack'],gap=state['gap'],queued=messages.qsize(),active_repairs=len(jobs)))
+                            raise TimeoutError('BINANCE_TOPIC_STALE')
+                # Topic flags alone cannot establish native closed history or a
+                # current WS revision. Only the unchanged consumer freeze can
+                # end bootstrap, once, for this epoch. Until then stale topics
+                # remain UNKNOWN without throwing away other initialization.
+                if not initialization.ready and candidate and not jobs:
+                    initialization.observe(store,names,now,clock,steady,protocol.epoch)
                 if observer and now-last_audit>=30_000:
+                    protocol.evidence.snapshot(messages,len(jobs))
                     observer(now); last_audit=now
             try: pending=[messages.get(timeout=.1)]
             except queue.Empty: continue
@@ -245,45 +416,60 @@ def session(store,names,manifest,stop,connect=open_ws,clock=millis,sleep=time.sl
                 for job in jobs.values(): job.cancel()
                 pool.shutdown(wait=True,cancel_futures=True)
                 for thread in threads: thread.join(timeout=7)
-                if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
-                for job in jobs.values():
-                    if not job.cancelled() and isinstance(job.exception(),(DurableStopError,sqlite3.Error)):
-                        raise job.exception()
+                try:
+                    if any(t.is_alive() for t in threads): raise DurableStopError('BINANCE_WS_THREAD_NOT_REAPED')
+                    for job in jobs.values():
+                        if not job.cancelled() and isinstance(job.exception(),(DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error)):
+                            raise job.exception()
+                finally:
+                    try:protocol.evidence.snapshot(messages,sum(not job.done() for job in jobs.values()),final=True)
+                    except Exception:pass  # Preserve the original stop/error even if observation fails.
 
 
 def collect(store,names,manifest,source_head,stop=lambda:False,connect=open_ws,
             clock=millis,sleep=time.sleep,steady=time.monotonic):
     budget=RecoveryBudget()
+    initialization=InitializationWindow(steady())
     def nonready(reason):
         interrupted=budget.healthy_since is not None
         budget.observe(False,steady())
-        if interrupted:print(json.dumps(dict(event='BINANCE_RECOVERY_WINDOW_RESET',reason=reason)),flush=True)
+        if interrupted:emit(dict(event='BINANCE_RECOVERY_WINDOW_RESET',reason=reason))
     def audit(now):
         frozen=store.freeze(names,now,now); finished=clock()
         ready=frozen['status']=='READY' and 0<=finished-now<=FRESH_MS
-        restored=budget.observe(ready,steady())
-        print(json.dumps(dict(event='BINANCE_CACHE_AUDIT',source_head=source_head,
+        observed=steady();restored=budget.observe(ready,observed)
+        ready_seconds=max(0,int(observed-budget.healthy_since)) if ready and budget.healthy_since is not None else 0
+        emit(dict(event='BINANCE_CACHE_AUDIT',source_head=source_head,
+            observed_at_ms=finished,ready_window_seconds=ready_seconds,
             status='READY' if ready else 'UNKNOWN',topics=len(names),
             roster_hash=roster_hash(names),manifest_sha256=manifest,
             epoch=frozen.get('epoch'),generation_sha256=frozen.get('generation_sha256'),
             reason=frozen.get('reason'),failed_topic=frozen.get('failed_topic'),
             recovery_budget_restored=restored,shadow_only=True,
-            real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY')),flush=True)
+            real_trading_enabled=False,capital_authority='NONE_SHADOW_ONLY'))
     while budget.failures<5 and not stop():
         state=Budget(store).status()
         if state['halt'] or clock()<state['cooldown_ms']: raise RuntimeError(state['halt'] or 'BINANCE_COOLDOWN_ACTIVE')
         try:
-            session(store,names,manifest,stop,connect,clock,sleep,observer=audit,on_nonready=nonready)
+            initialization.check(steady())
+            session(store,names,manifest,stop,connect,clock,sleep,observer=audit,on_nonready=nonready,
+                    initialization=initialization,steady=steady)
             return
-        except (DurableStopError,sqlite3.Error): raise
+        except (InitializationTimeout,DurableStopError,UncertainRequestError,UnreapedRequestError,sqlite3.Error): raise
         except Exception as error:
             response=getattr(error,'response',None)
             status=getattr(response,'status_code',0)
             if status in (403,418): Budget(store).failure(403,'Binance websocket denial')
             elif status: Budget(store).failure(status,'')
             delay=budget.failed()
-            print(json.dumps(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
-                error_type=type(error).__name__,status='UNKNOWN')),flush=True)
+            reason=str(error)
+            if not re.fullmatch(r'[A-Z][A-Z0-9_]{0,127}',reason): reason='UNCLASSIFIED'
+            emit(dict(event='BINANCE_STREAM_RECOVERY',failures=budget.failures,
+                error_type=type(error).__name__,error_code=reason,status='UNKNOWN'))
+            # Failed initial sessions share the original monotonic deadline.
+            # A previously READY session may bootstrap a new connection, while
+            # the existing five-failure/300-second recovery budget still applies.
+            if initialization.ready: initialization=InitializationWindow(steady())
         if budget.failures<5:
             for _ in range(delay*10):
                 if stop(): return
@@ -296,10 +482,12 @@ def main():
     parser.add_argument('--manifest',required=True,type=Path)
     parser.add_argument('--source-head-file',type=Path)
     parser.add_argument('--collect',action='store_true')
+    parser.add_argument('--health-supervision',action='store_true',
+                        help='Opt-in health contract; never grants consumer data READY')
     args=parser.parse_args()
     scan=json.loads(args.manifest.read_text(encoding='utf-8'))
     names=roster(scan,dt.datetime.now(dt.timezone.utc))
-    print(json.dumps(plan(names)))
+    emit(plan(names))
     if not args.collect: return
     source=args.source_head_file.read_text().strip() if args.source_head_file else ''
     if not re.fullmatch('[0-9a-f]{40}',source): raise ValueError('BINANCE_SOURCE_HEAD_REQUIRED')
@@ -308,7 +496,12 @@ def main():
     for signum in (signal.SIGINT,signal.SIGTERM): signal.signal(signum,lambda *_:stop.set())
     with (STATE_PATH.parent/'collector.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        collect(Store.reader(),names,content_hash(scan),source,stop.is_set)
+        if args.health_supervision:
+            from research.hunter_binance_health import collect as collect_health
+            from research.hunter_binance_health_store import Store as HealthStore
+            collect_health(HealthStore.reader(),names,content_hash(scan),source,stop.is_set)
+        else:
+            collect(Store.reader(),names,content_hash(scan),source,stop.is_set)
 
 
 if __name__=='__main__': main()
