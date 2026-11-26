@@ -1,0 +1,36 @@
+name: Binance Bootstrap Upgrade Offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/hunter_binance_bootstrap_upgrade_once.py'
+      - 'scripts/check_binance_bootstrap_upgrade.py'
+      - 'scripts/check_binance_bootstrap_systemd.py'
+      - 'tests/test_binance_bootstrap_*.py'
+      - 'deploy/binance-bootstrap-upgrade.md'
+      - '.github/workflows/binance-bootstrap-upgrade-offline.yml'
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Fetch only immutable reviewed package dependencies
+        run: git fetch --no-tags origin 8cb92bd7e39251e1997e1b363a5e9500c8344268 f4e8ad4de377a19763f4803e4fd56882c27d887a 7bd133584a21d5cc2af1147594f24031e29fd635 db0d59e3f7a6f15d1f99a678c07c2336e4474867
+      - name: Real SQLite and guard files, deterministic clock, no external effects
+        run: python -B scripts/check_binance_bootstrap_upgrade.py
+      - name: Independent real systemd exit hooks with isolated fake collector units
+        if: matrix.python == '3.12'
+        run: sudo env GITHUB_ACTIONS=true /usr/bin/python3 -I -B scripts/check_binance_bootstrap_systemd.py
