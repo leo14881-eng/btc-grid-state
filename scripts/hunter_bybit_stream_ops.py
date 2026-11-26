@@ -7,7 +7,8 @@ from pathlib import Path
 import re
 
 from research.hunter_bybit_stream import plan, roster
-from research.hunter_bybit_stream_store import STATE_PATH, Store, content_hash, roster_hash
+from research.hunter_bybit_stream_store import STATE_PATH, content_hash, roster_hash
+from research.hunter_bybit_health_store import Store, validate_generation
 
 
 def prepare(snapshot, source_head, now):
@@ -30,6 +31,17 @@ def acceptance(snapshot, reader, now, clock=lambda:dt.datetime.now(dt.timezone.u
     if not 0 <= finished-end <= 90_000:
         generation = dict(generation, status='UNKNOWN', windows={},
                           reason='CACHE_READ_FINISHED_STALE_OR_CLOCK_ROLLBACK')
+    if generation['status']=='READY' and (not validate_generation(generation,finished)
+            or hasattr(reader,'completed_generation') and not reader.completed_generation(
+                generation,finished,clock=lambda:int(clock().timestamp()*1000))):
+        generation=dict(generation,status='UNKNOWN',windows={},reason='BYBIT_HEALTH_READ_FENCE_FAILED')
+    actual_finished=int(clock().timestamp()*1000)
+    if generation['status']=='READY' and (actual_finished<finished or not 0<=actual_finished-end<=90000
+                                         or not validate_generation(generation,actual_finished)):
+        generation=dict(generation,status='UNKNOWN',windows={},reason='BYBIT_HEALTH_READ_FENCE_FAILED')
+    finished=actual_finished
+    if generation['status']=='UNKNOWN':
+        generation['generation_sha256']=content_hash({k:v for k,v in generation.items() if k!='generation_sha256'})
     return dict(schema='hunter_bybit_acceptance_v1', checked_at_utc=now.isoformat(),
                 expected_topics=len(topics), roster_hash=roster_hash(topics),
                 status=generation['status'], reason=generation.get('reason'),
