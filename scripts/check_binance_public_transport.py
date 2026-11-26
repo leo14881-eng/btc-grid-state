@@ -50,7 +50,7 @@ def main():
         sys.addaudithook(guard)
         suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_hunter_binance_transport*.py')
         result=unittest.TextTestRunner(verbosity=2).run(suite)
-        good=result.wasSuccessful() and result.testsRun==15 and not result.skipped and not blocked
+        good=result.wasSuccessful() and result.testsRun==21 and not result.skipped and not blocked
         print('BINANCE_TRANSPORT_OFFLINE_ACCEPTANCE',dict(tests=result.testsRun,blocked_effects=len(blocked),passed=good))
         return 0 if good else 1
 
