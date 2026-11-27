@@ -7,9 +7,11 @@ OI/funding, liquidation queues and stablecoin microstructure are not fabricated.
 import datetime as dt,json,math,os,pathlib,time,urllib.parse,urllib.request
 try:
  from research.hunter_policy import C
+ from research.hunter_replay_history_cache import load_json
 except ModuleNotFoundError as exc:
  if exc.name!="research":raise
  from hunter_policy import C
+ from hunter_replay_history_cache import load_json
 
 ROOT=pathlib.Path("research/results");OUT=ROOT/"hunter-leading-risk-replay.json"
 BN=os.getenv("HUNTER_BINANCE_API","https://data-api.binance.vision")
@@ -23,7 +25,7 @@ def get(url):
  for attempt in range(4):
   try:
    req=urllib.request.Request(url,headers={"User-Agent":"hunter-leading-replay/1.0","Accept":"application/json"})
-   with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+   return load_json(req,urllib.request.urlopen,timeout=20)
   except Exception as exc:
    last=exc
    if attempt<3:time.sleep(.5*(2**attempt))
