@@ -832,7 +832,7 @@ def quarantine_non_crypto_history(state,excluded):
  report["assets"]=sorted(report["assets"])
  return report
 
-def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_proposals=None):
+def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_proposals=None,signal_guard=None):
  """Manage open positions only. Ordinary deterioration never forces a loss exit."""
  btc=btc or price(scan,"BTC");cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
@@ -864,11 +864,28 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    pos['last_primary_venue_management_evidence']={'execution_venue':'BYBIT_SPOT','market_symbol':pos['market_symbol'],'generation_id':scan.get('generation_id'),'observed_at_utc':venue_packet['observed_at_utc'],'market_source_timestamp':venue_packet['market_source_timestamp'],'fee_bps':venue_packet['fee_bps'],'signal':venue_packet['candidate']['signal'],'signal_evidence':venue_packet['candidate']['signal_evidence'],'raw_book_evidence':venue_packet['liquidity']['raw_book_evidence'],'historical_execution_verified':False}
   c=venue_packet['candidate'] if venue_packet else cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
+  def signal_allowed(stage):
+   if signal_guard is None or venue_packet:return True
+   try:return signal_guard(pos['asset'],stage) is True
+   except Exception:return False
+  if not signal_allowed('decision'):
+   c=dict(c or {'asset':pos['asset']},signal={},signal_evidence={})
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
   systemic_level=((state.get("systemic_risk") or {}).get("level") or "HIGH")
   confirmed_systemic=tail.confirmed_systemic_liquidity_shock(state)
   health,health_reasons=position_health(pos,e,now,systemic_level,confirmed_systemic)
   signal_fresh=fresh((e.get("signal_evidence") or {}).get("observed_at_utc"),now)
+  def signal_action_allowed(stage):
+   nonlocal e,health,health_reasons,signal_fresh
+   if signal_allowed(stage):return True
+   e=dict(e,signal_evidence={},score=None,independent=0,btc_rel_1h=None,btc_rel_4h=None,
+          rel_accel=None,return_1h=None,return_4h=None)
+   signal_fresh=False
+   # HARD_INVALIDATION comes from independent identity, supply or book risk.
+   # Earlier valid health observations remain audit history; their derived
+   # signal state cannot authorize another action after this fence rejects.
+   if health!='HARD_INVALIDATION':health,health_reasons='EVIDENCE_PENDING',['SIGNAL_CACHE_REVOKED_AT_USE']
+   return False
   book_fresh=fresh(e.get("book_observed_at_utc"),now)
   if not (signal_fresh and book_fresh):act="HOLD";reasons.append("MANAGEMENT_EVIDENCE_STALE_OR_MISSING")
   if health!="STRONG":act="HOLD"
@@ -880,10 +897,14 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
    if capital_proposals is not None:
-    capital_proposals.append({"kind":"ADD","asset":pos["asset"],"pos":pos,"price":p,"evidence":e,"reasons":list(reasons),"amount":next_amount})
-    record(state,pos,"HOLD",now,["CAPITAL_ALLOCATION_PENDING"]+reasons,e,p)
+    if signal_action_allowed('add'):
+     capital_proposals.append({"kind":"ADD","asset":pos["asset"],"pos":pos,"price":p,"evidence":e,"reasons":list(reasons),"amount":next_amount})
+     record(state,pos,"HOLD",now,["CAPITAL_ALLOCATION_PENDING"]+reasons,e,p)
+    else:record(state,pos,"HOLD",now,['SIGNAL_CACHE_REVOKED_AT_USE'],e,p)
    elif capital_available(state,next_amount,"ADD",scan):
-    add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
+    if signal_action_allowed('add'):
+     add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
+    else:record(state,pos,"HOLD",now,['SIGNAL_CACHE_REVOKED_AT_USE'],e,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
   pnl=net_pnl(pos,p);legacy_protection=profit_protection(pos,p)
@@ -891,6 +912,10 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   pos['last_exit_estimate']=execution
   admit_execution_identity(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),execution,scan,now)
   protection=lifecycle.protect(pos,p,pnl,execution,now,scan.get('generation_id'),scan.get('as_of_utc'),PROTECT_ARM_PCT,GIVEBACK_MAX_PCT,MIN_PROTECTED_NET_PCT)
+  # Identity admission above may perform I/O; never reuse the pre-I/O signal
+  # booleans for recovery, thesis invalidation or target-momentum exits.
+  if not signal_action_allowed('exit') and capital_proposals is not None:
+   capital_proposals[:]=[q for q in capital_proposals if q.get('pos') is not pos]
   lifecycle.recovery(pos,e,now,pnl,pos.get('last_health_generation_id'),health)
   exit_reason=None;exit_reasons=None
   if legacy_protection["exit"] and pnl<=0 and health!="HARD_INVALIDATION":
