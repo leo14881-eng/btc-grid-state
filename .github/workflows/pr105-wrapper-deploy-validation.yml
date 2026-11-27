@@ -1,0 +1,39 @@
+name: PR105 Offline Wrapper Deployment Validation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'validation/pr105-wrapper-deploy/**'
+      - '.github/workflows/pr105-wrapper-deploy-validation.yml'
+permissions:
+  contents: read
+jobs:
+  offline-wrapper-state-machine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Parse unchanged artifact and run isolated Linux filesystem mocks
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          sha256sum validation/pr105-wrapper-deploy/pr105-wrapper-deploy.sh
+          bash --version | head -n 1
+          bash -n validation/pr105-wrapper-deploy/pr105-wrapper-deploy.sh
+          python validation/pr105-wrapper-deploy/test_deploy.py 2>&1 | tee /tmp/pr105-wrapper-deploy-validation.log
+          python validation/pr105-wrapper-deploy/test_bootstrap.py 2>&1 | tee /tmp/pr105-wrapper-bootstrap-validation.log
+          git diff --exit-code
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr105-wrapper-deploy-validation
+          path: /tmp/pr105-wrapper-*-validation.log
+          if-no-files-found: error
