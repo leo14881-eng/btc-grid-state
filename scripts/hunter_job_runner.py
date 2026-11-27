@@ -137,7 +137,7 @@ def readback(job):
  print("HUNTER_JOB_MAIN_READBACK_OK", job, commit, len(paths), flush=True)
 
 
-def publish_health(job, status, started, steps, error=None, error_details=None):
+def publish_health(job, status, started, steps, error=None, error_details=None, timing=None):
  # A separate file per job avoids lost updates between independent schedulers.
  path = str(RESULTS / ("hunter-runtime-" + job + "-health.json"))
  end = dt.datetime.now(dt.timezone.utc)
@@ -146,6 +146,10 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
         "duration_seconds": round((end - started).total_seconds(), 3),
         "source": "VULTR_SYSTEMD", "steps": steps, "error": error,
         "capital_authority": "NONE_SHADOW_ONLY", "real_trading_enabled": False}
+ doc["duration_scope"] = "runner_work_before_health_publication"
+ doc["duration_clock"] = "utc_wall_clock_legacy"
+ doc["health_publication_timing_source"] = "HUNTER_HEALTH_PUBLICATION_END journal event"
+ if timing is not None: doc["runner_work_monotonic_seconds"] = timing
  if error_details:
   doc["error_details"] = error_details
  if job == "watchdog":
@@ -201,6 +205,21 @@ def publish_health(job, status, started, steps, error=None, error_details=None):
  raise push_failure_exception("JOB_HEALTH_PUSH_RETRY_EXHAUSTED", last_push)
 
 
+def timed_publish_health(job, status, started, steps, *errors, runner_started):
+ begin = time.monotonic()
+ outcome = "FAILURE"
+ print("HUNTER_HEALTH_PUBLICATION_START", job, status, "clock=monotonic", flush=True)
+ try:
+  publish_health(job, status, started, steps, *errors,
+                 timing=round(begin-runner_started, 6))
+  outcome = "SUCCESS"
+ finally:
+  print("HUNTER_HEALTH_PUBLICATION_END", json.dumps(dict(
+    job=job, requested_status=status, publication_status=outcome,
+    seconds=round(time.monotonic()-begin, 6), clock="monotonic",
+    scope="local_receipt_and_github_health_publication_including_readback")), flush=True)
+
+
 def condition(step, outputs):
  value = step.get("if")
  if not value: return True
@@ -232,6 +251,7 @@ def safe_diagnostic(value, env=None, limit=2048):
  text = re.sub(r"(?i)([?&](?:token|key|api_key|access_token|secret|password)=)[^&\s'\"]+",
                r"\1[REDACTED]", text)
  text = re.sub(r"(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)", "[REDACTED]", text)
+ text = re.sub(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+", "[REDACTED_EMAIL]", text)
  return text[-limit:]
 
 
@@ -456,6 +476,12 @@ def run_job(job, preview=False, steps=None):
     else:
      require(result.returncode == 0, "JOB_STEP_FAILED " + name)
      row["status"] = "SUCCESS"
+    if (job == "research" and name == "Test complete Hunter system before state mutation"
+        and local_env.get("HUNTER_VALIDATION_RECEIPTS", "off") != "off"):
+     # Diagnostic comparison AFTER the entire original compile/test/state gate.
+     # There is deliberately no shortcut, alternate command or skip branch.
+     from scripts.hunter_validation_receipt import observe
+     row["validation_receipt_observation"] = observe(local_env)
     env.update(output_file(env["GITHUB_ENV"]))
     if name == "Capture discovery generation": generation = output_file(env["GITHUB_OUTPUT"])["id"]
    except Exception as exc:
@@ -507,21 +533,26 @@ def main():
          rules["capital_authority"] == "NONE_SHADOW_ONLY" and
          rules["tail_risk_phase1"]["real_trading_enabled"] is False, "SHADOW_BOUNDARY")
  started = dt.datetime.now(dt.timezone.utc)
+ runner_started = time.monotonic()
  rows = []
  try:
   for job in (["discovery", "research"] if args.job == "pipeline" else [args.job]):
    run_job(job, args.preview, rows)
-  if not args.preview: publish_health(args.job, "SUCCESS", started, rows)
+  if not args.preview: timed_publish_health(args.job, "SUCCESS", started, rows, runner_started=runner_started)
   print("HUNTER_JOB_SUCCESS", args.job, "preview=" + str(args.preview), flush=True)
  except Exception as exc:
   details = exception_details(exc)
   details["failed_step"] = next((r["name"] for r in reversed(rows) if r.get("status") == "FAILURE"), "INITIALIZATION_OR_HEALTH_PUBLICATION")
   print("HUNTER_JOB_FAILURE", args.job, json.dumps(details), flush=True)
   if not args.preview:
-   try: publish_health(args.job, "FAILURE", started, rows, type(exc).__name__, details)
+   try: timed_publish_health(args.job, "FAILURE", started, rows, type(exc).__name__, details, runner_started=runner_started)
    except Exception as health_exc:
     print("HUNTER_JOB_FAILURE_HEALTH_NOT_PUBLISHED", args.job, json.dumps(exception_details(health_exc)), flush=True)
   raise RuntimeError("HUNTER_JOB_FAILED " + details["message"]) from None
+ finally:
+  print("HUNTER_RUNNER_TOTAL", json.dumps(dict(job=args.job,
+    seconds=round(time.monotonic()-runner_started, 6), clock="monotonic",
+    scope="runner_work_and_health_publication_excludes_launcher_preparation")), flush=True)
 
 
 if __name__ == "__main__": main()
