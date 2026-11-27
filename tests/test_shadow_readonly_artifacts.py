@@ -87,6 +87,27 @@ def artifact(s):
 
 
 class ReadonlyArtifactsTests(unittest.TestCase):
+    def test_old_unresolved_batch_and_check_clock_do_not_hide_new_event(self):
+        d = fixture()
+        old = dict(d['portfolio']['events'][0], at='2026-10-09T13:00:00Z', shadow_id='old')
+        d['portfolio']['events'].append(old)
+        old_id = event_id(old)
+        d['cursor'].update(
+            last_successful_check_at='2026-10-10T14:00:00Z',
+            delivery_status='PREPARED_NOT_DELIVERED',
+            pending_batch_id=digest([old_id]), pending_event_ids=[old_id],
+            unresolved_batches=[dict(batch_id=digest([old_id]), event_ids=[old_id],
+                                     delivery_status='DELIVERY_ACK_UNVERIFIABLE')])
+        s = snapshot(d)
+        before = copy.deepcopy(s.raw)
+        first = candidate_batch(s)
+        self.assertEqual([e['event_id'] for e in first['events']],
+                         [event_id(d['portfolio']['events'][0])])
+        self.assertEqual(first['delivery_status'], 'CANDIDATE_ONLY_NOT_RESERVED_NOT_DELIVERED')
+        self.assertEqual(candidate_batch(s), first)
+        self.assertEqual(s.raw, before)
+        self.assertEqual(s.doc('cursor')['acknowledged_event_ids'], [])
+
     def test_review2_observed_live_risk_survives_invalid_receipt(self):
         d = fixture(); d['hunter_discovery']['real_trading_enabled'] = True
         d['hunter_discovery']['main_readback_verified'] = False
