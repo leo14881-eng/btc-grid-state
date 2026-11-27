@@ -832,13 +832,17 @@ def quarantine_non_crypto_history(state,excluded):
  report["assets"]=sorted(report["assets"])
  return report
 
-def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_proposals=None):
+def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_proposals=None,evaluation_clock=None):
  """Manage open positions only. Ordinary deterioration never forces a loss exit."""
  btc=btc or price(scan,"BTC");cm={c.get("asset"):c for c in review.get("candidates") or [] if c.get("asset")}
  state.setdefault("open_positions",[]);state.setdefault("closed_positions",[]);state.setdefault("events",[]);state.setdefault("decisions",[])
  state['active_observation_generation_id']=scan.get('generation_id')
  still=[];base_scan=scan;base_liq=liq
  for pos in state["open_positions"]:
+  if evaluation_clock is not None:now=evaluation_clock()
+  # Retain pre-observation identity timestamps for a final venue recheck. Using
+  # the mutated position would reject our own accepted packet as a duplicate.
+  venue_position_before=dict(pos)
   scan=base_scan;liq=base_liq;venue_packet=None
   identity=(pos.get('execution_venue'),pos.get('market_symbol'),pos.get('market_type'))
   if pos.get('execution_venue')=='BYBIT_SPOT' and ENTRY_MODE=='EXECUTABLE':
@@ -865,6 +869,7 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   c=venue_packet['candidate'] if venue_packet else cm.get(pos["asset"]);raw=raw_return(pos,p);pos["mfe_pct"]=round(max(pos.get("mfe_pct",0),raw),4);pos["mae_pct"]=round(min(pos.get("mae_pct",0),raw),4);ensure_opportunity_observation(pos,p,now)
   pos["last_price"]=p;pos["last_marked_at_utc"]=now.isoformat();pos["holding_hours"]=round((now-parse(pos["opened_at_utc"])).total_seconds()/3600,2)
   act,reasons,e=decision(c,scan,liq,supply,"ADD" if len(pos["tranches"])<3 else "HOLD",pos,p)
+  if evaluation_clock is not None:now=evaluation_clock()
   systemic_level=((state.get("systemic_risk") or {}).get("level") or "HIGH")
   confirmed_systemic=tail.confirmed_systemic_liquidity_shock(state)
   health,health_reasons=position_health(pos,e,now,systemic_level,confirmed_systemic)
@@ -879,10 +884,18 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    act="HOLD"
   if act=="ADD":
    next_amount=TRANCHES[len(pos["tranches"])]
-   if capital_proposals is not None:
+   available=capital_proposals is not None or capital_available(state,next_amount,"ADD",scan)
+   if evaluation_clock is not None:now=evaluation_clock()
+   # Capacity/decision work can outlive the evidence window. Reuse exactly the
+   # existing signal/book freshness and risk gates at the ADD/proposal boundary.
+   if not (fresh((e.get('signal_evidence') or {}).get('observed_at_utc'),now) and fresh(e.get('book_observed_at_utc'),now)):
+    record(state,pos,'HOLD',now,['MANAGEMENT_EVIDENCE_STALE_OR_MISSING'],e,p)
+   elif risk_blocks_new(state,now):
+    record(state,pos,'HOLD',now,['SYSTEMIC_RISK_ADD_FREEZE'],e,p)
+   elif capital_proposals is not None:
     capital_proposals.append({"kind":"ADD","asset":pos["asset"],"pos":pos,"price":p,"evidence":e,"reasons":list(reasons),"amount":next_amount})
     record(state,pos,"HOLD",now,["CAPITAL_ALLOCATION_PENDING"]+reasons,e,p)
-   elif capital_available(state,next_amount,"ADD",scan):
+   elif available:
     add(pos,p,e,now);record(state,pos,"ADD",now,reasons,e,p);trade_event(state,pos,"ADD",now,p,"MATERIAL_BETTER_PRICE_FRESH_RECOVERY_REVALIDATION");raw=raw_return(pos,p)
    else:record(state,pos,"HOLD",now,["CAPITAL_ALLOCATOR_CAPACITY_WAIT"],e,p)
   else:record(state,pos,"HOLD",now,reasons+["POSITION_HEALTH_"+health]+health_reasons,e,p)
@@ -890,6 +903,10 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
   execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,pos.get('execution_fee_bps',FEE_BPS))
   pos['last_exit_estimate']=execution
   admit_execution_identity(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),execution,scan,now)
+  if evaluation_clock is not None:
+   now=evaluation_clock()
+   execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,pos.get('execution_fee_bps',FEE_BPS))
+   pos['last_exit_estimate']=execution
   protection=lifecycle.protect(pos,p,pnl,execution,now,scan.get('generation_id'),scan.get('as_of_utc'),PROTECT_ARM_PCT,GIVEBACK_MAX_PCT,MIN_PROTECTED_NET_PCT)
   lifecycle.recovery(pos,e,now,pnl,pos.get('last_health_generation_id'),health)
   exit_reason=None;exit_reasons=None
@@ -911,6 +928,29 @@ def manage_existing_positions(state,scan,review,liq,supply,now,btc=None,capital_
    r1=e.get("btc_rel_1h");r4=e.get("btc_rel_4h");accel=e.get("rel_accel");runner=r1 is not None and r4 is not None and accel is not None and r1>0 and r4>0 and accel>0
    if runner:record(state,pos,"HOLD",now,["PROFIT_TARGET_REACHED_BUT_RELATIVE_MOMENTUM_STILL_STRONG","RUNNER_MODE"],e,p)
    else:exit_reason="PROFIT_REVIEW_MOMENTUM_FADED";exit_reasons=["PROFIT_TARGET_REACHED","RELATIVE_MOMENTUM_NOT_STRONG_ENOUGH_TO_RUN"]
+  if exit_reason and evaluation_clock is not None:
+   now=evaluation_clock()
+   # Only revalidate evidence required by the already selected exit path. A
+   # protection exit does not acquire a new signal requirement, nor do ordinary
+   # loss/identity exits acquire a new full-book requirement.
+   if venue_packet:
+    try:management_context(venue_position_before,base_scan,now)
+    except (KeyError,TypeError,ValueError) as exc:
+     record(state,pos,'HOLD',now,['PRIMARY_VENUE_MANAGEMENT_EVIDENCE_UNAVAILABLE',str(exc)],e,p);exit_reason=None
+   if exit_reason=='PROFIT_PROTECTION':
+    execution=lifecycle.liquidation(pos,liq_for(liq,pos['asset']).get('raw_book_evidence',{}),now,pos.get('execution_fee_bps',FEE_BPS))
+    pos['last_exit_estimate']=execution
+    if execution.get('status')!='SHADOW_RECEIPT_ESTIMATE' or execution.get('net_pnl_usdt',0)<=0:
+     record(state,pos,'HOLD',now,['EXIT_COST_UNKNOWN'],e,p);exit_reason=None
+   elif exit_reason=='PROFIT_REVIEW_MOMENTUM_FADED':
+    if not fresh((e.get('signal_evidence') or {}).get('observed_at_utc'),now):
+     record(state,pos,'HOLD',now,['MANAGEMENT_EVIDENCE_STALE_OR_MISSING'],e,p);exit_reason=None
+   elif exit_reason in ('HARD_INVALIDATION','PROFIT_STAGNATION','THESIS_INVALIDATED_PROFIT_EXIT'):
+    # Re-evaluate on pre-consumption health metadata; otherwise same-generation
+    # deduplication would reject a still-fresh decision made moments earlier.
+    checked_health,_=position_health(dict(venue_position_before),e,now,systemic_level,confirmed_systemic)
+    if checked_health!=health:
+     record(state,pos,'HOLD',now,['MANAGEMENT_EVIDENCE_STALE_OR_MISSING'],e,p);exit_reason=None
   if exit_reason and scan.get('as_of_utc') and not lifecycle.fresh(scan['as_of_utc'],now):
    record(state,pos,'HOLD',now,['EXIT_MARKET_EVIDENCE_STALE'],e,p);exit_reason=None
   if exit_reason and venue_packet:
